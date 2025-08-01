@@ -1,7 +1,8 @@
-pytorch
+torch
 usearch
 pyyaml
 boto3
 requests
 mcp
 sentence-transformers
+fastmcp

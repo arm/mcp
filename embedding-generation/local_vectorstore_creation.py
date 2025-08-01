@@ -15,32 +15,31 @@ def load_local_yaml_files() -> List[Dict]:
     print("Loading local YAML files")
     yaml_contents = []
 
-    yaml_files = glob.glob("chunk_*.yaml")
-    print(f"Found {len(yaml_files)} YAML files in current directory")
-
     intrinsic_files = glob.glob(os.path.join("intrinsic_chunks", "*.yaml"))
     print(f"Found {len(intrinsic_files)} YAML files in intrinsic_chunks directory")
-    
+
+    yaml_data_files = glob.glob(os.path.join("yaml_data", "*.yaml"))
+    print(f"Found {len(yaml_data_files)} YAML files in yaml_data directory")
+
     # Combine all files
-    all_files = yaml_files + intrinsic_files
+    all_files = intrinsic_files + yaml_data_files
     total_files = len(all_files)
     print(f"Total files to process: {total_files}")
 
     for i, file_path in enumerate(all_files, 1):
         print(f"Loading file {i}/{total_files}: {file_path}")
-        
+
         # Extract chunk identifier based on file location
         if file_path.startswith("intrinsic_chunks"):
-            # For intrinsic chunks, use the full filename without extension as identifier
             chunk_uuid = f"intrinsic_{os.path.basename(file_path).replace('.yaml', '')}"
+        elif file_path.startswith("yaml_data"):
+            chunk_uuid = f"yaml_data_{os.path.basename(file_path).replace('.yaml', '')}"
         else:
-            # For regular chunks, extract chunk number from filename
             chunk_uuid = file_path.replace('chunk_', '').replace('.yaml', '')
-        
+
         try:
             with open(file_path, 'r') as f:
                 yaml_content = yaml.safe_load(f)
-                # Add chunk identifier to the yaml content
                 yaml_content['chunk_uuid'] = chunk_uuid
                 yaml_contents.append(yaml_content)
         except Exception as e:

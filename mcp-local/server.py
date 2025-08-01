@@ -1,6 +1,6 @@
 from fastmcp import FastMCP
 from typing import List, Dict, Any
-import faiss
+from usearch.index import Index
 import json
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -13,8 +13,8 @@ import subprocess
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Configuration (use files in this script's own directory)
-FAISS_INDEX_PATH = os.path.join(BASE_DIR, "faiss_index.bin")
-FAISS_METADATA_PATH = os.path.join(BASE_DIR, "metadata.json")
+USEARCH_INDEX_PATH = os.path.join(BASE_DIR, "usearch_index.bin")
+METADATA_PATH = os.path.join(BASE_DIR, "metadata.json")
 MODEL_NAME = 'all-MiniLM-L6-v2'
 DISTANCE_THRESHOLD = 1.1
 K_RESULTS = 5
@@ -22,33 +22,82 @@ K_RESULTS = 5
 # Initialize the MCP server
 mcp = FastMCP("arm_torq")
 
-# Load FAISS index and metadata at module load time
-def load_faiss_index(index_path: str):
-    index = faiss.read_index(index_path)
+# Load USearch index and metadata at module load time
+def load_usearch_index(index_path: str, metadata: List[Dict]) -> Index:
+    """Load USearch index from file."""
+    # Get dimension from the first metadata entry's vector
+    dimension = len(metadata[0]['vector'])
+    
+    # Create index with same parameters as used during creation
+    index = Index(
+        ndim=dimension,
+        metric='l2sq',  # L2 squared distance
+        dtype='f32',
+        connectivity=16,
+        expansion_add=128,
+        expansion_search=64
+    )
+    
+    # Load the saved index
+    index.load(index_path)
     return index
 
-def load_metadata(metadata_path: str):
+def load_metadata(metadata_path: str) -> List[Dict]:
+    """Load metadata from JSON file."""
     with open(metadata_path, 'r') as f:
         metadata = json.load(f)
     return metadata
 
-FAISS_INDEX = load_faiss_index(FAISS_INDEX_PATH)
-FAISS_METADATA = load_metadata(FAISS_METADATA_PATH)
+# Load metadata first, then index (since index needs dimension from metadata)
+METADATA = load_metadata(METADATA_PATH)
+USEARCH_INDEX = load_usearch_index(USEARCH_INDEX_PATH, METADATA)
 EMBEDDING_MODEL = SentenceTransformer(MODEL_NAME)
 
 def embedding_search(query: str, k: int = K_RESULTS) -> List[Dict[str, Any]]:
-    """Search the FAISS index with a text query."""
+    """Search the USearch index with a text query."""
+    # Create query embedding
     query_embedding = EMBEDDING_MODEL.encode([query])[0]
-    distances, indices = FAISS_INDEX.search(query_embedding[None], k)
+    
+    # Search in USearch index
+    matches = USEARCH_INDEX.search(query_embedding, k)
     results = []
-    for i, (dist, idx) in enumerate(zip(distances[0], indices[0])):
-        if idx != -1 and float(dist) < DISTANCE_THRESHOLD:
-            result = {
-                "rank": i + 1,
-                "distance": float(dist),
-                "metadata": FAISS_METADATA[idx]
-            }
-            results.append(result)
+    # Robust handling of USearch Matches object, as in test_vectorstore.py
+    if matches is not None:
+        try:
+            # USearch Matches object can be accessed with .keys and .distances properties
+            if hasattr(matches, 'keys') and hasattr(matches, 'distances'):
+                labels = matches.keys
+                distances = matches.distances
+            # Alternative attribute names
+            elif hasattr(matches, 'labels') and hasattr(matches, 'distances'):
+                labels = matches.labels
+                distances = matches.distances
+            # Try converting to numpy arrays
+            else:
+                labels = np.array(matches.keys) if hasattr(matches, 'keys') else None
+                distances = np.array(matches.distances) if hasattr(matches, 'distances') else None
+            # If tuple (labels, distances)
+            if labels is None or distances is None:
+                if isinstance(matches, tuple) and len(matches) == 2:
+                    labels, distances = matches
+                elif isinstance(matches, dict):
+                    labels = matches.get('labels', matches.get('indices'))
+                    distances = matches.get('distances')
+            if labels is not None and distances is not None:
+                labels = np.atleast_1d(labels)
+                distances = np.atleast_1d(distances)
+                for i, (idx, dist) in enumerate(zip(labels, distances)):
+                    if idx != -1 and float(dist) < DISTANCE_THRESHOLD:
+                        result = {
+                            "rank": i + 1,
+                            "distance": float(dist),
+                            "metadata": METADATA[int(idx)]
+                        }
+                        results.append(result)
+        except Exception as e:
+            print(f"Error processing matches: {e}")
+            import traceback
+            traceback.print_exc()
     return results
 
 def deduplicate_urls(embedding_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
