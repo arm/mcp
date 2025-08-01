@@ -3,3 +3,4 @@ beautifulsoup4
 pyyaml
 usearch
 boto3
+sentence-transformers

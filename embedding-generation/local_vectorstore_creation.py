@@ -16,19 +16,38 @@ def load_local_yaml_files() -> List[Dict]:
     yaml_contents = []
 
     yaml_files = glob.glob("chunk_*.yaml")
-    total_files = len(yaml_files)
-    print(f"Found {total_files} YAML files")
+    print(f"Found {len(yaml_files)} YAML files in current directory")
 
-    for i, file_path in enumerate(yaml_files, 1):
+    intrinsic_files = glob.glob(os.path.join("intrinsic_chunks", "*.yaml"))
+    print(f"Found {len(intrinsic_files)} YAML files in intrinsic_chunks directory")
+    
+    # Combine all files
+    all_files = yaml_files + intrinsic_files
+    total_files = len(all_files)
+    print(f"Total files to process: {total_files}")
+
+    for i, file_path in enumerate(all_files, 1):
         print(f"Loading file {i}/{total_files}: {file_path}")
-        chunk_uuid = file_path.replace('chunk_', '').replace('.yaml', '')
         
-        with open(file_path, 'r') as f:
-            yaml_content = yaml.safe_load(f)
-            yaml_content['chunk_uuid'] = chunk_uuid
-            yaml_contents.append(yaml_content)
+        # Extract chunk identifier based on file location
+        if file_path.startswith("intrinsic_chunks"):
+            # For intrinsic chunks, use the full filename without extension as identifier
+            chunk_uuid = f"intrinsic_{os.path.basename(file_path).replace('.yaml', '')}"
+        else:
+            # For regular chunks, extract chunk number from filename
+            chunk_uuid = file_path.replace('chunk_', '').replace('.yaml', '')
+        
+        try:
+            with open(file_path, 'r') as f:
+                yaml_content = yaml.safe_load(f)
+                # Add chunk identifier to the yaml content
+                yaml_content['chunk_uuid'] = chunk_uuid
+                yaml_contents.append(yaml_content)
+        except Exception as e:
+            print(f"Error loading {file_path}: {e}")
+            continue
 
-    print(f"Loaded {len(yaml_contents)} YAML files")
+    print(f"Successfully loaded {len(yaml_contents)} YAML files")
     return yaml_contents
 
 def create_embeddings(contents: List[str], model_name: str = 'all-MiniLM-L6-v2') -> np.ndarray:
@@ -43,18 +62,29 @@ def create_usearch_index(embeddings: np.ndarray, metadata: List[Dict]) -> Tuple[
     """Create a USearch index with the given embeddings and metadata."""
     print("Creating USearch index")
     print(f"Embeddings shape: {embeddings.shape}")
+    
     dimension = embeddings.shape[1]
+    num_vectors = embeddings.shape[0]
+    
+    # Create USearch index
+    index = Index(
+        ndim=dimension,
+        metric='l2sq',
+        dtype='f32',
+        connectivity=16,
+        expansion_add=128,
+        expansion_search=64
+    )
+    
+    # Add vectors to the index
+    print(f"Adding {num_vectors} vectors to the index")
+    for i, embedding in enumerate(embeddings):
+        index.add(i, embedding)
 
-    # Initialize USearch index (using cosine similarity by default)
-    index = Index(dimension=dimension, metric='cos', dtype='f32')
-
-    # USearch needs integer keys for vectors. We'll use their index in the metadata list.
-    for idx, (item, vec) in enumerate(zip(metadata, embeddings)):
-        # Index add: key must be int, vector must be numpy array
-        index.add(idx, vec.astype(np.float32))
-        item['vector'] = vec.tolist()  # Optionally save for debugging/inspection
-
-    print(f"Added {len(embeddings)} vectors to the index")
+    for item, vec in zip(metadata, embeddings):
+        item['vector'] = vec.tolist()
+    
+    print(f"Added {len(index)} vectors to the index")
     return index, metadata
 
 def main():
@@ -63,7 +93,7 @@ def main():
     # Load local YAML files
     yaml_contents = load_local_yaml_files()
 
-    # Extract content and metadata from YAML files
+    # Extract content, uuid, url, and original text from YAML files
     print("Extracting content and metadata from YAML files")
     contents = []
     metadata = []
@@ -100,7 +130,7 @@ def main():
     metadata_filename = 'metadata.json'
     print(f"Saving metadata to {metadata_filename}")
     with open(metadata_filename, 'w') as f:
-        json.dump(metadata, f, indent=2)  # Added indent for better readability
+        json.dump(metadata, f, indent=2)
 
     print("USearch index and metadata have been created and saved.")
     print(f"Total documents processed: {len(contents)}")
