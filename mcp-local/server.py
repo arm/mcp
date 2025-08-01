@@ -190,7 +190,7 @@ def sysreport() -> Dict[str, Any]:
     """
     Run sysreport and return the system information.
     """
-    result = subprocess.run(["python3", "../../sysreport/src/sysreport.py"], capture_output=True, text=True)
+    result = subprocess.run(["python3", "/app/sysreport/src/sysreport.py"], capture_output=True, text=True)
     if result.returncode == 0:
         return json.loads(result.stdout)
     else:

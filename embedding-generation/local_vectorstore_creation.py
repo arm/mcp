@@ -1,5 +1,4 @@
 import yaml
-import faiss
 import numpy as np
 import math
 from typing import List, Dict, Tuple
@@ -8,7 +7,8 @@ import os
 import glob
 import sys
 import datetime
-from sentence_transformers import SentenceTransformer  # <--- NEW
+from sentence_transformers import SentenceTransformer
+from usearch.index import Index
 
 def load_local_yaml_files() -> List[Dict]:
     """Load locally stored YAML files and return their contents as a list of dictionaries."""
@@ -21,12 +21,10 @@ def load_local_yaml_files() -> List[Dict]:
 
     for i, file_path in enumerate(yaml_files, 1):
         print(f"Loading file {i}/{total_files}: {file_path}")
-        # Extract chunk number from filename
         chunk_uuid = file_path.replace('chunk_', '').replace('.yaml', '')
         
         with open(file_path, 'r') as f:
             yaml_content = yaml.safe_load(f)
-            # Add chunk number to the yaml content
             yaml_content['chunk_uuid'] = chunk_uuid
             yaml_contents.append(yaml_content)
 
@@ -41,28 +39,31 @@ def create_embeddings(contents: List[str], model_name: str = 'all-MiniLM-L6-v2')
     print(f"Created embeddings with shape: {embeddings.shape}")
     return embeddings
 
-def create_faiss_index(embeddings: np.ndarray, metadata: List[Dict]) -> Tuple[faiss.IndexFlatL2, List[Dict]]:
-    """Create a FAISS index with the given embeddings and metadata."""
-    print("Creating FAISS index")
+def create_usearch_index(embeddings: np.ndarray, metadata: List[Dict]) -> Tuple[Index, List[Dict]]:
+    """Create a USearch index with the given embeddings and metadata."""
+    print("Creating USearch index")
     print(f"Embeddings shape: {embeddings.shape}")
     dimension = embeddings.shape[1]
-    index = faiss.IndexFlatL2(dimension)
-    index.add(embeddings)
 
-    # Store the vector used for each metadata record (for debugging)
-    for item, vec in zip(metadata, embeddings):
-        item['vector'] = vec.tolist()  # Convert numpy array to list for JSON serialization
-    
-    print(f"Added {index.ntotal} vectors to the index")
+    # Initialize USearch index (using cosine similarity by default)
+    index = Index(dimension=dimension, metric='cos', dtype='f32')
+
+    # USearch needs integer keys for vectors. We'll use their index in the metadata list.
+    for idx, (item, vec) in enumerate(zip(metadata, embeddings)):
+        # Index add: key must be int, vector must be numpy array
+        index.add(idx, vec.astype(np.float32))
+        item['vector'] = vec.tolist()  # Optionally save for debugging/inspection
+
+    print(f"Added {len(embeddings)} vectors to the index")
     return index, metadata
 
 def main():
-    print("Starting the FAISS datastore creation process")
+    print("Starting the USearch datastore creation process")
 
     # Load local YAML files
     yaml_contents = load_local_yaml_files()
 
-    # Extract content, uuid, url, and original text from YAML files
+    # Extract content and metadata from YAML files
     print("Extracting content and metadata from YAML files")
     contents = []
     metadata = []
@@ -86,14 +87,14 @@ def main():
     filename = f"embeddings_{timestamp}.txt"
     np.savetxt(filename, embeddings)
 
-    # Create FAISS index
-    print("Creating FAISS index")
-    index, metadata = create_faiss_index(embeddings, metadata)
+    # Create USearch index
+    print("Creating USearch index")
+    index, metadata = create_usearch_index(embeddings, metadata)
 
-    # Save the FAISS index
-    index_filename = 'faiss_index.bin'
-    print(f"Saving FAISS index to {index_filename}")
-    faiss.write_index(index, index_filename)
+    # Save the USearch index
+    index_filename = 'usearch_index.bin'
+    print(f"Saving USearch index to {index_filename}")
+    index.save(index_filename)
 
     # Save metadata
     metadata_filename = 'metadata.json'
@@ -101,9 +102,9 @@ def main():
     with open(metadata_filename, 'w') as f:
         json.dump(metadata, f, indent=2)  # Added indent for better readability
 
-    print("FAISS index and metadata have been created and saved.")
+    print("USearch index and metadata have been created and saved.")
     print(f"Total documents processed: {len(contents)}")
-    print(f"FAISS index saved to: {os.path.abspath(index_filename)}")
+    print(f"USearch index saved to: {os.path.abspath(index_filename)}")
     print(f"Metadata saved to: {os.path.abspath(metadata_filename)}")
 
 if __name__ == "__main__":
