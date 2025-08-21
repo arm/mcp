@@ -1,5 +1,5 @@
 from fastmcp import FastMCP
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Tuple
 from usearch.index import Index
 import json
 import numpy as np
@@ -245,6 +245,188 @@ def sysreport() -> Dict[str, Any]:
         "stderr": result.stderr,
         "returncode": result.returncode
     }
+
+
+MIGRATE_EASE_ROOT = "/app/migrate-ease"
+SUPPORTED_SCANNERS = {"cpp", "docker", "go", "java", "python", "rust"}  # case-insensitive
+DEFAULT_ARCH = "aarch64"
+
+def _normalize_scanner(scanner: str) -> str:
+    """
+    Normalize scanner names. Docs sometimes show 'Python' capitalized;
+    the package modules are typically lowercase. We'll prefer lowercase.
+    """
+    s = scanner.strip()
+    if s.lower() in SUPPORTED_SCANNERS:
+        return s.lower()
+    return s  # let the caller see the exact name if it's custom
+
+def _ensure_dir_empty(path: str) -> Optional[str]:
+    """Ensure directory exists and is empty; return None on success or error string."""
+    try:
+        p = pathlib.Path(path)
+        p.mkdir(parents=True, exist_ok=True)
+        # If directory has content, that's an error for migrate-ease git mode
+        if any(p.iterdir()):
+            return f"clone_path '{path}' must be empty."
+        return None
+    except Exception as e:
+        return f"Failed to prepare clone_path '{path}': {e}"
+
+def _resolve_scan_path(path: Optional[str]) -> str:
+    """
+    Resolve a user path against the workspace mount if it's not absolute.
+    Defaults to WORKSPACE_DIR when path is None.
+    """
+    if not path:
+        return WORKSPACE_DIR
+    if os.path.isabs(path):
+        return path
+    return os.path.join(WORKSPACE_DIR, path)
+
+def _build_output_path(scanner: str, output_format: str) -> str:
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    suffix = output_format.lower().lstrip(".")
+    # Always put results into /tmp to avoid permission issues
+    return f"/tmp/migrate_ease_{scanner}_{ts}.{suffix}"
+
+def _run_migrate_ease(
+    scanner: str,
+    arch: str,
+    scan_path: Optional[str],
+    git_repo: Optional[str],
+    clone_path: Optional[str],
+    output_format: str,
+    extra_args: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Execute migrate-ease scanner as 'python3 -m {scanner} ...' in MIGRATE_EASE_ROOT.
+    """
+    normalized_scanner = _normalize_scanner(scanner)
+    fmt = output_format.lower().lstrip(".")
+    if fmt not in {"json", "txt", "csv", "html"}:
+        return {"status": "error", "message": f"Unsupported output format '{output_format}'."}
+
+    out_path = _build_output_path(normalized_scanner, fmt)
+
+    # Base command
+    cmd: List[str] = ["python3", "-u", "-m", normalized_scanner, "--arch", arch, "--output", out_path]
+
+    # Route: git repo vs local path
+    if git_repo:
+        if not clone_path:
+            return {"status": "error", "message": "clone_path is required when git_repo is provided."}
+        # migrate-ease requires empty directory for clone
+        err = _ensure_dir_empty(clone_path)
+        if err:
+            return {"status": "error", "message": err}
+        cmd.extend(["--git-repo", git_repo, clone_path])
+        resolved_for_echo = clone_path
+    else:
+        target = _resolve_scan_path(scan_path)
+        cmd.append(target)
+        resolved_for_echo = target
+
+    # Append any raw extra args last
+    if extra_args:
+        cmd.extend(extra_args)
+
+    # Run
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=MIGRATE_EASE_ROOT,  # run from repo root so module resolution works
+            capture_output=True,
+            text=True,
+            timeout=60 * 30,  # 30 minutes max
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "status": "error",
+            "message": "migrate-ease scan timed out.",
+            "command": " ".join(shlex.quote(c) for c in cmd),
+        }
+    except FileNotFoundError as e:
+        return {
+            "status": "error",
+            "message": f"Failed to execute migrate-ease: {e}",
+            "hint": "Verify MIGRATE_EASE_ROOT and that Python can import the scanner module.",
+        }
+
+    result: Dict[str, Any] = {
+        "status": "success" if proc.returncode == 0 else "error",
+        "returncode": proc.returncode,
+        "command": " ".join(shlex.quote(c) for c in cmd),
+        "ran_from": MIGRATE_EASE_ROOT,
+        "target": resolved_for_echo,
+        "stdout": proc.stdout[-50_000:],  # tail to keep payload reasonable
+        "stderr": proc.stderr[-50_000:],
+        "output_file": out_path,
+        "output_format": fmt,
+    }
+
+    # If JSON, try to parse and inline a preview
+    if fmt == "json":
+        try:
+            with open(out_path, "r") as f:
+                data = json.load(f)
+            result["parsed_results"] = data
+        except Exception as e:
+            result["parsed_results_error"] = f"Failed to parse JSON report: {e}"
+
+    return result
+
+@mcp.tool(
+    description=(
+        "Run a migrate-ease scan on a local path (default: mounted WORKSPACE_DIR) or a remote Git repo. "
+        "Wraps the CLI usage: 'python3 -m {scanner_name} --arch {arch} [--git-repo REPO CLONE_PATH]|[SCAN_PATH] "
+        "--output /tmp/….{json|txt|csv|html}'. Returns stdio, output file path, and parsed JSON when requested."
+    )
+)
+def migrate_ease_scan(
+    scanner: str,
+    path: Optional[str] = None,
+    arch: str = DEFAULT_ARCH,
+    git_repo: Optional[str] = None,
+    clone_path: Optional[str] = None,
+    output_format: str = "json",
+    extra_args: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Args:
+        scanner: One of cpp, docker, go, java, python, rust (case-insensitive).
+        path: Local path to scan. If relative, resolved against WORKSPACE_DIR. Defaults to WORKSPACE_DIR when omitted.
+        arch: Architecture for the scan (default: aarch64).
+        git_repo: Remote Git repo URL to scan (if provided, 'clone_path' must be given and empty).
+        clone_path: Empty directory where the repo will be cloned for scanning.
+        output_format: One of json, txt, csv, html. Defaults to json.
+        extra_args: Optional list of additional flags passed through to the scanner (e.g., ["--exclude", "tests/"]).
+
+    Returns:
+        A dictionary with status, returncode, command, stdio, output file path, and parsed_results (for JSON).
+    """
+    # Validate scanner early
+    if scanner.lower() not in SUPPORTED_SCANNERS:
+        return {
+            "status": "error",
+            "message": f"Unsupported scanner '{scanner}'. Supported: {sorted(SUPPORTED_SCANNERS)}"
+        }
+
+    if git_repo and path:
+        return {
+            "status": "error",
+            "message": "Provide either 'path' for local scans OR 'git_repo' + 'clone_path' for repo scans, not both."
+        }
+
+    return _run_migrate_ease(
+        scanner=scanner,
+        arch=arch,
+        scan_path=path,
+        git_repo=git_repo,
+        clone_path=clone_path,
+        output_format=output_format,
+        extra_args=extra_args,
+    )
 
 
 if __name__ == "__main__":
