@@ -8,6 +8,10 @@ This repository contains a Model Context Protocol (MCP) server that integrates:
 
 The server is designed to run inside a Docker container and expose tools to MCP clients such as **q CLI** or **VS Code MCP integration**.
 
+The Dockerfile is located in mcp-local.
+
+embedding-generation is exclusively for creating the vector db, and mcp-remote is the IaC for AWS
+
 ---
 
 ## 1. Build the container
@@ -30,7 +34,7 @@ docker build -t arm-mcp .
         "run",
         "--rm",
         "-i",
-        "-v", "${PWD}:/workspace",
+        "-v", "[local directory path]:/workspace",
         "arm-mcp"
       ]
     }
@@ -38,4 +42,6 @@ docker build -t arm-mcp .
 }
 ```
 
-For q cli this config should be placed in ~/.config/q/mcp.json
+Replace [local directory path] with the local path that you want the mcp server to be able to access.
+
+For q cli this config should be placed in ~/.aws/amazonq/mcp.json
