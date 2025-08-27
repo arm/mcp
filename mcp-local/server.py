@@ -250,7 +250,7 @@ def sysreport() -> Dict[str, Any]:
 
 
 MIGRATE_EASE_ROOT = "/app/migrate-ease"
-SUPPORTED_SCANNERS = {"cpp", "docker", "go", "java", "python", "rust"}  # case-insensitive
+SUPPORTED_SCANNERS = {"cpp", "docker", "go", "java", "python", "rust"}
 DEFAULT_ARCH = "aarch64"
 
 def _normalize_scanner(scanner: str) -> str:
@@ -303,6 +303,10 @@ def _run_migrate_ease(
 ) -> Dict[str, Any]:
     """
     Execute migrate-ease scanner as 'python3 -m {scanner} ...' in MIGRATE_EASE_ROOT.
+
+    NOTE: The migrate-ease output file is created under /tmp and is **deleted**
+    before this function returns. A best-effort deletion flag is included in
+    the returned dictionary as 'output_file_deleted'.
     """
     normalized_scanner = _normalize_scanner(scanner)
     fmt = output_format.lower().lstrip(".")
@@ -312,7 +316,7 @@ def _run_migrate_ease(
     out_path = _build_output_path(normalized_scanner, fmt)
 
     # Base command
-    cmd: List[str] = ["python3", "-u", "-m", normalized_scanner, "--arch", arch, "--output", out_path]
+    cmd: List[str] = ["python3", "-u", "-m", normalized_scanner, "--march", arch, "--output", out_path]
 
     # Route: git repo vs local path
     if git_repo:
@@ -342,6 +346,42 @@ def _run_migrate_ease(
             text=True,
             timeout=60 * 30,  # 30 minutes max
         )
+        status = "success" if proc.returncode == 0 else "error"
+        result: Dict[str, Any] = {
+            "status": status,
+            "returncode": proc.returncode,
+            "command": " ".join(shlex.quote(c) for c in cmd),
+            "ran_from": MIGRATE_EASE_ROOT,
+            "target": resolved_for_echo,
+            "stdout": proc.stdout[-50_000:],  # tail to keep payload reasonable
+            "stderr": proc.stderr[-50_000:],
+            "output_file": out_path,
+            "output_format": fmt,
+        }
+
+        # Inline JSON results before cleanup so callers still get the data.
+        if fmt == "json":
+            try:
+                with open(out_path, "r") as f:
+                    data = json.load(f)
+                result["parsed_results"] = data
+            except Exception as e:
+                result["parsed_results_error"] = f"Failed to parse JSON report: {e}"
+
+        # BEST-EFFORT CLEANUP of the migrate-ease output file
+        try:
+            os.remove(out_path)
+            result["output_file_deleted"] = True
+        except FileNotFoundError:
+            # It might not have been created (e.g., early failure)
+            result["output_file_deleted"] = False
+            result["output_file_delete_error"] = "Output file not found during cleanup."
+        except Exception as e:
+            result["output_file_deleted"] = False
+            result["output_file_delete_error"] = f"Failed to delete output file: {e}"
+
+        return result
+
     except subprocess.TimeoutExpired:
         return {
             "status": "error",
@@ -355,34 +395,12 @@ def _run_migrate_ease(
             "hint": "Verify MIGRATE_EASE_ROOT and that Python can import the scanner module.",
         }
 
-    result: Dict[str, Any] = {
-        "status": "success" if proc.returncode == 0 else "error",
-        "returncode": proc.returncode,
-        "command": " ".join(shlex.quote(c) for c in cmd),
-        "ran_from": MIGRATE_EASE_ROOT,
-        "target": resolved_for_echo,
-        "stdout": proc.stdout[-50_000:],  # tail to keep payload reasonable
-        "stderr": proc.stderr[-50_000:],
-        "output_file": out_path,
-        "output_format": fmt,
-    }
-
-    # If JSON, try to parse and inline a preview
-    if fmt == "json":
-        try:
-            with open(out_path, "r") as f:
-                data = json.load(f)
-            result["parsed_results"] = data
-        except Exception as e:
-            result["parsed_results_error"] = f"Failed to parse JSON report: {e}"
-
-    return result
-
 @mcp.tool(
     description=(
         "Run a migrate-ease scan on a local path (default: mounted WORKSPACE_DIR) or a remote Git repo. "
-        "Wraps the CLI usage: 'python3 -m {scanner_name} --arch {arch} [--git-repo REPO CLONE_PATH]|[SCAN_PATH] "
-        "--output /tmp/….{json|txt|csv|html}'. Returns stdio, output file path, and parsed JSON when requested."
+        "Wraps the CLI usage: 'python3 -m {scanner_name} --march {arch} [--git-repo REPO CLONE_PATH]|[SCAN_PATH] "
+        "--output /tmp/….{json|txt|csv|html}'. Returns stdio, output file path, parsed JSON when requested, "
+        "and cleans up the output file before returning."
     )
 )
 def migrate_ease_scan(
@@ -405,7 +423,8 @@ def migrate_ease_scan(
         extra_args: Optional list of additional flags passed through to the scanner (e.g., ["--exclude", "tests/"]).
 
     Returns:
-        A dictionary with status, returncode, command, stdio, output file path, and parsed_results (for JSON).
+        A dictionary with status, returncode, command, stdio, output file path (for traceability),
+        parsed_results (for JSON), and a flag indicating if the output file was deleted.
     """
     # Validate scanner early
     if scanner.lower() not in SUPPORTED_SCANNERS:
