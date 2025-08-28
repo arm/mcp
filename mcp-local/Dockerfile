@@ -23,6 +23,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir -r /app/migrate-ease/requirements.txt
 
 # Copy server code and supporting files
+COPY utils/ ./utils/
 COPY server.py ./
 COPY usearch_index.bin ./
 COPY metadata.json ./

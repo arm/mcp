@@ -1,117 +1,22 @@
 from fastmcp import FastMCP
-from typing import List, Dict, Any, Optional, Tuple
-from usearch.index import Index
-import json
-import numpy as np
+from typing import List, Dict, Any, Optional
 from sentence_transformers import SentenceTransformer
-import os
-import requests
-import pathlib
-import time
-import shlex
-import subprocess
 
-# Find the directory this file is in
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# Configuration (use files in this script's own directory)
-USEARCH_INDEX_PATH = os.path.join(BASE_DIR, "usearch_index.bin")
-METADATA_PATH = os.path.join(BASE_DIR, "metadata.json")
-MODEL_NAME = 'all-MiniLM-L6-v2'
-DISTANCE_THRESHOLD = 1.1
-K_RESULTS = 5
+# Import helper modules
+from utils.config import METADATA_PATH, USEARCH_INDEX_PATH, MODEL_NAME, SUPPORTED_SCANNERS, DEFAULT_ARCH
+from utils.search_utils import load_metadata, load_usearch_index, embedding_search, deduplicate_urls
+from utils.docker_utils import check_docker_image_architectures
+from utils.migrate_ease_utils import run_migrate_ease_scan
+from utils.sys_utils import run_sysreport
 
 # Initialize the MCP server
 mcp = FastMCP("arm_torq")
 
 # Load USearch index and metadata at module load time
-def load_usearch_index(index_path: str, metadata: List[Dict]) -> Index:
-    """Load USearch index from file."""
-    # Get dimension from the first metadata entry's vector
-    dimension = len(metadata[0]['vector'])
-    
-    # Create index with same parameters as used during creation
-    index = Index(
-        ndim=dimension,
-        metric='l2sq',  # L2 squared distance
-        dtype='f32',
-        connectivity=16,
-        expansion_add=128,
-        expansion_search=64
-    )
-    
-    # Load the saved index
-    index.load(index_path)
-    return index
-
-def load_metadata(metadata_path: str) -> List[Dict]:
-    """Load metadata from JSON file."""
-    with open(metadata_path, 'r') as f:
-        metadata = json.load(f)
-    return metadata
-
-# Load metadata first, then index (since index needs dimension from metadata)
 METADATA = load_metadata(METADATA_PATH)
 USEARCH_INDEX = load_usearch_index(USEARCH_INDEX_PATH, METADATA)
 EMBEDDING_MODEL = SentenceTransformer(MODEL_NAME)
 
-def embedding_search(query: str, k: int = K_RESULTS) -> List[Dict[str, Any]]:
-    """Search the USearch index with a text query."""
-    # Create query embedding
-    query_embedding = EMBEDDING_MODEL.encode([query])[0]
-    
-    # Search in USearch index
-    matches = USEARCH_INDEX.search(query_embedding, k)
-    results = []
-    # Robust handling of USearch Matches object, as in test_vectorstore.py
-    if matches is not None:
-        try:
-            # USearch Matches object can be accessed with .keys and .distances properties
-            if hasattr(matches, 'keys') and hasattr(matches, 'distances'):
-                labels = matches.keys
-                distances = matches.distances
-            # Alternative attribute names
-            elif hasattr(matches, 'labels') and hasattr(matches, 'distances'):
-                labels = matches.labels
-                distances = matches.distances
-            # Try converting to numpy arrays
-            else:
-                labels = np.array(matches.keys) if hasattr(matches, 'keys') else None
-                distances = np.array(matches.distances) if hasattr(matches, 'distances') else None
-            # If tuple (labels, distances)
-            if labels is None or distances is None:
-                if isinstance(matches, tuple) and len(matches) == 2:
-                    labels, distances = matches
-                elif isinstance(matches, dict):
-                    labels = matches.get('labels', matches.get('indices'))
-                    distances = matches.get('distances')
-            if labels is not None and distances is not None:
-                labels = np.atleast_1d(labels)
-                distances = np.atleast_1d(distances)
-                for i, (idx, dist) in enumerate(zip(labels, distances)):
-                    if idx != -1 and float(dist) < DISTANCE_THRESHOLD:
-                        result = {
-                            "rank": i + 1,
-                            "distance": float(dist),
-                            "metadata": METADATA[int(idx)]
-                        }
-                        results.append(result)
-        except Exception as e:
-            print(f"Error processing matches: {e}")
-            import traceback
-            traceback.print_exc()
-    return results
-
-def deduplicate_urls(embedding_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Deduplicate metadata based on the 'url' field."""
-    seen_urls = set()
-    deduplicated_results = []
-    for item in embedding_results:
-        url = item["metadata"].get("url")
-        if url and url not in seen_urls:
-            seen_urls.add(url)
-            deduplicated_results.append(item)
-    return deduplicated_results
 
 @mcp.tool(
     description="Searches an Arm knowledge base of learning resources, Arm intrinsics, and software version compatibility using semantic similarity. Given a natural language query, returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful for finding documentation, tutorials, or version compatibility for Arm."
@@ -126,7 +31,7 @@ def knowledge_base_search(query: str) -> List[Dict[str, Any]]:
     Returns:
         List of dictionaries with metadata including url and text snippets.
     """
-    embedding_results = embedding_search(query)
+    embedding_results = embedding_search(query, USEARCH_INDEX, METADATA, EMBEDDING_MODEL)
     deduped = deduplicate_urls(embedding_results)
     # Only return the relevant fields
     formatted = [
@@ -140,56 +45,6 @@ def knowledge_base_search(query: str) -> List[Dict[str, Any]]:
     ]
     return formatted
 
-# Target architectures to check
-TARGET_ARCHITECTURES = {'amd64', 'arm64'}
-TIMEOUT_SECONDS = 10
-
-def get_auth_token(repository: str) -> str:
-    """Get Docker Hub authentication token."""
-    url = "https://auth.docker.io/token"
-    params = {
-        "service": "registry.docker.io",
-        "scope": f"repository:{repository}:pull"
-    }
-    try:
-        response = requests.get(url, params=params, timeout=TIMEOUT_SECONDS)
-        response.raise_for_status()
-        return response.json()['token']
-    except requests.exceptions.RequestException as e:
-        return f"Failed to get auth token: {e}"
-
-def get_manifest(repository: str, tag: str, token: str) -> Dict:
-    """Fetch manifest for specified image."""
-    headers = {
-        'Accept': 'application/vnd.docker.distribution.manifest.list.v2+json',
-        'Authorization': f'Bearer {token}'
-    }
-    url = f"https://registry-1.docker.io/v2/{repository}/manifests/{tag}"
-    try:
-        response = requests.get(url, headers=headers, timeout=TIMEOUT_SECONDS)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        return {"error": f"Failed to get manifest: {e}"}
-
-def check_architectures(manifest: Dict) -> List[str]:
-    """Check available architectures in the manifest."""
-    if manifest.get('manifests'):
-        archs = [m['platform']['architecture'] for m in manifest['manifests']]
-        return archs
-    else:
-        return []
-
-def parse_image_spec(image: str) -> Tuple[str, str]:
-    """Parse image specification into repository and tag."""
-    if ':' in image:
-        repository, tag = image.split(':', 1)
-    else:
-        repository, tag = image, 'latest'
-
-    if '/' not in repository:
-        repository = f'library/{repository}'
-    return repository.lower(), tag
 
 @mcp.tool()
 def check_image(image: str) -> dict:
@@ -201,37 +56,7 @@ def check_image(image: str) -> dict:
     Returns:
         Dictionary with architecture information
     """
-    repository, tag = parse_image_spec(image)
-    token = get_auth_token(repository)
-    
-    if isinstance(token, str) and not token.startswith("Failed"):
-        manifest = get_manifest(repository, tag, token)
-        if isinstance(manifest, dict) and not manifest.get("error"):
-            architectures = check_architectures(manifest)
-            
-            if not architectures:
-                return {"status": "error", "message": f"No architectures found for {image}"}
-            
-            available_targets = TARGET_ARCHITECTURES.intersection(architectures)
-            missing_targets = TARGET_ARCHITECTURES - set(architectures)
-            
-            if not missing_targets:
-                return {
-                    "status": "success",
-                    "message": f"Image {image} supports all required architectures",
-                    "architectures": architectures
-                }
-            else:
-                return {
-                    "status": "warning",
-                    "message": f"Image {image} is missing architectures: {', '.join(missing_targets)}",
-                    "available": architectures,
-                    "missing": list(missing_targets)
-                }
-        else:
-            return {"status": "error", "message": manifest.get("error", "Unknown error getting manifest")}
-    else:
-        return {"status": "error", "message": token}
+    return check_docker_image_architectures(image)
 
 
 @mcp.tool(
@@ -241,159 +66,8 @@ def sysreport() -> Dict[str, Any]:
     """
     Run sysreport and return the system information.
     """
-    result = subprocess.run(["python3", "/app/sysreport/src/sysreport.py"], capture_output=True, text=True)
-    return {
-        "stdout": result.stdout,
-        "stderr": result.stderr,
-        "returncode": result.returncode
-    }
+    return run_sysreport()
 
-
-MIGRATE_EASE_ROOT = "/app/migrate-ease"
-SUPPORTED_SCANNERS = {"cpp", "docker", "go", "java", "python", "rust"}
-DEFAULT_ARCH = "aarch64"
-
-def _normalize_scanner(scanner: str) -> str:
-    """
-    Normalize scanner names. Docs sometimes show 'Python' capitalized;
-    the package modules are typically lowercase. We'll prefer lowercase.
-    """
-    s = scanner.strip()
-    if s.lower() in SUPPORTED_SCANNERS:
-        return s.lower()
-    return s  # let the caller see the exact name if it's custom
-
-def _ensure_dir_empty(path: str) -> Optional[str]:
-    """Ensure directory exists and is empty; return None on success or error string."""
-    try:
-        p = pathlib.Path(path)
-        p.mkdir(parents=True, exist_ok=True)
-        # If directory has content, that's an error for migrate-ease git mode
-        if any(p.iterdir()):
-            return f"clone_path '{path}' must be empty."
-        return None
-    except Exception as e:
-        return f"Failed to prepare clone_path '{path}': {e}"
-
-def _resolve_scan_path(path: Optional[str]) -> str:
-    """
-    Resolve a user path against the workspace mount if it's not absolute.
-    Defaults to WORKSPACE_DIR when path is None.
-    """
-    if not path:
-        return WORKSPACE_DIR
-    if os.path.isabs(path):
-        return path
-    return os.path.join(WORKSPACE_DIR, path)
-
-def _build_output_path(scanner: str, output_format: str) -> str:
-    ts = time.strftime("%Y%m%d-%H%M%S")
-    suffix = output_format.lower().lstrip(".")
-    # Always put results into /tmp to avoid permission issues
-    return f"/tmp/migrate_ease_{scanner}_{ts}.{suffix}"
-
-def _run_migrate_ease(
-    scanner: str,
-    arch: str,
-    scan_path: Optional[str],
-    git_repo: Optional[str],
-    clone_path: Optional[str],
-    output_format: str,
-    extra_args: Optional[List[str]] = None,
-) -> Dict[str, Any]:
-    """
-    Execute migrate-ease scanner as 'python3 -m {scanner} ...' in MIGRATE_EASE_ROOT.
-
-    NOTE: The migrate-ease output file is created under /tmp and is **deleted**
-    before this function returns. A best-effort deletion flag is included in
-    the returned dictionary as 'output_file_deleted'.
-    """
-    normalized_scanner = _normalize_scanner(scanner)
-    fmt = output_format.lower().lstrip(".")
-    if fmt not in {"json", "txt", "csv", "html"}:
-        return {"status": "error", "message": f"Unsupported output format '{output_format}'."}
-
-    out_path = _build_output_path(normalized_scanner, fmt)
-
-    # Base command
-    cmd: List[str] = ["python3", "-u", "-m", normalized_scanner, "--march", arch, "--output", out_path]
-
-    # Route: git repo vs local path
-    if git_repo:
-        if not clone_path:
-            return {"status": "error", "message": "clone_path is required when git_repo is provided."}
-        # migrate-ease requires empty directory for clone
-        err = _ensure_dir_empty(clone_path)
-        if err:
-            return {"status": "error", "message": err}
-        cmd.extend(["--git-repo", git_repo, clone_path])
-        resolved_for_echo = clone_path
-    else:
-        target = _resolve_scan_path(scan_path)
-        cmd.append(target)
-        resolved_for_echo = target
-
-    # Append any raw extra args last
-    if extra_args:
-        cmd.extend(extra_args)
-
-    # Run
-    try:
-        proc = subprocess.run(
-            cmd,
-            cwd=MIGRATE_EASE_ROOT,  # run from repo root so module resolution works
-            capture_output=True,
-            text=True,
-            timeout=60 * 30,  # 30 minutes max
-        )
-        status = "success" if proc.returncode == 0 else "error"
-        result: Dict[str, Any] = {
-            "status": status,
-            "returncode": proc.returncode,
-            "command": " ".join(shlex.quote(c) for c in cmd),
-            "ran_from": MIGRATE_EASE_ROOT,
-            "target": resolved_for_echo,
-            "stdout": proc.stdout[-50_000:],  # tail to keep payload reasonable
-            "stderr": proc.stderr[-50_000:],
-            "output_file": out_path,
-            "output_format": fmt,
-        }
-
-        # Inline JSON results before cleanup so callers still get the data.
-        if fmt == "json":
-            try:
-                with open(out_path, "r") as f:
-                    data = json.load(f)
-                result["parsed_results"] = data
-            except Exception as e:
-                result["parsed_results_error"] = f"Failed to parse JSON report: {e}"
-
-        # BEST-EFFORT CLEANUP of the migrate-ease output file
-        try:
-            os.remove(out_path)
-            result["output_file_deleted"] = True
-        except FileNotFoundError:
-            # It might not have been created (e.g., early failure)
-            result["output_file_deleted"] = False
-            result["output_file_delete_error"] = "Output file not found during cleanup."
-        except Exception as e:
-            result["output_file_deleted"] = False
-            result["output_file_delete_error"] = f"Failed to delete output file: {e}"
-
-        return result
-
-    except subprocess.TimeoutExpired:
-        return {
-            "status": "error",
-            "message": "migrate-ease scan timed out.",
-            "command": " ".join(shlex.quote(c) for c in cmd),
-        }
-    except FileNotFoundError as e:
-        return {
-            "status": "error",
-            "message": f"Failed to execute migrate-ease: {e}",
-            "hint": "Verify MIGRATE_EASE_ROOT and that Python can import the scanner module.",
-        }
 
 @mcp.tool(
     description=(
@@ -439,7 +113,7 @@ def migrate_ease_scan(
             "message": "Provide either 'path' for local scans OR 'git_repo' + 'clone_path' for repo scans, not both."
         }
 
-    return _run_migrate_ease(
+    return run_migrate_ease_scan(
         scanner=scanner,
         arch=arch,
         scan_path=path,
