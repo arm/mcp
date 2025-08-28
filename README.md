@@ -45,3 +45,15 @@ docker build -t arm-mcp .
 Replace [local directory path] with the local path that you want the mcp server to be able to access.
 
 For q cli this config should be placed in ~/.aws/amazonq/mcp.json
+
+For GitHub Copilot in VS Code, the config can either be put in:
+
+`.vscode/mcp.json` local to the open project folder, or
+
+globally here (for macOS):
+
+`~/Library/Application Support/Code/User/mcp.json`
+
+The easiest way to open this file in VS Code for editing is command+shift+p and search for
+
+MCP: Open User Configuration
