@@ -19,10 +19,44 @@ embedding-generation is exclusively for creating the vector db, and mcp-remote i
 From the root of this project (where the `Dockerfile` lives):
 
 ```bash
-docker build -t arm-mcp .
+docker buildx build --platform linux/arm64 -t arm-mcp .
+```
+
+To get into the container for troubleshooting, use
+
+```bash
+docker run --rm -it --entrypoint /bin/bash arm-mcp
 ```
 
 ## 2. Set up the MCP config
+
+### for q cli
+
+```json
+{
+  "mcpServers": {
+    "arm_torq": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-v", "[local directory path]:/workspace",
+        "--name", "arm-mcp",
+        "arm-mcp"
+      ],
+      "env": {},
+      "timeout": 60000
+    }
+  }
+}
+```
+
+Replace [local directory path] with the local path that you want the mcp server to be able to access.
+
+For q cli this config should be placed in ~/.aws/amazonq/mcp.json
+
+### GitHub Copilot in VS Code
 
 ```json
 {
@@ -42,11 +76,7 @@ docker build -t arm-mcp .
 }
 ```
 
-Replace [local directory path] with the local path that you want the mcp server to be able to access.
-
-For q cli this config should be placed in ~/.aws/amazonq/mcp.json
-
-For GitHub Copilot in VS Code, the config can either be put in:
+The config can either be put in:
 
 `.vscode/mcp.json` local to the open project folder, or
 
