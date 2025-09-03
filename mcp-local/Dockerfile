@@ -6,7 +6,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1 \
     WORKSPACE_DIR=/workspace
 
-# add sudo so the installer works
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-venv python3-pip curl sudo && \
     rm -rf /var/lib/apt/lists/*
