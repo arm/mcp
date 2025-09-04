@@ -7,7 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     WORKSPACE_DIR=/workspace
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-venv python3-pip curl sudo && \
+    python3 python3-venv python3-pip curl sudo libelf-dev && \
     rm -rf /var/lib/apt/lists/*
 
 RUN curl -sSL https://raw.githubusercontent.com/arm/arm-linux-migration-tools/main/scripts/install.sh | bash

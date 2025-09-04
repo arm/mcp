@@ -17,7 +17,6 @@ from utils.bolt_tool import bolt_help, perf2bolt_help, bolt_optimize
 from utils.papi_tool import papi_help, papi_list
 from utils.perf_tool import perf_help, perf_record, perf_report
 from utils.processwatch_tool import processwatch_help, processwatch_run
-from utils.porting_advisor_tool import porting_advisor_help, porting_advisor_run
 
 # Initialize the MCP server
 mcp = FastMCP("arm_torq")
@@ -160,13 +159,6 @@ def kubearchinspect(kubeconfig: Optional[str] = None, namespace: Optional[str] =
     if kubeconfig is None and namespace is None and not extra_args:
         return kubearchinspect_help()
     return kubearchinspect_scan(kubeconfig=kubeconfig, namespace=namespace, output_format=output_format, extra_args=extra_args)
-
-
-@mcp.tool(description="Source Code Portability Assessment: Analyzes source code to estimate effort required for ARM64 migration. Scans C/C++, Python, Java, Fortran, and Go code for architecture-specific constructs, inline assembly, incompatible libraries, and provides migration recommendations. Essential for planning x86 to ARM migration projects. Specify 'path' to analyze and optional 'extra_args' for detailed scanning options.")
-def porting_advisor(path: Optional[str] = None, extra_args: Optional[List[str]] = None) -> Dict[str, Any]:
-    if not path and not extra_args:
-        return porting_advisor_help()
-    return porting_advisor_run(path=path, extra_args=extra_args)
 
 
 @mcp.tool(description="Binary Performance Optimizer: Post-compilation optimizer that reorganizes compiled programs for better CPU cache utilization and performance. Can improve application speed by 2-20% using execution profiles. Particularly valuable when optimizing for different CPU architectures. Use 'mode' (help/optimize), specify 'binary' and 'fdata' (profile data) for optimization, 'output_binary' for result, and 'extra_args' for advanced options.")
