@@ -10,6 +10,8 @@ import pathlib
 import time
 import shlex
 import subprocess
+from utils.atp import prepare_target, run_workload, get_results
+
 
 # Find the directory this file is in
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -25,7 +27,7 @@ K_RESULTS = 5
 mcp = FastMCP("arm_torq")
 
 # Load USearch index and metadata at module load time
-def load_usearch_index(index_path: str, metadata: List[Dict]) -> Index:
+def load_usearch_index(index_path: str, metadata: List[Dict]):# -> Index:
     """Load USearch index from file."""
     # Get dimension from the first metadata entry's vector
     dimension = len(metadata[0]['vector'])
@@ -52,7 +54,7 @@ def load_metadata(metadata_path: str) -> List[Dict]:
 
 # Load metadata first, then index (since index needs dimension from metadata)
 METADATA = load_metadata(METADATA_PATH)
-USEARCH_INDEX = load_usearch_index(USEARCH_INDEX_PATH, METADATA)
+#USEARCH_INDEX = load_usearch_index(USEARCH_INDEX_PATH, METADATA)
 EMBEDDING_MODEL = SentenceTransformer(MODEL_NAME)
 
 def embedding_search(query: str, k: int = K_RESULTS) -> List[Dict[str, Any]]:
@@ -430,118 +432,39 @@ def migrate_ease_scan(
         extra_args=extra_args,
     )
 
-def extract_run_id(output: str) -> str:
-    try:
-        data = json.loads(output.split("\n")[1])
-        return data.get("data", {}).get("run_id", {})
-    except Exception:
-        return ""
-
-def run_command(command: list, cwd: str, parse_output=None) -> tuple:
-    """
-    Run a shell command as a child process and wait for it to finish.
-    Optionally parse the output using a provided function.
-    Returns (returncode, parsed_output or stdout).
-    """
-    try:
-        result = subprocess.run(command, cwd=cwd, timeout=30, capture_output=True, text=True)
-    except subprocess.TimeoutExpired as e:
-        print(f"Command timed out: {e}")
-        return -1, None
-    output = result.stdout
-    if parse_output:
-        output = parse_output(output)
-    return result.returncode, output
-
-def read_file_contents(file_path: str) -> str:
-    """Read the contents of a file and return as a string."""
-    with open(file_path, 'r', encoding='utf-8') as f:
-        return f.read()
-
-def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str) -> str:
-    """Prepare the target machine for running workloads. 
-        Returns the target ID."""
-    command = [
-        "./atperf",
-        "target", "prepare",
-        "--json",
-        f"--ssh-key={ssh_key_path}",
-        f"--target={remote_usr}@{remote_ip_addr}"
-    ]
-    atperf_dir = "/Applications/Arm Total Performance.app/Contents/assets/atperf"
-    status, target_id = run_command(command, cwd=atperf_dir, parse_output=lambda out: json.loads(out.split("\n")[1]).get("data", {}).get("target_id", ""))
-    if status != 0 or not target_id:
-        raise RuntimeError("Failed to prepare target")
-    return target_id
-
-def run_workload(cmd:str, target: str) -> str:
-    """Run a sample workload on the target machine. Example query: 'Help my analyze my code's performance'."""
-    command = [
-        "./atperf",
-        "recipe", "run", "cpu_hotspots",
-        "--json",
-        f"--target={target}",
-        "--system-wide"
-    ]
-    atperf_dir = "/Applications/Arm Total Performance.app/Contents/assets/atperf"
-    status, run_id = run_command(command, cwd=atperf_dir, parse_output=extract_run_id)
-    return run_id
-
-def get_results(run_id: str, table: str) -> str:
-    """Get results from the target machine after running a workload. 
-        Returns a csv of the run results, which are sampling data 
-        for the different function calls."""
-    
-    atperf_dir = "/Applications/Arm Total Performance.app/Contents/assets/atperf"
-
-    # Step 1: Run './atperf render {run_id}'
-    render_cmd = ["./atperf", "run", "render", run_id]
-    render_proc = subprocess.run(render_cmd, cwd=atperf_dir, capture_output=True, text=True)
-    if render_proc.returncode != 0:
-        raise RuntimeError(f"atperf render failed: {render_proc.stderr}")
-
-    # Step 2: Parse session id and table from JSON output
-    try:
-        render_json = json.loads(render_proc.stdout)
-        session_id = render_json.get("data").get("invocation").get("session_id")
-        if not session_id:
-            raise ValueError("session_id not found in render output")
-        # If you need to extract the table name from the JSON, do it here
-        # For now, using the provided 'table' argument
-    except Exception as e:
-        raise RuntimeError(f"Failed to parse render output: {e}")
-
-    # Step 3: Run './atperf render query {session_id} "select * from {table}"'
-    query_cmd = ["./atperf", "render", "query", session_id, f"select * from {table}"]
-    query_proc = subprocess.run(query_cmd, cwd=atperf_dir, capture_output=True, text=True)
-    if query_proc.returncode != 0:
-        raise RuntimeError(f"atperf render query failed: {query_proc.stderr}")
-
-    return query_proc.stdout
-
 @mcp.tool()
-def atp_recipe_run(cmd:str, ssh_key_path:str, remote_ip_addr:str, remote_usr:str) -> str:
+def atp_recipe_run(cmd:str, remote_ip_addr:str, remote_usr:str, recipe:str) -> str:
     """
     Run a sample workload on the given target using an Arm Total Performance recipe, 
-    and interpret the results. 
+    and interpret the results. Example user prompt: "Help me analyze my code's performance"
+
+    This tool is run within Docker, so the ATP CLI is installed at /opt/Arm Total Performance/assets/atperf
+    If you hit an error when running atperf commands, log the error to the user and back out. Do not try to run atperf on the local machine.
 
     Args:
         cmd: command to run on the remote machine
-        ssh_key_path: path to the SSH private key for accessing the remote machine
         remote_ip_addr: IP address of the remote machine
         remote_usr: username for SSH access to the remote machine
+        recipe: the ATP recipe to run (must be one of ["cpu_hotspots", "instruction_mix", "topdown", "memory_access"], or "all" if unsure)
 
     Returns:
         JSON with the results of the workload. 
     """
-    #target_id = prepare_target(remote_ip_addr, remote_usr, ssh_key_path)
-    target_id = "aws_10.252.211.230" #Hardcoding the target for now
+    key_path = os.getenv("SSH_KEY_PATH")
+    known_hosts_path = os.getenv("KNOWN_HOSTS_PATH")
+
+    if not key_path or not known_hosts_path:
+        raise RuntimeError("SSH_KEY_PATH and KNOWN_HOSTS_PATH environment variables must be set in the docker run command in the mcp config file to use ATP.")
+
+    atp_cli_dir = "/opt/Arm Total Performance/assets/atperf"
+    target_id = prepare_target(remote_ip_addr, remote_usr, key_path, atp_cli_dir)
+    #target_id = "aws_10.252.211.230" #Hardcoding the target for now
     print(f"Prepared target: {target_id}")
-    run_id = run_workload(cmd, target_id)
+    run_id = run_workload(cmd, target_id, recipe, atp_cli_dir)
     print(f"Workload run ID: {run_id}")
-    results = get_results(run_id, "drilldown")
+    results = get_results(run_id, "drilldown", atp_cli_dir)
     
     return results
 
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(transport="stdio")

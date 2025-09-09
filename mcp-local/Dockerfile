@@ -1,7 +1,10 @@
-FROM python:3.12-slim
+FROM python:3.12-slim-bookworm
 
 # Set working directory
 WORKDIR /app
+
+RUN dpkg --print-architecture
+RUN apt-get update && apt-cache policy libgtk-3-0 | sed -n '1,40p'
 
 # Install system dependencies
 RUN apt-get update && \
@@ -9,9 +12,52 @@ RUN apt-get update && \
         build-essential \
         git \
         wget \
+        curl \
+        unzip \
         libopenblas-dev \
         libomp-dev \
+        libgtk-3-0 \
+        libnotify4 \
+        libnss3 \
+        libx11-xcb1 \
+        libxss1 \
+        libxtst6 \
+        xdg-utils \
+        libsecret-1-0 \
         && rm -rf /var/lib/apt/lists/*
+
+# Download and unzip into current working directory
+#RUN curl -L https://artifacts.tools.arm.com/arm-total-performance/installers/latest/linux/arm64/ArmTotalPerformance-arm64.deb -o /tmp/tool.deb
+
+#RUN apt-get install -y --no-install-recommends /tmp/tool.deb
+
+#RUN rm /tmp/tool.deb
+
+# ---- ATP (Arm Total Performance) install ----
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Re-open apt index (since you cleaned it), install likely runtime deps,
+# fetch the .deb, install it, and clean up — all in one layer.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        libgtk-3-0 \
+        libnotify4 \
+        libnss3 \
+        libx11-xcb1 \
+        libxss1 \
+        libxtst6 \
+        xdg-utils \
+        libsecret-1-0 \
+        libatspi2.0-0 \
+    && curl -fsSL -o /tmp/atp.deb \
+        https://artifacts.tools.arm.com/arm-total-performance/installers/latest/linux/arm64/ArmTotalPerformance-arm64.deb \
+    && apt-get install -y --no-install-recommends /tmp/atp.deb \
+    && rm -f /tmp/atp.deb \
+    && rm -rf /var/lib/apt/lists/*
+
+# Ensure the CLI is reachable even if the installer doesn’t put it on PATH
+ENV PATH="/opt/arm/total-performance/bin:/opt/ArmTotalPerformance/bin:${PATH}"
 
 RUN git clone https://github.com/ArmDeveloperEcosystem/sysreport.git /app/sysreport && \
     git clone https://github.com/migrate-ease/migrate-ease.git /app/migrate-ease && \
@@ -23,6 +69,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN pip install --no-cache-dir -r /app/migrate-ease/requirements.txt
 
 # Copy server code and supporting files
+COPY utils/ ./utils/
 COPY server.py ./
 COPY usearch_index.bin ./
 COPY metadata.json ./
