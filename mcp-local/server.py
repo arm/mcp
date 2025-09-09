@@ -19,7 +19,7 @@ from utils.search_utils import load_metadata, load_usearch_index, embedding_sear
 from utils.docker_utils import check_docker_image_architectures
 from utils.migrate_ease_utils import run_migrate_ease_scan
 from utils.sys_utils import run_sysreport
-
+from utils.atp import prepare_target, run_workload, get_results
 # Initialize the MCP server
 mcp = FastMCP("arm_torq")
 
