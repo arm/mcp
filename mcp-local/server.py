@@ -1,7 +1,6 @@
 from fastmcp import FastMCP
 from typing import List, Dict, Any, Optional
 from sentence_transformers import SentenceTransformer
-<<<<<<< HEAD
 import os
 import requests
 import pathlib
@@ -10,8 +9,6 @@ import shlex
 import subprocess
 from utils.atp import prepare_target, run_workload, get_results
 
-=======
->>>>>>> bb3620b (refactor server file layout and update README)
 
 # Import helper modules
 from utils.config import METADATA_PATH, USEARCH_INDEX_PATH, MODEL_NAME, SUPPORTED_SCANNERS, DEFAULT_ARCH
@@ -24,7 +21,6 @@ from utils.atp import prepare_target, run_workload, get_results
 mcp = FastMCP("arm_torq")
 
 # Load USearch index and metadata at module load time
-<<<<<<< HEAD
 def load_usearch_index(index_path: str, metadata: List[Dict]):# -> Index:
     """Load USearch index from file."""
     # Get dimension from the first metadata entry's vector
@@ -51,8 +47,6 @@ def load_metadata(metadata_path: str) -> List[Dict]:
     return metadata
 
 # Load metadata first, then index (since index needs dimension from metadata)
-=======
->>>>>>> bb3620b (refactor server file layout and update README)
 METADATA = load_metadata(METADATA_PATH)
 #USEARCH_INDEX = load_usearch_index(USEARCH_INDEX_PATH, METADATA)
 EMBEDDING_MODEL = SentenceTransformer(MODEL_NAME)
