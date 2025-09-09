@@ -17,6 +17,7 @@ from utils.bolt_tool import bolt_help, perf2bolt_help, bolt_optimize
 from utils.papi_tool import papi_help, papi_list
 from utils.perf_tool import perf_help, perf_record, perf_report
 from utils.processwatch_tool import processwatch_help, processwatch_run
+from utils.invocation_logger import log_invocation_reason
 
 # Initialize the MCP server
 mcp = FastMCP("arm_torq")
@@ -31,6 +32,12 @@ EMBEDDING_MODEL = SentenceTransformer(MODEL_NAME)
     description="Searches an Arm knowledge base of learning resources, Arm intrinsics, and software version compatibility using semantic similarity. Given a natural language query, returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful for finding documentation, tutorials, or version compatibility for Arm. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
 )
 def knowledge_base_search(query: str, invocation_reason: Optional[str] = None) -> List[Dict[str, Any]]:
+    # Log invocation reason if provided
+    log_invocation_reason(
+        tool="knowledge_base_search",
+        reason=invocation_reason,
+        args={"query": query},
+    )
     """
     Search for learning resources relevant to the given query using embedding similarity.
 
@@ -59,6 +66,11 @@ def knowledge_base_search(query: str, invocation_reason: Optional[str] = None) -
     description="Check Docker image architectures. Provide an image in 'name:tag' format and get a report of supported architectures. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
 )
 def check_image(image: str, invocation_reason: Optional[str] = None) -> dict:
+    log_invocation_reason(
+        tool="check_image",
+        reason=invocation_reason,
+        args={"image": image},
+    )
     """Check Docker image architectures
     
     Args:
@@ -74,6 +86,11 @@ def check_image(image: str, invocation_reason: Optional[str] = None) -> dict:
     description="Runs sysreport, a tool that obtains system information related to system architecture, CPU, memory, and other hardware details. Useful for diagnosing system issues or gathering information about the system's capabilities. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
 )
 def sysreport(invocation_reason: Optional[str] = None) -> Dict[str, Any]:
+    log_invocation_reason(
+        tool="sysreport",
+        reason=invocation_reason,
+        args={},
+    )
     """
     Run sysreport and return the system information.
     """
@@ -98,6 +115,19 @@ def migrate_ease_scan(
     extra_args: Optional[List[str]] = None,
     invocation_reason: Optional[str] = None,
 ) -> Dict[str, Any]:
+    log_invocation_reason(
+        tool="migrate_ease_scan",
+        reason=invocation_reason,
+        args={
+            "scanner": scanner,
+            "path": path,
+            "arch": arch,
+            "git_repo": git_repo,
+            "clone_path": clone_path,
+            "output_format": output_format,
+            "extra_args": extra_args,
+        },
+    )
     """
     Args:
         scanner: One of cpp, docker, go, java, python, rust (case-insensitive).
@@ -138,6 +168,11 @@ def migrate_ease_scan(
 
 @mcp.tool(description="Container Image Architecture Inspector: Inspect container images remotely without downloading to check architecture support (especially ARM64 compatibility). Useful before migrating workloads to ARM-based infrastructure. Set 'image' (e.g. nginx:latest), optional 'transport' (docker, oci, dir), and 'raw' to get detailed manifest data. Shows available architectures, OS support, and image metadata. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
 def skopeo(image: Optional[str] = None, transport: str = "docker", raw: bool = False, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
+    log_invocation_reason(
+        tool="skopeo",
+        reason=invocation_reason,
+        args={"image": image, "transport": transport, "raw": raw},
+    )
     if not image:
         return skopeo_help()
     return skopeo_inspect(image=image, transport=transport, raw=raw)
@@ -145,6 +180,11 @@ def skopeo(image: Optional[str] = None, transport: str = "docker", raw: bool = F
 
 @mcp.tool(description="Assembly Code Performance Analyzer: Analyze assembly code to predict performance on different CPU architectures and identify bottlenecks. Helps optimize code before migrating between processor types (x86 to ARM64). Estimates Instructions Per Cycle (IPC), execution time, and resource usage. Accepts 'input_path' (assembly/object file), optional 'triple' (target architecture), 'cpu' (specific processor model), and extra analysis arguments. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
 def mca(input_path: Optional[str] = None, triple: Optional[str] = None, cpu: Optional[str] = None, extra_args: Optional[List[str]] = None, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
+    log_invocation_reason(
+        tool="mca",
+        reason=invocation_reason,
+        args={"input_path": input_path, "triple": triple, "cpu": cpu, "extra_args": extra_args},
+    )
     if not input_path:
         return mca_help()
     return llvm_mca_analyze(input_path=input_path, triple=triple, cpu=cpu, extra_args=extra_args)
@@ -152,6 +192,11 @@ def mca(input_path: Optional[str] = None, triple: Optional[str] = None, cpu: Opt
 
 @mcp.tool(description="CPU Performance Bottleneck Analyzer: Systematically identifies what's limiting your application performance using Intel's Top-Down methodology. Categorizes issues into CPU frontend problems (instruction fetch), backend problems (execution units), bad speculation (branch misprediction), or retirement issues. Essential for performance tuning when migrating between architectures. Requires no arguments to show help, or provide custom analysis arguments. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
 def topdown(args: Optional[List[str]] = None, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
+    log_invocation_reason(
+        tool="topdown",
+        reason=invocation_reason,
+        args={"args": args},
+    )
     if not args:
         return topdown_help()
     return topdown_run(args=args)
@@ -159,6 +204,16 @@ def topdown(args: Optional[List[str]] = None, invocation_reason: Optional[str] =
 
 @mcp.tool(description="Kubernetes ARM64 Readiness Scanner: Scans your Kubernetes cluster to identify which container images support ARM64 architecture. Essential first step before migrating Kubernetes workloads to ARM-based nodes (like AWS Graviton). Reports incompatible images and suggests alternatives. Requires kubectl access to target cluster. Supports 'kubeconfig' path, 'namespace' filtering, 'output_format' (json/html), and passthrough 'extra_args'. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
 def kubearchinspect(kubeconfig: Optional[str] = None, namespace: Optional[str] = None, output_format: str = "json", extra_args: Optional[List[str]] = None, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
+    log_invocation_reason(
+        tool="kubearchinspect",
+        reason=invocation_reason,
+        args={
+            "kubeconfig": kubeconfig,
+            "namespace": namespace,
+            "output_format": output_format,
+            "extra_args": extra_args,
+        },
+    )
     if kubeconfig is None and namespace is None and not extra_args:
         return kubearchinspect_help()
     return kubearchinspect_scan(kubeconfig=kubeconfig, namespace=namespace, output_format=output_format, extra_args=extra_args)
@@ -166,6 +221,17 @@ def kubearchinspect(kubeconfig: Optional[str] = None, namespace: Optional[str] =
 
 @mcp.tool(description="Binary Performance Optimizer: Post-compilation optimizer that reorganizes compiled programs for better CPU cache utilization and performance. Can improve application speed by 2-20% using execution profiles. Particularly valuable when optimizing for different CPU architectures. Use 'mode' (help/optimize), specify 'binary' and 'fdata' (profile data) for optimization, 'output_binary' for result, and 'extra_args' for advanced options. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
 def bolt(mode: str = "help", binary: Optional[str] = None, fdata: Optional[str] = None, output_binary: Optional[str] = None, extra_args: Optional[List[str]] = None, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
+    log_invocation_reason(
+        tool="bolt",
+        reason=invocation_reason,
+        args={
+            "mode": mode,
+            "binary": binary,
+            "fdata": fdata,
+            "output_binary": output_binary,
+            "extra_args": extra_args,
+        },
+    )
     if mode == "help":
         return bolt_help()
     if mode == "perf2bolt_help":
@@ -177,6 +243,11 @@ def bolt(mode: str = "help", binary: Optional[str] = None, fdata: Optional[str] 
 
 @mcp.tool(description="Hardware Performance Counter Interface: Portable interface for accessing CPU performance metrics (cache misses, instruction counts, cycles) across different processor architectures. Essential for comparing performance between x86 and ARM systems during migration. Use 'help' to see available counters or 'list' to show supported performance events for your hardware. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
 def papi(mode: str = "help", invocation_reason: Optional[str] = None) -> Dict[str, Any]:
+    log_invocation_reason(
+        tool="papi",
+        reason=invocation_reason,
+        args={"mode": mode},
+    )
     if mode == "help":
         return papi_help()
     if mode == "list":
@@ -186,6 +257,17 @@ def papi(mode: str = "help", invocation_reason: Optional[str] = None) -> Dict[st
 
 @mcp.tool(description="Linux System Performance Profiler: Record and analyze CPU performance, identify hotspots, and trace system events. Critical for performance comparison when migrating applications between architectures. Use 'record' mode with 'record_cmd' (command to profile), optional 'record_seconds' duration, and 'extra_args'. Use 'report' mode with 'data_file' to analyze previously recorded data. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
 def perf(mode: str = "help", record_cmd: Optional[List[str]] = None, record_seconds: Optional[int] = None, data_file: str = "/tmp/perf.data", extra_args: Optional[List[str]] = None, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
+    log_invocation_reason(
+        tool="perf",
+        reason=invocation_reason,
+        args={
+            "mode": mode,
+            "record_cmd": record_cmd,
+            "record_seconds": record_seconds,
+            "data_file": data_file,
+            "extra_args": extra_args,
+        },
+    )
     if mode == "help":
         return perf_help()
     if mode == "record":
@@ -197,6 +279,11 @@ def perf(mode: str = "help", record_cmd: Optional[List[str]] = None, record_seco
 
 @mcp.tool(description="ARM Instruction Usage Monitor: Real-time monitoring tool that tracks which ARM-specific instruction sets (NEON, SVE, SVE2) your running processes are actually using. Valuable for validating that migrated applications are taking advantage of ARM architectural features and for identifying optimization opportunities. Provide monitoring 'args' or no arguments for usage help. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
 def process_watch(args: Optional[List[str]] = None, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
+    log_invocation_reason(
+        tool="process_watch",
+        reason=invocation_reason,
+        args={"args": args},
+    )
     if not args:
         return processwatch_help()
     return processwatch_run(args=args)
@@ -204,6 +291,11 @@ def process_watch(args: Optional[List[str]] = None, invocation_reason: Optional[
 
 @mcp.tool(description="AWS Performance Data Collector: Comprehensive performance monitoring tool that collects system metrics, CPU counters, and generates comparative HTML reports. Designed for troubleshooting performance issues and comparing workload behavior across different instance types (especially when migrating to ARM-based AWS Graviton instances). Records performance data for analysis and visualization. Provide 'args' for recording/monitoring options or no arguments for help. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
 def aperf(args: Optional[List[str]] = None, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
+    log_invocation_reason(
+        tool="aperf",
+        reason=invocation_reason,
+        args={"args": args},
+    )
     if not args:
         return aperf_help()
     return aperf_run(args=args)
