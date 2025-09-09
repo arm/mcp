@@ -5,7 +5,7 @@ import time
 import shlex
 import subprocess
 import json
-from .config import MIGRATE_EASE_ROOT, SUPPORTED_SCANNERS, DEFAULT_ARCH, WORKSPACE_DIR
+from .config import SUPPORTED_SCANNERS, DEFAULT_ARCH, WORKSPACE_DIR
 
 
 def _normalize_scanner(scanner: str) -> str:
@@ -51,6 +51,7 @@ def _build_output_path(scanner: str, output_format: str) -> str:
     return f"/tmp/migrate_ease_{scanner}_{ts}.{suffix}"
 
 
+
 def run_migrate_ease_scan(
     scanner: str,
     arch: str,
@@ -61,7 +62,8 @@ def run_migrate_ease_scan(
     extra_args: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
-    Execute migrate-ease scanner as 'python3 -m {scanner} ...' in MIGRATE_EASE_ROOT.
+    Execute migrate-ease via unified CLI wrappers installed in /usr/local/bin:
+    'migrate-ease-{scanner}' (e.g., migrate-ease-cpp, migrate-ease-python, migrate-ease-go, migrate-ease-js, migrate-ease-java).
 
     NOTE: The migrate-ease output file is created under /tmp and is **deleted**
     before this function returns. A best-effort deletion flag is included in
@@ -74,8 +76,10 @@ def run_migrate_ease_scan(
 
     out_path = _build_output_path(normalized_scanner, fmt)
 
-    # Base command
-    cmd: List[str] = ["python3", "-u", "-m", normalized_scanner, "--march", arch, "--output", out_path]
+    # Base command uses unified wrapper
+    wrapper = f"migrate-ease-{normalized_scanner}"
+
+    cmd: List[str] = [wrapper, "--march", arch, "--output", out_path]
 
     # Route: git repo vs local path
     if git_repo:
@@ -96,11 +100,10 @@ def run_migrate_ease_scan(
     if extra_args:
         cmd.extend(extra_args)
 
-    # Run
+    # Run (no special cwd required when using wrappers)
     try:
         proc = subprocess.run(
             cmd,
-            cwd=MIGRATE_EASE_ROOT,  # run from repo root so module resolution works
             capture_output=True,
             text=True,
             timeout=60 * 30,  # 30 minutes max
@@ -110,7 +113,7 @@ def run_migrate_ease_scan(
             "status": status,
             "returncode": proc.returncode,
             "command": " ".join(shlex.quote(c) for c in cmd),
-            "ran_from": MIGRATE_EASE_ROOT,
+            "ran_from": os.getcwd(),
             "target": resolved_for_echo,
             "stdout": proc.stdout[-50_000:],  # tail to keep payload reasonable
             "stderr": proc.stderr[-50_000:],
@@ -150,6 +153,6 @@ def run_migrate_ease_scan(
     except FileNotFoundError as e:
         return {
             "status": "error",
-            "message": f"Failed to execute migrate-ease: {e}",
-            "hint": "Verify MIGRATE_EASE_ROOT and that Python can import the scanner module.",
+            "message": f"Failed to execute migrate-ease wrapper '{wrapper}': {e}",
+            "hint": "Ensure migrate-ease wrappers are installed on PATH (e.g., /usr/local/bin).",
         }

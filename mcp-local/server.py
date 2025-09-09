@@ -100,9 +100,9 @@ def sysreport(invocation_reason: Optional[str] = None) -> Dict[str, Any]:
 @mcp.tool(
     description=(
         "Run a migrate-ease scan on a local path (default: mounted WORKSPACE_DIR) or a remote Git repo. "
-        "Wraps the CLI usage: 'python3 -m {scanner_name} --march {arch} [--git-repo REPO CLONE_PATH]|[SCAN_PATH] "
-        "--output /tmp/….{json|txt|csv|html}'. Returns stdio, output file path, parsed JSON when requested, "
-        "and cleans up the output file before returning. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
+        "Uses unified wrappers installed in /usr/local/bin (migrate-ease-cpp, migrate-ease-python, migrate-ease-go, migrate-ease-js, migrate-ease-java). "
+        "CLI shape: 'migrate-ease-{scanner} --march {arch} [--git-repo REPO CLONE_PATH]|[SCAN_PATH] --output /tmp/….{json|txt|csv|html}'. "
+        "Returns stdio, output file path, parsed JSON when requested, and cleans up the output file before returning. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
     )
 )
 def migrate_ease_scan(
@@ -130,7 +130,7 @@ def migrate_ease_scan(
     )
     """
     Args:
-        scanner: One of cpp, docker, go, java, python, rust (case-insensitive).
+        scanner: One of cpp, python, go, js, java (case-insensitive).
         path: Local path to scan. If relative, resolved against WORKSPACE_DIR. Defaults to WORKSPACE_DIR when omitted.
         arch: Architecture for the scan (default: aarch64).
         git_repo: Remote Git repo URL to scan (if provided, 'clone_path' must be given and empty).
