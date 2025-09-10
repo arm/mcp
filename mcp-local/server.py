@@ -8,7 +8,7 @@ import time
 import shlex
 import subprocess
 from utils.atp import prepare_target, run_workload, get_results
-
+import json
 
 # Import helper modules
 from utils.config import METADATA_PATH, USEARCH_INDEX_PATH, MODEL_NAME, SUPPORTED_SCANNERS, DEFAULT_ARCH

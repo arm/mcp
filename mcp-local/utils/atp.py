@@ -91,13 +91,13 @@ def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, atpe
         raise RuntimeError("Failed to prepare target")
     return generated_name
 
-def run_workload(cmd:str, target: str, recipe:str, atperf_dir:str) -> str:
+def run_workload(cmd:str, target: str, recipe:str, atperf_dir:str) -> dict:
     """Run a sample workload on the target machine. Example query: 'Help my analyze my code's performance'."""
     command = [
         "./atperf",
         "recipe", "run", recipe,
         f"--workload={cmd}",
-        #"--json",
+        "--json",
         f"--target={target}"
     ]
     print("run workload command:")
@@ -108,15 +108,14 @@ def run_workload(cmd:str, target: str, recipe:str, atperf_dir:str) -> str:
         raise RuntimeError("Failed to run workload or extract run_id")
     return run_id
 
-def get_results(run_id: str, table: str, atperf_dir:str) -> str:
+def get_results(run_id: dict, table: str, atperf_dir:str) -> str:
     """Get results from the target machine after running a workload. 
         Returns a csv of the run results, which are sampling data 
         for the different function calls."""
     
-    #atperf_dir = "/Applications/Arm Total Performance.app/Contents/assets/atperf"
-
-    # Step 1: Run './atperf render {run_id}'
-    render_cmd = ["./atperf", "run", "render", run_id]
+    render_cmd = ["./atperf", "run", "render", run_id['value']]
+    print("run workload command:")
+    print(render_cmd)
     render_proc = subprocess.run(render_cmd, cwd=atperf_dir, capture_output=True, text=True)
     if render_proc.returncode != 0:
         raise RuntimeError(f"atperf render failed: {render_proc.stderr}")
