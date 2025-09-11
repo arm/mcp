@@ -51,7 +51,6 @@ def _build_output_path(scanner: str, output_format: str) -> str:
     return f"/tmp/migrate_ease_{scanner}_{ts}.{suffix}"
 
 
-
 def run_migrate_ease_scan(
     scanner: str,
     arch: str,

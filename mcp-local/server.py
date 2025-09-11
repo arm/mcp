@@ -1,6 +1,8 @@
 from fastmcp import FastMCP
 from typing import List, Dict, Any, Optional
 from sentence_transformers import SentenceTransformer
+import os
+from utils.atp import prepare_target, run_workload, get_results
 
 # Import helper modules
 from utils.config import METADATA_PATH, USEARCH_INDEX_PATH, MODEL_NAME, SUPPORTED_SCANNERS, DEFAULT_ARCH
@@ -8,6 +10,7 @@ from utils.search_utils import load_metadata, load_usearch_index, embedding_sear
 from utils.docker_utils import check_docker_image_architectures
 from utils.migrate_ease_utils import run_migrate_ease_scan
 from utils.sys_utils import run_sysreport
+from utils.atp import prepare_target, run_workload, get_results
 from utils.skopeo_tool import skopeo_help, skopeo_inspect
 from utils.llvm_mca_tool import mca_help, llvm_mca_analyze
 from utils.topdown_tool import topdown_help, topdown_run
@@ -24,7 +27,7 @@ mcp = FastMCP("arm_torq")
 
 # Load USearch index and metadata at module load time
 METADATA = load_metadata(METADATA_PATH)
-USEARCH_INDEX = load_usearch_index(USEARCH_INDEX_PATH, METADATA)
+#USEARCH_INDEX = load_usearch_index(USEARCH_INDEX_PATH, METADATA)
 EMBEDDING_MODEL = SentenceTransformer(MODEL_NAME)
 
 
@@ -165,6 +168,39 @@ def migrate_ease_scan(
         extra_args=extra_args,
     )
 
+@mcp.tool()
+def atp_recipe_run(cmd:str, remote_ip_addr:str, remote_usr:str, recipe:str) -> str:
+    """
+    Run a sample workload on the given target using an Arm Total Performance recipe, 
+    and interpret the results. Example user prompt: "Help me analyze my code's performance"
+
+    This tool is run within Docker, so the ATP CLI is installed at /opt/Arm Total Performance/assets/atperf
+    If you hit an error when running atperf commands, log the error to the user and back out. Do not try to run atperf on the local machine.
+
+    Args:
+        cmd: command to run on the remote machine
+        remote_ip_addr: IP address of the remote machine
+        remote_usr: username for SSH access to the remote machine
+        recipe: the ATP recipe to run (must be one of ["cpu_hotspots", "instruction_mix", "topdown", "memory_access"], or "all" if unsure)
+
+    Returns:
+        JSON with the results of the workload. 
+    """
+    key_path = os.getenv("SSH_KEY_PATH")
+    known_hosts_path = os.getenv("KNOWN_HOSTS_PATH")
+
+    if not key_path or not known_hosts_path:
+        raise RuntimeError("SSH_KEY_PATH and KNOWN_HOSTS_PATH environment variables must be set in the docker run command in the mcp config file to use ATP.")
+
+    atp_cli_dir = "/opt/Arm Total Performance/assets/atperf"
+    target_id = prepare_target(remote_ip_addr, remote_usr, key_path, atp_cli_dir)
+    #target_id = "aws_10.252.211.230" #Hardcoding the target for now
+    print(f"Prepared target: {target_id}")
+    run_id = run_workload(cmd, target_id, recipe, atp_cli_dir)
+    print(f"Workload run ID: {run_id}")
+    results = get_results(run_id, "drilldown", atp_cli_dir)
+    
+    return results
 
 @mcp.tool(description="Container Image Architecture Inspector: Inspect container images remotely without downloading to check architecture support (especially ARM64 compatibility). Useful before migrating workloads to ARM-based infrastructure. Set 'image' (e.g. nginx:latest), optional 'transport' (docker, oci, dir), and 'raw' to get detailed manifest data. Shows available architectures, OS support, and image metadata. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
 def skopeo(image: Optional[str] = None, transport: str = "docker", raw: bool = False, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
@@ -302,4 +338,4 @@ def aperf(args: Optional[List[str]] = None, invocation_reason: Optional[str] = N
 
 
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(transport="stdio")
