@@ -16,6 +16,8 @@ TIMEOUT_SECONDS = 10
 
 # migrate-ease configuration
 MIGRATE_EASE_ROOT = "/app/migrate-ease"
-SUPPORTED_SCANNERS = {"cpp", "docker", "go", "java", "python", "rust"}
+# Migrate-Ease scanners supported by this package. Five language wrappers are
+# installed: cpp, python, go, js, java.
+SUPPORTED_SCANNERS = {"cpp", "python", "go", "js", "java"}
 DEFAULT_ARCH = "armv8-a"
 WORKSPACE_DIR = "/workspace"
