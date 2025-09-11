@@ -4,10 +4,17 @@ import json
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from .config import USEARCH_INDEX_PATH, METADATA_PATH, MODEL_NAME, DISTANCE_THRESHOLD, K_RESULTS
+import os
 
 
 def load_usearch_index(index_path: str, metadata: List[Dict]) -> Index:
     """Load USearch index from file."""
+    if not os.path.exists(index_path):
+        print(f"Error: USearch index file '{index_path}' does not exist.")
+        return None
+    if not metadata:
+        print("Error: Knowledge base metadata is missing or invalid.")
+        return None
     # Get dimension from the first metadata entry's vector
     dimension = len(metadata[0]['vector'])
     
@@ -28,6 +35,9 @@ def load_usearch_index(index_path: str, metadata: List[Dict]) -> Index:
 
 def load_metadata(metadata_path: str) -> List[Dict]:
     """Load metadata from JSON file."""
+    if not os.path.exists(metadata_path):
+        print(f"Error: Metadata file '{metadata_path}' does not exist.")
+        return []
     with open(metadata_path, 'r') as f:
         metadata = json.load(f)
     return metadata

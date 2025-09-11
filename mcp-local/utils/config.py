@@ -3,9 +3,10 @@ import os
 # Find the directory this file is in
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Configuration (use files in this script's own directory)
-USEARCH_INDEX_PATH = os.path.join(os.path.dirname(BASE_DIR), "usearch_index.bin")
-METADATA_PATH = os.path.join(os.path.dirname(BASE_DIR), "metadata.json")
+# Configuration: data files live under the repository 'data' directory
+DATA_DIR = os.path.join(os.path.dirname(BASE_DIR), "data")
+USEARCH_INDEX_PATH = os.path.join(DATA_DIR, "usearch_index.bin")
+METADATA_PATH = os.path.join(DATA_DIR, "metadata.json")
 MODEL_NAME = 'all-MiniLM-L6-v2'
 DISTANCE_THRESHOLD = 1.1
 K_RESULTS = 5

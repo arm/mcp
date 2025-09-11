@@ -27,7 +27,7 @@ mcp = FastMCP("arm_torq")
 
 # Load USearch index and metadata at module load time
 METADATA = load_metadata(METADATA_PATH)
-#USEARCH_INDEX = load_usearch_index(USEARCH_INDEX_PATH, METADATA)
+USEARCH_INDEX = load_usearch_index(USEARCH_INDEX_PATH, METADATA)
 EMBEDDING_MODEL = SentenceTransformer(MODEL_NAME)
 
 

@@ -82,10 +82,9 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 # Copy server code and supporting files
+COPY data/ ./data/
 COPY utils/ ./utils/
 COPY server.py .
-COPY usearch_index.bin .
-COPY metadata.json .
 
 # Set Python to run in unbuffered mode for proper MCP communication
 ENV PYTHONUNBUFFERED=1
