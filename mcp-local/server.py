@@ -13,13 +13,8 @@ from utils.sys_utils import run_sysreport
 from utils.atp import prepare_target, run_workload, get_results
 from utils.skopeo_tool import skopeo_help, skopeo_inspect
 from utils.llvm_mca_tool import mca_help, llvm_mca_analyze
-from utils.topdown_tool import topdown_help, topdown_run
 from utils.kubearchinspect_tool import kubearchinspect_help, kubearchinspect_scan
-from utils.aperf_tool import aperf_help, aperf_run
 from utils.bolt_tool import bolt_help, perf2bolt_help, bolt_optimize
-from utils.papi_tool import papi_help, papi_list
-from utils.perf_tool import perf_help, perf_record, perf_report
-from utils.processwatch_tool import processwatch_help, processwatch_run
 from utils.invocation_logger import log_invocation_reason
 
 # Initialize the MCP server
@@ -226,18 +221,6 @@ def mca(input_path: Optional[str] = None, triple: Optional[str] = None, cpu: Opt
     return llvm_mca_analyze(input_path=input_path, triple=triple, cpu=cpu, extra_args=extra_args)
 
 
-@mcp.tool(description="CPU Performance Bottleneck Analyzer: Systematically identifies what's limiting your application performance using Intel's Top-Down methodology. Categorizes issues into CPU frontend problems (instruction fetch), backend problems (execution units), bad speculation (branch misprediction), or retirement issues. Essential for performance tuning when migrating between architectures. Requires no arguments to show help, or provide custom analysis arguments. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
-def topdown(args: Optional[List[str]] = None, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
-    log_invocation_reason(
-        tool="topdown",
-        reason=invocation_reason,
-        args={"args": args},
-    )
-    if not args:
-        return topdown_help()
-    return topdown_run(args=args)
-
-
 @mcp.tool(description="Kubernetes ARM64 Readiness Scanner: Scans your Kubernetes cluster to identify which container images support ARM64 architecture. Essential first step before migrating Kubernetes workloads to ARM-based nodes (like AWS Graviton). Reports incompatible images and suggests alternatives. Requires kubectl access to target cluster. Supports 'kubeconfig' path, 'namespace' filtering, 'output_format' (json/html), and passthrough 'extra_args'. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
 def kubearchinspect(kubeconfig: Optional[str] = None, namespace: Optional[str] = None, output_format: str = "json", extra_args: Optional[List[str]] = None, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
     log_invocation_reason(
@@ -275,66 +258,6 @@ def bolt(mode: str = "help", binary: Optional[str] = None, fdata: Optional[str] 
     if mode == "optimize":
         return bolt_optimize(binary=binary, fdata=fdata, output_binary=output_binary, extra_args=extra_args)
     return {"status": "error", "message": "Unknown mode. Use: help | perf2bolt_help | optimize"}
-
-
-@mcp.tool(description="Hardware Performance Counter Interface: Portable interface for accessing CPU performance metrics (cache misses, instruction counts, cycles) across different processor architectures. Essential for comparing performance between x86 and ARM systems during migration. Use 'help' to see available counters or 'list' to show supported performance events for your hardware. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
-def papi(mode: str = "help", invocation_reason: Optional[str] = None) -> Dict[str, Any]:
-    log_invocation_reason(
-        tool="papi",
-        reason=invocation_reason,
-        args={"mode": mode},
-    )
-    if mode == "help":
-        return papi_help()
-    if mode == "list":
-        return papi_list()
-    return {"status": "error", "message": "Unknown mode. Use: help | list"}
-
-
-@mcp.tool(description="Linux System Performance Profiler: Record and analyze CPU performance, identify hotspots, and trace system events. Critical for performance comparison when migrating applications between architectures. Use 'record' mode with 'record_cmd' (command to profile), optional 'record_seconds' duration, and 'extra_args'. Use 'report' mode with 'data_file' to analyze previously recorded data. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
-def perf(mode: str = "help", record_cmd: Optional[List[str]] = None, record_seconds: Optional[int] = None, data_file: str = "/tmp/perf.data", extra_args: Optional[List[str]] = None, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
-    log_invocation_reason(
-        tool="perf",
-        reason=invocation_reason,
-        args={
-            "mode": mode,
-            "record_cmd": record_cmd,
-            "record_seconds": record_seconds,
-            "data_file": data_file,
-            "extra_args": extra_args,
-        },
-    )
-    if mode == "help":
-        return perf_help()
-    if mode == "record":
-        return perf_record(cmd=record_cmd or ["sleep", "1"], seconds=record_seconds, data_file=data_file, extra_args=extra_args)
-    if mode == "report":
-        return perf_report(data_file=data_file, extra_args=extra_args)
-    return {"status": "error", "message": "Unknown mode. Use: help | record | report"}
-
-
-@mcp.tool(description="ARM Instruction Usage Monitor: Real-time monitoring tool that tracks which ARM-specific instruction sets (NEON, SVE, SVE2) your running processes are actually using. Valuable for validating that migrated applications are taking advantage of ARM architectural features and for identifying optimization opportunities. Provide monitoring 'args' or no arguments for usage help. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
-def process_watch(args: Optional[List[str]] = None, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
-    log_invocation_reason(
-        tool="process_watch",
-        reason=invocation_reason,
-        args={"args": args},
-    )
-    if not args:
-        return processwatch_help()
-    return processwatch_run(args=args)
-
-
-@mcp.tool(description="AWS Performance Data Collector: Comprehensive performance monitoring tool that collects system metrics, CPU counters, and generates comparative HTML reports. Designed for troubleshooting performance issues and comparing workload behavior across different instance types (especially when migrating to ARM-based AWS Graviton instances). Records performance data for analysis and visualization. Provide 'args' for recording/monitoring options or no arguments for help. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
-def aperf(args: Optional[List[str]] = None, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
-    log_invocation_reason(
-        tool="aperf",
-        reason=invocation_reason,
-        args={"args": args},
-    )
-    if not args:
-        return aperf_help()
-    return aperf_run(args=args)
 
 
 if __name__ == "__main__":
