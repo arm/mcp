@@ -16,12 +16,13 @@ def run_command(command: list, cwd: str, parse_output=None) -> tuple:
     Returns (returncode, parsed_output or stdout).
     """
     try:
-        result = subprocess.run(command, cwd=cwd, timeout=30, capture_output=True, text=True)
+        print(command)
+        result = subprocess.run(command, cwd=cwd, timeout=60, capture_output=True, text=True)
     except subprocess.TimeoutExpired as e:
         print(f"Command timed out: {e}")
         return -1, None
     output = result.stdout
-    print(f"Command output: {output}")
+    
     if parse_output:
         output = parse_output(output)
     return result.returncode, output
@@ -34,23 +35,12 @@ def read_file_contents(file_path: str) -> str:
 def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, atperf_dir:str) -> str:
     """Prepare the target machine for running workloads. 
         Returns the target ID."""
-    # First, check if the target already exists using './atperf target list'
-    cwd = os.getcwd()
-    print(f"(Prepare target) Current working directory: {cwd}")
-
-    # List contents in current directory
-    contents = os.listdir(atperf_dir)
-    print("Contents:")
-    for item in contents:
-        print(" -", item)
-
-    #atperf_dir = f"{cwd}/atp/Arm Total Performance.app/Contents/assets/atperf"
     
+    #Check if target already exists
     list_command = ["./atperf", "target", "list", "--json"]
     status, list_output = run_command(list_command, cwd=atperf_dir)
     if status == 0 and list_output:
         try:
-            # Parse the JSON output (skip first line if needed)
             lines = list_output.strip().split("\n")
             json_line = lines[1] if len(lines) > 1 else lines[0]
             data = json.loads(json_line)
@@ -70,7 +60,7 @@ def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, atpe
         except Exception as e:
             print(f"Failed to parse target list output: {e}")
 
-    
+    # Add the target if it doesn't exist
     generated_name = f"{remote_usr}_{remote_ip_addr.replace('.', '_')}"
     add_command = [
         "./atperf", "target", "add",
@@ -100,9 +90,6 @@ def run_workload(cmd:str, target: str, recipe:str, atperf_dir:str) -> dict:
         "--json",
         f"--target={target}"
     ]
-    print("run workload command:")
-    print(command)
-    #atperf_dir = f"{cwd}/atp/Arm Total Performance.app/Contents/assets/atperf"
     status, run_id = run_command(command, cwd=atperf_dir, parse_output=extract_run_id)
     if not run_id:
         raise RuntimeError("Failed to run workload or extract run_id")
@@ -113,25 +100,24 @@ def get_results(run_id: dict, table: str, atperf_dir:str) -> str:
         Returns a csv of the run results, which are sampling data 
         for the different function calls."""
     
+    # Startup the local db for querying results
     render_cmd = ["./atperf", "run", "render", run_id['value']]
-    print("run workload command:")
     print(render_cmd)
-    render_proc = subprocess.run(render_cmd, cwd=atperf_dir, capture_output=True, text=True)
+    render_proc = subprocess.run(render_cmd, cwd=atperf_dir, timeout=60, capture_output=True, text=True)
+    print(render_proc.stdout)
     if render_proc.returncode != 0:
         raise RuntimeError(f"atperf render failed: {render_proc.stderr}")
 
-    # Step 2: Parse session id and table from JSON output
+    # Parse session id and table from JSON output
     try:
         render_json = json.loads(render_proc.stdout)
         session_id = render_json.get("data").get("invocation").get("session_id")
         if not session_id:
             raise ValueError("session_id not found in render output")
-        # If you need to extract the table name from the JSON, do it here
-        # For now, using the provided 'table' argument
     except Exception as e:
         raise RuntimeError(f"Failed to parse render output: {e}")
 
-    # Step 3: Run './atperf render query {session_id} "select * from {table}"'
+    # Query the DB for csv results to send to Agent
     query_cmd = ["./atperf", "render", "query", session_id, f"select * from {table}"]
     query_proc = subprocess.run(query_cmd, cwd=atperf_dir, capture_output=True, text=True)
     if query_proc.returncode != 0:
