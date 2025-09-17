@@ -66,10 +66,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Ensure the CLI is reachable even if the installer doesn’t put it on PATH
 ENV PATH="/opt/arm/total-performance/bin:/opt/ArmTotalPerformance/bin:${PATH}"
 
-RUN git clone https://github.com/ArmDeveloperEcosystem/sysreport.git /app/sysreport && \
-    git clone https://github.com/migrate-ease/migrate-ease.git /app/migrate-ease && \
-    git clone https://github.com/arm/arm-linux-migration-tools.git /app/arm-linux-migration-tools
-
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip install -r requirements.txt
