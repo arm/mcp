@@ -9,7 +9,6 @@ from utils.config import METADATA_PATH, USEARCH_INDEX_PATH, MODEL_NAME, SUPPORTE
 from utils.search_utils import load_metadata, load_usearch_index, embedding_search, deduplicate_urls
 from utils.docker_utils import check_docker_image_architectures
 from utils.migrate_ease_utils import run_migrate_ease_scan
-from utils.sys_utils import run_sysreport
 from utils.atp import prepare_target, run_workload, get_results
 from utils.skopeo_tool import skopeo_help, skopeo_inspect
 from utils.llvm_mca_tool import mca_help, llvm_mca_analyze
@@ -81,18 +80,44 @@ def check_image(image: str, invocation_reason: Optional[str] = None) -> dict:
 
 
 @mcp.tool(
-    description="Runs sysreport, a tool that obtains system information related to system architecture, CPU, memory, and other hardware details. Useful for diagnosing system issues or gathering information about the system's capabilities. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
+    description="Provides instructions for installing and using sysreport, a tool that obtains system information related to system architecture, CPU, memory, and other hardware details. Since this runs in a container, the tool provides installation instructions for running sysreport directly on the host system."
 )
-def sysreport(invocation_reason: Optional[str] = None) -> Dict[str, Any]:
+def sysreport_instructions(invocation_reason: Optional[str] = None) -> Dict[str, Any]:
     log_invocation_reason(
-        tool="sysreport",
+        tool="sysreport_instructions",
         reason=invocation_reason,
         args={},
     )
-    """
-    Run sysreport and return the system information.
-    """
-    return run_sysreport()
+    
+    instructions = """
+# SysReport Installation and Usage
+
+## Installation
+```bash
+git clone https://github.com/ArmDeveloperEcosystem/sysreport.git
+cd sysreport
+```
+
+## Usage
+```bash
+python3 sysreport.py
+```
+
+## What SysReport Does
+- Gathers comprehensive system information including architecture, CPU, memory, and hardware details
+- Useful for diagnosing system issues or understanding system capabilities
+- Provides detailed hardware and software configuration data
+
+## Note
+Run these commands directly on your host system (not in a container) to get accurate system information.
+"""
+    
+    return {
+        "instructions": instructions,
+        "repository": "https://github.com/ArmDeveloperEcosystem/sysreport.git",
+        "usage_command": "python3 sysreport.py",
+        "note": "This tool must be run on the host system to provide accurate system information."
+    }
 
 
 @mcp.tool(
