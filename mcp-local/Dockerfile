@@ -30,14 +30,6 @@ RUN rm -f /usr/local/bin/aperf \
            /opt/arm-migration-tools/processwatch \
            /opt/arm-migration-tools/papi
 
-# Install ATP
-RUN curl -fsSL -o /tmp/atp.deb \
-        https://artifacts.tools.arm.com/arm-total-performance/installers/latest/linux/arm64/ArmTotalPerformance-arm64.deb && \
-    apt-get install -y --no-install-recommends /tmp/atp.deb && \
-    rm -f /tmp/atp.deb
-
-ENV PATH="/opt/arm/total-performance/bin:/opt/ArmTotalPerformance/bin:/opt/arm-migration-tools/venv/bin:${PATH}"
-
 WORKDIR /app
 ENV VIRTUAL_ENV=/app/.venv \
     PATH=/app/.venv/bin:$PATH

@@ -41,6 +41,10 @@ docker run --rm -it --entrypoint /bin/bash arm-mcp
         "run",
         "--rm",
         "-i",
+        "-e", "SSH_KEY_PATH=/root/.ssh/yourkey.pem", 
+        "-e", "KNOWN_HOSTS_PATH=/root/.ssh/known_hosts", 
+        "-v", "[path to yourkey.pem]:/root/.ssh/yourkey.pem:ro",  
+        "-v", "[path to your known_hosts]:/root/.ssh/known_hosts:ro", 
         "-v", "[local directory path]:/workspace",
         "--name", "arm-mcp",
         "arm-mcp"
@@ -68,6 +72,10 @@ For q cli this config should be placed in ~/.aws/amazonq/mcp.json
         "run",
         "--rm",
         "-i",
+        "-e", "SSH_KEY_PATH=/root/.ssh/yourkey.pem", 
+        "-e", "KNOWN_HOSTS_PATH=/root/.ssh/known_hosts", 
+        "-v", "[path to yourkey.pem]:/root/.ssh/yourkey.pem:ro",  
+        "-v", "[path to your known_hosts]:/root/.ssh/known_hosts:ro", 
         "-v", "[local directory path]:/workspace",
         "arm-mcp"
       ]
