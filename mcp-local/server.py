@@ -140,10 +140,11 @@ Run these commands directly on your host system (not in a container) to get accu
 
 @mcp.tool(
     description=(
-        "Run a migrate-ease scan on a local path (default: mounted WORKSPACE_DIR) or a remote Git repo. "
-        "Uses unified wrappers installed in /usr/local/bin (migrate-ease-cpp, migrate-ease-python, migrate-ease-go, migrate-ease-js, migrate-ease-java). "
-        "CLI shape: 'migrate-ease-{scanner} --march {arch} [--git-repo REPO CLONE_PATH]|[SCAN_PATH] --output /tmp/….{json|txt|csv|html}'. "
+        "Run a migrate-ease scan on a path inside the container (default: /workspace) or a remote Git repo. "
+        "IMPORTANT: 'path' is a container filesystem path, not a host path. In typical use, a host directory is bind-mounted to /workspace inside the container, and 'path' should point to that container path (e.g., /workspace/my-project). This is done at the MCP server configuration level, so please ensure your host directory is correctly mounted to the container before using local scans. "
+        "Supported scanners: cpp, python, go, js, java. "
         "Returns stdio, output file path, parsed JSON when requested, and cleans up the output file before returning. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
+        " The scanner can take 60+ seconds depending on codebase size, so if the tool times out, consider increasing the timeout in the MCP server configuration."
     )
 )
 def migrate_ease_scan(
@@ -172,7 +173,7 @@ def migrate_ease_scan(
     """
     Args:
         scanner: One of cpp, python, go, js, java (case-insensitive).
-        path: Local path to scan. If relative, resolved against WORKSPACE_DIR. Defaults to WORKSPACE_DIR when omitted.
+        path: Container path to scan (inside the container). Typically a directory under /workspace that is bind-mounted from the host. If relative, resolved against WORKSPACE_DIR (/workspace). Defaults to WORKSPACE_DIR when omitted.
         arch: Architecture for the scan (default: aarch64).
         git_repo: Remote Git repo URL to scan (if provided, 'clone_path' must be given and empty).
         clone_path: Empty directory where the repo will be cloned for scanning.
