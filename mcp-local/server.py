@@ -1,20 +1,16 @@
 from fastmcp import FastMCP
 from typing import List, Dict, Any, Optional
 from sentence_transformers import SentenceTransformer
-import os
-from utils.atp import prepare_target, run_workload, get_results
-
-# Import helper modules
 from utils.config import METADATA_PATH, USEARCH_INDEX_PATH, MODEL_NAME, SUPPORTED_SCANNERS, DEFAULT_ARCH
 from utils.search_utils import load_metadata, load_usearch_index, embedding_search, deduplicate_urls
 from utils.docker_utils import check_docker_image_architectures
 from utils.migrate_ease_utils import run_migrate_ease_scan
-from utils.atp import prepare_target, run_workload, get_results
 from utils.skopeo_tool import skopeo_help, skopeo_inspect
 from utils.llvm_mca_tool import mca_help, llvm_mca_analyze
 from utils.kubearchinspect_tool import kubearchinspect_help, kubearchinspect_scan
 from utils.bolt_tool import bolt_help, perf2bolt_help, bolt_optimize
 from utils.invocation_logger import log_invocation_reason
+from utils.error_handling import format_tool_error
 
 # Initialize the MCP server
 mcp = FastMCP("arm_torq")
@@ -23,6 +19,9 @@ mcp = FastMCP("arm_torq")
 METADATA = load_metadata(METADATA_PATH)
 USEARCH_INDEX = load_usearch_index(USEARCH_INDEX_PATH, METADATA)
 EMBEDDING_MODEL = SentenceTransformer(MODEL_NAME)
+
+
+# error formatter now lives in utils/error_handling.py
 
 
 @mcp.tool(
@@ -44,19 +43,26 @@ def knowledge_base_search(query: str, invocation_reason: Optional[str] = None) -
     Returns:
         List of dictionaries with metadata including url and text snippets.
     """
-    embedding_results = embedding_search(query, USEARCH_INDEX, METADATA, EMBEDDING_MODEL)
-    deduped = deduplicate_urls(embedding_results)
-    # Only return the relevant fields
-    formatted = [
-        {
-            "url": item["metadata"].get("url"),
-            "snippet": item["metadata"].get("original_text", item["metadata"].get("content", "")),
-            "title": item["metadata"].get("title", ""),
-            "distance": item.get("distance")
-        }
-        for item in deduped
-    ]
-    return formatted
+    try:
+        embedding_results = embedding_search(query, USEARCH_INDEX, METADATA, EMBEDDING_MODEL)
+        deduped = deduplicate_urls(embedding_results)
+        # Only return the relevant fields
+        formatted = [
+            {
+                "url": item["metadata"].get("url"),
+                "snippet": item["metadata"].get("original_text", item["metadata"].get("content", "")),
+                "title": item["metadata"].get("title", ""),
+                "distance": item.get("distance")
+            }
+            for item in deduped
+        ]
+        return formatted
+    except Exception as e:
+        return format_tool_error(
+            tool="knowledge_base_search",
+            exc=e,
+            args={"query": query},
+        )
 
 
 @mcp.tool(
@@ -76,7 +82,14 @@ def check_image(image: str, invocation_reason: Optional[str] = None) -> dict:
     Returns:
         Dictionary with architecture information
     """
-    return check_docker_image_architectures(image)
+    try:
+        return check_docker_image_architectures(image)
+    except Exception as e:
+        return format_tool_error(
+            tool="check_image",
+            exc=e,
+            args={"image": image},
+        )
 
 
 @mcp.tool(
@@ -88,8 +101,8 @@ def sysreport_instructions(invocation_reason: Optional[str] = None) -> Dict[str,
         reason=invocation_reason,
         args={},
     )
-    
-    instructions = """
+    try:
+        instructions = """
 # SysReport Installation and Usage
 
 ## Installation
@@ -111,13 +124,18 @@ python3 sysreport.py
 ## Note
 Run these commands directly on your host system (not in a container) to get accurate system information.
 """
-    
-    return {
-        "instructions": instructions,
-        "repository": "https://github.com/ArmDeveloperEcosystem/sysreport.git",
-        "usage_command": "python3 sysreport.py",
-        "note": "This tool must be run on the host system to provide accurate system information."
-    }
+        return {
+            "instructions": instructions,
+            "repository": "https://github.com/ArmDeveloperEcosystem/sysreport.git",
+            "usage_command": "python3 sysreport.py",
+            "note": "This tool must be run on the host system to provide accurate system information."
+        }
+    except Exception as e:
+        return format_tool_error(
+            tool="sysreport_instructions",
+            exc=e,
+            args={},
+        )
 
 
 @mcp.tool(
@@ -165,62 +183,44 @@ def migrate_ease_scan(
         A dictionary with status, returncode, command, stdio, output file path (for traceability),
         parsed_results (for JSON), and a flag indicating if the output file was deleted.
     """
-    # Validate scanner early
-    if scanner.lower() not in SUPPORTED_SCANNERS:
-        return {
-            "status": "error",
-            "message": f"Unsupported scanner '{scanner}'. Supported: {sorted(SUPPORTED_SCANNERS)}"
-        }
+    try:
+        # Validate scanner early
+        if scanner.lower() not in SUPPORTED_SCANNERS:
+            return {
+                "status": "error",
+                "message": f"Unsupported scanner '{scanner}'. Supported: {sorted(SUPPORTED_SCANNERS)}"
+            }
 
-    if git_repo and path:
-        return {
-            "status": "error",
-            "message": "Provide either 'path' for local scans OR 'git_repo' + 'clone_path' for repo scans, not both."
-        }
+        if git_repo and path:
+            return {
+                "status": "error",
+                "message": "Provide either 'path' for local scans OR 'git_repo' + 'clone_path' for repo scans, not both."
+            }
 
-    return run_migrate_ease_scan(
-        scanner=scanner,
-        arch=arch,
-        scan_path=path,
-        git_repo=git_repo,
-        clone_path=clone_path,
-        output_format=output_format,
-        extra_args=extra_args,
-    )
+        return run_migrate_ease_scan(
+            scanner=scanner,
+            arch=arch,
+            scan_path=path,
+            git_repo=git_repo,
+            clone_path=clone_path,
+            output_format=output_format,
+            extra_args=extra_args,
+        )
+    except Exception as e:
+        return format_tool_error(
+            tool="migrate_ease_scan",
+            exc=e,
+            args={
+                "scanner": scanner,
+                "path": path,
+                "arch": arch,
+                "git_repo": git_repo,
+                "clone_path": clone_path,
+                "output_format": output_format,
+                "extra_args": extra_args,
+            },
+        )
 
-@mcp.tool()
-def atp_recipe_run(cmd:str, remote_ip_addr:str, remote_usr:str, recipe:str) -> str:
-    """
-    Run a sample workload on the given target using an Arm Total Performance recipe, 
-    and interpret the results. Example user prompt: "Help me analyze my code's performance"
-
-    This tool is run within Docker, so the ATP CLI is installed at /opt/Arm Total Performance/assets/atperf
-    If you hit an error when running atperf commands, log the error to the user and back out. Do not try to run atperf on the local machine.
-
-    Args:
-        cmd: command to run on the remote machine
-        remote_ip_addr: IP address of the remote machine
-        remote_usr: username for SSH access to the remote machine
-        recipe: the ATP recipe to run (must be one of ["cpu_hotspots", "instruction_mix", "topdown", "memory_access"], or "all" if unsure)
-
-    Returns:
-        JSON with the results of the workload. 
-    """
-    key_path = os.getenv("SSH_KEY_PATH")
-    known_hosts_path = os.getenv("KNOWN_HOSTS_PATH")
-
-    if not key_path or not known_hosts_path:
-        raise RuntimeError("SSH_KEY_PATH and KNOWN_HOSTS_PATH environment variables must be set in the docker run command in the mcp config file to use ATP.")
-
-    atp_cli_dir = "/opt/Arm Total Performance/assets/atperf"
-    target_id = prepare_target(remote_ip_addr, remote_usr, key_path, atp_cli_dir)
-    #target_id = "aws_10.252.211.230" #Hardcoding the target for now
-    print(f"Prepared target: {target_id}")
-    run_id = run_workload(cmd, target_id, recipe, atp_cli_dir)
-    print(f"Workload run ID: {run_id}")
-    results = get_results(run_id, "drilldown", atp_cli_dir)
-    
-    return results
 
 @mcp.tool(description="Container Image Architecture Inspector: Inspect container images remotely without downloading to check architecture support (especially ARM64 compatibility). Useful before migrating workloads to ARM-based infrastructure. Set 'image' (e.g. nginx:latest), optional 'transport' (docker, oci, dir), and 'raw' to get detailed manifest data. Shows available architectures, OS support, and image metadata. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
 def skopeo(image: Optional[str] = None, transport: str = "docker", raw: bool = False, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
@@ -229,9 +229,16 @@ def skopeo(image: Optional[str] = None, transport: str = "docker", raw: bool = F
         reason=invocation_reason,
         args={"image": image, "transport": transport, "raw": raw},
     )
-    if not image:
-        return skopeo_help()
-    return skopeo_inspect(image=image, transport=transport, raw=raw)
+    try:
+        if not image:
+            return skopeo_help()
+        return skopeo_inspect(image=image, transport=transport, raw=raw)
+    except Exception as e:
+        return format_tool_error(
+            tool="skopeo",
+            exc=e,
+            args={"image": image, "transport": transport, "raw": raw},
+        )
 
 
 @mcp.tool(description="Assembly Code Performance Analyzer: Analyze assembly code to predict performance on different CPU architectures and identify bottlenecks. Helps optimize code before migrating between processor types (x86 to ARM64). Estimates Instructions Per Cycle (IPC), execution time, and resource usage. Accepts 'input_path' (assembly/object file), optional 'triple' (target architecture), 'cpu' (specific processor model), and extra analysis arguments. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
@@ -241,9 +248,16 @@ def mca(input_path: Optional[str] = None, triple: Optional[str] = None, cpu: Opt
         reason=invocation_reason,
         args={"input_path": input_path, "triple": triple, "cpu": cpu, "extra_args": extra_args},
     )
-    if not input_path:
-        return mca_help()
-    return llvm_mca_analyze(input_path=input_path, triple=triple, cpu=cpu, extra_args=extra_args)
+    try:
+        if not input_path:
+            return mca_help()
+        return llvm_mca_analyze(input_path=input_path, triple=triple, cpu=cpu, extra_args=extra_args)
+    except Exception as e:
+        return format_tool_error(
+            tool="mca",
+            exc=e,
+            args={"input_path": input_path, "triple": triple, "cpu": cpu, "extra_args": extra_args},
+        )
 
 
 @mcp.tool(description="Kubernetes ARM64 Readiness Scanner: Scans your Kubernetes cluster to identify which container images support ARM64 architecture. Essential first step before migrating Kubernetes workloads to ARM-based nodes (like AWS Graviton). Reports incompatible images and suggests alternatives. Requires kubectl access to target cluster. Supports 'kubeconfig' path, 'namespace' filtering, 'output_format' (json/html), and passthrough 'extra_args'. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
@@ -258,9 +272,21 @@ def kubearchinspect(kubeconfig: Optional[str] = None, namespace: Optional[str] =
             "extra_args": extra_args,
         },
     )
-    if kubeconfig is None and namespace is None and not extra_args:
-        return kubearchinspect_help()
-    return kubearchinspect_scan(kubeconfig=kubeconfig, namespace=namespace, output_format=output_format, extra_args=extra_args)
+    try:
+        if kubeconfig is None and namespace is None and not extra_args:
+            return kubearchinspect_help()
+        return kubearchinspect_scan(kubeconfig=kubeconfig, namespace=namespace, output_format=output_format, extra_args=extra_args)
+    except Exception as e:
+        return format_tool_error(
+            tool="kubearchinspect",
+            exc=e,
+            args={
+                "kubeconfig": kubeconfig,
+                "namespace": namespace,
+                "output_format": output_format,
+                "extra_args": extra_args,
+            },
+        )
 
 
 @mcp.tool(description="Binary Performance Optimizer: Post-compilation optimizer that reorganizes compiled programs for better CPU cache utilization and performance. Can improve application speed by 2-20% using execution profiles. Particularly valuable when optimizing for different CPU architectures. Use 'mode' (help/optimize), specify 'binary' and 'fdata' (profile data) for optimization, 'output_binary' for result, and 'extra_args' for advanced options. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
@@ -276,13 +302,26 @@ def bolt(mode: str = "help", binary: Optional[str] = None, fdata: Optional[str] 
             "extra_args": extra_args,
         },
     )
-    if mode == "help":
-        return bolt_help()
-    if mode == "perf2bolt_help":
-        return perf2bolt_help()
-    if mode == "optimize":
-        return bolt_optimize(binary=binary, fdata=fdata, output_binary=output_binary, extra_args=extra_args)
-    return {"status": "error", "message": "Unknown mode. Use: help | perf2bolt_help | optimize"}
+    try:
+        if mode == "help":
+            return bolt_help()
+        if mode == "perf2bolt_help":
+            return perf2bolt_help()
+        if mode == "optimize":
+            return bolt_optimize(binary=binary, fdata=fdata, output_binary=output_binary, extra_args=extra_args)
+        return {"status": "error", "message": "Unknown mode. Use: help | perf2bolt_help | optimize"}
+    except Exception as e:
+        return format_tool_error(
+            tool="bolt",
+            exc=e,
+            args={
+                "mode": mode,
+                "binary": binary,
+                "fdata": fdata,
+                "output_binary": output_binary,
+                "extra_args": extra_args,
+            },
+        )
 
 
 if __name__ == "__main__":
