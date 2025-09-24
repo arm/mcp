@@ -56,6 +56,29 @@ Replace [local directory path] with the local path that you want the mcp server 
 
 For q cli this config should be placed in ~/.aws/amazonq/mcp.json
 
+### Codex CLI
+
+```toml
+[projects."/path/to/your/project"]
+trust_level = "trusted"
+
+[mcp_servers.arm_torq]
+command = "docker"
+args = [
+  "run",
+  "--rm",
+  "-i",
+  "-v", "[local directory path]:/workspace",
+  "--name", "arm-mcp",
+  "arm-mcp"
+]
+env = {}
+```
+
+Replace `[local directory path]` with the local path that you want the mcp server to be able to access, and replace `/path/to/your/project` with your actual project path.
+
+For Codex CLI this config should be saved in `~/.codex/config.toml`.
+
 ### GitHub Copilot in VS Code
 
 ```json
