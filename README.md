@@ -56,6 +56,29 @@ Replace [local directory path] with the local path that you want the mcp server 
 
 For q cli this config should be placed in ~/.aws/amazonq/mcp.json
 
+### Codex CLI
+
+```json
+{
+  "mcpServers": {
+    "arm_torq": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-v", "[local directory path]:/workspace",
+        "arm-mcp"
+      ]
+    }
+  }
+}
+```
+
+Replace [local directory path] with the local path that you want the mcp server to be able to access.
+
+For Codex CLI this config should be placed in `~/.config/codex/mcp.json` or as specified in your Codex CLI documentation.
+
 ### GitHub Copilot in VS Code
 
 ```json
