@@ -110,3 +110,7 @@ globally here (for macOS):
 The easiest way to open this file in VS Code for editing is command+shift+p and search for
 
 MCP: Open User Configuration
+
+---
+
+This is a test line added to the README.
