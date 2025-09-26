@@ -79,6 +79,12 @@ Replace `[local directory path]` with the local path that you want the mcp serve
 
 For Codex CLI this config should be saved in `~/.codex/config.toml`.
 
+**Setup Instructions:**
+1. Create the config directory if it doesn't exist: `mkdir -p ~/.codex`
+2. Create or edit the config file: `~/.codex/config.toml`
+3. Add the configuration above with your specific paths
+4. Ensure your project path has the `trust_level = "trusted"` setting to enable MCP server functionality
+
 ### GitHub Copilot in VS Code
 
 ```json
