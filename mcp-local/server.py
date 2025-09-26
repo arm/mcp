@@ -152,7 +152,6 @@ def migrate_ease_scan(
     path: Optional[str] = None,
     arch: str = DEFAULT_ARCH,
     git_repo: Optional[str] = None,
-    clone_path: Optional[str] = None,
     output_format: str = "json",
     extra_args: Optional[List[str]] = None,
     invocation_reason: Optional[str] = None,
@@ -165,7 +164,6 @@ def migrate_ease_scan(
             "path": path,
             "arch": arch,
             "git_repo": git_repo,
-            "clone_path": clone_path,
             "output_format": output_format,
             "extra_args": extra_args,
         },
@@ -174,9 +172,9 @@ def migrate_ease_scan(
     Args:
         scanner: One of cpp, python, go, js, java (case-insensitive).
         path: Container path to scan (inside the container). Typically a directory under /workspace that is bind-mounted from the host. If relative, resolved against WORKSPACE_DIR (/workspace). Defaults to WORKSPACE_DIR when omitted.
-        arch: Architecture for the scan (default: aarch64).
-        git_repo: Remote Git repo URL to scan (if provided, 'clone_path' must be given and empty).
-        clone_path: Empty directory where the repo will be cloned for scanning.
+        arch: Architecture for the scan (default: armv8-a).
+        git_repo: Remote Git repo URL to scan. When set, the scan clones the repository into a
+            temporary directory that is cleaned up automatically.
         output_format: One of json, txt, csv, html. Defaults to json.
         extra_args: Optional list of additional flags passed through to the scanner (e.g., ["--exclude", "tests/"]).
 
@@ -185,7 +183,6 @@ def migrate_ease_scan(
         parsed_results (for JSON), and a flag indicating if the output file was deleted.
     """
     try:
-        # Validate scanner early
         if scanner.lower() not in SUPPORTED_SCANNERS:
             return {
                 "status": "error",
@@ -195,7 +192,7 @@ def migrate_ease_scan(
         if git_repo and path:
             return {
                 "status": "error",
-                "message": "Provide either 'path' for local scans OR 'git_repo' + 'clone_path' for repo scans, not both."
+                "message": "Provide either 'path' for local scans OR 'git_repo' for repo scans, not both."
             }
 
         return run_migrate_ease_scan(
@@ -203,7 +200,6 @@ def migrate_ease_scan(
             arch=arch,
             scan_path=path,
             git_repo=git_repo,
-            clone_path=clone_path,
             output_format=output_format,
             extra_args=extra_args,
         )
@@ -216,7 +212,6 @@ def migrate_ease_scan(
                 "path": path,
                 "arch": arch,
                 "git_repo": git_repo,
-                "clone_path": clone_path,
                 "output_format": output_format,
                 "extra_args": extra_args,
             },

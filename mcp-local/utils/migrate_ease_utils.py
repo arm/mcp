@@ -1,11 +1,12 @@
 from typing import Dict, Any, List, Optional
 import os
-import pathlib
 import time
 import shlex
 import subprocess
 import json
-from .config import SUPPORTED_SCANNERS, DEFAULT_ARCH, WORKSPACE_DIR
+import tempfile
+import shutil
+from .config import SUPPORTED_SCANNERS, WORKSPACE_DIR
 
 
 def _normalize_scanner(scanner: str) -> str:
@@ -17,19 +18,6 @@ def _normalize_scanner(scanner: str) -> str:
     if s.lower() in SUPPORTED_SCANNERS:
         return s.lower()
     return s  # let the caller see the exact name if it's custom
-
-
-def _ensure_dir_empty(path: str) -> Optional[str]:
-    """Ensure directory exists and is empty; return None on success or error string."""
-    try:
-        p = pathlib.Path(path)
-        p.mkdir(parents=True, exist_ok=True)
-        # If directory has content, that's an error for migrate-ease git mode
-        if any(p.iterdir()):
-            return f"clone_path '{path}' must be empty."
-        return None
-    except Exception as e:
-        return f"Failed to prepare clone_path '{path}': {e}"
 
 
 def _resolve_scan_path(path: Optional[str]) -> str:
@@ -56,7 +44,6 @@ def run_migrate_ease_scan(
     arch: str,
     scan_path: Optional[str],
     git_repo: Optional[str],
-    clone_path: Optional[str],
     output_format: str,
     extra_args: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
@@ -64,9 +51,10 @@ def run_migrate_ease_scan(
     Execute migrate-ease via unified CLI wrappers installed in /usr/local/bin:
     'migrate-ease-{scanner}' (e.g., migrate-ease-cpp, migrate-ease-python, migrate-ease-go, migrate-ease-js, migrate-ease-java).
 
-    NOTE: The migrate-ease output file is created under /tmp and is **deleted**
-    before this function returns. A best-effort deletion flag is included in
-    the returned dictionary as 'output_file_deleted'.
+    NOTE: Remote repository scans are staged inside a temporary directory under /tmp
+    that is removed after execution. The migrate-ease output file is created
+    under /tmp and is **deleted** before this function returns. A best-effort
+    deletion flag is included in the returned dictionary as 'output_file_deleted'.
     """
     normalized_scanner = _normalize_scanner(scanner)
     fmt = output_format.lower().lstrip(".")
@@ -80,27 +68,25 @@ def run_migrate_ease_scan(
 
     cmd: List[str] = [wrapper, "--march", arch, "--output", out_path]
 
-    # Route: git repo vs local path
-    if git_repo:
-        if not clone_path:
-            return {"status": "error", "message": "clone_path is required when git_repo is provided."}
-        # migrate-ease requires empty directory for clone
-        err = _ensure_dir_empty(clone_path)
-        if err:
-            return {"status": "error", "message": err}
-        cmd.extend(["--git-repo", git_repo, clone_path])
-        resolved_for_echo = clone_path
-    else:
-        target = _resolve_scan_path(scan_path)
-        cmd.append(target)
-        resolved_for_echo = target
+    temporary_clone_dir: Optional[str] = None
 
-    # Append any raw extra args last
-    if extra_args:
-        cmd.extend(extra_args)
-
-    # Run (no special cwd required when using wrappers)
     try:
+        # Route: git repo vs local path
+        if git_repo:
+            # Always stage remote scans inside a temporary workspace that is cleaned up later
+            temporary_clone_dir = tempfile.mkdtemp(prefix="migrate_ease_clone_", dir="/tmp")
+            cmd.extend(["--git-repo", git_repo, temporary_clone_dir])
+            resolved_for_echo = temporary_clone_dir
+        else:
+            target = _resolve_scan_path(scan_path)
+            cmd.append(target)
+            resolved_for_echo = target
+
+        # Append any raw extra args last
+        if extra_args:
+            cmd.extend(extra_args)
+
+        # Run (no special cwd required when using wrappers)
         proc = subprocess.run(
             cmd,
             capture_output=True,
@@ -155,3 +141,6 @@ def run_migrate_ease_scan(
             "message": f"Failed to execute migrate-ease wrapper '{wrapper}': {e}",
             "hint": "Ensure migrate-ease wrappers are installed on PATH (e.g., /usr/local/bin).",
         }
+    finally:
+        if temporary_clone_dir:
+            shutil.rmtree(temporary_clone_dir, ignore_errors=True)
