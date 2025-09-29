@@ -6,10 +6,6 @@ def bolt_help() -> Dict[str, Any]:
     return run_command(["llvm-bolt", "--help"])
 
 
-def perf2bolt_help() -> Dict[str, Any]:
-    return run_command(["perf2bolt", "--help"])
-
-
 def bolt_optimize(binary: Optional[str], fdata: Optional[str], output_binary: Optional[str], extra_args: Optional[List[str]]) -> Dict[str, Any]:
     if not binary or not fdata or not output_binary:
         return {"status": "error", "message": "binary, fdata, and output_binary are required for optimize mode"}
