@@ -22,6 +22,18 @@ From the root of this project (where the `Dockerfile` lives):
 docker buildx build --platform linux/arm64 -t arm-mcp .
 ```
 
+The command above will only build the Arm version. To build the multi-arch version and push to dockerhub:
+
+```bash
+docker buildx build \
+  --platform linux/arm64,linux/amd64 \
+  -t joestech324/mcp:arm-mcp-[version-number] \
+  -t joestech324/mcp:latest \
+  . --push
+```
+
+Where [version-number] is the current version.
+
 To get into the container for troubleshooting, use
 
 ```bash
