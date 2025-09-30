@@ -15,3 +15,5 @@ jobs:
     steps:
       - name: Docker pull ARM MCP image
         run: docker pull pareenaverma/arm-mcp:latest
+        timeout-minutes: 20
+        
