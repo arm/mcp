@@ -14,4 +14,4 @@ jobs:
     environment: copilot
     steps:
       - name: Docker pull ARM MCP image
-        run: docker pull joestech324/mcp:latest
+        run: docker pull pareenaverma/arm-mcp:latest
