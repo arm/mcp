@@ -17,18 +17,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 # Install all ARM migration tools
-RUN curl -sSL https://raw.githubusercontent.com/arm/arm-linux-migration-tools/main/scripts/install.sh | bash
-
-# Remove unwanted tools
-RUN rm -f /usr/local/bin/aperf \
-         /usr/local/bin/topdown-tool \
-         /usr/local/bin/processwatch \
-         /usr/local/bin/papi_* && \
-    rm -rf /opt/arm-migration-tools/aperf \
-           /opt/arm-migration-tools/topdown-tool \
-           /opt/arm-migration-tools/telemetry-solution \
-           /opt/arm-migration-tools/processwatch \
-           /opt/arm-migration-tools/papi
+#RUN curl -sSL https://raw.githubusercontent.com/arm/arm-linux-migration-tools/main/scripts/install.sh | bash
+#
+## Remove unwanted tools
+#RUN rm -f /usr/local/bin/aperf \
+#         /usr/local/bin/topdown-tool \
+#         /usr/local/bin/processwatch \
+#         /usr/local/bin/papi_* && \
+#    rm -rf /opt/arm-migration-tools/aperf \
+#           /opt/arm-migration-tools/topdown-tool \
+#           /opt/arm-migration-tools/telemetry-solution \
+#           /opt/arm-migration-tools/processwatch \
+#           /opt/arm-migration-tools/papi
 
 WORKDIR /app
 ENV VIRTUAL_ENV=/app/.venv \

@@ -14,5 +14,5 @@ jobs:
     environment: copilot
     steps:
       - name: Docker pull ARM MCP image
-        run: docker pull joestech324/agent-testing:latest
+        run: docker pull joestech324/agent-testing:amd64
         timeout-minutes: 20
