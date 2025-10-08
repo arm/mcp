@@ -122,3 +122,80 @@ globally here (for macOS):
 The easiest way to open this file in VS Code for editing is command+shift+p and search for
 
 MCP: Open User Configuration
+
+---
+
+## Arm Nginx Tuning
+
+This MCP server can help with Arm server optimization, including nginx tuning for Arm processors like AWS Graviton. Here are key nginx tuning recommendations for Arm servers:
+
+### Nginx Version Compatibility
+- **NGINX** works on Arm Linux servers starting from version 1.7.7 (October 2014)
+- **Recommended**: Version 1.20.1 and above for best performance on Arm (released December 2022)
+- **NGINX Plus** supported on Arm from December 2014
+
+### Key Configuration Optimizations
+
+#### Worker Configuration
+```nginx
+user www-data;
+worker_processes auto;
+worker_rlimit_nofile 1000000;
+worker_connections 512;
+```
+
+#### Performance Directives
+```nginx
+# Enable sendfile for better performance
+sendfile on;
+tcp_nopush on;
+
+# Connection tuning
+keepalive_timeout 75;
+keepalive_requests 1000000000;
+
+# Disable access logging for better performance
+access_log off;
+error_log /var/log/nginx/error.log;
+```
+
+#### Upstream Configuration
+```nginx
+upstream backend {
+    server backend1.example.com;
+    server backend2.example.com;
+    keepalive 1024;  # Enable connection caching
+}
+```
+
+#### Proxy Settings
+```nginx
+proxy_http_version 1.1;
+proxy_set_header Connection "";  # Clear connection header for keepalive
+```
+
+### System-Level Tuning
+
+Optimize Linux network stack parameters:
+```bash
+sudo sysctl -w net.core.somaxconn=65535
+sudo sysctl -w net.core.rmem_max=8388607
+sudo sysctl -w net.core.wmem_max=8388607
+sudo sysctl -w net.ipv4.tcp_max_syn_backlog=65535
+sudo sysctl -w net.ipv4.ip_local_port_range="1024 65535"
+sudo sysctl -w net.ipv4.tcp_rmem="4096 8338607 8338607"
+sudo sysctl -w net.ipv4.tcp_wmem="4096 8338607 8338607"
+```
+
+### Performance Impact
+Proper tuning can provide significant performance improvements on Arm servers, potentially allowing you to:
+- Downsize instance types (e.g., m7g.2xlarge → m7g.xlarge)
+- Achieve better cost efficiency
+- Handle higher connection volumes
+
+### Additional Resources
+- [ARM Nginx Learning Path](https://learn.arm.com/learning-paths/servers-and-cloud-computing/nginx/)
+- [ARM Nginx Tuning Guide](https://learn.arm.com/learning-paths/servers-and-cloud-computing/nginx_tune/)
+- [ARM Ecosystem Dashboard](https://www.arm.com/developer-hub/ecosystem-dashboard/?package=nginx)
+
+Use the `knowledge_base_search` tool in this MCP server to find more detailed nginx tuning information and other Arm-specific optimizations.
