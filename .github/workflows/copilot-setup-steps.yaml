@@ -13,7 +13,6 @@ jobs:
       contents: read
     environment: copilot
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-        
-        
+      - name: Docker pull ARM MCP image
+        run: docker pull joestech324/agent-testing:amd64
+        timeout-minutes: 20
