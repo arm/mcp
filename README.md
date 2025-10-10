@@ -16,10 +16,10 @@ embedding-generation is exclusively for creating the vector db, and mcp-remote i
 
 ## 1. Build the container
 
-From the root of this project (where the `Dockerfile` lives):
+From the root of this project, using the multi-stage Dockerfile in `mcp-local/`:
 
 ```bash
-docker buildx build --platform linux/arm64 -t arm-mcp .
+docker buildx build --platform linux/arm64 -f mcp-local/Dockerfile -t arm-mcp mcp-local
 ```
 
 The command above will only build the Arm version. To build the multi-arch version and push to dockerhub:
@@ -27,9 +27,10 @@ The command above will only build the Arm version. To build the multi-arch versi
 ```bash
 docker buildx build \
   --platform linux/arm64,linux/amd64 \
+  -f mcp-local/Dockerfile \
   -t joestech324/mcp:arm-mcp-[version-number] \
   -t joestech324/mcp:latest \
-  . --push
+  mcp-local --push
 ```
 
 Where [version-number] is the current version.
