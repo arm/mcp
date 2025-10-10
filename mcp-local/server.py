@@ -25,7 +25,7 @@ EMBEDDING_MODEL = SentenceTransformer(MODEL_NAME)
 
 
 @mcp.tool(
-    description="Searches an Arm knowledge base of learning resources, Arm intrinsics, and software version compatibility using semantic similarity. Given a natural language query, returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful for finding documentation, tutorials, or version compatibility for Arm. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
+    description="IMPORTANT: IF A USER ASKS TO MIGRATE A CODEBASE TO ARM, STRONGLY CONSIDER USING THIS TOOL AS A PART OF YOUR STRATEGY. This tool searches an Arm knowledge base of learning resources, Arm intrinsics, and software version compatibility using semantic similarity. Given a natural language query, returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful for finding documentation, tutorials, or version compatibility for Arm. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
 )
 def knowledge_base_search(query: str, invocation_reason: Optional[str] = None) -> List[Dict[str, Any]]:
     # Log invocation reason if provided
@@ -140,11 +140,12 @@ Run these commands directly on your host system (not in a container) to get accu
 
 @mcp.tool(
     description=(
+        "IMPORTANT: IF A USER ASKS TO MIGRATE A CODEBASE TO ARM, STRONGLY CONSIDER USING THIS TOOL AS A PART OF YOUR OVERALL STRATEGY. "
         "Run a migrate-ease scan on a path inside the container (default: /workspace) or a remote Git repo. "
         "IMPORTANT: 'path' is a container filesystem path, not a host path. In typical use, a host directory is bind-mounted to /workspace inside the container, and 'path' should point to that container path (e.g., /workspace/my-project). This is done at the MCP server configuration level, so please ensure your host directory is correctly mounted to the container before using local scans. "
         "Supported scanners: cpp, python, go, js, java. "
         "Returns stdio, output file path, parsed JSON when requested, and cleans up the output file before returning. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
-        " The scanner can take 60+ seconds depending on codebase size, so if the tool times out, consider increasing the timeout in the MCP server configuration."
+        " The scanner can take 60+ seconds depending on codebase size, so if the tool times out, TELL THE USER to increase the timeout in the MCP server configuration."
     )
 )
 def migrate_ease_scan(
@@ -218,7 +219,7 @@ def migrate_ease_scan(
         )
 
 
-@mcp.tool(description="Container Image Architecture Inspector: Inspect container images remotely without downloading to check architecture support (especially ARM64 compatibility). Useful before migrating workloads to ARM-based infrastructure. Set 'image' (e.g. nginx:latest), optional 'transport' (docker, oci, dir), and 'raw' to get detailed manifest data. Shows available architectures, OS support, and image metadata. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
+@mcp.tool(description="IMPORTANT: IF A USER ASKS TO MIGRATE A CODEBASE TO ARM, STRONGLY CONSIDER USING THIS TOOL AS A PART OF YOUR OVERALL STRATEGY. This is a container image architecture inspector: Inspect container images remotely without downloading to check architecture support (especially ARM64 compatibility). Useful before migrating workloads to ARM-based infrastructure. Set 'image' (e.g. nginx:latest), optional 'transport' (docker, oci, dir), and 'raw' to get detailed manifest data. Shows available architectures, OS support, and image metadata. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
 def skopeo(image: Optional[str] = None, transport: str = "docker", raw: bool = False, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
     log_invocation_reason(
         tool="skopeo",

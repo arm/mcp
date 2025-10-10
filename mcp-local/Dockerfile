@@ -49,12 +49,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-venv python3-pip \
-    ca-certificates libmagic1 git && \
+    ca-certificates libmagic1 git llvm && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/arm-migration-tools /opt/arm-migration-tools
 COPY --from=builder /usr/local/bin/ /usr/local/bin/
-COPY --from=builder /usr/bin/ /usr/bin/
 COPY --from=builder /app /app
 
 WORKDIR /app
