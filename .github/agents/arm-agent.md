@@ -1,5 +1,5 @@
 ---
-name: container-migration-agent
+name: arm-agent
 tools: ['skopeo', 'check_image', 'knowledge_base_search']
 description: 'Migrate a Dockerfile project to ARM architecture'
 mcp-servers:
