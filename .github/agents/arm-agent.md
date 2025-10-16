@@ -3,7 +3,7 @@ name: arm-agent
 tools: ['skopeo', 'check_image', 'knowledge_base_search']
 description: 'Migrate a Dockerfile project to ARM architecture'
 mcp-servers:
-  arm_torq:
+  arm-mcp:
     type: 'local'
     command: 'docker'
     args:
@@ -12,7 +12,7 @@ mcp-servers:
       - '-i'
       - '--name'
       - 'arm-mcp'
-      - 'joestech324/mcp:latest'
+      - 'joestech324/agent-testing:amd64'
 ---
 Your goal is to migrate a Dockerfile project to ARM architecture, ensuring compatibility and optimizing performance.
 
