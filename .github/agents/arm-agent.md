@@ -6,6 +6,7 @@ mcp-servers:
   arm-mcp:
     type: 'local'
     command: 'docker'
+    tools: ['skopeo', 'check_image', 'knowledge_base_search']
     args:
       - 'run'
       - '--rm'
