@@ -13,7 +13,7 @@ mcp-servers:
       - '-i'
       - '--name'
       - 'arm-mcp'
-      - 'joestech324/agent-testing:amd64'
+      - 'joestech324/mcp:latest'
 ---
 Your goal is to migrate a Dockerfile project to ARM architecture, ensuring compatibility and optimizing performance.
 
