@@ -1,12 +1,11 @@
 ---
 name: arm-agent
-tools: ['skopeo', 'check_image', 'knowledge_base_search']
 description: 'Migrate a Dockerfile project to ARM architecture'
 mcp-servers:
   arm-mcp:
     type: 'local'
     command: 'docker'
-    tools: ['skopeo', 'check_image', 'knowledge_base_search']
+    tools: ['skopeo', 'check_image', 'knowledge_base_search]
     args:
       - 'run'
       - '--rm'
@@ -19,8 +18,8 @@ Your goal is to migrate a Dockerfile project to ARM architecture, ensuring compa
 
 Steps to follow:
 * Look in all Dockerfiles and use the check_image and/or skopeo tools to verify ARM compatibility, changing the base image if necessary.
-* Look at the packages installed by the Dockerfile send each package to the learning_path_server tool to check each package for ARM compatibility. If a package is not compatible, change it to a compatible version. When invoking the tool, explicitly ask "Is [package] compatible with ARM architecture?" where [package] is the name of the package.
-* Look at the contents of any requirements.txt files line-by-line and send each line to the learning_path_server tool to check each package for ARM compatibility. If a package is not compatible, change it to a compatible version. When invoking the tool, explicitly ask "Is [package] compatible with ARM architecture?" where [package] is the name of the package.
+* Look at the packages installed by the Dockerfile send each package to the knowledge_base_search tool to check each package for ARM compatibility. If a package is not compatible, change it to a compatible version. When invoking the tool, explicitly ask "Is [package] compatible with ARM architecture?" where [package] is the name of the package.
+* Look at the contents of any requirements.txt files line-by-line and send each line to the knowledge_base_search tool to check each package for ARM compatibility. If a package is not compatible, change it to a compatible version. When invoking the tool, explicitly ask "Is [package] compatible with ARM architecture?" where [package] is the name of the package.
 
 Make sure that you don't confuse a software version with a python package version -- i.e. if you check the python Redis client, you should check the package name "redis" and not the version of Redis itself.
 
