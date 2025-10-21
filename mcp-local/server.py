@@ -13,7 +13,7 @@ from utils.invocation_logger import log_invocation_reason
 from utils.error_handling import format_tool_error
 
 # Initialize the MCP server
-mcp = FastMCP("arm_torq")
+mcp = FastMCP("arm-mcp")
 
 # Load USearch index and metadata at module load time
 METADATA = load_metadata(METADATA_PATH)
