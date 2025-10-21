@@ -20,18 +20,6 @@ def _normalize_scanner(scanner: str) -> str:
     return s  # let the caller see the exact name if it's custom
 
 
-def _resolve_scan_path(path: Optional[str]) -> str:
-    """
-    Resolve a user path against the workspace mount if it's not absolute.
-    Defaults to WORKSPACE_DIR when path is None.
-    """
-    if not path:
-        return WORKSPACE_DIR
-    if os.path.isabs(path):
-        return path
-    return os.path.join(WORKSPACE_DIR, path)
-
-
 def _build_output_path(scanner: str, output_format: str) -> str:
     ts = time.strftime("%Y%m%d-%H%M%S")
     suffix = output_format.lower().lstrip(".")
@@ -42,7 +30,6 @@ def _build_output_path(scanner: str, output_format: str) -> str:
 def run_migrate_ease_scan(
     scanner: str,
     arch: str,
-    scan_path: Optional[str],
     git_repo: Optional[str],
     output_format: str,
     extra_args: Optional[List[str]] = None,
@@ -51,10 +38,12 @@ def run_migrate_ease_scan(
     Execute migrate-ease via unified CLI wrappers installed in /usr/local/bin:
     'migrate-ease-{scanner}' (e.g., migrate-ease-cpp, migrate-ease-python, migrate-ease-go, migrate-ease-js, migrate-ease-java).
 
-    NOTE: Remote repository scans are staged inside a temporary directory under /tmp
+    NOTE: Local scans always target WORKSPACE_DIR (/workspace) inside the container.
+    Remote repository scans are staged inside a temporary directory under /tmp
     that is removed after execution. The migrate-ease output file is created
     under /tmp and is **deleted** before this function returns. A best-effort
     deletion flag is included in the returned dictionary as 'output_file_deleted'.
+    For local scans, a listing of WORKSPACE_DIR is captured to aid troubleshooting.
     """
     normalized_scanner = _normalize_scanner(scanner)
     fmt = output_format.lower().lstrip(".")
@@ -69,18 +58,23 @@ def run_migrate_ease_scan(
     cmd: List[str] = [wrapper, "--march", arch, "--output", out_path]
 
     temporary_clone_dir: Optional[str] = None
+    workspace_listing: Optional[List[str]] = None
+    workspace_listing_error: Optional[str] = None
 
     try:
-        # Route: git repo vs local path
+        # Route: git repo vs workspace scan
         if git_repo:
             # Always stage remote scans inside a temporary workspace that is cleaned up later
             temporary_clone_dir = tempfile.mkdtemp(prefix="migrate_ease_clone_", dir="/tmp")
             cmd.extend(["--git-repo", git_repo, temporary_clone_dir])
             resolved_for_echo = temporary_clone_dir
         else:
-            target = _resolve_scan_path(scan_path)
-            cmd.append(target)
-            resolved_for_echo = target
+            cmd.append(WORKSPACE_DIR)
+            resolved_for_echo = WORKSPACE_DIR
+            try:
+                workspace_listing = sorted(os.listdir(WORKSPACE_DIR))
+            except Exception as e:
+                workspace_listing_error = f"Failed to list workspace contents: {e}"
 
         # Append any raw extra args last
         if extra_args:
@@ -105,6 +99,11 @@ def run_migrate_ease_scan(
             "output_file": out_path,
             "output_format": fmt,
         }
+
+        if workspace_listing is not None:
+            result["workspace_listing"] = workspace_listing
+        if workspace_listing_error:
+            result["workspace_listing_error"] = workspace_listing_error
 
         # Inline JSON results before cleanup so callers still get the data.
         if fmt == "json":
