@@ -16,3 +16,6 @@ jobs:
       - name: Docker pull ARM MCP image
         run: docker pull joestech324/mcp:latest
         timeout-minutes: 20
+
+      - name: Checkout code
+        uses: actions/checkout@v5
