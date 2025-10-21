@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  mcp-local:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    volumes:
+      - /workspace:/workspace
+    environment:
+      - WORKSPACE_DIR=/workspace
+    ports:
+      - "8080:8080"
+
+  # Example service for ARM-specific deployment
+  mcp-local-arm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      platforms:
+        - linux/arm64
+    volumes:
+      - /workspace:/workspace
+    environment:
+      - WORKSPACE_DIR=/workspace
+    ports:
+      - "8081:8080"

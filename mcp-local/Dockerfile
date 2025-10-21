@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1.7
-FROM ubuntu:24.04 AS builder
+# Multi-platform build support for ARM64 and AMD64
+FROM --platform=$BUILDPLATFORM ubuntu:24.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -38,7 +39,7 @@ COPY data/ ./data/
 COPY utils/ ./utils/
 COPY server.py .
 
-FROM ubuntu:24.04 AS runtime
+FROM --platform=$BUILDPLATFORM ubuntu:24.04 AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
