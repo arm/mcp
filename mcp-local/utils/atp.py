@@ -16,8 +16,8 @@ def run_command(command: list, cwd: str, parse_output=None) -> tuple:
     Returns (returncode, parsed_output or stdout).
     """
     try:
-        print(command)
-        result = subprocess.run(command, cwd=cwd, timeout=60, capture_output=True, text=True)
+        #print(command)
+        result = subprocess.run(command, cwd=cwd, timeout=60*30, capture_output=True, text=True)
     except subprocess.TimeoutExpired as e:
         print(f"Command timed out: {e}")
         return -1, None
@@ -55,7 +55,7 @@ def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, atpe
                 t_user = jump.get("username")
                 t_key = jump.get("private_key_filename")
                 if t_host == remote_ip_addr and t_user == remote_usr and t_key == ssh_key_path:
-                    print(f"Target already exists: {target_id}")
+                    #print(f"Target already exists: {target_id}")
                     return target_id
         except Exception as e:
             print(f"Failed to parse target list output: {e}")
@@ -68,8 +68,9 @@ def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, atpe
         "--name", generated_name
     ]
     add_status, add_output = run_command(add_command, cwd=atperf_dir)
-    if add_status != 0:
-        print(f"Warning: Failed to add target (may already exist): {add_output}")
+    #if add_status != 0:
+        #pass
+        #print(f"Warning: Failed to add target (may already exist): {add_output}")
 
     command = [
         "./atperf",
@@ -102,9 +103,9 @@ def get_results(run_id: dict, table: str, atperf_dir:str) -> str:
     
     # Startup the local db for querying results
     render_cmd = ["./atperf", "run", "render", run_id['value']]
-    print(render_cmd)
-    render_proc = subprocess.run(render_cmd, cwd=atperf_dir, timeout=60, capture_output=True, text=True)
-    print(render_proc.stdout)
+    #print(render_cmd)
+    render_proc = subprocess.run(render_cmd, cwd=atperf_dir, timeout=60*5, capture_output=True, text=True)
+    #print(render_proc.stdout)
     if render_proc.returncode != 0:
         raise RuntimeError(f"atperf render failed: {render_proc.stderr}")
 

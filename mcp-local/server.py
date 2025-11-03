@@ -20,8 +20,8 @@ from utils.invocation_logger import log_invocation_reason
 mcp = FastMCP("arm_torq")
 
 # Load USearch index and metadata at module load time
-METADATA = load_metadata(METADATA_PATH)
-USEARCH_INDEX = load_usearch_index(USEARCH_INDEX_PATH, METADATA)
+#METADATA = load_metadata(METADATA_PATH)
+#USEARCH_INDEX = load_usearch_index(USEARCH_INDEX_PATH, METADATA)
 EMBEDDING_MODEL = SentenceTransformer(MODEL_NAME)
 
 
@@ -44,9 +44,10 @@ def knowledge_base_search(query: str, invocation_reason: Optional[str] = None) -
     Returns:
         List of dictionaries with metadata including url and text snippets.
     """
-    embedding_results = embedding_search(query, USEARCH_INDEX, METADATA, EMBEDDING_MODEL)
-    deduped = deduplicate_urls(embedding_results)
+    #embedding_results = embedding_search(query, USEARCH_INDEX, METADATA, EMBEDDING_MODEL)
+    #deduped = deduplicate_urls(embedding_results)
     # Only return the relevant fields
+    '''
     formatted = [
         {
             "url": item["metadata"].get("url"),
@@ -56,7 +57,8 @@ def knowledge_base_search(query: str, invocation_reason: Optional[str] = None) -
         }
         for item in deduped
     ]
-    return formatted
+    '''
+    return [] #formatted
 
 
 @mcp.tool(
@@ -215,9 +217,9 @@ def atp_recipe_run(cmd:str, remote_ip_addr:str, remote_usr:str, recipe:str) -> s
     atp_cli_dir = "/opt/Arm Total Performance/assets/atperf"
     target_id = prepare_target(remote_ip_addr, remote_usr, key_path, atp_cli_dir)
     #target_id = "aws_10.252.211.230" #Hardcoding the target for now
-    print(f"Prepared target: {target_id}")
+    #print(f"Prepared target: {target_id}")
     run_id = run_workload(cmd, target_id, recipe, atp_cli_dir)
-    print(f"Workload run ID: {run_id}")
+    #print(f"Workload run ID: {run_id}")
     results = get_results(run_id, "drilldown", atp_cli_dir)
     
     return results
