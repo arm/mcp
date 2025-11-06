@@ -141,7 +141,7 @@ Run these commands directly on your host system (not in a container) to get accu
 @mcp.tool(
     description=(
         "IMPORTANT: IF A USER ASKS TO MIGRATE A CODEBASE TO ARM, STRONGLY CONSIDER USING THIS TOOL AS A PART OF YOUR OVERALL STRATEGY. "
-        "Run a migrate-ease scan against the container-mounted workspace (/workspace) or a remote Git repo. "
+        "Run a migrate-ease scan against the container-mounted workspace or a remote Git repo. "
         "Supported scanners: cpp, python, go, js, java. "
         "Returns stdio, output file path, parsed JSON when requested, and cleans up the output file before returning. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
         " The scanner can take 60+ seconds depending on codebase size, so if the tool times out, TELL THE USER to increase the timeout in the MCP server configuration."
@@ -171,15 +171,16 @@ def migrate_ease_scan(
         scanner: One of cpp, python, go, js, java (case-insensitive).
         arch: Architecture for the scan (default: armv8-a).
         git_repo: Remote Git repo URL to scan. Local scans always target the mounted
-            workspace directory (/workspace). When git_repo is set, the scan clones the
+            workspace directory. When git_repo is set, the scan clones the
             repository into a temporary directory that is cleaned up automatically.
         output_format: One of json, txt, csv, html. Defaults to json.
-        extra_args: Optional list of additional flags passed through to the scanner (e.g., ["--exclude", "tests/"]).
+        extra_args: Optional list of additional flags passed through to the scanner.
 
     Returns:
         A dictionary with status, returncode, command, stdio, output file path (for traceability),
         parsed_results (for JSON), a flag indicating if the output file was deleted, and a
-        workspace directory listing when running a local scan.
+        workspace directory listing when running a local scan, for troubleshooting purposes. Tell the user when the directory is empty,
+        as it indicates a misconfigured docker volume mount.
     """
     try:
         if scanner.lower() not in SUPPORTED_SCANNERS:
