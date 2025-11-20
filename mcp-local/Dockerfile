@@ -1,4 +1,6 @@
 # syntax=docker/dockerfile:1.7
+
+# Stage 1: Build main application with embedded vector database generation
 FROM ubuntu:24.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -28,6 +30,18 @@ RUN rm -f /usr/local/bin/aperf \
            /opt/arm-migration-tools/processwatch \
            /opt/arm-migration-tools/papi
 
+# Copy embedding data and scripts from the embedding base image
+COPY --from=joestech324/mcp-embedding-base:latest /embedding-data /tmp/embedding-data
+
+# Install dependencies for vector database generation
+WORKDIR /tmp/embedding-data
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+
+# Generate vector database
+RUN python3 generate-chunks.py urls-to-chunk.csv && \
+    python3 local_vectorstore_creation.py
+
+# Set up MCP server application
 WORKDIR /app
 ENV VIRTUAL_ENV=/app/.venv \
     PATH=/app/.venv/bin:$PATH
@@ -37,7 +51,11 @@ RUN python3 -m venv "$VIRTUAL_ENV" && pip install --upgrade pip
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY data/ ./data/
+# Copy generated vector database files
+RUN mkdir -p ./data
+RUN cp /tmp/embedding-data/metadata.json ./data/ && \
+    cp /tmp/embedding-data/usearch_index.bin ./data/
+
 COPY utils/ ./utils/
 COPY server.py .
 
