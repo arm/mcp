@@ -14,6 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 RUN curl -sSL https://raw.githubusercontent.com/arm/arm-linux-migration-tools/main/scripts/install.sh | bash
+# Temp until migrate-ease is updated
+RUN curl -sSL https://raw.githubusercontent.com/JoeStech/migrate-ease/main/js/advisor/main.py \
+    -o /opt/arm-migration-tools/migrate-ease/js/advisor/main.py
 
 RUN rm -f /usr/local/bin/aperf \
          /usr/local/bin/topdown-tool \
@@ -49,11 +52,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-venv python3-pip \
-    ca-certificates libmagic1 git llvm && \
+    ca-certificates libmagic1 git llvm \
+    libgpgme11 libassuan0 libdevmapper1.02.1 && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/arm-migration-tools /opt/arm-migration-tools
 COPY --from=builder /usr/local/bin/ /usr/local/bin/
+COPY --from=builder /usr/bin/skopeo /usr/bin/skopeo
 COPY --from=builder /app /app
 
 WORKDIR /app

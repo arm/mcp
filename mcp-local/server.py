@@ -141,8 +141,7 @@ Run these commands directly on your host system (not in a container) to get accu
 @mcp.tool(
     description=(
         "IMPORTANT: IF A USER ASKS TO MIGRATE A CODEBASE TO ARM, STRONGLY CONSIDER USING THIS TOOL AS A PART OF YOUR OVERALL STRATEGY. "
-        "Run a migrate-ease scan on a path inside the container (default: /workspace) or a remote Git repo. "
-        "IMPORTANT: 'path' is a container filesystem path, not a host path. In typical use, a host directory is bind-mounted to /workspace inside the container, and 'path' should point to that container path (e.g., /workspace/my-project). This is done at the MCP server configuration level, so please ensure your host directory is correctly mounted to the container before using local scans. "
+        "Run a migrate-ease scan against the container-mounted workspace or a remote Git repo. "
         "Supported scanners: cpp, python, go, js, java. "
         "Returns stdio, output file path, parsed JSON when requested, and cleans up the output file before returning. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
         " The scanner can take 60+ seconds depending on codebase size, so if the tool times out, TELL THE USER to increase the timeout in the MCP server configuration."
@@ -150,7 +149,6 @@ Run these commands directly on your host system (not in a container) to get accu
 )
 def migrate_ease_scan(
     scanner: str,
-    path: Optional[str] = None,
     arch: str = DEFAULT_ARCH,
     git_repo: Optional[str] = None,
     output_format: str = "json",
@@ -162,7 +160,6 @@ def migrate_ease_scan(
         reason=invocation_reason,
         args={
             "scanner": scanner,
-            "path": path,
             "arch": arch,
             "git_repo": git_repo,
             "output_format": output_format,
@@ -172,16 +169,18 @@ def migrate_ease_scan(
     """
     Args:
         scanner: One of cpp, python, go, js, java (case-insensitive).
-        path: Container path to scan (inside the container). Typically a directory under /workspace that is bind-mounted from the host. If relative, resolved against WORKSPACE_DIR (/workspace). Defaults to WORKSPACE_DIR when omitted.
         arch: Architecture for the scan (default: armv8-a).
-        git_repo: Remote Git repo URL to scan. When set, the scan clones the repository into a
-            temporary directory that is cleaned up automatically.
+        git_repo: Remote Git repo URL to scan. Local scans always target the mounted
+            workspace directory. When git_repo is set, the scan clones the
+            repository into a temporary directory that is cleaned up automatically.
         output_format: One of json, txt, csv, html. Defaults to json.
-        extra_args: Optional list of additional flags passed through to the scanner (e.g., ["--exclude", "tests/"]).
+        extra_args: Optional list of additional flags passed through to the scanner.
 
     Returns:
         A dictionary with status, returncode, command, stdio, output file path (for traceability),
-        parsed_results (for JSON), and a flag indicating if the output file was deleted.
+        parsed_results (for JSON), a flag indicating if the output file was deleted, and a
+        workspace directory listing when running a local scan, for troubleshooting purposes. Tell the user when the directory is empty,
+        as it indicates a misconfigured docker volume mount.
     """
     try:
         if scanner.lower() not in SUPPORTED_SCANNERS:
@@ -190,16 +189,9 @@ def migrate_ease_scan(
                 "message": f"Unsupported scanner '{scanner}'. Supported: {sorted(SUPPORTED_SCANNERS)}"
             }
 
-        if git_repo and path:
-            return {
-                "status": "error",
-                "message": "Provide either 'path' for local scans OR 'git_repo' for repo scans, not both."
-            }
-
         return run_migrate_ease_scan(
             scanner=scanner,
             arch=arch,
-            scan_path=path,
             git_repo=git_repo,
             output_format=output_format,
             extra_args=extra_args,
@@ -210,7 +202,6 @@ def migrate_ease_scan(
             exc=e,
             args={
                 "scanner": scanner,
-                "path": path,
                 "arch": arch,
                 "git_repo": git_repo,
                 "output_format": output_format,

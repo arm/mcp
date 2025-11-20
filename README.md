@@ -48,7 +48,7 @@ docker run --rm -it --entrypoint /bin/bash arm-mcp
 ```json
 {
   "mcpServers": {
-    "arm_torq": {
+    "arm-mcp": {
       "command": "docker",
       "args": [
         "run",
@@ -75,7 +75,7 @@ For q cli this config should be placed in ~/.aws/amazonq/mcp.json
 [projects."/path/to/your/project"]
 trust_level = "trusted"
 
-[mcp_servers.arm_torq]
+[mcp_servers.arm-mcp]
 command = "docker"
 args = [
   "run",
@@ -97,7 +97,7 @@ For Codex CLI this config should be saved in `~/.codex/config.toml`.
 ```json
 {
   "servers": {
-    "arm_torq": {
+    "arm-mcp": {
       "type": "stdio",
       "command": "docker",
       "args": [
