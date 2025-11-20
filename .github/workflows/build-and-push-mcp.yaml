@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build-and-push:
-    runs-on: large-arm-runner
+    runs-on: self-hosted
 
     steps:
       - name: Checkout code
