@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libelf-dev \
     ca-certificates file tar xz-utils jq libmagic1 && \
     rm -rf /var/lib/apt/lists/*
-RUN curl -sSL https://raw.githubusercontent.com/arm/arm-linux-migration-tools/main/scripts/install.sh | VERSION=1 bash
+RUN curl -sSL https://raw.githubusercontent.com/JoeStech/arm-linux-migration-tools/main/scripts/install.sh | bash
 # Temp until migrate-ease is updated
 RUN curl -sSL https://raw.githubusercontent.com/JoeStech/migrate-ease/main/js/advisor/main.py \
     -o /opt/arm-migration-tools/migrate-ease/js/advisor/main.py
