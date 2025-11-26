@@ -33,6 +33,7 @@ jobs:
         run: |
           docker buildx build \
             --platform linux/arm64,linux/amd64 \
+            --no-cache \
             -t joestech324/mcp:arm-mcp-${{ inputs.version }} \
             -t joestech324/mcp:latest \
             . \
