@@ -21,8 +21,6 @@ from utils.docker_utils import check_docker_image_architectures
 from utils.migrate_ease_utils import run_migrate_ease_scan
 from utils.skopeo_tool import skopeo_help, skopeo_inspect
 from utils.llvm_mca_tool import mca_help, llvm_mca_analyze
-from utils.kubearchinspect_tool import kubearchinspect_help, kubearchinspect_scan
-from utils.bolt_tool import bolt_help, bolt_optimize
 from utils.invocation_logger import log_invocation_reason
 from utils.error_handling import format_tool_error
 

@@ -1,98 +1,45 @@
 # Arm MCP Server
 
-This repository contains a Model Context Protocol (MCP) server that integrates:
-- [migrate-ease](https://github.com/migrate-ease/migrate-ease) for scanning codebases
-- [sysreport](https://github.com/ArmDeveloperEcosystem/sysreport) for system information
-- Docker image architecture checks
-- A semantic search knowledge base (using USearch + embeddings)
+An [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server providing AI assistants with tools and knowledge for Arm architecture development, migration, and optimization.
 
-The server is designed to run inside a Docker container and expose tools to MCP clients such as **q CLI** or **GitHub Copilot**.
+## Features
 
-The Dockerfile is located in mcp-local.
+This MCP server equips AI assistants with specialized tools for Arm development:
 
-embedding-generation is exclusively for creating the vector db, and mcp-remote is the IaC for AWS
+- **Knowledge Base Search**: Semantic search across Arm documentation, learning resources, intrinsics, and software compatibility information
+- **Code Migration Analysis**: Scan codebases for Arm compatibility using [migrate-ease](https://github.com/migrate-ease/migrate-ease) (supports C++, Python, Go, JavaScript, Java)
+- **Container Architecture Inspection**: Check Docker image architecture support using integrated [Skopeo](https://github.com/containers/skopeo) and check-image tools.
+- **Assembly Performance Analysis**: Analyze assembly code performance using LLVM-MCA
+- **System Information**: Instructions for gathering detailed system architecture information via [sysreport](https://github.com/ArmDeveloperEcosystem/sysreport)
 
----
+## Prerequisites
 
-## 1. Build the container
+- Docker (with buildx support for multi-arch builds)
+- An MCP-compatible AI assistant client (e.g. GitHub Copilot, Kiro CLI, Codex CLI, Claude Code, etc)
 
-From the root of this project, using the multi-stage Dockerfile in `mcp-local/`:
+## Quick Start
 
-```bash
-docker buildx build --platform linux/arm64 -f mcp-local/Dockerfile -t arm-mcp mcp-local
-```
+### 1. Build the Docker Image
 
-The command above will only build the Arm version. To build the multi-arch version and push to dockerhub:
-
-```bash
-docker buildx build \
-  --platform linux/arm64,linux/amd64 \
-  -f mcp-local/Dockerfile \
-  -t joestech324/mcp:arm-mcp-[version-number] \
-  -t joestech324/mcp:latest \
-  mcp-local --push
-```
-
-Where [version-number] is the current version.
-
-To get into the container for troubleshooting, use
+From the root of this repository:
 
 ```bash
-docker run --rm -it --entrypoint /bin/bash arm-mcp
+docker buildx build --platform linux/arm64,linux/amd64 -f mcp-local/Dockerfile -t arm-mcp mcp-local
 ```
 
-## 2. Set up the MCP config
+For a single-platform build (faster):
 
-### for q cli
-
-```json
-{
-  "mcpServers": {
-    "arm-mcp": {
-      "command": "docker",
-      "args": [
-        "run",
-        "--rm",
-        "-i",
-        "-v", "[local directory path]:/workspace",
-        "--name", "arm-mcp",
-        "arm-mcp"
-      ],
-      "env": {},
-      "timeout": 60000
-    }
-  }
-}
+```bash
+docker buildx build -f mcp-local/Dockerfile -t arm-mcp mcp-local
 ```
 
-Replace [local directory path] with the local path that you want the mcp server to be able to access.
+### 2. Configure Your MCP Client
 
-For q cli this config should be placed in ~/.aws/amazonq/mcp.json
+Choose the configuration that matches your MCP client:
 
-### Codex CLI
+#### GitHub Copilot (VS Code)
 
-```toml
-[projects."/path/to/your/project"]
-trust_level = "trusted"
-
-[mcp_servers.arm-mcp]
-command = "docker"
-args = [
-  "run",
-  "--rm",
-  "-i",
-  "-v", "[local directory path]:/workspace",
-  "--name", "arm-mcp",
-  "arm-mcp"
-]
-env = {}
-```
-
-Replace `[local directory path]` with the local path that you want the mcp server to be able to access, and replace `/path/to/your/project` with your actual project path.
-
-For Codex CLI this config should be saved in `~/.codex/config.toml`.
-
-### GitHub Copilot in VS Code
+Add to `.vscode/mcp.json` in your project, or globally at `~/Library/Application Support/Code/User/mcp.json` (macOS):
 
 ```json
 {
@@ -104,7 +51,7 @@ For Codex CLI this config should be saved in `~/.codex/config.toml`.
         "run",
         "--rm",
         "-i",
-        "-v", "[local directory path]:/workspace",
+        "-v", "/path/to/your/workspace:/workspace",
         "arm-mcp"
       ]
     }
@@ -112,14 +59,89 @@ For Codex CLI this config should be saved in `~/.codex/config.toml`.
 }
 ```
 
-The config can either be put in:
-
-`.vscode/mcp.json` local to the open project folder, or
-
-globally here (for macOS):
-
-`~/Library/Application Support/Code/User/mcp.json`
-
 The easiest way to open this file in VS Code for editing is command+shift+p and search for
 
 MCP: Open User Configuration
+
+#### AWS Kiro CLI
+
+Add to `~/.aws/amazonq/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "arm-mcp": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-v", "/path/to/your/workspace:/workspace",
+        "--name", "arm-mcp",
+        "arm-mcp"
+      ],
+      "timeout": 60000
+    }
+  }
+}
+```
+
+#### MCP Clients using TOML format (e.g. Codex CLI)
+
+```toml
+[mcp_servers.arm-mcp]
+command = "docker"
+args = [
+  "run",
+  "--rm",
+  "-i",
+  "-v", "/path/to/your/workspace:/workspace",
+  "arm-mcp"
+]
+```
+
+**Note**: Replace `/path/to/your/workspace` with the actual path to your project directory that you want the MCP server to access.
+
+### 3. Restart Your MCP Client
+
+After updating the configuration, restart your MCP client to load the Arm MCP server.
+
+## Repository Structure
+
+- **`mcp-local/`**: The MCP server implementation
+  - `server.py`: Main FastMCP server with tool definitions
+  - `utils/`: Helper modules for each tool
+  - `data/`: Pre-built knowledge base (embeddings and metadata)
+  - `Dockerfile`: Multi-stage Docker build
+- **`embedding-generation/`**: Scripts for regenerating the knowledge base from source documents
+
+## Troubleshooting
+
+### Accessing the Container Shell
+
+To debug or explore the container environment:
+
+```bash
+docker run --rm -it --entrypoint /bin/bash arm-mcp
+```
+
+### Common Issues
+
+- **Timeout errors during migration scans**: Increase the `timeout` value in your MCP client configuration (e.g., `"timeout": 120000` for 2 minutes)
+- **Empty workspace**: Ensure your volume mount path is correct and the directory exists
+- **Architecture mismatches**: If you encounter platform-specific issues, rebuild for your specific platform using `--platform linux/amd64` or `--platform linux/arm64`
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues or pull requests.
+
+When contributing:
+- Follow PEP 8 style guidelines for Python code
+- Update documentation for any new features or changes
+- Ensure the Docker image builds successfully before submitting
+
+## License
+
+Copyright © 2025, Arm Limited and Contributors. All rights reserved.
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
