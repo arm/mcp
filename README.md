@@ -6,7 +6,7 @@ This repository contains a Model Context Protocol (MCP) server that integrates:
 - Docker image architecture checks
 - A semantic search knowledge base (using USearch + embeddings)
 
-The server is designed to run inside a Docker container and expose tools to MCP clients such as **q CLI** or **VS Code MCP integration**.
+The server is designed to run inside a Docker container and expose tools to MCP clients such as **q CLI** or **GitHub Copilot**.
 
 The Dockerfile is located in mcp-local.
 
