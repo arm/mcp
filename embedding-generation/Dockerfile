@@ -12,3 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Base image containing intrinsic chunks data
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Python
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /embedding-data
+
+# Copy intrinsic chunks data
+COPY intrinsic_chunks/ ./intrinsic_chunks/
+
+# Copy Python scripts and dependencies
+COPY generate-chunks.py .
+COPY local_vectorstore_creation.py .
+COPY urls-to-chunk.csv .
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
