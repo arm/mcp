@@ -12,6 +12,10 @@ This MCP server equips AI assistants with specialized tools for Arm development:
 - **Assembly Performance Analysis**: Analyze assembly code performance using LLVM-MCA
 - **System Information**: Instructions for gathering detailed system architecture information via [sysreport](https://github.com/ArmDeveloperEcosystem/sysreport)
 
+## Pre-Built Image
+
+If you would prefer to use a pre-built, multi-arch image, the official image can be found in Docker Hub here: `armswdev/arm-mcp:latest`
+
 ## Prerequisites
 
 - Docker (with buildx support for multi-arch builds)
