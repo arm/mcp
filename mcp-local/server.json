@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
   "name": "io.github.arm/arm-mcp",
   "title": "Arm MCP Server",
-  "description": "Official Arm MCP server providing tools for code migration, optimization, and Arm architecture guidance",
+  "description": "Official Arm MCP server for code migration, optimization, and Arm architecture guidance",
   "version": "1.0.1",
   "repository": {
     "url": "https://github.com/arm/mcp",
