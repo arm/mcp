@@ -69,7 +69,7 @@ MCP: Open User Configuration
 
 #### AWS Kiro CLI
 
-Add to `~/.aws/amazonq/mcp.json`:
+Add to `~/.kiro/settings/mcp.json`:
 
 ```json
 {
