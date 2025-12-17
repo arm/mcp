@@ -32,7 +32,7 @@ def read_file_contents(file_path: str) -> str:
     with open(file_path, 'r', encoding='utf-8') as f:
         return f.read()
 
-def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, atperf_dir:str) -> str:
+def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, atperf_dir:str) -> dict:
     """Prepare the target machine for running workloads. 
         Returns the target ID."""
     
@@ -56,17 +56,26 @@ def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, atpe
                 t_key = jump.get("private_key_filename")
                 if t_host == remote_ip_addr and t_user == remote_usr and t_key == ssh_key_path:
                     #print(f"Target already exists: {target_id}")
-                    return target_id
+                    return {
+                        "target_id": target_id
+                    }
         except Exception as e:
             print(f"Failed to parse target list output: {e}")
-
-    # Add the target if it doesn't exist
+    
     generated_name = f"{remote_usr}_{remote_ip_addr.replace('.', '_')}"
-    add_command = [
-        "./atperf", "target", "add",
-        f"{remote_usr}@{remote_ip_addr}:22:{ssh_key_path}",
-        "--name", generated_name
-    ]
+    # Add the target if it doesn't exist
+    if remote_ip_addr == "172.17.0.1" or "localhost":
+        add_command = [
+            "./atperf", "target", "add",
+            f"{remote_usr}@172.17.0.1:22:{ssh_key_path}",
+            "--name", generated_name, "--host-key-policy=ignore"
+        ]
+    else:
+        add_command = [
+            "./atperf", "target", "add",
+            f"{remote_usr}@{remote_ip_addr}:22:{ssh_key_path}",
+            "--name", generated_name
+        ]
     add_status, add_output = run_command(add_command, cwd=atperf_dir)
     #if add_status != 0:
         #pass
@@ -79,11 +88,19 @@ def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, atpe
     ]
     status, target_id = run_command(command, cwd=atperf_dir)
     if status != 0 or not target_id:
-        raise RuntimeError("Failed to prepare target")
-    return generated_name
+        return {
+            "error": "Failed to prepare target. Check the connection details and make sure you have the correct username and ip address. Sometimes when you mean to connect to localhost, you are running from a docker container so the ip address needs to be 172.17.0.1",
+            "details": target_id
+        }
+    return {
+        "target_id": generated_name
+    }
 
 def run_workload(cmd:str, target: str, recipe:str, atperf_dir:str) -> dict:
-    """Run a sample workload on the target machine. Example query: 'Help my analyze my code's performance'."""
+    """Run a sample workload on the target machine. Some example queries: 
+        - 'Help my analyze my code's performance'.
+        - 'Find the CPU hotspots in my application'.
+        Returns the run ID of the workload execution."""
     command = [
         "./atperf",
         "recipe", "run", recipe,
@@ -93,8 +110,11 @@ def run_workload(cmd:str, target: str, recipe:str, atperf_dir:str) -> dict:
     ]
     status, run_id = run_command(command, cwd=atperf_dir, parse_output=extract_run_id)
     if not run_id:
-        raise RuntimeError("Failed to run workload or extract run_id")
-    return run_id
+        return {
+            "error": "Failed to run workload on target machine.",
+            "details": run_id
+        }
+    return {"run_id": run_id}
 
 def get_results(run_id: dict, table: str, atperf_dir:str) -> str:
     """Get results from the target machine after running a workload. 
@@ -107,14 +127,14 @@ def get_results(run_id: dict, table: str, atperf_dir:str) -> str:
     render_proc = subprocess.run(render_cmd, cwd=atperf_dir, timeout=60*5, capture_output=True, text=True)
     #print(render_proc.stdout)
     if render_proc.returncode != 0:
-        raise RuntimeError(f"atperf render failed: {render_proc.stderr}")
+        return f"atperf render failed. {render_proc.stderr}"
 
     # Parse session id and table from JSON output
     try:
         render_json = json.loads(render_proc.stdout)
         session_id = render_json.get("data").get("invocation").get("session_id")
         if not session_id:
-            raise ValueError("session_id not found in render output")
+            return "Failed to get session ID from render output."
     except Exception as e:
         raise RuntimeError(f"Failed to parse render output: {e}")
 
@@ -122,6 +142,6 @@ def get_results(run_id: dict, table: str, atperf_dir:str) -> str:
     query_cmd = ["./atperf", "render", "query", session_id, f"select * from {table}"]
     query_proc = subprocess.run(query_cmd, cwd=atperf_dir, capture_output=True, text=True)
     if query_proc.returncode != 0:
-        raise RuntimeError(f"atperf render query failed: {query_proc.stderr}")
+        return f"atperf render query failed. {query_proc.stderr}"
 
     return query_proc.stdout

@@ -191,13 +191,20 @@ def migrate_ease_scan(
     )
 
 @mcp.tool()
-def atp_recipe_run(cmd:str, remote_ip_addr:str, remote_usr:str, recipe:str) -> str:
+def atp_recipe_run(cmd:str, remote_ip_addr:str, remote_usr:str, recipe:str="cpu_hotspots", invocation_reason: Optional[str] = None) -> str:
     """
     Run a sample workload on the given target using an Arm Total Performance recipe, 
-    and interpret the results. Example user prompt: "Help me analyze my code's performance"
+    and interpret the results. Some example user requests: 
+        - 'Help my analyze my code's performance.'
+        - 'Find the CPU hotspots in my application.'
+
+    If you do not know which recipe to use, use 'cpu_hotspots'.
 
     This tool is run within Docker, so the ATP CLI is installed at /opt/Arm Total Performance/assets/atperf
     If you hit an error when running atperf commands, log the error to the user and back out. Do not try to run atperf on the local machine.
+
+    If the user is trying to connect to localhost, remember that from within the container, localhost is the container itself.
+    Instead, use the host's IP address, which is usually 172.17.0.1.
 
     Args:
         cmd: command to run on the remote machine
@@ -208,19 +215,33 @@ def atp_recipe_run(cmd:str, remote_ip_addr:str, remote_usr:str, recipe:str) -> s
     Returns:
         JSON with the results of the workload. 
     """
+    log_invocation_reason(
+        tool="atp_recipe_run",
+        reason=invocation_reason,
+        args={
+            "cmd": cmd,
+            "remote_ip_addr": remote_ip_addr,
+            "remote_usr": remote_usr,
+            "recipe": recipe,
+        },
+    )
     key_path = os.getenv("SSH_KEY_PATH")
     known_hosts_path = os.getenv("KNOWN_HOSTS_PATH")
 
     if not key_path or not known_hosts_path:
-        raise RuntimeError("SSH_KEY_PATH and KNOWN_HOSTS_PATH environment variables must be set in the docker run command in the mcp config file to use ATP.")
+        return "SSH_KEY_PATH and KNOWN_HOSTS_PATH environment variables must be set in the docker run command in the mcp config file to mount in the container to use ATP."
 
     atp_cli_dir = "/opt/Arm Total Performance/assets/atperf"
-    target_id = prepare_target(remote_ip_addr, remote_usr, key_path, atp_cli_dir)
+    target_add_res = prepare_target(remote_ip_addr, remote_usr, key_path, atp_cli_dir)
+    if "error" in target_add_res:
+        return target_add_res["error"]
     #target_id = "aws_10.252.211.230" #Hardcoding the target for now
     #print(f"Prepared target: {target_id}")
-    run_id = run_workload(cmd, target_id, recipe, atp_cli_dir)
+    run_res = run_workload(cmd, target_add_res["target_id"], recipe, atp_cli_dir)
+    if "error" in run_res:
+        return run_res["error"]
     #print(f"Workload run ID: {run_id}")
-    results = get_results(run_id, "drilldown", atp_cli_dir)
+    results = get_results(run_res["run_id"], "drilldown", atp_cli_dir)
     
     return results
 
