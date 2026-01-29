@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+MCP_DOCKER_IMAGE = "arm-mcp:latest"
+
 INIT_REQUEST = {
             "jsonrpc": "2.0",
             "id": 1,

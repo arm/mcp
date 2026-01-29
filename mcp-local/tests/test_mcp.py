@@ -81,7 +81,7 @@ def _read_mcp_message(sock, timeout: float = 10.0) -> dict:
                         continue
 
 def test_mcp_stdio_transport_responds():
-    image = os.getenv("MCP_IMAGE", "arm-mcp:latest")
+    image = os.getenv("MCP_IMAGE", constants.MCP_DOCKER_IMAGE)
     repo_root = Path(__file__).resolve().parents[1]
     print("\n***repo root: ", repo_root)
     with (
