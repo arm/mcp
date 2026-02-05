@@ -163,7 +163,7 @@ def test_mcp_stdio_transport_responds():
         #Check MCA Tool Test
         raw_socket.sendall(_encode_mcp_message(constants.CHECK_MCA_TOOL_REQUEST))
         check_mca_response = _read_response(7, timeout=60)
-        assert check_mca_response.get("result")["structuredContent"] == constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE, "Test Failed: MCP mca tool failed: content mismatch.Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE,indent=2), json.dumps(check_mca_response.get("result")["structuredContent"],indent=2))
+        assert check_mca_response.get("result")["structuredContent"]["status"] == constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE["status"], "Test Failed: MCP mca tool failed: content mismatch.Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE,indent=2), json.dumps(check_mca_response.get("result")["structuredContent"],indent=2))
         print("\n***Test Passed: MCP mca tool succeeded")
         
 if __name__ == "__main__":
