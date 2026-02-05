@@ -46,6 +46,9 @@ RUN rm -f /usr/local/bin/aperf \
 # Copy embedding data and scripts from the embedding base image
 COPY --from=joestech324/mcp-embedding-base:latest /embedding-data /tmp/embedding-data
 
+# Override with local generate-chunks.py (fixes for updated learn.arm.com HTML structure)
+COPY embedding-generation/generate-chunks.py /tmp/embedding-data/generate-chunks.py
+
 # Install dependencies for vector database generation
 WORKDIR /tmp/embedding-data
 RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
@@ -61,7 +64,7 @@ ENV VIRTUAL_ENV=/app/.venv \
 
 RUN python3 -m venv "$VIRTUAL_ENV" && pip install --upgrade pip
 
-COPY requirements.txt .
+COPY mcp-local/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy generated vector database files
@@ -69,8 +72,8 @@ RUN mkdir -p ./data
 RUN cp /tmp/embedding-data/metadata.json ./data/ && \
     cp /tmp/embedding-data/usearch_index.bin ./data/
 
-COPY utils/ ./utils/
-COPY server.py .
+COPY mcp-local/utils/ ./utils/
+COPY mcp-local/server.py .
 
 FROM ubuntu:24.04 AS runtime
 
