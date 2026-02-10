@@ -38,7 +38,10 @@ jobs:
           sudo rm -rf /opt/hostedtoolcache/CodeQL
           sudo rm -rf /usr/share/swift
           sudo rm -rf /usr/local/.ghcup
-          docker system prune -af
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          rm -rf ~/.cache/*
+          docker system prune -af --volumes
           df -h
 
       - name: Set up Docker Buildx
