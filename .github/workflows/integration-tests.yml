@@ -7,6 +7,7 @@ on:
 jobs:
   integration-tests:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - runner: ubuntu-24.04
