@@ -22,8 +22,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r mcp-local/tests/requirements.txt
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build MCP Docker image
-        run:  docker buildx build -f mcp-local/Dockerfile -t arm-mcp .
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            -f mcp-local/Dockerfile \
+            -t arm-mcp:latest \
+            --load \
+            .
 
       - name: Run integration tests
         env:
