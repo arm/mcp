@@ -1,0 +1,17 @@
+.git
+.github
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/.venv
+**/venv
+dist
+build
+*.log
+*.tar
+*.tar.gz
+*.zip
