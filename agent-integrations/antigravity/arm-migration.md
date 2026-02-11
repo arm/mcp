@@ -1,5 +1,5 @@
 <!--
-  Place this file at .agent/workflows/arm-migration.md
+  Place this file at .agent/workflows/arm-migration.md in your workspace.
   Invoke using /arm-migration
 -->
 ---
