@@ -90,6 +90,29 @@ Add to `~/.kiro/settings/mcp.json`:
 }
 ```
 
+#### Gemini CLI
+
+It is recommended to use a project-local configuration file to ensure the relevant workspace is mounted.
+
+Add to `.gemini/settings.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "arm-mcp": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-v", "/path/to/your/workspace:/workspace",
+        "arm-mcp"
+      ]
+    }
+  }
+}
+```
+
 #### MCP Clients using TOML format (e.g. Codex CLI)
 
 ```toml
