@@ -52,4 +52,4 @@ jobs:
       - name: Run integration tests
         env:
           MCP_IMAGE: arm-mcp:latest
-        run: pytest -v mcp-local/tests/test_mcp.py
+        run: pytest -v mcp-local/tests/test_mcp.py --platform ${{ matrix.platform }}
