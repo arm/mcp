@@ -419,17 +419,29 @@ def createLearningPathChunks():
     learn_url = "https://learn.arm.com/"
     response = http_session.get(learn_url, timeout=60)
     soup = BeautifulSoup(response.text, 'html.parser')
-    for card in soup.find_all(class_='main-topic-card'):
-        if 'tool-install' == card.get('id'): 
-            ig_rel_path = card.get('link')
-            processLearningPath(ig_rel_path,"Install Guide")
+    
+    # Process Install Guides separately (directly from /install-guides page)
+    processLearningPath("/install-guides", "Install Guide")
+    
+    # Find category links - main-topic-card elements are now wrapped in <a> tags
+    # Look for <a> tags that contain main-topic-card divs
+    for a_tag in soup.find_all('a', href=True):
+        card = a_tag.find(class_='main-topic-card')
+        if card:
+            cat_rel_path = a_tag.get('href')
+            if cat_rel_path is None or cat_rel_path.startswith('http'):
+                continue
+            # Skip non-learning-path links (like /tag/ml/ or install guides button)
+            if not cat_rel_path.startswith('/learning-paths/'):
+                continue
             
-        else:         
-            cat_rel_path = card.get('link')
-            cat_response = http_session.get(learn_url+cat_rel_path, timeout=60)
+            cat_response = http_session.get(learn_url.rstrip('/') + cat_rel_path, timeout=60)
             cat_soup = BeautifulSoup(cat_response.text, 'html.parser')
             for lp_card in cat_soup.find_all(class_="path-card"):
-                lp_url = learn_url + lp_card.get('link')
+                lp_link = lp_card.get('link')
+                if lp_link is None:
+                    continue
+                lp_url = learn_url.rstrip('/') + lp_link
                 # Chunking step
                 processLearningPath(lp_url, "Learning Path")
 

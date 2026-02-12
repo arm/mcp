@@ -43,11 +43,16 @@ RUN rm -f /usr/local/bin/aperf \
            /opt/arm-migration-tools/processwatch \
            /opt/arm-migration-tools/papi
 
+COPY embedding-generation/generate-chunks.py /tmp/embedding-generation/generate-chunks.py
+COPY embedding-generation/local_vectorstore_creation.py /tmp/embedding-generation/local_vectorstore_creation.py
+COPY embedding-generation/requirements.txt /tmp/embedding-generation/requirements.txt
+COPY embedding-generation/urls-to-chunk.csv /tmp/embedding-generation/urls-to-chunk.csv
+
 # Copy embedding data and scripts from the embedding base image
-COPY --from=joestech324/mcp-embedding-base:latest /embedding-data /tmp/embedding-data
+COPY --from=joestech324/mcp-embedding-base:latest /embedding-data/intrinsic_chunks /tmp/embedding-generation/intrinsic_chunks
 
 # Install dependencies for vector database generation
-WORKDIR /tmp/embedding-data
+WORKDIR /tmp/embedding-generation
 RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
 # Generate vector database
@@ -61,16 +66,16 @@ ENV VIRTUAL_ENV=/app/.venv \
 
 RUN python3 -m venv "$VIRTUAL_ENV" && pip install --upgrade pip
 
-COPY requirements.txt .
+COPY mcp-local/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy generated vector database files
 RUN mkdir -p ./data
-RUN cp /tmp/embedding-data/metadata.json ./data/ && \
-    cp /tmp/embedding-data/usearch_index.bin ./data/
+RUN cp /tmp/embedding-generation/metadata.json ./data/ && \
+    cp /tmp/embedding-generation/usearch_index.bin ./data/
 
-COPY utils/ ./utils/
-COPY server.py .
+COPY mcp-local/utils/ ./utils/
+COPY mcp-local/server.py .
 
 FROM ubuntu:24.04 AS runtime
 

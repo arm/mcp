@@ -1,2 +1,30 @@
 invocation_reasons.yaml
 
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+embedding-generation/venv/
+embedding-generation/yaml_data
+embedding-generation/info
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
