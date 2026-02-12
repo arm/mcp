@@ -177,7 +177,7 @@ def test_mcp_stdio_transport_responds(platform):
             assert check_mca_response.get("result")["structuredContent"]["status"] == constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS, "Test Failed: MCP mca tool failed: status mismatch.Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS,indent=2), json.dumps(check_mca_response.get("result")["structuredContent"]["status"],indent=2))
             print("\n***Test Passed: MCP mca tool succeeded")
         else:
-            print("\n***Test NA: MCP mca tool is not supported on this platform")
+            print("\n***Test NA: MCP mca tool is not supported on this platform: {}".format(platform))
         
 if __name__ == "__main__":
     pytest.main([__file__])
