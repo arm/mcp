@@ -1,0 +1,20 @@
+name: Check Runner Disk Space
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check-disk-space:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Show disk space (df -h)
+        run: df -h
+
+      - name: Show disk usage by top-level directories
+        run: |
+          echo "Top-level directory usage:"
+          sudo du -h --max-depth=1 / | sort -hr | head -n 20
+
+      - name: Show inode usage
+        run: df -i
