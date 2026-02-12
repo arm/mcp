@@ -86,8 +86,10 @@ def _read_mcp_message(sock, timeout: float = 10.0) -> dict:
                     except json.JSONDecodeError:
                         continue
 
-def test_mcp_stdio_transport_responds():
-    image = os.getenv("MCP_IMAGE", constants.MCP_DOCKER_IMAGE)
+def test_mcp_stdio_transport_responds(mcp_image):
+    image = mcp_image or os.getenv("MCP_IMAGE", constants.MCP_DOCKER_IMAGE)
+
+    print("image is: ", image)
     repo_root = Path(__file__).resolve().parents[1]
     print("\n***repo root: ", repo_root)
     with (
