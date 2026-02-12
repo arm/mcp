@@ -1,3 +1,5 @@
+invocation_reasons.yaml
+
 # Virtual environments
 venv/
 .venv/
@@ -25,3 +27,4 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+

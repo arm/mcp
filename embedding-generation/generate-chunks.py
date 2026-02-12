@@ -12,18 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-from bs4 import BeautifulSoup
 import argparse
-import sys, os
+import sys
+import os
 import re
 import uuid
 import yaml
 import csv
 import datetime
 import json
+
+import boto3
+from botocore.exceptions import NoCredentialsError, ClientError
+from bs4 import BeautifulSoup
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
 
 # Create a session with retry logic for resilient HTTP requests
 def create_retry_session(retries=5, backoff_factor=1, status_forcelist=(500, 502, 503, 504)):
@@ -45,10 +50,6 @@ def create_retry_session(retries=5, backoff_factor=1, status_forcelist=(500, 502
 # Global session for all HTTP requests
 http_session = create_retry_session()
 
-# Boto3 for S3 operations
-import boto3
-from botocore.exceptions import NoCredentialsError, ClientError
-
 
 def ensure_intrinsic_chunks_from_s3(local_folder='intrinsic_chunks',
                                     s3_bucket='arm-github-copilot-extension',
@@ -57,7 +58,6 @@ def ensure_intrinsic_chunks_from_s3(local_folder='intrinsic_chunks',
     Ensure the local 'intrinsic_chunks' folder exists and is populated with files from S3.
     If the folder does not exist, create it and download all files from the S3 prefix.
     """
-    import os
     if not os.path.exists(local_folder):
         os.makedirs(local_folder, exist_ok=True)
         print(f"Created local folder: {local_folder}")
@@ -86,9 +86,7 @@ def ensure_intrinsic_chunks_from_s3(local_folder='intrinsic_chunks',
 To fix:
 1. Prevent multiple learning paths from being used (compare URLs to existing chunks OR delete overlaps)
 2. Learning Path titles must come from index page...send through function along with Graviton.
-
 '''
-
 
 yaml_dir = 'yaml_data'
 details_file = 'info/chunk_details.csv'
@@ -97,7 +95,6 @@ chunk_index = 1
 
 # Global var to prevent duplication entries from cross platform learning paths
 cross_platform_lps_dont_duplicate = []
-
 
 # Increase the file size limit, which defaults to '131,072'
 csv.field_size_limit(10**9) #1,000,000,000 (1 billion), smaller than 64-bit space but avoids 'python overflowerror'
@@ -194,7 +191,6 @@ def createEcosystemDashboardChunks():
         chunkSaveAndTrack(url,chunk) 
 
     return 
-
 
 
 def createIntrinsicsDatabaseChunks():
@@ -313,7 +309,6 @@ def createIntrinsicsDatabaseChunks():
         This is the sudocode for how the <name> intrinsic operates.
         <sudocode>
     '''
-
 
 
 def processLearningPath(url,type):
@@ -474,6 +469,7 @@ def readInCSV(csv_file):
 
     return csv_dict, csv_length
 
+
 def getMarkdownGitHubURLsFromPage(url):
     GH_urls = []
     SITE_urls = []
@@ -534,6 +530,7 @@ def obtainMarkdownContentFromGitHubMDFile(gh_url):
     md_content = md_content[md_content.find('---', 3)  + 3:].strip()  # +3 to remove the '---' and strip to remove leading/trailing whitespace
 
     return md_content
+
 
 def obtainTextSnippets__Markdown(content, min_words=300, max_words=500, min_final_words=200):
     """Split content into chunks based on headers and word count constraints."""
@@ -632,6 +629,7 @@ def createChunk(text_snippet,WEBSITE_url,keywords,title):
 
     return chunk
 
+
 def printChunks(chunks):
     for chunk_dict in chunks:
         print('='*100)
@@ -700,7 +698,6 @@ def chunkSaveAndTrack(url,chunk):
     # Record chunk
     recordChunk()
     print(f"{file_name} === {chunk.title}")
-
 
 
 def main():

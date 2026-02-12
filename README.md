@@ -34,12 +34,33 @@ docker buildx build --platform linux/arm64,linux/amd64 -f mcp-local/Dockerfile -
 For a single-platform build (faster):
 
 ```bash
-docker buildx build -f mcp-local/Dockerfile -t arm-mcp .
+docker buildx build -f mcp-local/Dockerfile -t arm-mcp . --load
 ```
 
 ### 2. Configure Your MCP Client
 
 Choose the configuration that matches your MCP client:
+
+#### Claude Code
+
+Add to `.mcp.json` in your project:
+
+```json
+{
+  "mcpServers": {
+    "arm-mcp": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-v", "/path/to/your/workspace:/workspace",
+        "arm-mcp"
+      ]
+    }
+  }
+}
+```
 
 #### GitHub Copilot (VS Code)
 
