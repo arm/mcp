@@ -24,6 +24,7 @@ import datetime
 from sentence_transformers import SentenceTransformer
 from usearch.index import Index
 
+
 def load_local_yaml_files() -> List[Dict]:
     """Load locally stored YAML files and return their contents as a list of dictionaries."""
     print("Loading local YAML files")
@@ -63,6 +64,7 @@ def load_local_yaml_files() -> List[Dict]:
     print(f"Successfully loaded {len(yaml_contents)} YAML files")
     return yaml_contents
 
+
 def create_embeddings(contents: List[str], model_name: str = 'all-MiniLM-L6-v2') -> np.ndarray:
     """Create embeddings for the given contents using SentenceTransformers."""
     print(f"Creating embeddings using model: {model_name}")
@@ -70,6 +72,7 @@ def create_embeddings(contents: List[str], model_name: str = 'all-MiniLM-L6-v2')
     embeddings = model.encode(contents, show_progress_bar=True, convert_to_numpy=True)
     print(f"Created embeddings with shape: {embeddings.shape}")
     return embeddings
+
 
 def create_usearch_index(embeddings: np.ndarray, metadata: List[Dict]) -> Tuple[Index, List[Dict]]:
     """Create a USearch index with the given embeddings and metadata."""
@@ -99,6 +102,7 @@ def create_usearch_index(embeddings: np.ndarray, metadata: List[Dict]) -> Tuple[
     
     print(f"Added {len(index)} vectors to the index")
     return index, metadata
+
 
 def main():
     print("Starting the USearch datastore creation process")

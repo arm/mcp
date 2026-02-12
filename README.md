@@ -28,18 +28,39 @@ If you would prefer to use a pre-built, multi-arch image, the official image can
 From the root of this repository:
 
 ```bash
-docker buildx build --platform linux/arm64,linux/amd64 -f mcp-local/Dockerfile -t arm-mcp .
+docker buildx build --platform linux/arm64,linux/amd64 -f mcp-local/Dockerfile -t armlimited/arm-mcp .
 ```
 
 For a single-platform build (faster):
 
 ```bash
-docker buildx build -f mcp-local/Dockerfile -t arm-mcp .
+docker buildx build -f mcp-local/Dockerfile -t armlimited/arm-mcp . --load
 ```
 
 ### 2. Configure Your MCP Client
 
 Choose the configuration that matches your MCP client:
+
+#### Claude Code
+
+Add to `.mcp.json` in your project:
+
+```json
+{
+  "mcpServers": {
+    "arm-mcp": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-v", "/path/to/your/workspace:/workspace",
+        "armlimited/arm-mcp"
+      ]
+    }
+  }
+}
+```
 
 #### GitHub Copilot (VS Code)
 
@@ -56,7 +77,7 @@ Add to `.vscode/mcp.json` in your project, or globally at `~/Library/Application
         "--rm",
         "-i",
         "-v", "/path/to/your/workspace:/workspace",
-        "arm-mcp"
+        "armlimited/arm-mcp"
       ]
     }
   }
@@ -82,9 +103,32 @@ Add to `~/.kiro/settings/mcp.json`:
         "-i",
         "-v", "/path/to/your/workspace:/workspace",
         "--name", "arm-mcp",
-        "arm-mcp"
+        "armlimited/arm-mcp"
       ],
       "timeout": 60000
+    }
+  }
+}
+```
+
+#### Gemini CLI
+
+It is recommended to use a project-local configuration file to ensure the relevant workspace is mounted.
+
+Add to `.gemini/settings.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "arm-mcp": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-v", "/path/to/your/workspace:/workspace",
+        "armlimited/arm-mcp"
+      ]
     }
   }
 }
@@ -100,7 +144,7 @@ args = [
   "--rm",
   "-i",
   "-v", "/path/to/your/workspace:/workspace",
-  "arm-mcp"
+  "armlimited/arm-mcp"
 ]
 ```
 
@@ -139,7 +183,7 @@ After updating the configuration, restart your MCP client to load the Arm MCP se
 To debug or explore the container environment:
 
 ```bash
-docker run --rm -it --entrypoint /bin/bash arm-mcp
+docker run --rm -it --entrypoint /bin/bash armlimited/arm-mcp
 ```
 
 ### Common Issues
