@@ -86,12 +86,20 @@ def _read_mcp_message(sock, timeout: float = 10.0) -> dict:
                     except json.JSONDecodeError:
                         continue
 
-def test_mcp_stdio_transport_responds(mcp_image):
-    image = mcp_image or os.getenv("MCP_IMAGE", constants.MCP_DOCKER_IMAGE)
+def test_mcp_stdio_transport_responds(platform):
 
-    print("image is: ", image)
+    print("\n***Platform: ", platform)
+
+    #Select the appropriate docker image based on platform
+    if platform == constants.DEFAULT_PLATFORM:
+        image = os.getenv("MCP_IMAGE", constants.MCP_DOCKER_IMAGE_ARM)
+    else:
+        image = os.getenv("MCP_IMAGE", constants.MCP_DOCKER_IMAGE_X86)
+    
+    print("\n***Docker Image: ", image)
+
     repo_root = Path(__file__).resolve().parents[1]
-    print("\n***repo root: ", repo_root)
+    print("\n***Repo Root: ", repo_root)
     with (
         DockerContainer(image)
         .with_volume_mapping(str(repo_root), "/workspace")
@@ -162,12 +170,14 @@ def test_mcp_stdio_transport_responds(mcp_image):
         assert check_sysreport_response.get("result")["structuredContent"] == constants.EXPECTED_CHECK_SYSREPORT_TOOL_RESPONSE, "Test Failed: MCP sysreport_instructions tool failed: content mismatch. Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_SYSREPORT_TOOL_RESPONSE,indent=2), json.dumps(check_sysreport_response.get("result")["structuredContent"],indent=2))
         print("\n***Test Passed: MCP sysreport_instructions tool succeeded")
 
-        #Check MCA Tool Test
-        raw_socket.sendall(_encode_mcp_message(constants.CHECK_MCA_TOOL_REQUEST))
-        check_mca_response = _read_response(7, timeout=60)
-        print("\n***MCA Tool Response: ", json.dumps(check_mca_response.get("result")["structuredContent"], indent=2))
-        assert check_mca_response.get("result")["structuredContent"]["status"] == constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS, "Test Failed: MCP mca tool failed: status mismatch.Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS,indent=2), json.dumps(check_mca_response.get("result")["structuredContent"]["status"],indent=2))
-        print("\n***Test Passed: MCP mca tool succeeded")
+        #Check MCA Tool Test - works only on platform=linux/arm64
+        if platform == constants.DEFAULT_PLATFORM:
+            raw_socket.sendall(_encode_mcp_message(constants.CHECK_MCA_TOOL_REQUEST))
+            check_mca_response = _read_response(7, timeout=60)
+            assert check_mca_response.get("result")["structuredContent"]["status"] == constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS, "Test Failed: MCP mca tool failed: status mismatch.Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS,indent=2), json.dumps(check_mca_response.get("result")["structuredContent"]["status"],indent=2))
+            print("\n***Test Passed: MCP mca tool succeeded")
+        else:
+            print("\n***Test NA: MCP mca tool is not supported on this platform")
         
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -17,12 +17,12 @@ import constants
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
-        "--mcp-image",
+        "--platform",
         action="store",
-        default=constants.MCP_DOCKER_IMAGE,
-        help="Docker image to use for MCP tests"
+        default=constants.DEFAULT_PLATFORM,
+        help="Platform to use for MCP tests"
     )
 
 @pytest.fixture
-def mcp_image(request: pytest.FixtureRequest):
-    return request.config.getoption("--mcp-image")
+def platform(request: pytest.FixtureRequest):
+    return request.config.getoption("--platform")
