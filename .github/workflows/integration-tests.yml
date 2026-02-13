@@ -6,8 +6,12 @@ on:
 
 jobs:
   integration-tests:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -28,4 +32,4 @@ jobs:
       - name: Run integration tests
         env:
           MCP_IMAGE: arm-mcp:latest
-        run: pytest -v mcp-local/tests/test_mcp.py
+        run: pytest -v mcp-local/tests/test_mcp.py --platform="linux/amd64"
