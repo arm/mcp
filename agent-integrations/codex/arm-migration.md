@@ -5,6 +5,8 @@
 description: Scan a project and migrate to Arm architecture
 ---
 
+Before starting, verify that the `arm-mcp` MCP server is installed and available. If you don't have access to the arm-mcp tools (skopeo, check_image, knowledge_base_search, migrate_ease_scan, mca, sysreport_instructions), refer to the [MCP Server Installation Guide](https://github.com/arm/mcp#quick-start) to install it.
+
 Your goal is to migrate a codebase from x86 to Arm. Use the mcp server tools to help you with this. Check for x86-specific dependencies (such as build flags, intrinsics, and libraries) and change them to Arm architecture equivalents, ensuring compatibility and optimizing performance. Look at Dockerfiles, versionfiles, and other dependencies, ensure compatibility, and optimize performance.
 
 Steps to follow:
