@@ -16,7 +16,7 @@
 
 ARG EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-latest
 # EMBEDDINGS_IMAGE must point to an embeddings image tag (e.g., armlimited/arm-mcp:embeddings-YYYY-MM-DD).
-FROM ${EMBEDDINGS_IMAGE} AS embeddings
+FROM --platform=linux/arm64 ${EMBEDDINGS_IMAGE} AS embeddings
 
 # Stage 1: Build main application with prebuilt vector database
 FROM ubuntu:24.04 AS builder
