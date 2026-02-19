@@ -12,10 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Base image containing intrinsic chunks data
-FROM ubuntu:24.04
+# syntax=docker/dockerfile:1.7
 
-ENV DEBIAN_FRONTEND=noninteractive
+ARG EMBEDDING_BASE_IMAGE=armlimited/arm-mcp:mcp-embedding-base
+FROM ${EMBEDDING_BASE_IMAGE} AS intrinsic-chunks
+
+FROM ubuntu:24.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_INDEX_URL=https://download.pytorch.org/whl/cpu \
+    PIP_EXTRA_INDEX_URL=https://pypi.org/simple
 
 # Install Python
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -24,14 +30,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /embedding-data
 
-# Copy intrinsic chunks data
-COPY intrinsic_chunks/ ./intrinsic_chunks/
-
 # Copy Python scripts and dependencies
 COPY generate-chunks.py .
 COPY local_vectorstore_creation.py .
 COPY urls-to-chunk.csv .
 COPY requirements.txt .
 
-# Install Python dependencies
+# Copy intrinsic chunks data from the cached base image
+COPY --from=intrinsic-chunks /embedding-data/intrinsic_chunks ./intrinsic_chunks
+
+# Install Python dependencies (force CPU-only torch)
 RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+
+# Generate vector database
+RUN python3 generate-chunks.py urls-to-chunk.csv && \
+    python3 local_vectorstore_creation.py && \
+    rm -f embeddings_*.txt
+
+FROM scratch AS embeddings
+
+COPY --from=builder /embedding-data/metadata.json /embedding-data/metadata.json
+COPY --from=builder /embedding-data/usearch_index.bin /embedding-data/usearch_index.bin

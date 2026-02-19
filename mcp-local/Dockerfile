@@ -14,7 +14,11 @@
 
 # syntax=docker/dockerfile:1.7
 
-# Stage 1: Build main application with embedded vector database generation
+ARG EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-latest
+# EMBEDDINGS_IMAGE must point to an embeddings image tag (e.g., armlimited/arm-mcp:embeddings-YYYY-MM-DD).
+FROM ${EMBEDDINGS_IMAGE} AS embeddings
+
+# Stage 1: Build main application with prebuilt vector database
 FROM ubuntu:24.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -43,22 +47,6 @@ RUN rm -f /usr/local/bin/aperf \
            /opt/arm-migration-tools/processwatch \
            /opt/arm-migration-tools/papi
 
-COPY embedding-generation/generate-chunks.py /tmp/embedding-generation/generate-chunks.py
-COPY embedding-generation/local_vectorstore_creation.py /tmp/embedding-generation/local_vectorstore_creation.py
-COPY embedding-generation/requirements.txt /tmp/embedding-generation/requirements.txt
-COPY embedding-generation/urls-to-chunk.csv /tmp/embedding-generation/urls-to-chunk.csv
-
-# Copy embedding data and scripts from the embedding base image
-COPY --from=joestech324/mcp-embedding-base:latest /embedding-data/intrinsic_chunks /tmp/embedding-generation/intrinsic_chunks
-
-# Install dependencies for vector database generation
-WORKDIR /tmp/embedding-generation
-RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
-
-# Generate vector database
-RUN python3 generate-chunks.py urls-to-chunk.csv && \
-    python3 local_vectorstore_creation.py
-
 # Set up MCP server application
 WORKDIR /app
 ENV VIRTUAL_ENV=/app/.venv \
@@ -67,12 +55,20 @@ ENV VIRTUAL_ENV=/app/.venv \
 RUN python3 -m venv "$VIRTUAL_ENV" && pip install --upgrade pip
 
 COPY mcp-local/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+ARG TARGETPLATFORM
+# Install dependencies (force CPU-only torch on amd64)
+RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
+        PIP_INDEX_URL=https://download.pytorch.org/whl/cpu \
+        PIP_EXTRA_INDEX_URL=https://pypi.org/simple \
+        pip install --no-cache-dir -r requirements.txt; \
+    else \
+        pip install --no-cache-dir -r requirements.txt; \
+    fi
 
 # Copy generated vector database files
 RUN mkdir -p ./data
-RUN cp /tmp/embedding-generation/metadata.json ./data/ && \
-    cp /tmp/embedding-generation/usearch_index.bin ./data/
+COPY --from=embeddings /embedding-data/metadata.json ./data/metadata.json
+COPY --from=embeddings /embedding-data/usearch_index.bin ./data/usearch_index.bin
 
 COPY mcp-local/utils/ ./utils/
 COPY mcp-local/server.py .
