@@ -14,7 +14,7 @@
 
 # syntax=docker/dockerfile:1.7
 
-ARG EMBEDDINGS_IMAGE
+ARG EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-latest
 # EMBEDDINGS_IMAGE must point to an embeddings image tag (e.g., armlimited/arm-mcp:embeddings-YYYY-MM-DD).
 FROM --platform=linux/arm64 ${EMBEDDINGS_IMAGE} AS embeddings
 
