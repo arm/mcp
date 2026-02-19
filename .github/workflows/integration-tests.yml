@@ -23,7 +23,7 @@ jobs:
           pip install -r mcp-local/tests/requirements.txt
 
       - name: Build MCP Docker image
-        run:  docker buildx build -f mcp-local/Dockerfile -t arm-mcp .
+        run: docker buildx build -f mcp-local/Dockerfile -t arm-mcp --build-arg EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-latest .
 
       - name: Run integration tests
         env:

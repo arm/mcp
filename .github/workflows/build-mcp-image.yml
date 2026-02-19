@@ -1,0 +1,87 @@
+name: Build MCP Image
+
+on:
+  workflow_run:
+    workflows: ["Build Embeddings Image"]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  build-arch-images:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux/amd64
+            tag: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            tag: arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      build_date: ${{ steps.build_date.outputs.build_date }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set build date (UTC)
+        id: build_date
+        run: |
+          if [ -n "${{ github.event.workflow_run.created_at }}" ]; then
+            BUILD_DATE=$(date -u -d "${{ github.event.workflow_run.created_at }}" +%Y-%m-%d)
+          else
+            BUILD_DATE=$(date -u +%Y-%m-%d)
+          fi
+          echo "BUILD_DATE=$BUILD_DATE" >> "$GITHUB_ENV"
+          echo "build_date=$BUILD_DATE" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push ${{ matrix.platform }} image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: mcp-local/Dockerfile
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: armlimited/arm-mcp:${{ env.BUILD_DATE }}-${{ matrix.tag }}
+          build-args: |
+            EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-${{ env.BUILD_DATE }}
+
+  merge-manifests:
+    needs: build-arch-images
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    if: ${{ needs.build-arch-images.result == 'success' }}
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Create multi-arch manifest for date tag
+        env:
+          BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
+        run: |
+          docker buildx imagetools create \
+            -t armlimited/arm-mcp:${{ env.BUILD_DATE }} \
+            armlimited/arm-mcp:${{ env.BUILD_DATE }}-amd64 \
+            armlimited/arm-mcp:${{ env.BUILD_DATE }}-arm64
