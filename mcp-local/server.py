@@ -24,6 +24,8 @@ mcp = FastMCP("arm_torq")
 #USEARCH_INDEX = load_usearch_index(USEARCH_INDEX_PATH, METADATA)
 EMBEDDING_MODEL = SentenceTransformer(MODEL_NAME)
 
+atperf_dir = os.environ.get("ATPERF_HOME", "/opt/atperf")
+
 
 @mcp.tool(
     description="Searches an Arm knowledge base of learning resources, Arm intrinsics, and software version compatibility using semantic similarity. Given a natural language query, returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful for finding documentation, tutorials, or version compatibility for Arm. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
@@ -200,11 +202,17 @@ def atp_recipe_run(cmd:str, remote_ip_addr:str, remote_usr:str, recipe:str="cpu_
 
     If you do not know which recipe to use, use 'cpu_hotspots'.
 
+    Ask the user if they want to run on localhost or a remote machine. If remote, then ask for the IP address of the remote machine.
+
     This tool is run within Docker, so the ATP CLI is installed at /opt/Arm Total Performance/assets/atperf
-    If you hit an error when running atperf commands, log the error to the user and back out. Do not try to run atperf on the local machine.
+    If you hit an error when running atperf commands, log the error to the user and back out. Do not try to run atperf on the 
+    local machine.
 
     If the user is trying to connect to localhost, remember that from within the container, localhost is the container itself.
     Instead, use the host's IP address, which is usually 172.17.0.1.
+
+    IMPORTANT NOTE: In order to run the intruction_mix, topdown, memory_access or all recipes, the target machine must have 
+    access to all PMU counters on the machine. If not, then only cpu_hotspots can be run.
 
     Args:
         cmd: command to run on the remote machine
@@ -231,17 +239,17 @@ def atp_recipe_run(cmd:str, remote_ip_addr:str, remote_usr:str, recipe:str="cpu_
     if not key_path or not known_hosts_path:
         return "SSH_KEY_PATH and KNOWN_HOSTS_PATH environment variables must be set in the docker run command in the mcp config file to mount in the container to use ATP."
 
-    atp_cli_dir = "/opt/Arm Total Performance/assets/atperf"
-    target_add_res = prepare_target(remote_ip_addr, remote_usr, key_path, atp_cli_dir)
+    #atp_cli_dir = "/opt/Arm Total Performance/assets/atperf"
+    target_add_res = prepare_target(remote_ip_addr, remote_usr, key_path, atperf_dir)
     if "error" in target_add_res:
-        return target_add_res["error"]
+        return f"Error:{target_add_res["error"]} \n Details:{target_add_res["details"]}"
     #target_id = "aws_10.252.211.230" #Hardcoding the target for now
     #print(f"Prepared target: {target_id}")
-    run_res = run_workload(cmd, target_add_res["target_id"], recipe, atp_cli_dir)
+    run_res = run_workload(cmd, target_add_res["target_id"], recipe, atperf_dir)
     if "error" in run_res:
-        return run_res["error"]
+        return f"{run_res['error']} \nDetails: {run_res['details']}"
     #print(f"Workload run ID: {run_id}")
-    results = get_results(run_res["run_id"], "drilldown", atp_cli_dir)
+    results = get_results(run_res["run_id"], "drilldown", atperf_dir)
     
     return results
 

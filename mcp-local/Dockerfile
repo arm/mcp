@@ -31,12 +31,40 @@ RUN rm -f /usr/local/bin/aperf \
            /opt/arm-migration-tools/papi
 
 # Install ATP
-RUN curl -fsSL -o /tmp/atp.deb \
-        https://artifacts.tools.arm.com/arm-total-performance/installers/latest/linux/arm64/ArmTotalPerformance-arm64.deb && \
-    apt-get install -y --no-install-recommends /tmp/atp.deb && \
-    rm -f /tmp/atp.deb
+#RUN curl -fsSL -o /tmp/atp.deb \
+#        https://artifacts.tools.arm.com/arm-total-performance/installers/latest/linux/arm64/ArmTotalPerformance-arm64.deb && \
+#    apt-get install -y --no-install-recommends /tmp/atp.deb && \
+#    rm -f /tmp/atp.deb
 
-ENV PATH="/opt/arm/total-performance/bin:/opt/ArmTotalPerformance/bin:/opt/arm-migration-tools/venv/bin:${PATH}"
+#ENV PATH="/opt/arm/total-performance/bin:/opt/ArmTotalPerformance/bin:/opt/arm-migration-tools/venv/bin:${PATH}"
+
+# --- Install atperf into a fixed location, keep full directory structure ---
+ENV ATPERF_HOME=/opt/atperf \
+    ATPERF_BIN=/opt/atperf/atperf
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates curl tar; \
+    rm -rf /var/lib/apt/lists/*; \
+    \
+    mkdir -p "${ATPERF_HOME}"; \
+    tmpdir="$(mktemp -d)"; \
+    cd "$tmpdir"; \
+    \
+    curl -fsSL -L -o atperf.tar.gz \
+      "https://artifacts.tools.arm.com/its-arm-total-performance-cli/latest/linux/arm64/atperf.tar.gz"; \
+    \
+    # Extract directly into $ATPERF_HOME (preserves data/lib/etc alongside atperf)
+    tar -xzf atperf.tar.gz -C "${ATPERF_HOME}"; \
+    \
+    # Ensure executable bit
+    chmod +x "${ATPERF_BIN}"; \
+    \
+    # Optional: convenience symlink
+    ln -sf "${ATPERF_BIN}" /usr/local/bin/atperf; \
+    \
+    cd /; \
+    rm -rf "$tmpdir"
 
 WORKDIR /app
 ENV VIRTUAL_ENV=/app/.venv \
@@ -50,6 +78,7 @@ RUN pip install -r requirements.txt
 COPY data/ ./data/
 COPY utils/ ./utils/
 COPY server.py .
+COPY test_json.py .
 
 VOLUME ["/workspace"]
 ENTRYPOINT ["python", "-u", "server.py"]

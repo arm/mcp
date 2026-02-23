@@ -17,7 +17,7 @@ def run_command(command: list, cwd: str, parse_output=None) -> tuple:
     """
     try:
         #print(command)
-        result = subprocess.run(command, cwd=cwd, timeout=60*30, capture_output=True, text=True)
+        result = subprocess.run(command, cwd=cwd, timeout=60*60*3, capture_output=True, text=True)
     except subprocess.TimeoutExpired as e:
         print(f"Command timed out: {e}")
         return -1, None
@@ -77,9 +77,14 @@ def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, atpe
             "--name", generated_name
         ]
     add_status, add_output = run_command(add_command, cwd=atperf_dir)
-    #if add_status != 0:
-        #pass
-        #print(f"Warning: Failed to add target (may already exist): {add_output}")
+    
+    # Check for SSH key permission errors
+    if add_output and ("engine.ssh.KEY_FILE_NOT_READABLE" in add_output):
+        return {
+            "error": "Check that the file permissions allow read access to the SSH key file. If ATP still cannot read the file, contact Arm support.",
+            "details": f"Please run: chmod 0600 on your SSH key and then restart the mcp server.",
+            "raw_output": add_output
+        }
 
     command = [
         "./atperf",
@@ -101,18 +106,33 @@ def run_workload(cmd:str, target: str, recipe:str, atperf_dir:str) -> dict:
         - 'Help my analyze my code's performance'.
         - 'Find the CPU hotspots in my application'.
         Returns the run ID of the workload execution."""
+    
+    # Check if the recipe is ready to run on the target
+    ready_command = ["./atperf", "recipe", "ready", recipe, "--target", target]
+    ready_status, ready_output = run_command(ready_command, cwd=atperf_dir)
+    
+    # If there's any output or non-zero status, the recipe is not ready
+    if ready_status != 0 or (ready_output and ready_output.strip()):
+        return {
+            "error": "The recipe is not ready to run on the target machine.",
+            "details": ready_output if ready_output else "Recipe readiness check failed.",
+            "suggestion": "You may need to run 'target prepare' or use '--deploy-tools' flag."
+        }
+    
     command = [
         "./atperf",
         "recipe", "run", recipe,
         f"--workload={cmd}",
         "--json",
-        f"--target={target}"
+        f"--target={target}",
+        "--deploy-tools"
     ]
-    status, run_id = run_command(command, cwd=atperf_dir, parse_output=extract_run_id)
-    if not run_id:
+    status, output = run_command(command, cwd=atperf_dir)
+    run_id = extract_run_id(output) if status == 0 else ""
+    if not run_id or "Error" in output:
         return {
-            "error": "Failed to run workload on target machine.",
-            "details": run_id
+            "error": output if output else "Failed to run workload.",
+            "details": output
         }
     return {"run_id": run_id}
 
@@ -127,7 +147,7 @@ def get_results(run_id: dict, table: str, atperf_dir:str) -> str:
     render_proc = subprocess.run(render_cmd, cwd=atperf_dir, timeout=60*5, capture_output=True, text=True)
     #print(render_proc.stdout)
     if render_proc.returncode != 0:
-        return f"atperf render failed. {render_proc.stderr}"
+        return f"atperf render failed. Is there a runID? This is what was sent into the function : {run_id}. This function expects a dictionary with a 'value' key. Error: {render_proc}"
 
     # Parse session id and table from JSON output
     try:
