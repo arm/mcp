@@ -44,6 +44,7 @@ jobs:
             --platform ${{ matrix.platform }} \
             -f mcp-local/Dockerfile \
             -t arm-mcp:latest \
+            --build-arg EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-latest \
             --output type=docker \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
