@@ -142,10 +142,8 @@ def test_mcp_stdio_transport_responds(platform):
         #Check Skopeo Tool Test
         raw_socket.sendall(_encode_mcp_message(constants.CHECK_SKOPEO_REQUEST))
         check_skopeo_response = _read_response(3, timeout=60)
-        #actual_architecture = json.loads(check_skopeo_response.get("result")["structuredContent"]["stdout"]).get("Architecture")
         actual_os = json.loads(check_skopeo_response.get("result")["structuredContent"]["stdout"]).get("Os")
         actual_status = check_skopeo_response.get("result")["structuredContent"].get("status")
-        #assert actual_architecture == json.loads(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["stdout"]).get("Architecture"), "Test Failed: MCP check_skopeo tool failed: Architecture mismatch. Expected: {}, Received: {}".format(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["Architecture"], actual_architecture)
         assert actual_os == json.loads(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["stdout"]).get("Os"), "Test Failed: MCP check_skopeo tool failed: Os mismatch. Expected: {}, Received: {}".format(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["Os"], actual_os)
         assert actual_status == constants.EXPECTED_CHECK_SKOPEO_RESPONSE["status"], "Test Failed: MCP check_skopeo tool failed: Status mismatch. Expected: {}, Received: {}".format(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["status"], actual_status)
         print("\n***Test Passed: MCP check_skopeo tool succeeded")
