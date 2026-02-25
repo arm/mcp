@@ -6,7 +6,15 @@ on:
 
 jobs:
   integration-tests:
-    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux/amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,10 +30,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r mcp-local/tests/requirements.txt
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build MCP Docker image
-        run: docker buildx build -f mcp-local/Dockerfile -t arm-mcp --build-arg EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-latest .
+        run: |
+          docker buildx build \
+            --platform ${{ matrix.platform }} \
+            -f mcp-local/Dockerfile \
+            -t arm-mcp:latest \
+            --build-arg EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-latest \
+            --output type=docker \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            .
 
       - name: Run integration tests
         env:
           MCP_IMAGE: arm-mcp:latest
-        run: pytest -v mcp-local/tests/test_mcp.py
+        run: pytest -v mcp-local/tests/test_mcp.py --platform ${{ matrix.platform }}

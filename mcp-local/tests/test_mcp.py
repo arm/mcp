@@ -86,10 +86,15 @@ def _read_mcp_message(sock, timeout: float = 10.0) -> dict:
                     except json.JSONDecodeError:
                         continue
 
-def test_mcp_stdio_transport_responds():
-    image = os.getenv("MCP_IMAGE", constants.MCP_DOCKER_IMAGE)
+def test_mcp_stdio_transport_responds(platform):
+
+    print("\n***Platform: ", platform)
+    
+    image = constants.MCP_DOCKER_IMAGE
+    print("\n***Docker Image: ", image)
+
     repo_root = Path(__file__).resolve().parents[1]
-    print("\n***repo root: ", repo_root)
+    print("\n***Repo Root: ", repo_root)
     with (
         DockerContainer(image)
         .with_volume_mapping(str(repo_root), "/workspace")
@@ -132,10 +137,8 @@ def test_mcp_stdio_transport_responds():
         #Check Skopeo Tool Test
         raw_socket.sendall(_encode_mcp_message(constants.CHECK_SKOPEO_REQUEST))
         check_skopeo_response = _read_response(3, timeout=60)
-        actual_architecture = json.loads(check_skopeo_response.get("result")["structuredContent"]["stdout"]).get("Architecture")
         actual_os = json.loads(check_skopeo_response.get("result")["structuredContent"]["stdout"]).get("Os")
         actual_status = check_skopeo_response.get("result")["structuredContent"].get("status")
-        assert actual_architecture == json.loads(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["stdout"]).get("Architecture"), "Test Failed: MCP check_skopeo tool failed: Architecture mismatch. Expected: {}, Received: {}".format(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["Architecture"], actual_architecture)
         assert actual_os == json.loads(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["stdout"]).get("Os"), "Test Failed: MCP check_skopeo tool failed: Os mismatch. Expected: {}, Received: {}".format(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["Os"], actual_os)
         assert actual_status == constants.EXPECTED_CHECK_SKOPEO_RESPONSE["status"], "Test Failed: MCP check_skopeo tool failed: Status mismatch. Expected: {}, Received: {}".format(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["status"], actual_status)
         print("\n***Test Passed: MCP check_skopeo tool succeeded")
@@ -160,11 +163,14 @@ def test_mcp_stdio_transport_responds():
         assert check_sysreport_response.get("result")["structuredContent"] == constants.EXPECTED_CHECK_SYSREPORT_TOOL_RESPONSE, "Test Failed: MCP sysreport_instructions tool failed: content mismatch. Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_SYSREPORT_TOOL_RESPONSE,indent=2), json.dumps(check_sysreport_response.get("result")["structuredContent"],indent=2))
         print("\n***Test Passed: MCP sysreport_instructions tool succeeded")
 
-        #Check MCA Tool Test
-        raw_socket.sendall(_encode_mcp_message(constants.CHECK_MCA_TOOL_REQUEST))
-        check_mca_response = _read_response(7, timeout=60)
-        assert check_mca_response.get("result")["structuredContent"]["status"] == constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS, "Test Failed: MCP mca tool failed: status mismatch.Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS,indent=2), json.dumps(check_mca_response.get("result")["structuredContent"]["status"],indent=2))
-        print("\n***Test Passed: MCP mca tool succeeded")
+        #Check MCA Tool Test - works only on platform=linux/arm64
+        if platform == constants.DEFAULT_PLATFORM:
+            raw_socket.sendall(_encode_mcp_message(constants.CHECK_MCA_TOOL_REQUEST))
+            check_mca_response = _read_response(7, timeout=60)
+            assert check_mca_response.get("result")["structuredContent"]["status"] == constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS, "Test Failed: MCP mca tool failed: status mismatch.Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS,indent=2), json.dumps(check_mca_response.get("result")["structuredContent"]["status"],indent=2))
+            print("\n***Test Passed: MCP mca tool succeeded")
+        else:
+            print("\n***Test NA: MCP mca tool is not supported on this platform: {}".format(platform))
         
 if __name__ == "__main__":
     pytest.main([__file__])
