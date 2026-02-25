@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-MCP_DOCKER_IMAGE_ARM = "arm-mcp:latest"
-
-MCP_DOCKER_IMAGE_X86 = "armlimited/arm-mcp:latest"
+MCP_DOCKER_IMAGE = "armlimited/arm-mcp:latest"
 
 DEFAULT_PLATFORM = "linux/arm64"
 

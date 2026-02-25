@@ -89,13 +89,8 @@ def _read_mcp_message(sock, timeout: float = 10.0) -> dict:
 def test_mcp_stdio_transport_responds(platform):
 
     print("\n***Platform: ", platform)
-
-    #Select the appropriate docker image based on platform
-    if platform == constants.DEFAULT_PLATFORM:
-        image = os.getenv("MCP_IMAGE", constants.MCP_DOCKER_IMAGE_ARM)
-    else:
-        image = os.getenv("MCP_IMAGE", constants.MCP_DOCKER_IMAGE_X86)
     
+    image = constants.MCP_DOCKER_IMAGE
     print("\n***Docker Image: ", image)
 
     repo_root = Path(__file__).resolve().parents[1]
