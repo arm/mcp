@@ -90,7 +90,7 @@ def test_mcp_stdio_transport_responds(platform):
 
     print("\n***Platform: ", platform)
     
-    image = constants.MCP_DOCKER_IMAGE
+    image = os.getenv("MCP_IMAGE", constants.MCP_DOCKER_IMAGE)
     print("\n***Docker Image: ", image)
 
     repo_root = Path(__file__).resolve().parents[1]
