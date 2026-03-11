@@ -22,7 +22,7 @@ For JSON-based configurations:
     "--pull=always",
     "-v", "/path/to/your/workspace:/workspace",
     "--name", "arm-mcp",
-    "armlimited/arm-mcp"
+    "armlimited/arm-mcp:latest"
   ]
 }
 ```
@@ -42,7 +42,7 @@ args = [
     "/path/to/your/workspace:/workspace",
     "--name",
     "arm-mcp",
-    "armlimited/arm-mcp",
+    "armlimited/arm-mcp:latest",
 ]
 ```
 
