@@ -10,6 +10,8 @@ docker pull armlimited/arm-mcp:latest
 
 Use the following command and args in your MCP configuration (adjusting the format as required by your agent):
 
+For JSON-based configurations:
+
 ```json
 {
   "command": "docker",
