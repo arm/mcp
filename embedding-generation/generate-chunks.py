@@ -187,12 +187,12 @@ class Chunk:
         self.uuid = uuid
         self.content = content
 
-        # Translate keyword list into comma-seperated string, and add similar words to keywords.
+        # Translate keyword list into comma-separated string, and add similar words to keywords.
         self.keywords = self.formatKeywords(keywords)
-    
 
-    def formatKeywords(self,keywords):
-        return ', '.join(keywords).lower().strip()
+    def formatKeywords(self, keywords):
+        """Format keywords list into a lowercase, comma-separated string."""
+        return ', '.join(k.strip() for k in keywords).lower()
 
     # Used to dump into a yaml file without difficulty
     def toDict(self):
@@ -573,27 +573,24 @@ def createLearningPathChunks():
 
 
 def readInCSV(csv_file):
-    csv_length = 0
+    """Read sources CSV file and return dict of lists for processing.
+    
+    Uses csv.DictReader to properly handle quoted fields containing commas.
+    """
     csv_dict = {
         'urls': [],
         'focus': [],
         'source_names': []
     }
-    with open(csv_file, 'r') as file:
-        next(file)  # Skip the header row
-        for line in file:
-
-            source_name = line.strip().split(',')[2]  # Get the URL from column A
-            focus = line.strip().split(',')[4]  # Get the URL from column B
-            url = line.strip().split(',')[3]  # Get the URL from column C
-
-            csv_dict['urls'].append(url)
-            csv_dict['focus'].append(focus)
-            csv_dict['source_names'].append(source_name)
-
-            csv_length += 1
-
-    return csv_dict, csv_length
+    
+    with open(csv_file, 'r', newline='', encoding='utf-8') as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            csv_dict['urls'].append(row.get('URL', ''))
+            csv_dict['focus'].append(row.get('Keywords', ''))
+            csv_dict['source_names'].append(row.get('Display Name', ''))
+    
+    return csv_dict, len(csv_dict['urls'])
 
 
 def getMarkdownGitHubURLsFromPage(url):
@@ -833,10 +830,19 @@ def main():
     ensure_intrinsic_chunks_from_s3()
 
     # Argparse inputs
-    parser = argparse.ArgumentParser(description="Turn a Learning Path URL into suburls in GitHub")
-    parser.add_argument("csv_file", help="Path to the CSV file that lists all Learning Paths to chunk.")
+    parser = argparse.ArgumentParser(
+        description="Generate text chunks from Arm documentation sources for vector database ingestion. "
+                    "Discovers learning paths, install guides, and ecosystem dashboard entries, "
+                    "then updates the sources CSV with any new entries found."
+    )
+    parser.add_argument(
+        "sources_file",
+        help="Path to vector-db-sources.csv. This file is read for existing sources "
+             "(to avoid duplicates) and WILL BE OVERWRITTEN with the combined list "
+             "of existing + newly discovered sources."
+    )
     args = parser.parse_args()
-    sources_file = args.csv_file
+    sources_file = args.sources_file
 
     # Load existing sources from vector-db-sources.csv (for deduplication)
     load_existing_sources(sources_file)

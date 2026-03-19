@@ -12,28 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
-import os
-import sys
+"""Unit tests for generate-chunks.py.
+
+The `gc` fixture is provided by conftest.py and gives access to the
+generate_chunks module with reset global state between tests.
+"""
+
 import csv
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-# Import module with hyphen in name using importlib
-import importlib.util
-spec = importlib.util.spec_from_file_location(
-    "generate_chunks",
-    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "generate-chunks.py")
-)
-gc = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(gc)
+import pytest
 
 
 class TestChunkClass:
     """Tests for the Chunk class."""
 
-    def test_chunk_creation(self):
+    def test_chunk_creation(self, gc):
         """Test basic Chunk creation."""
         chunk = gc.Chunk(
             title="Test Title",
@@ -48,7 +41,7 @@ class TestChunkClass:
         assert chunk.uuid == "test-uuid-123"
         assert chunk.content == "This is test content."
 
-    def test_chunk_keywords_formatting(self):
+    def test_chunk_keywords_formatting(self, gc):
         """Test that keywords are properly formatted to lowercase comma-separated string."""
         chunk = gc.Chunk(
             title="Test",
@@ -60,8 +53,8 @@ class TestChunkClass:
         
         assert chunk.keywords == "python, testing, arm"
 
-    def test_chunk_keywords_with_spaces(self):
-        """Test keywords with leading/trailing spaces."""
+    def test_chunk_keywords_with_spaces(self, gc):
+        """Test keywords with leading/trailing spaces are trimmed."""
         chunk = gc.Chunk(
             title="Test",
             url="https://example.com",
@@ -70,10 +63,10 @@ class TestChunkClass:
             content="content"
         )
         
-        # formatKeywords joins then strips the whole string
-        assert chunk.keywords == "python  , testing"
+        # Each keyword should be stripped individually before joining
+        assert chunk.keywords == "python, testing"
 
-    def test_chunk_to_dict(self):
+    def test_chunk_to_dict(self, gc):
         """Test toDict method returns correct dictionary."""
         chunk = gc.Chunk(
             title="Test Title",
@@ -93,7 +86,7 @@ class TestChunkClass:
             'content': "Test content"
         }
 
-    def test_chunk_empty_keywords(self):
+    def test_chunk_empty_keywords(self, gc):
         """Test Chunk with empty keywords list."""
         chunk = gc.Chunk(
             title="Test",
@@ -107,18 +100,13 @@ class TestChunkClass:
 
 
 class TestSourceTracking:
-    """Tests for source tracking functions."""
+    """Tests for source tracking functions.
+    
+    Note: The gc fixture (from conftest.py) automatically resets
+    known_source_urls and all_sources before and after each test.
+    """
 
-    @pytest.fixture(autouse=True)
-    def reset_globals(self):
-        """Reset global variables before each test."""
-        gc.known_source_urls = set()
-        gc.all_sources = []
-        yield
-        gc.known_source_urls = set()
-        gc.all_sources = []
-
-    def test_register_source_new(self):
+    def test_register_source_new(self, gc):
         """Test registering a new source."""
         result = gc.register_source(
             site_name="Test Site",
@@ -134,7 +122,7 @@ class TestSourceTracking:
         assert gc.all_sources[0]['url'] == "https://example.com/test"
         assert gc.all_sources[0]['keywords'] == "test; example"
 
-    def test_register_source_duplicate(self):
+    def test_register_source_duplicate(self, gc):
         """Test that duplicate URLs are rejected."""
         gc.register_source(
             site_name="Test Site",
@@ -155,7 +143,7 @@ class TestSourceTracking:
         assert result is False
         assert len(gc.all_sources) == 1
 
-    def test_register_source_url_normalization(self):
+    def test_register_source_url_normalization(self, gc):
         """Test that URLs are stripped of whitespace."""
         gc.register_source(
             site_name="Test",
@@ -167,7 +155,7 @@ class TestSourceTracking:
         
         assert "https://example.com/test" in gc.known_source_urls
 
-    def test_register_source_string_keywords(self):
+    def test_register_source_string_keywords(self, gc):
         """Test that string keywords are preserved as-is."""
         gc.register_source(
             site_name="Test",
@@ -179,14 +167,14 @@ class TestSourceTracking:
         
         assert gc.all_sources[0]['keywords'] == "already; formatted; string"
 
-    def test_load_existing_sources_file_not_exists(self, tmp_path):
+    def test_load_existing_sources_file_not_exists(self, gc, tmp_path):
         """Test loading from non-existent file."""
         gc.load_existing_sources(str(tmp_path / "nonexistent.csv"))
         
         assert len(gc.all_sources) == 0
         assert len(gc.known_source_urls) == 0
 
-    def test_load_existing_sources(self, tmp_path):
+    def test_load_existing_sources(self, gc, tmp_path):
         """Test loading sources from CSV file."""
         csv_file = tmp_path / "sources.csv"
         csv_file.write_text(
@@ -203,7 +191,7 @@ class TestSourceTracking:
         assert gc.all_sources[0]['site_name'] == "Test Site"
         assert gc.all_sources[1]['display_name'] == "Another Display"
 
-    def test_save_sources_csv(self, tmp_path):
+    def test_save_sources_csv(self, gc, tmp_path):
         """Test saving sources to CSV file."""
         gc.all_sources = [
             {
@@ -234,7 +222,7 @@ class TestSourceTracking:
         assert rows[1] == ['Site 1', 'MIT', 'Display 1', 'https://example.com/1', 'key1; key2']
         assert rows[2] == ['Site 2', 'Apache', 'Display 2', 'https://example.com/2', 'key3']
 
-    def test_load_and_save_roundtrip(self, tmp_path):
+    def test_load_and_save_roundtrip(self, gc, tmp_path):
         """Test that loading and saving preserves data."""
         csv_file = tmp_path / "sources.csv"
         original_content = (
@@ -271,7 +259,7 @@ class TestSourceTracking:
 class TestGetMarkdownGitHubURLsFromPage:
     """Tests for getMarkdownGitHubURLsFromPage function."""
 
-    def test_migration_url(self):
+    def test_migration_url(self, gc):
         """Test handling of migration page URL."""
         gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage("https://learn.arm.com/migration")
         
@@ -281,7 +269,7 @@ class TestGetMarkdownGitHubURLsFromPage:
         assert "migration/_index.md" in gh_urls[0]
         assert site_urls[0] == "https://learn.arm.com/migration"
 
-    def test_graviton_url(self):
+    def test_graviton_url(self, gc):
         """Test handling of Graviton getting started URL."""
         url = "https://github.com/aws/aws-graviton-getting-started/blob/main/README.md"
         gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage(url)
@@ -291,7 +279,7 @@ class TestGetMarkdownGitHubURLsFromPage:
         assert "raw.githubusercontent.com/aws/aws-graviton-getting-started" in gh_urls[0]
         assert "README.md" in gh_urls[0]
 
-    def test_graviton_nested_url(self):
+    def test_graviton_nested_url(self, gc):
         """Test handling of nested Graviton URL."""
         url = "https://github.com/aws/aws-graviton-getting-started/blob/main/machinelearning/pytorch.md"
         gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage(url)
@@ -299,7 +287,7 @@ class TestGetMarkdownGitHubURLsFromPage:
         assert len(gh_urls) == 1
         assert "machinelearning/pytorch.md" in gh_urls[0]
 
-    def test_unknown_url_returns_empty(self, capsys):
+    def test_unknown_url_returns_empty(self, gc, capsys):
         """Test that unknown URLs return empty lists and print warning."""
         gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage("https://unknown.com/page")
         
@@ -313,7 +301,7 @@ class TestGetMarkdownGitHubURLsFromPage:
 class TestObtainTextSnippetsMarkdown:
     """Tests for obtainTextSnippets__Markdown function."""
 
-    def test_single_short_content(self):
+    def test_single_short_content(self, gc):
         """Test content shorter than min_words stays as one chunk."""
         content = "This is a short piece of content with only a few words."
         
@@ -321,7 +309,7 @@ class TestObtainTextSnippetsMarkdown:
         
         assert len(chunks) == 1
 
-    def test_split_by_h2(self):
+    def test_split_by_h2(self, gc):
         """Test that content is split by h2 headings."""
         content = """
 ## Section One
@@ -334,7 +322,7 @@ class TestObtainTextSnippetsMarkdown:
         
         assert len(chunks) >= 2
 
-    def test_split_by_h3_when_h2_too_large(self):
+    def test_split_by_h3_when_h2_too_large(self, gc):
         """Test that large h2 sections are split by h3."""
         content = """
 ## Large Section
@@ -349,7 +337,7 @@ class TestObtainTextSnippetsMarkdown:
         # Should have multiple chunks due to h3 splitting
         assert len(chunks) >= 2
 
-    def test_small_final_chunk_merged(self):
+    def test_small_final_chunk_merged(self, gc):
         """Test that small final chunks are merged with previous."""
         content = "word " * 400 + "\n\n" + "short ending"
         
@@ -359,13 +347,13 @@ class TestObtainTextSnippetsMarkdown:
         assert len(chunks) == 1
         assert "short ending" in chunks[0]
 
-    def test_empty_content(self):
+    def test_empty_content(self, gc):
         """Test handling of empty content."""
         chunks = gc.obtainTextSnippets__Markdown("")
         
         assert chunks == [] or chunks == ['']
 
-    def test_respects_max_words(self):
+    def test_respects_max_words(self, gc):
         """Test that chunks don't significantly exceed max_words when headers are present."""
         # Create content with h2 headers to enable splitting
         content = """
@@ -387,7 +375,7 @@ class TestObtainTextSnippetsMarkdown:
 class TestReadInCSV:
     """Tests for readInCSV function."""
 
-    def test_read_csv_basic(self, tmp_path):
+    def test_read_csv_basic(self, gc, tmp_path):
         """Test reading a basic CSV file."""
         csv_file = tmp_path / "test.csv"
         csv_file.write_text(
@@ -403,7 +391,7 @@ class TestReadInCSV:
         assert csv_dict['source_names'] == ['Display1', 'Display2']
         assert csv_dict['focus'] == ['key1', 'key2']
 
-    def test_read_csv_empty(self, tmp_path):
+    def test_read_csv_empty(self, gc, tmp_path):
         """Test reading an empty CSV (header only)."""
         csv_file = tmp_path / "empty.csv"
         csv_file.write_text("Site Name,License Type,Display Name,URL,Keywords\n")
@@ -413,11 +401,27 @@ class TestReadInCSV:
         assert length == 0
         assert csv_dict['urls'] == []
 
+    def test_read_csv_quoted_commas(self, gc, tmp_path):
+        """Test that quoted fields containing commas are handled correctly."""
+        csv_file = tmp_path / "quoted.csv"
+        # Display name contains a comma inside quotes
+        csv_file.write_text(
+            'Site Name,License Type,Display Name,URL,Keywords\n'
+            'Learning Paths,CC4.0,"Learning Path - Managed, self-hosted runners",https://example.com/runners,"github; actions, runners"\n'
+        )
+        
+        csv_dict, length = gc.readInCSV(str(csv_file))
+        
+        assert length == 1
+        assert csv_dict['source_names'] == ['Learning Path - Managed, self-hosted runners']
+        assert csv_dict['urls'] == ['https://example.com/runners']
+        assert csv_dict['focus'] == ['github; actions, runners']
+
 
 class TestCreateChunk:
     """Tests for createChunk function."""
 
-    def test_create_chunk_basic(self):
+    def test_create_chunk_basic(self, gc):
         """Test basic chunk creation."""
         chunk = gc.createChunk(
             text_snippet="Test content",
@@ -433,7 +437,7 @@ class TestCreateChunk:
         # UUID should be generated
         assert len(chunk.uuid) > 0
 
-    def test_create_chunk_generates_unique_uuids(self):
+    def test_create_chunk_generates_unique_uuids(self, gc):
         """Test that each chunk gets a unique UUID."""
         chunk1 = gc.createChunk("content", "url", ["key"], "title")
         chunk2 = gc.createChunk("content", "url", ["key"], "title")
@@ -444,7 +448,7 @@ class TestCreateChunk:
 class TestCreateRetrySession:
     """Tests for create_retry_session function."""
 
-    def test_creates_session(self):
+    def test_creates_session(self, gc):
         """Test that a session is created."""
         session = gc.create_retry_session()
         
@@ -453,7 +457,7 @@ class TestCreateRetrySession:
         assert 'http://' in session.adapters
         assert 'https://' in session.adapters
 
-    def test_custom_retry_settings(self):
+    def test_custom_retry_settings(self, gc):
         """Test session with custom retry settings."""
         session = gc.create_retry_session(
             retries=3,

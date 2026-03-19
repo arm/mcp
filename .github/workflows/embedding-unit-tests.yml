@@ -31,7 +31,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest pyyaml requests beautifulsoup4 boto3
+          pip install -r requirements.txt
+          pip install pytest
 
       - name: Run unit tests
         run: python -m pytest tests/ -v --tb=short
