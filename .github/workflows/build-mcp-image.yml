@@ -83,5 +83,6 @@ jobs:
         run: |
           docker buildx imagetools create \
             -t armlimited/arm-mcp:${{ env.BUILD_DATE }} \
+            -t armlimited/arm-mcp:latest \
             armlimited/arm-mcp:${{ env.BUILD_DATE }}-amd64 \
             armlimited/arm-mcp:${{ env.BUILD_DATE }}-arm64
