@@ -254,7 +254,7 @@ def hybrid_search(
         candidates[chunk_uuid] = existing
 
     combined = rerank_candidates(query, list(candidates.values()))
-    return combined[:candidate_depth]
+    return combined[:k]
 
 
 def deduplicate_urls(results: List[Dict[str, Any]], max_chunks_per_url: int = 1) -> List[Dict[str, Any]]:
