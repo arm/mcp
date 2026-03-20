@@ -19,9 +19,15 @@ FROM ${EMBEDDING_BASE_IMAGE} AS intrinsic-chunks
 
 FROM ubuntu:24.04 AS builder
 
+ARG SOURCES_FILE=vector-db-sources.csv
+ARG EMBEDDING_MODEL=all-MiniLM-L6-v2
+
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_INDEX_URL=https://download.pytorch.org/whl/cpu \
-    PIP_EXTRA_INDEX_URL=https://pypi.org/simple
+    PIP_EXTRA_INDEX_URL=https://pypi.org/simple \
+    SENTENCE_TRANSFORMER_MODEL=${EMBEDDING_MODEL} \
+    HF_HOME=/embedding-data/.cache/huggingface \
+    SENTENCE_TRANSFORMERS_HOME=/embedding-data/.cache/sentence_transformers
 
 # Install Python
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -32,6 +38,7 @@ WORKDIR /embedding-data
 
 # Copy Python scripts and dependencies
 COPY generate-chunks.py .
+COPY document_chunking.py .
 COPY local_vectorstore_creation.py .
 COPY vector-db-sources.csv .
 COPY requirements.txt .
@@ -42,8 +49,11 @@ COPY --from=intrinsic-chunks /embedding-data/intrinsic_chunks ./intrinsic_chunks
 # Install Python dependencies (force CPU-only torch)
 RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
+# Pre-download the embedding model so local/offline loads succeed later in the build.
+RUN python3 -c "from sentence_transformers import SentenceTransformer; import os; SentenceTransformer(os.environ['SENTENCE_TRANSFORMER_MODEL'], cache_folder=os.environ['SENTENCE_TRANSFORMERS_HOME'])"
+
 # Generate vector database
-RUN python3 generate-chunks.py vector-db-sources.csv && \
+RUN python3 generate-chunks.py ${SOURCES_FILE} && \
     python3 local_vectorstore_creation.py && \
     rm -f embeddings_*.txt
 

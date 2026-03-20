@@ -6,3 +6,4 @@ requests
 mcp
 sentence-transformers
 fastmcp
+rank-bm25

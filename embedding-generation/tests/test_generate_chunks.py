@@ -73,18 +73,30 @@ class TestChunkClass:
             url="https://example.com",
             uuid="test-uuid",
             keywords=["key1", "key2"],
-            content="Test content"
+            content="Test content",
+            heading="Install",
+            heading_path=["Guide", "Install"],
+            doc_type="Tutorial",
+            product="Ampere",
+            version="2025",
+            resolved_url="https://example.com/resolved",
+            content_type="markdown",
         )
         
         result = chunk.toDict()
         
-        assert result == {
-            'title': "Test Title",
-            'url': "https://example.com",
-            'uuid': "test-uuid",
-            'keywords': "key1, key2",
-            'content': "Test content"
-        }
+        assert result["title"] == "Test Title"
+        assert result["url"] == "https://example.com"
+        assert result["uuid"] == "test-uuid"
+        assert result["keywords"] == "key1, key2"
+        assert result["content"] == "Test content"
+        assert result["heading"] == "Install"
+        assert result["heading_path"] == ["Guide", "Install"]
+        assert result["doc_type"] == "Tutorial"
+        assert result["product"] == "Ampere"
+        assert result["version"] == "2025"
+        assert result["resolved_url"] == "https://example.com/resolved"
+        assert result["content_type"] == "markdown"
 
     def test_chunk_empty_keywords(self, gc):
         """Test Chunk with empty keywords list."""
@@ -371,6 +383,43 @@ class TestObtainTextSnippetsMarkdown:
         # With headers, content should be split into multiple chunks
         assert len(chunks) >= 2
 
+    def test_prepends_document_title_and_heading_path(self, gc):
+        """Structured chunks should carry the document title and heading path prefix."""
+        content = """
+# Deployment Guide
+
+## Install
+""" + "word " * 350
+
+        chunks = gc.obtainTextSnippets__Markdown(content, min_words=150, max_words=400)
+
+        assert len(chunks) >= 1
+        assert chunks[0].startswith("Document Title: Deployment Guide")
+        assert "Heading Path: Install" in chunks[0]
+
+    def test_keeps_code_with_neighboring_explanation(self, gc):
+        """Code blocks should remain grouped with nearby explanatory text."""
+        content = """
+# Example Guide
+
+## Build
+First install dependencies and verify the environment is ready for compilation.
+
+```bash
+make build
+make test
+```
+
+Use the generated binary to verify the expected output and continue with setup.
+""" + ("\n\nAdditional context. " * 120)
+
+        chunks = gc.obtainTextSnippets__Markdown(content, min_words=100, max_words=250)
+
+        matching = [chunk for chunk in chunks if "make build" in chunk]
+        assert matching
+        assert "First install dependencies" in matching[0]
+        assert "Use the generated binary" in matching[0]
+
 
 class TestReadInCSV:
     """Tests for readInCSV function."""
@@ -390,6 +439,8 @@ class TestReadInCSV:
         assert csv_dict['urls'] == ['https://example.com/1', 'https://example.com/2']
         assert csv_dict['source_names'] == ['Display1', 'Display2']
         assert csv_dict['focus'] == ['key1', 'key2']
+        assert csv_dict['site_names'] == ['Site1', 'Site2']
+        assert csv_dict['license_types'] == ['MIT', 'Apache']
 
     def test_read_csv_empty(self, gc, tmp_path):
         """Test reading an empty CSV (header only)."""

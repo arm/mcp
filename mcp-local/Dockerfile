@@ -15,16 +15,21 @@
 # syntax=docker/dockerfile:1.7
 
 ARG EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-latest
+ARG EMBEDDING_MODEL=all-MiniLM-L6-v2
 # EMBEDDINGS_IMAGE must point to an embeddings image tag (e.g., armlimited/arm-mcp:embeddings-YYYY-MM-DD).
 FROM --platform=linux/arm64 ${EMBEDDINGS_IMAGE} AS embeddings
 
 # Stage 1: Build main application with prebuilt vector database
 FROM ubuntu:24.04 AS builder
+ARG EMBEDDING_MODEL=all-MiniLM-L6-v2
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    WORKSPACE_DIR=/workspace
+    WORKSPACE_DIR=/workspace \
+    HF_HOME=/app/.cache/huggingface \
+    SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence_transformers \
+    SENTENCE_TRANSFORMER_MODEL=${EMBEDDING_MODEL}
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-venv python3-pip \
@@ -65,6 +70,9 @@ RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
         pip install --no-cache-dir -r requirements.txt; \
     fi
 
+RUN mkdir -p "$HF_HOME" "$SENTENCE_TRANSFORMERS_HOME" && \
+    python -c "from sentence_transformers import SentenceTransformer; import os; SentenceTransformer(os.environ['SENTENCE_TRANSFORMER_MODEL'], cache_folder=os.environ['SENTENCE_TRANSFORMERS_HOME'])"
+
 # Copy generated vector database files
 RUN mkdir -p ./data
 COPY --from=embeddings /embedding-data/metadata.json ./data/metadata.json
@@ -82,6 +90,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     WORKSPACE_DIR=/workspace \
+    HF_HOME=/app/.cache/huggingface \
+    SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence_transformers \
     VIRTUAL_ENV=/app/.venv \
     PATH=/app/.venv/bin:$PATH
 

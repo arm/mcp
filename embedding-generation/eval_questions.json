@@ -1,0 +1,85 @@
+[
+  {
+    "question": "How should worker_processes, worker_connections, and keepalive settings be tuned for NGINX on Ampere processors?",
+    "expected_urls": ["https://amperecomputing.com/tuning-guides/nginx-tuning-guide"]
+  },
+  {
+    "question": "Which MySQL configuration and benchmarking steps are recommended to improve OLTP performance on Ampere systems?",
+    "expected_urls": ["https://amperecomputing.com/tuning-guides/mysql-tuning-guide"]
+  },
+  {
+    "question": "What Redis server settings and benchmark client parameters does the Ampere tuning guide focus on?",
+    "expected_urls": ["https://amperecomputing.com/tuning-guides/Redis-setup-and-tuning-guide"]
+  },
+  {
+    "question": "How should Kafka brokers, storage, and benchmark settings be tuned on Ampere for better throughput and latency?",
+    "expected_urls": ["https://amperecomputing.com/tuning-guides/apache-kafka-tuning-guide"]
+  },
+  {
+    "question": "What JVM flags, profiling workflow, and GC advice are recommended for Java on Ampere Altra family processors?",
+    "expected_urls": ["https://amperecomputing.com/tuning-guides/unlocking-java-performance-tuning-guide"]
+  },
+  {
+    "question": "How do locking primitives and memory ordering work on Ampere Altra, and when are barriers required?",
+    "expected_urls": ["https://amperecomputing.com/tuning-guides/locking-primitives-and-memory-ordering"]
+  },
+  {
+    "question": "What huge page sizes are available on Arm64, and when should larger page sizes be used for performance tuning?",
+    "expected_urls": ["https://amperecomputing.com/tuning-guides/understanding-memory-page-sizes-on-arm64"]
+  },
+  {
+    "question": "Which GCC compiler options and tuning recommendations are called out in the 2025 Ampere GCC guide?",
+    "expected_urls": ["https://amperecomputing.com/tutorials/gcc-guide-ampere-processors"]
+  },
+  {
+    "question": "How do I use the Ampere Porting Advisor to inspect Arm64 migration issues before porting an application?",
+    "expected_urls": ["https://amperecomputing.com/tutorials/porting-advisor"]
+  },
+  {
+    "question": "What are the main deployment steps in the reference architecture for running an ELK stack on Google Tau T2A?",
+    "expected_urls": ["https://amperecomputing.com/reference-architecture/deploying-an-elk-stack-on-google-tau-t2a"]
+  },
+  {
+    "question": "How do I build and tune DPDK cryptography workloads on Ampere systems?",
+    "expected_urls": ["https://amperecomputing.com/tuning-guides/dpdk-cryptography-build-and-tuning-guide"]
+  },
+  {
+    "question": "What huge page, NIC, and core-affinity setup is recommended in the DPDK setup and tuning guide for Ampere?",
+    "expected_urls": ["https://amperecomputing.com/tuning-guides/DPDK-setup-and-tuning-guide"]
+  },
+  {
+    "question": "What bare-metal tuning advice does the Hadoop guide provide for Ampere processors?",
+    "expected_urls": ["https://amperecomputing.com/tuning-guides/hadoop-tuning-guide-on-bare-metal"]
+  },
+  {
+    "question": "How should MongoDB be configured and benchmarked on Ampere processors for better performance?",
+    "expected_urls": ["https://amperecomputing.com/tuning-guides/mongoDB-tuning-guide"]
+  },
+  {
+    "question": "What thread-count, connection, and benchmarking guidance does the Memcached tuning guide give for Ampere?",
+    "expected_urls": ["https://amperecomputing.com/tuning-guides/memcached-tuning-guide"]
+  },
+  {
+    "question": "How can cryptography libraries be accelerated on Ampere processors according to the Ampere tutorial?",
+    "expected_urls": ["https://amperecomputing.com/tutorials/cryptography"]
+  },
+  {
+    "question": "What does the Azure Dpsv5 workload brief say about running AI inference workloads on Ampere-based virtual machines?",
+    "expected_urls": ["https://amperecomputing.com/briefs/ai-inference-on-azure-brief"]
+  },
+  {
+    "question": "Which storage layout and deployment pattern is described in the MinIO single-node workload brief on Ampere?",
+    "expected_urls": ["https://www.amperecomputing.com/briefs/minio-on-single-node-brief"]
+  },
+  {
+    "question": "How do I get started with cloud-native FreeBSD on OCI Ampere A1 using Terraform?",
+    "expected_urls": ["https://amperecomputing.com/blogs/getting-cloud-native-with-freebsd-on-oci-ampere-a1-with-terraform-"]
+  },
+  {
+    "question": "In the AWS Graviton performance runbook, how should I define a benchmark and configure the system under test before optimization?",
+    "expected_urls": [
+      "https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/defining_your_benchmark.md",
+      "https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/configuring_your_sut.md"
+    ]
+  }
+]

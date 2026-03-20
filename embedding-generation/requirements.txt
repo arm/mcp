@@ -4,3 +4,5 @@ pyyaml
 usearch
 boto3
 sentence-transformers
+pypdf
+rank-bm25

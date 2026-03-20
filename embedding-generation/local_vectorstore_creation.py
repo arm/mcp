@@ -19,22 +19,27 @@ from typing import List, Dict, Tuple
 import json
 import os
 import glob
-import sys
 import datetime
 from sentence_transformers import SentenceTransformer
 from usearch.index import Index
+
+
+def sentence_transformer_cache_folder():
+    return os.getenv("SENTENCE_TRANSFORMERS_HOME") or None
 
 
 def load_local_yaml_files() -> List[Dict]:
     """Load locally stored YAML files and return their contents as a list of dictionaries."""
     print("Loading local YAML files")
     yaml_contents = []
+    intrinsic_dir = os.getenv("INTRINSIC_CHUNKS_DIR", "intrinsic_chunks")
+    yaml_dir = os.getenv("YAML_DATA_DIR", "yaml_data")
 
-    intrinsic_files = glob.glob(os.path.join("intrinsic_chunks", "*.yaml"))
-    print(f"Found {len(intrinsic_files)} YAML files in intrinsic_chunks directory")
+    intrinsic_files = glob.glob(os.path.join(intrinsic_dir, "*.yaml"))
+    print(f"Found {len(intrinsic_files)} YAML files in {intrinsic_dir} directory")
 
-    yaml_data_files = glob.glob(os.path.join("yaml_data", "*.yaml"))
-    print(f"Found {len(yaml_data_files)} YAML files in yaml_data directory")
+    yaml_data_files = glob.glob(os.path.join(yaml_dir, "*.yaml"))
+    print(f"Found {len(yaml_data_files)} YAML files in {yaml_dir} directory")
 
     # Combine all files
     all_files = intrinsic_files + yaml_data_files
@@ -42,12 +47,13 @@ def load_local_yaml_files() -> List[Dict]:
     print(f"Total files to process: {total_files}")
 
     for i, file_path in enumerate(all_files, 1):
-        print(f"Loading file {i}/{total_files}: {file_path}")
+        if i <= 10 or i % 1000 == 0 or i == total_files:
+            print(f"Loading file {i}/{total_files}: {file_path}")
 
         # Extract chunk identifier based on file location
-        if file_path.startswith("intrinsic_chunks"):
+        if os.path.normpath(file_path).startswith(os.path.normpath(intrinsic_dir)):
             chunk_uuid = f"intrinsic_{os.path.basename(file_path).replace('.yaml', '')}"
-        elif file_path.startswith("yaml_data"):
+        elif os.path.normpath(file_path).startswith(os.path.normpath(yaml_dir)):
             chunk_uuid = f"yaml_data_{os.path.basename(file_path).replace('.yaml', '')}"
         else:
             chunk_uuid = file_path.replace('chunk_', '').replace('.yaml', '')
@@ -68,7 +74,11 @@ def load_local_yaml_files() -> List[Dict]:
 def create_embeddings(contents: List[str], model_name: str = 'all-MiniLM-L6-v2') -> np.ndarray:
     """Create embeddings for the given contents using SentenceTransformers."""
     print(f"Creating embeddings using model: {model_name}")
-    model = SentenceTransformer(model_name)
+    model = SentenceTransformer(
+        model_name,
+        cache_folder=sentence_transformer_cache_folder(),
+        local_files_only=True,
+    )
     embeddings = model.encode(contents, show_progress_bar=True, convert_to_numpy=True)
     print(f"Created embeddings with shape: {embeddings.shape}")
     return embeddings
@@ -96,9 +106,6 @@ def create_usearch_index(embeddings: np.ndarray, metadata: List[Dict]) -> Tuple[
     print(f"Adding {num_vectors} vectors to the index")
     for i, embedding in enumerate(embeddings):
         index.add(i, embedding)
-
-    for item, vec in zip(metadata, embeddings):
-        item['vector'] = vec.tolist()
     
     print(f"Added {len(index)} vectors to the index")
     return index, metadata
@@ -115,15 +122,39 @@ def main():
     contents = []
     metadata = []
     for i, yaml_content in enumerate(yaml_contents, 1):
-        print(f"Processing YAML content {i}/{len(yaml_contents)}")
+        if i <= 10 or i % 1000 == 0 or i == len(yaml_contents):
+            print(f"Processing YAML content {i}/{len(yaml_contents)}")
         contents.append(yaml_content['content'])
+        heading_path = yaml_content.get('heading_path', []) or []
+        search_text = " ".join(
+            str(value)
+            for value in [
+                yaml_content.get('title', ''),
+                " ".join(heading_path),
+                yaml_content.get('heading', ''),
+                yaml_content.get('doc_type', ''),
+                yaml_content.get('product', ''),
+                yaml_content.get('version', ''),
+                yaml_content.get('keywords', ''),
+                yaml_content.get('content', ''),
+            ]
+            if value
+        )
         metadata.append({
             'uuid': yaml_content['uuid'],
             'url': yaml_content['url'],
+            'resolved_url': yaml_content.get('resolved_url', yaml_content['url']),
             'original_text': yaml_content['content'],
             'title': yaml_content['title'],
             'keywords': yaml_content['keywords'],
-            'chunk_uuid': yaml_content['chunk_uuid']
+            'chunk_uuid': yaml_content['chunk_uuid'],
+            'heading': yaml_content.get('heading', ''),
+            'heading_path': heading_path,
+            'doc_type': yaml_content.get('doc_type', ''),
+            'product': yaml_content.get('product', ''),
+            'version': yaml_content.get('version', ''),
+            'content_type': yaml_content.get('content_type', ''),
+            'search_text': search_text,
         })
 
     # Create embeddings
@@ -139,12 +170,12 @@ def main():
     index, metadata = create_usearch_index(embeddings, metadata)
 
     # Save the USearch index
-    index_filename = 'usearch_index.bin'
+    index_filename = os.getenv('USEARCH_INDEX_FILENAME', 'usearch_index.bin')
     print(f"Saving USearch index to {index_filename}")
     index.save(index_filename)
 
     # Save metadata
-    metadata_filename = 'metadata.json'
+    metadata_filename = os.getenv('METADATA_FILENAME', 'metadata.json')
     print(f"Saving metadata to {metadata_filename}")
     with open(metadata_filename, 'w') as f:
         json.dump(metadata, f, indent=2)
