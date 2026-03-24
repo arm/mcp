@@ -102,11 +102,7 @@ CHECK_NGINX_REQUEST = {
         }
 
 EXPECTED_CHECK_NGINX_RESPONSE = [
-"https://learn.arm.com/learning-paths/servers-and-cloud-computing/nginx_tune/tune_static_file_server",
- "https://learn.arm.com/learning-paths/servers-and-cloud-computing/nginx_tune/test_optimizations",
- "https://learn.arm.com/learning-paths/servers-and-cloud-computing/nginx_tune/kernel_comp_lib",
- "https://learn.arm.com/learning-paths/servers-and-cloud-computing/nginx_tune/before_and_after",
-"https://learn.arm.com/learning-paths/servers-and-cloud-computing/nginx_tune/tune_revprox_and_apigw"
+    "https://amperecomputing.com/tuning-guides/nginx-tuning-guide"
     ]
 
 CHECK_MIGRATE_EASE_TOOL_REQUEST = {
