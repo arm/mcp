@@ -22,6 +22,7 @@ FROM --platform=linux/arm64 ${EMBEDDINGS_IMAGE} AS embeddings
 # Stage 1: Build main application with prebuilt vector database
 FROM ubuntu:24.04 AS builder
 ARG EMBEDDING_MODEL=all-MiniLM-L6-v2
+ARG TARGETPLATFORM
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -52,6 +53,24 @@ RUN rm -f /usr/local/bin/aperf \
            /opt/arm-migration-tools/processwatch \
            /opt/arm-migration-tools/papi
 
+RUN set -eux; \
+    if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
+        echo "WARNING: Using x86_64 Performix CLI on amd64 target. Results may vary from Arm64."; \
+        APX_TARBALL="ArmPerformix-cli-1.0.0-linux-x64.tar.gz"; \
+    else \
+        APX_TARBALL="ArmPerformix-cli-1.0.0-linux-arm64.tar.gz"; \
+    fi; \
+    APX_HOME="/opt/ArmPerformix-cli-current"; \
+    APX_URL="https://artifacts.tools.arm.com/arm-performix/cli/1.0.0/${APX_TARBALL}"; \
+    mkdir -p "${APX_HOME}"; \
+    tmpdir="$(mktemp -d)"; \
+    cd "$tmpdir"; \
+    curl -fsSL -L -o "${APX_TARBALL}" "${APX_URL}"; \
+    tar -xzf "${APX_TARBALL}" -C "${APX_HOME}"; \
+    chmod +x "${APX_HOME}/apx"; \
+    ln -sf "${APX_HOME}/apx" /usr/local/bin/apx; \
+    rm -rf "$tmpdir"
+
 # Set up MCP server application
 WORKDIR /app
 ENV VIRTUAL_ENV=/app/.venv \
@@ -60,9 +79,8 @@ ENV VIRTUAL_ENV=/app/.venv \
 RUN python3 -m venv "$VIRTUAL_ENV" && pip install --upgrade pip
 
 COPY mcp-local/requirements.txt .
-ARG TARGETPLATFORM
-# Install dependencies (force CPU-only torch on amd64)
-RUN if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
+# Install dependencies using CPU-only PyTorch wheels for supported Linux targets.
+RUN if [ "$TARGETPLATFORM" = "linux/amd64" ] || [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
         PIP_INDEX_URL=https://download.pytorch.org/whl/cpu \
         PIP_EXTRA_INDEX_URL=https://pypi.org/simple \
         pip install --no-cache-dir -r requirements.txt; \
@@ -86,7 +104,6 @@ FROM ubuntu:24.04 AS runtime
 
 # MCP Registry verification label
 LABEL io.modelcontextprotocol.server.name="io.github.arm/arm-mcp"
-ARG TARGETPLATFORM
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -100,46 +117,24 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/app/.venv/bin:$PATH
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-venv python3-pip \
-    ca-certificates libmagic1 git llvm \
+    python3 \
+    ca-certificates libmagic1 git llvm-18 \
     libgpgme11 libassuan0 libdevmapper1.02.1 && \
+    ln -sf /usr/bin/llvm-mca-18 /usr/bin/llvm-mca && \
     rm -rf /var/lib/apt/lists/*
 
-# --- Install apx into a fixed location, keep full directory structure ---
-RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates curl tar; \
-    rm -rf /var/lib/apt/lists/*; \
-    \
-    if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
-        echo "WARNING: Using x86_64 Performix CLI on amd64 target. Results may vary from Arm64."; \
-        APX_ARCH="x64"; \
-        APX_TARBALL="ArmPerformix-cli-1.0.0-linux-x64.tar.gz"; \
-    else \
-        APX_ARCH="arm64"; \
-        APX_TARBALL="ArmPerformix-cli-1.0.0-linux-arm64.tar.gz"; \
-    fi; \
-    \
-    APX_INSTALL_HOME="/opt/ArmPerformix-cli-1.0.0-linux-${APX_ARCH}"; \
-    APX_INSTALL_BIN="${APX_INSTALL_HOME}/apx"; \
-    APX_URL="https://artifacts.tools.arm.com/arm-performix/cli/1.0.0/${APX_TARBALL}"; \
-    \
-    mkdir -p "${APX_INSTALL_HOME}"; \
-    tmpdir="$(mktemp -d)"; \
-    cd "$tmpdir"; \
-    curl -fsSL -L -o "${APX_TARBALL}" "${APX_URL}"; \
-    # Extract directly into arch-specific path (preserves data/lib/etc alongside apx)
-    tar -xzf "${APX_TARBALL}" -C "${APX_INSTALL_HOME}"; \
-    chmod +x "${APX_INSTALL_BIN}"; \
-    ln -sfn "${APX_INSTALL_HOME}" "${APX_HOME}"; \
-    ln -sf "${APX_BIN}" /usr/local/bin/apx; \
-    cd /; \
-    rm -rf "$tmpdir"
-
-COPY --from=builder /opt/arm-migration-tools /opt/arm-migration-tools
-COPY --from=builder /usr/local/bin/ /usr/local/bin/
+COPY --from=builder /opt/ArmPerformix-cli-current /opt/ArmPerformix-cli-current
+COPY --from=builder /opt/arm-migration-tools/migrate-ease /opt/arm-migration-tools/migrate-ease
+COPY --from=builder /opt/arm-migration-tools/venv /opt/arm-migration-tools/venv
+COPY --from=builder /usr/local/bin/migrate-ease-cpp /usr/local/bin/migrate-ease-cpp
+COPY --from=builder /usr/local/bin/migrate-ease-go /usr/local/bin/migrate-ease-go
+COPY --from=builder /usr/local/bin/migrate-ease-java /usr/local/bin/migrate-ease-java
+COPY --from=builder /usr/local/bin/migrate-ease-js /usr/local/bin/migrate-ease-js
+COPY --from=builder /usr/local/bin/migrate-ease-python /usr/local/bin/migrate-ease-python
 COPY --from=builder /usr/bin/skopeo /usr/bin/skopeo
 COPY --from=builder /app /app
+
+RUN ln -sf "${APX_BIN}" /usr/local/bin/apx
 
 WORKDIR /app
 
