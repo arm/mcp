@@ -98,6 +98,10 @@ def test_mcp_stdio_transport_responds(platform):
     with (
         DockerContainer(image)
         .with_volume_mapping(str(repo_root), "/workspace")
+        .with_volume_mapping(str(Path(__file__).resolve()), "/run/keys/ssh-key.pem:ro")
+        .with_volume_mapping(str(Path(__file__).resolve()), "/run/keys/known_hosts:ro")
+        .with_env("SSH_KEY_PATH", "/run/keys/ssh-key.pem")
+        .with_env("KNOWN_HOSTS_PATH", "/run/keys/known_hosts")
         .with_kwargs(stdin_open=True, tty=False)
     ) as container:
         wait_for_logs(container, "Starting MCP server", timeout=60)
