@@ -171,6 +171,14 @@ def test_mcp_stdio_transport_responds(platform):
             print("\n***Test Passed: MCP mca tool succeeded")
         else:
             print("\n***Test NA: MCP mca tool is not supported on this platform: {}".format(platform))
+
+        #Check APX Recipe Run Tool Test
+        raw_socket.sendall(_encode_mcp_message(constants.CHECK_APX_RECIPE_RUN_REQUEST))
+        check_apx_recipe_run_response = _read_response(8, timeout=60)
+        apx_structured = check_apx_recipe_run_response.get("result", {}).get("structuredContent", {})
+        assert apx_structured.get("recipe") == "code_hotspots", "Test Failed: MCP apx_recipe_run tool failed: recipe mismatch. Expected: code_hotspots, Received: {}".format(apx_structured.get("recipe"))
+        assert apx_structured.get("status") in {"success", "partial", "error"}, "Test Failed: MCP apx_recipe_run tool failed: unexpected status. Received: {}".format(apx_structured.get("status"))
+        print("\n***Test Passed: MCP apx_recipe_run tool call completed")
         
 if __name__ == "__main__":
     pytest.main([__file__])

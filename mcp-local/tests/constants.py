@@ -243,3 +243,19 @@ EXPECTED_CHECK_MCA_TOOL_RESPONSE = {
       }'''
 
 EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS = "ok"     
+
+CHECK_APX_RECIPE_RUN_REQUEST = {
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "tools/call",
+            "params": {
+                "name": "apx_recipe_run",
+                "arguments": {
+                    "cmd": "python3 /workspace/tests/test.py",
+                    "remote_ip_addr": "localhost",
+                    "remote_usr": "base",
+                    "recipe": "code_hotspots",
+                    "invocation_reason": "Run APX code hotspots recipe against the local test workload requested by the user.",
+                },
+            },
+        }
