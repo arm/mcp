@@ -95,8 +95,8 @@ def test_mcp_stdio_transport_responds(platform):
 
     repo_root = Path(__file__).resolve().parents[1]
     print("\n***Repo Root: ", repo_root)
-    dummy_ssh_material_ssh = "/workspace/utils/apx.pem"
-    dummy_ssh_material_kh = "/workspace/utils/known_hosts"
+    dummy_ssh_material_ssh = "/app/utils/test/apx.pem"
+    dummy_ssh_material_kh = "/app/utils/tests/known_hosts"
     print("\n***Dummy SSH Path In Container: ", dummy_ssh_material_ssh)
     print("\n***Dummy Known Hosts Path In Container: ", dummy_ssh_material_kh)
 
