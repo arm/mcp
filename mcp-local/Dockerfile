@@ -114,7 +114,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     APX_HOME=/opt/ArmPerformix-cli-current \
     APX_BIN=/opt/ArmPerformix-cli-current/apx \
     VIRTUAL_ENV=/app/.venv \
-    PATH=/app/.venv/bin:$PATH
+    PATH=/app/.venv/bin:$PATH \
+    KNOWN_HOSTS_PATH=/run/keys/known_hosts \
+    SSH_KEY_PATH=/run/keys/ssh-key.pem
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
