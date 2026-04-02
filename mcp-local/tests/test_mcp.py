@@ -95,13 +95,14 @@ def test_mcp_stdio_transport_responds(platform):
 
     repo_root = Path(__file__).resolve().parents[1]
     print("\n***Repo Root: ", repo_root)
-    keys_dir = repo_root / "tests"
-    print("\n***Keys Directory: ", keys_dir)
+    dummy_ssh_material = repo_root / "utils" / "apx.py"
+    print("\n***Dummy SSH Source File: ", dummy_ssh_material)
 
     with (
         DockerContainer(image)
         .with_volume_mapping(str(repo_root), "/workspace")
-        .with_volume_mapping(str(keys_dir), "/run/keys")
+        .with_volume_mapping(str(dummy_ssh_material), "/run/keys/ssh-key.pem")
+        .with_volume_mapping(str(dummy_ssh_material), "/run/keys/known_hosts")
         .with_env("SSH_KEY_PATH", "/run/keys/ssh-key.pem")
         .with_env("KNOWN_HOSTS_PATH", "/run/keys/known_hosts")
         .with_kwargs(stdin_open=True, tty=False)
