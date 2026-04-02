@@ -98,6 +98,10 @@ def test_mcp_stdio_transport_responds(platform):
     with (
         DockerContainer(image)
         .with_volume_mapping(str(repo_root), "/workspace")
+        .with_volume_mapping(str(Path(__file__).resolve()), "/run/keys/ssh-key.pem")
+        .with_volume_mapping(str(Path(__file__).resolve()), "/run/keys/known_hosts")
+        .with_env("SSH_KEY_PATH", "/run/keys/ssh-key.pem")
+        .with_env("KNOWN_HOSTS_PATH", "/run/keys/known_hosts")
         .with_kwargs(stdin_open=True, tty=False)
     ) as container:
         wait_for_logs(container, "Starting MCP server", timeout=60)
@@ -171,6 +175,15 @@ def test_mcp_stdio_transport_responds(platform):
             print("\n***Test Passed: MCP mca tool succeeded")
         else:
             print("\n***Test NA: MCP mca tool is not supported on this platform: {}".format(platform))
+
+        #Check APX Recipe Run Tool Test
+        raw_socket.sendall(_encode_mcp_message(constants.CHECK_APX_RECIPE_RUN_REQUEST))
+        check_apx_recipe_run_response = _read_response(8, timeout=60)
+        apx_structured = check_apx_recipe_run_response.get("result", {}).get("structuredContent", {})
+        print("\n***APX Recipe Run Tool Response Structured Content: ", json.dumps(apx_structured, indent=2))
+        assert apx_structured.get("recipe") == "code_hotspots", "Test Failed: MCP apx_recipe_run tool failed: recipe mismatch. Expected: code_hotspots, Received: {}".format(apx_structured.get("recipe"))
+        assert apx_structured.get("status") in {"success"}, "Test Failed: MCP apx_recipe_run tool failed: unexpected status. Received: {}".format(apx_structured.get("status"))
+        print("\n***Test Passed: MCP apx_recipe_run tool call completed")
         
 if __name__ == "__main__":
     pytest.main([__file__])

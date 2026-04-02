@@ -321,6 +321,7 @@ def apx_recipe_run(cmd:str, remote_ip_addr:str, remote_usr:str, recipe:str="code
             ),
             "details": target_add_res.get("details", ""),
             "raw_output": target_add_res.get("raw_output", ""),
+            "debug_trace": target_add_res.get("debug_trace", []),
         }
     
     run_res = run_workload(cmd, target_add_res["target_id"], recipe, apx_dir)
