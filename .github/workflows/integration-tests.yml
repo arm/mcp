@@ -64,6 +64,9 @@ jobs:
           sudo chmod 600 "/home/${APX_SSH_USER}/.ssh/authorized_keys"
           sudo sh -lc "cat '${KEY_PATH}.pub' >> '/home/${APX_SSH_USER}/.ssh/authorized_keys'"
           sudo chown -R "${APX_SSH_USER}:${APX_SSH_USER}" "/home/${APX_SSH_USER}/.ssh"
+          echo "${APX_SSH_USER} ALL=(ALL) NOPASSWD:ALL" | sudo tee "/etc/sudoers.d/90-${APX_SSH_USER}-nopasswd"
+          sudo chmod 440 "/etc/sudoers.d/90-${APX_SSH_USER}-nopasswd"
+          sudo visudo -cf "/etc/sudoers.d/90-${APX_SSH_USER}-nopasswd"
 
           sudo apt-get update
           sudo apt-get install -y openssh-server
@@ -85,7 +88,7 @@ jobs:
           fi
           chmod 644 "${KNOWN_HOSTS_PATH}"
 
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="${KNOWN_HOSTS_PATH}" -i "${KEY_PATH}" "${APX_SSH_USER}@127.0.0.1" "echo ssh_ok"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="${KNOWN_HOSTS_PATH}" -i "${KEY_PATH}" "${APX_SSH_USER}@127.0.0.1" "sudo -n true && echo ssh_ok"
 
           {
             echo "APX_TEST_SSH_KEY_PATH=${KEY_PATH}"
