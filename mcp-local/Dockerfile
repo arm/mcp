@@ -38,9 +38,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libelf-dev \
     ca-certificates file tar xz-utils jq libmagic1 && \
     rm -rf /var/lib/apt/lists/*
-RUN curl -sSL https://raw.githubusercontent.com/JoeStech/arm-linux-migration-tools/main/scripts/install.sh | bash
+RUN bash -o pipefail -c 'set -eux; \
+    curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+      https://raw.githubusercontent.com/JoeStech/arm-linux-migration-tools/main/scripts/install.sh | bash'
 # Temp until migrate-ease is updated
-RUN curl -sSL https://raw.githubusercontent.com/JoeStech/migrate-ease/main/js/advisor/main.py \
+RUN curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+    https://raw.githubusercontent.com/JoeStech/migrate-ease/main/js/advisor/main.py \
     -o /opt/arm-migration-tools/migrate-ease/js/advisor/main.py
 
 RUN rm -f /usr/local/bin/aperf \
@@ -114,7 +117,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     APX_HOME=/opt/ArmPerformix-cli-current \
     APX_BIN=/opt/ArmPerformix-cli-current/apx \
     VIRTUAL_ENV=/app/.venv \
-    PATH=/app/.venv/bin:$PATH
+    PATH=/app/.venv/bin:$PATH \
+    KNOWN_HOSTS_PATH=/run/keys/known_hosts \
+    SSH_KEY_PATH=/run/keys/ssh-key.pem
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \

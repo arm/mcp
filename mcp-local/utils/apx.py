@@ -283,36 +283,63 @@ def read_file_contents(file_path: str) -> str:
 def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, apx_dir:str) -> dict:
     """Prepare the target machine for running workloads. 
         Returns the target ID."""
-    
-    #Check if target already exists
+
+    debug_trace: List[Dict[str, Any]] = []
+
+    def _record_debug(command: List[str], status: int, output: Optional[str]) -> None:
+        debug_trace.append(
+            {
+                "command": command,
+                "status": status,
+                "output": _trim_output(output or ""),
+            }
+        )
+
+    def _extract_targets(list_output: str) -> Dict[str, Any]:
+        if not list_output:
+            return {}
+
+        candidates: List[str] = [list_output.strip()]
+        candidates.extend(
+            [line.strip() for line in list_output.splitlines() if line.strip().startswith("{")]
+        )
+
+        for candidate in candidates:
+            try:
+                data = json.loads(candidate)
+            except Exception:
+                continue
+            parsed_targets = data.get("data", {})
+            if isinstance(parsed_targets, dict):
+                return parsed_targets
+        return {}
+
+    canonical_host = "172.17.0.1" if remote_ip_addr in {"localhost", "127.0.0.1"} else remote_ip_addr
+    generated_name = f"{remote_usr}_{remote_ip_addr.replace('.', '_')}"
+
+    # Check if target already exists
     list_command = ["./apx", "target", "list", "--json"]
     status, list_output = run_command(list_command, cwd=apx_dir)
+    _record_debug(list_command, status, list_output)
     if status == 0 and list_output:
-        try:
-            lines = list_output.strip().split("\n")
-            json_line = lines[1] if len(lines) > 1 else lines[0]
-            data = json.loads(json_line)
-            targets = data.get("data", {})
-            for target_id, target_info in targets.items():
-                value = target_info.get("value", {})
-                jumps = value.get("jumps", [])
-                if not jumps:
-                    continue
-                jump = jumps[0]
-                t_host = jump.get("host")
-                t_user = jump.get("username")
-                t_key = jump.get("private_key_filename")
-                if t_host == remote_ip_addr and t_user == remote_usr and t_key == ssh_key_path:
-                    #print(f"Target already exists: {target_id}")
-                    return {
-                        "target_id": target_id
-                    }
-        except Exception as e:
-            print(f"Failed to parse target list output: {e}")
-    
-    generated_name = f"{remote_usr}_{remote_ip_addr.replace('.', '_')}"
+        targets = _extract_targets(list_output)
+        for target_id, target_info in targets.items():
+            value = target_info.get("value", {})
+            jumps = value.get("jumps", [])
+            if not jumps:
+                continue
+            jump = jumps[0]
+            t_host = jump.get("host")
+            t_user = jump.get("username")
+            t_key = jump.get("private_key_filename")
+            if t_host == canonical_host and t_user == remote_usr and t_key == ssh_key_path:
+                return {
+                    "target_id": target_id,
+                    "debug_trace": debug_trace,
+                }
+
     # Add the target if it doesn't exist
-    if remote_ip_addr in {"172.17.0.1", "localhost"}:
+    if remote_ip_addr in {"172.17.0.1", "localhost", "127.0.0.1"}:
         add_command = [
             "./apx", "target", "add",
             f"{remote_usr}@172.17.0.1:22:{ssh_key_path}",
@@ -325,14 +352,38 @@ def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, apx_
             "--name", generated_name
         ]
     add_status, add_output = run_command(add_command, cwd=apx_dir)
+    _record_debug(add_command, add_status, add_output)
     
     # Check for SSH key permission errors
     if add_output and ("engine.ssh.KEY_FILE_NOT_READABLE" in add_output):
         return {
             "error": "Check that the file permissions allow read access to the SSH key file. If ATP still cannot read the file, contact Arm support.",
             "details": f"Please run: chmod 0600 on your SSH key and then restart the mcp server.",
-            "raw_output": add_output
+            "raw_output": add_output,
+            "debug_trace": debug_trace,
         }
+
+    if add_status != 0:
+        return {
+            "error": "Failed to add target before preparation.",
+            "details": add_output or "apx target add returned a non-zero status.",
+            "raw_output": add_output or "",
+            "debug_trace": debug_trace,
+        }
+
+    # Validate that target now exists before prepare to catch add/list state issues.
+    post_add_list_command = ["./apx", "target", "list", "--json"]
+    post_add_status, post_add_list_output = run_command(post_add_list_command, cwd=apx_dir)
+    _record_debug(post_add_list_command, post_add_status, post_add_list_output)
+    if post_add_status == 0:
+        post_add_targets = _extract_targets(post_add_list_output or "")
+        if generated_name not in post_add_targets:
+            return {
+                "error": "Target add reported success, but the target was not found in target list.",
+                "details": f"Expected target name '{generated_name}' was missing after add.",
+                "raw_output": post_add_list_output or "",
+                "debug_trace": debug_trace,
+            }
 
     command = [
         "./apx",
@@ -340,13 +391,16 @@ def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, apx_
         "--target", f"{generated_name}"
     ]
     status, target_id = run_command(command, cwd=apx_dir)
+    _record_debug(command, status, target_id)
     if status != 0 or not target_id:
         return {
             "error": "Failed to prepare target. Check the connection details and make sure you have the correct username and ip address. Sometimes when you mean to connect to localhost, you are running from a docker container so the ip address needs to be 172.17.0.1",
-            "details": target_id
+            "details": target_id,
+            "debug_trace": debug_trace,
         }
     return {
-        "target_id": generated_name
+        "target_id": generated_name,
+        "debug_trace": debug_trace,
     }
 
 def run_workload(cmd:str, target: str, recipe:str, apx_dir:str) -> dict:
@@ -354,24 +408,43 @@ def run_workload(cmd:str, target: str, recipe:str, apx_dir:str) -> dict:
         - 'Help my analyze my code's performance'.
         - 'Find the CPU hotspots in my application'.
         Returns the run ID of the workload execution."""
-    
+
+    debug_trace: List[Dict[str, Any]] = []
+
+    def _record_debug(command: List[str], status: int, output: Optional[str]) -> None:
+        debug_trace.append(
+            {
+                "command": command,
+                "status": status,
+                "output": _trim_output(output or ""),
+            }
+        )
+
     # Check if the recipe is ready to run on the target
     ready_command = ["./apx", "recipe", "ready", recipe, "--target", target]
     ready_status, ready_output = run_command(ready_command, cwd=apx_dir)
+    _record_debug(ready_command, ready_status, ready_output)
 
     ready_output_text = (ready_output or "").lower()
     has_deploy_tools_hint = (
         "--deploy-tools" in ready_output_text
         and "to deploy this tool on the target" in ready_output_text
     )
+    has_missing_agent_hint = (
+        "recipe is not ready to be run on your target machine" in ready_output_text
+        and "agent server" in ready_output_text
+        and "run `target prepare`" in ready_output_text
+    )
+    is_expected_predeploy_state = has_deploy_tools_hint or has_missing_agent_hint
     
     # If readiness failed for reasons other than missing deployed tools, return early.
     # Missing tool deployment is expected because recipe run uses --deploy-tools.
-    if (ready_status != 0 or (ready_output and ready_output.strip())) and not has_deploy_tools_hint:
+    if (ready_status != 0 or (ready_output and ready_output.strip())) and not is_expected_predeploy_state:
         return {
             "error": "The recipe is not ready to run on the target machine.",
             "details": ready_output if ready_output else "Recipe readiness check failed.",
-            "suggestion": "You may need to run 'target prepare' or use '--deploy-tools' flag."
+            "suggestion": "You may need to run 'target prepare' or use '--deploy-tools' flag.",
+            "debug_trace": debug_trace,
         }
     
     command = [
@@ -383,14 +456,19 @@ def run_workload(cmd:str, target: str, recipe:str, apx_dir:str) -> dict:
         "--deploy-tools", "--param", "collect_java_stacks=true"
     ]
     status, output = run_command(command, cwd=apx_dir)
+    _record_debug(command, status, output)
     output_text = output or ""
     run_id = extract_run_id(output_text) if status == 0 else ""
     if not run_id or "Error" in output_text:
         return {
             "error": output_text if output_text else "Failed to run workload.",
-            "details": output_text
+            "details": output_text,
+            "debug_trace": debug_trace,
         }
-    return {"run_id": run_id}
+    return {
+        "run_id": run_id,
+        "debug_trace": debug_trace,
+    }
 
 def get_results(run_id: dict, recipe: str, apx_dir: str, default_table: str = "drilldown") -> Dict[str, Any]:
     """Get results from the target machine after running a workload. 

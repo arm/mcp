@@ -45,6 +45,58 @@ jobs:
             --cache-to type=gha,mode=max \
             .
 
+      - name: Prepare SSH target on runner
+        run: |
+          set -euxo pipefail
+          APX_SSH_USER="apxci"
+          KEY_PATH="${RUNNER_TEMP}/apx_ci_key"
+          KNOWN_HOSTS_PATH="${RUNNER_TEMP}/apx_ci_known_hosts"
+
+          ssh-keygen -t ed25519 -N "" -f "${KEY_PATH}" -C "apx-ci@github-actions"
+          chmod 600 "${KEY_PATH}"
+
+          if ! id -u "${APX_SSH_USER}" >/dev/null 2>&1; then
+            sudo useradd -m -s /bin/bash "${APX_SSH_USER}"
+          fi
+          sudo mkdir -p "/home/${APX_SSH_USER}/.ssh"
+          sudo chmod 700 "/home/${APX_SSH_USER}/.ssh"
+          sudo touch "/home/${APX_SSH_USER}/.ssh/authorized_keys"
+          sudo chmod 600 "/home/${APX_SSH_USER}/.ssh/authorized_keys"
+          sudo sh -lc "cat '${KEY_PATH}.pub' >> '/home/${APX_SSH_USER}/.ssh/authorized_keys'"
+          sudo chown -R "${APX_SSH_USER}:${APX_SSH_USER}" "/home/${APX_SSH_USER}/.ssh"
+          echo "${APX_SSH_USER} ALL=(ALL) NOPASSWD:ALL" | sudo tee "/etc/sudoers.d/90-${APX_SSH_USER}-nopasswd"
+          sudo chmod 440 "/etc/sudoers.d/90-${APX_SSH_USER}-nopasswd"
+          sudo visudo -cf "/etc/sudoers.d/90-${APX_SSH_USER}-nopasswd"
+
+          sudo apt-get update
+          sudo apt-get install -y openssh-server
+          sudo mkdir -p /run/sshd
+          sudo sed -i 's/^#\?PubkeyAuthentication .*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config
+          sudo sed -i 's/^#\?KbdInteractiveAuthentication .*/KbdInteractiveAuthentication no/' /etc/ssh/sshd_config
+          if grep -q '^AllowUsers ' /etc/ssh/sshd_config; then
+            sudo sed -i "s/^AllowUsers .*/AllowUsers ${APX_SSH_USER}/" /etc/ssh/sshd_config
+          else
+            echo "AllowUsers ${APX_SSH_USER}" | sudo tee -a /etc/ssh/sshd_config
+          fi
+          sudo systemctl restart ssh || sudo service ssh restart || sudo /usr/sbin/sshd
+
+          ssh-keyscan -H 127.0.0.1 > "${KNOWN_HOSTS_PATH}" || true
+          ssh-keyscan -H 172.17.0.1 >> "${KNOWN_HOSTS_PATH}" || true
+          if [ ! -s "${KNOWN_HOSTS_PATH}" ]; then
+            touch "${KNOWN_HOSTS_PATH}"
+          fi
+          chmod 644 "${KNOWN_HOSTS_PATH}"
+
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="${KNOWN_HOSTS_PATH}" -i "${KEY_PATH}" "${APX_SSH_USER}@127.0.0.1" "sudo -n true && echo ssh_ok"
+
+          {
+            echo "APX_TEST_SSH_KEY_PATH=${KEY_PATH}"
+            echo "APX_TEST_KNOWN_HOSTS_PATH=${KNOWN_HOSTS_PATH}"
+            echo "APX_TEST_REMOTE_USER=${APX_SSH_USER}"
+            echo "APX_TEST_REMOTE_IP=172.17.0.1"
+          } >> "${GITHUB_ENV}"
+
       - name: Run integration tests
         env:
           MCP_IMAGE: arm-mcp:latest
