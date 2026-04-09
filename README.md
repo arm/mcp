@@ -64,10 +64,10 @@ Add to `.mcp.json` in your project:
         "--rm",
         "-i",
         "-v", "/path/to/your/workspace:/workspace",
-        "-e", "SSH_KEY_PATH=/run/keys/ssh-key.pem",
-        "-e", "KNOWN_HOSTS_PATH=/run/keys/known_hosts",
         "-v", "/path/to/your/ssh/private_key:/run/keys/ssh-key.pem:ro",
         "-v", "/path/to/your/ssh/known_hosts:/run/keys/known_hosts:ro",
+        "-e", "SSH_KEY_PATH=/run/keys/ssh-key.pem",
+        "-e", "KNOWN_HOSTS_PATH=/run/keys/known_hosts",
         "armlimited/arm-mcp"
       ]
     }
@@ -90,10 +90,10 @@ Add to `.vscode/mcp.json` in your project, or globally at `~/Library/Application
         "--rm",
         "-i",
         "-v", "/path/to/your/workspace:/workspace",
-        "-e", "SSH_KEY_PATH=/run/keys/ssh-key.pem",
-        "-e", "KNOWN_HOSTS_PATH=/run/keys/known_hosts",
         "-v", "/path/to/your/ssh/private_key:/run/keys/ssh-key.pem:ro",
         "-v", "/path/to/your/ssh/known_hosts:/run/keys/known_hosts:ro",
+        "-e", "SSH_KEY_PATH=/run/keys/ssh-key.pem",
+        "-e", "KNOWN_HOSTS_PATH=/run/keys/known_hosts",
         "armlimited/arm-mcp"
       ]
     }
@@ -119,10 +119,10 @@ Add to `~/.kiro/settings/mcp.json`:
         "--rm",
         "-i",
         "-v", "/path/to/your/workspace:/workspace",
-        "-e", "SSH_KEY_PATH=/run/keys/ssh-key.pem",
-        "-e", "KNOWN_HOSTS_PATH=/run/keys/known_hosts",
         "-v", "/path/to/your/ssh/private_key:/run/keys/ssh-key.pem:ro",
         "-v", "/path/to/your/ssh/known_hosts:/run/keys/known_hosts:ro",
+        "-e", "SSH_KEY_PATH=/run/keys/ssh-key.pem",
+        "-e", "KNOWN_HOSTS_PATH=/run/keys/known_hosts",
         "--name", "arm-mcp",
         "armlimited/arm-mcp"
       ],
@@ -148,10 +148,10 @@ Add to `.gemini/settings.json` in your project root:
         "--rm",
         "-i",
         "-v", "/path/to/your/workspace:/workspace",
-        "-e", "SSH_KEY_PATH=/run/keys/ssh-key.pem",
-        "-e", "KNOWN_HOSTS_PATH=/run/keys/known_hosts",
         "-v", "/path/to/your/ssh/private_key:/run/keys/ssh-key.pem:ro",
         "-v", "/path/to/your/ssh/known_hosts:/run/keys/known_hosts:ro",
+        "-e", "SSH_KEY_PATH=/run/keys/ssh-key.pem",
+        "-e", "KNOWN_HOSTS_PATH=/run/keys/known_hosts",
         "armlimited/arm-mcp"
       ]
     }
@@ -169,15 +169,15 @@ args = [
   "--rm",
   "-i",
   "-v", "/path/to/your/workspace:/workspace",
-  "-e", "SSH_KEY_PATH=/run/keys/ssh-key.pem",
-  "-e", "KNOWN_HOSTS_PATH=/run/keys/known_hosts",
   "-v", "/path/to/your/ssh/private_key:/run/keys/ssh-key.pem:ro",
   "-v", "/path/to/your/ssh/known_hosts:/run/keys/known_hosts:ro",
+  "-e", "SSH_KEY_PATH=/run/keys/ssh-key.pem",
+  "-e", "KNOWN_HOSTS_PATH=/run/keys/known_hosts",
   "armlimited/arm-mcp"
 ]
 ```
 
-**Note**: Replace `/path/to/your/workspace` with the actual path to your project directory that you want the MCP server to access. If you are enabling Arm Performix, also replace the SSH key and `known_hosts` paths with your local files.
+**Note**: Replace `/path/to/your/workspace` with the actual path to your project directory that you want the MCP server to access. If you are enabling Arm Performix, also replace the `/path/to/your/ssh/private_key` and `/path/to/your/ssh/known_hosts` paths with your local files.
 
 ### 3. Restart Your MCP Client
 
