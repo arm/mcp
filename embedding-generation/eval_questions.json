@@ -76,10 +76,75 @@
     "expected_urls": ["https://amperecomputing.com/blogs/getting-cloud-native-with-freebsd-on-oci-ampere-a1-with-terraform-"]
   },
   {
-    "question": "In the AWS Graviton performance runbook, how should I define a benchmark and configure the system under test before optimization?",
+    "question": "What Google Axion-backed Compute Engine machine series are available for Arm VMs, and how do C4A and N4A differ?",
     "expected_urls": [
-      "https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/defining_your_benchmark.md",
-      "https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/configuring_your_sut.md"
+      "https://docs.cloud.google.com/compute/docs/instances/arm-on-compute"
+    ]
+  },
+  {
+    "question": "On Google Cloud CPU platforms, which Arm machine series map to Google Axion versus Ampere Altra, and how are vCPUs counted on those platforms?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/compute/docs/cpu-platforms"
+    ]
+  },
+  {
+    "question": "What storage, networking, and workload positioning does Google Cloud call out for the C4A and N4A general-purpose machine families?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/compute/docs/general-purpose-machines"
+    ]
+  },
+  {
+    "question": "How does Google Cloud's next-generation dynamic resource management improve N4A VM placement and live migration for Axion workloads?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/compute/docs/dynamic-resource-management"
+    ]
+  },
+  {
+    "question": "What C4A bare metal instance options does Compute Engine provide, including the machine type, vCPU count, memory, and network bandwidth?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/compute/docs/instances/bare-metal-instances"
+    ]
+  },
+  {
+    "question": "In Google Cloud Troubleshooting Arm VMs, what happens if you create an Arm VM from a boot disk with x86 architecture, and how do serial console logs help identify it?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/compute/docs/troubleshooting/troubleshooting-arm-vms"
+    ]
+  },
+  {
+    "question": "Which GKE cluster modes and machine families support Arm workloads, and what are the major limitations for Arm nodes on GKE?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/kubernetes-engine/docs/concepts/arm-on-gke"
+    ]
+  },
+  {
+    "question": "How do you build and verify a multi-architecture container image so the same image can run on both x86 and Arm nodes in GKE?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/kubernetes-engine/docs/how-to/build-multi-arch-for-arm"
+    ]
+  },
+  {
+    "question": "In a GKE Standard cluster, why are Arm nodes tainted by default and what selectors or tolerations are needed to schedule workloads onto them?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/kubernetes-engine/docs/how-to/prepare-arm-workloads-for-deployment"
+    ]
+  },
+  {
+    "question": "How do you request Arm nodes in GKE Autopilot, and what does kubernetes.io/arch=arm64 select on newer versus older cluster versions?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/kubernetes-engine/docs/how-to/autopilot-arm-workloads"
+    ]
+  },
+  {
+    "question": "What are the main steps in the GKE tutorial for migrating an x86-only application to a multi-arch image that also runs on Arm?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/kubernetes-engine/docs/tutorials/migrate-x86-to-multi-arch-arm"
+    ]
+  },
+  {
+    "question": "In GKE Troubleshooting Arm workloads, what does the Pod log message \"exec ./hello-app: exec format error\" mean, and what is the recommended fix?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/kubernetes-engine/docs/troubleshooting/arm-workloads"
     ]
   }
 ]

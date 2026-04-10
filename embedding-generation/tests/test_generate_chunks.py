@@ -155,6 +155,57 @@ class TestSourceTracking:
         assert result is False
         assert len(gc.all_sources) == 1
 
+    def test_register_source_inserts_after_matching_site_group(self, gc):
+        """Test that new sources stay grouped with existing sources from the same site."""
+        gc.all_sources = [
+            {
+                'site_name': 'Google Cloud',
+                'license_type': 'CC4.0',
+                'display_name': 'Google 1',
+                'url': 'https://example.com/google-1',
+                'keywords': 'g1'
+            },
+            {
+                'site_name': 'Ecosystem Dashboard',
+                'license_type': 'Arm Proprietary',
+                'display_name': 'Dashboard 1',
+                'url': 'https://example.com/dashboard-1',
+                'keywords': 'd1'
+            },
+            {
+                'site_name': 'Ecosystem Dashboard',
+                'license_type': 'Arm Proprietary',
+                'display_name': 'Dashboard 2',
+                'url': 'https://example.com/dashboard-2',
+                'keywords': 'd2'
+            },
+            {
+                'site_name': 'AWS Graviton',
+                'license_type': 'Apache-2.0',
+                'display_name': 'Graviton 1',
+                'url': 'https://example.com/graviton-1',
+                'keywords': 'a1'
+            },
+        ]
+        gc.known_source_urls = {source['url'] for source in gc.all_sources}
+
+        result = gc.register_source(
+            site_name="Ecosystem Dashboard",
+            license_type="Arm Proprietary",
+            display_name="Dashboard 3",
+            url="https://example.com/dashboard-3",
+            keywords=["d3"]
+        )
+
+        assert result is True
+        assert [source['display_name'] for source in gc.all_sources] == [
+            'Google 1',
+            'Dashboard 1',
+            'Dashboard 2',
+            'Dashboard 3',
+            'Graviton 1',
+        ]
+
     def test_register_source_url_normalization(self, gc):
         """Test that URLs are stripped of whitespace."""
         gc.register_source(
