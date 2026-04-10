@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 QUERY_REGISTRY_PATH = Path(__file__).resolve().parent.parent / "sql" / "queries.sql"
 ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+RUN_KEYS_DIR = Path("/run/keys")
+PROC_MOUNTS_PATH = Path("/proc/self/mounts")
 
 
 def load_recipe_query_map(sql_file_path: Path) -> Dict[str, Dict[str, str]]:
@@ -247,6 +249,91 @@ def _build_atp_error_response(
     if raw_output:
         response["raw_output"] = _trim_output(raw_output)
     return response
+
+
+def _decode_mount_field(field: str) -> str:
+    return re.sub(
+        r"\\([0-7]{3})",
+        lambda match: chr(int(match.group(1), 8)),
+        field,
+    )
+
+
+def discover_run_keys_mounts(
+    mounts_path: Optional[Path] = None,
+    run_keys_dir: Optional[Path] = None,
+) -> List[str]:
+    mounts_path = mounts_path or PROC_MOUNTS_PATH
+    run_keys_dir = run_keys_dir or RUN_KEYS_DIR
+
+    if not mounts_path.exists():
+        return []
+
+    mount_targets: List[str] = []
+    for line in mounts_path.read_text(encoding="utf-8").splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        target = _decode_mount_field(parts[1])
+        if target == str(run_keys_dir) or target.startswith(f"{run_keys_dir}/"):
+            mount_targets.append(target)
+
+    # Preserve input order while removing duplicates.
+    return list(dict.fromkeys(mount_targets))
+
+
+def _select_known_hosts_path(mount_targets: List[str]) -> Optional[str]:
+    matches = [
+        path for path in mount_targets
+        if "known_hosts" in Path(path).name.lower().replace("-", "_")
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _select_ssh_key_path(mount_targets: List[str], known_hosts_path: Optional[str]) -> Optional[str]:
+    candidates = [path for path in mount_targets if path != known_hosts_path]
+    if len(candidates) == 1:
+        return candidates[0]
+
+    key_like = [
+        path for path in candidates
+        if any(
+            token in Path(path).name.lower()
+            for token in ("ssh", "key", ".pem", "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa")
+        )
+    ]
+    return key_like[0] if len(key_like) == 1 else None
+
+
+def resolve_apx_ssh_mount_env() -> Dict[str, Any]:
+    key_path = os.getenv("SSH_KEY_PATH")
+    known_hosts_path = os.getenv("KNOWN_HOSTS_PATH")
+    mount_targets: List[str] = []
+
+    if key_path and known_hosts_path:
+        return {
+            "key_path": key_path,
+            "known_hosts_path": known_hosts_path,
+            "mount_targets": mount_targets,
+        }
+
+    mount_targets = discover_run_keys_mounts()
+
+    if not known_hosts_path:
+        known_hosts_path = _select_known_hosts_path(mount_targets)
+        if known_hosts_path:
+            os.environ["KNOWN_HOSTS_PATH"] = known_hosts_path
+
+    if not key_path:
+        key_path = _select_ssh_key_path(mount_targets, known_hosts_path)
+        if key_path:
+            os.environ["SSH_KEY_PATH"] = key_path
+
+    return {
+        "key_path": key_path,
+        "known_hosts_path": known_hosts_path,
+        "mount_targets": mount_targets,
+    }
 
 def extract_run_id(output: str) -> str:
     if not output:

@@ -34,12 +34,14 @@ Validate SSH access:
 ssh -i /path/to/key <remote_user>@<target_ip>
 ```
 
-### 2. MCP server runtime must have SSH config
+### 2. MCP server runtime must have the SSH files mounted
 
-Your MCP server/container configuration must include:
+Your MCP server/container configuration must mount:
 
-- `SSH_KEY_PATH`
-- `KNOWN_HOSTS_PATH`
+- the private key file under `/run/keys`
+- the `known_hosts` file under `/run/keys`
+
+The MCP container will discover these mounts from `/proc/self/mounts` and set the internal `SSH_KEY_PATH` and `KNOWN_HOSTS_PATH` values automatically.
 
 ### 3. Target workload must be runnable
 
@@ -138,6 +140,6 @@ flowchart LR
 If `apx_recipe_run` fails:
 
 - Verify SSH key permissions (`chmod 600 /path/to/key`).
-- Verify `SSH_KEY_PATH` and `KNOWN_HOSTS_PATH` in MCP config.
+- Verify the SSH key and `known_hosts` files are mounted into `/run/keys`.
 - Verify target IP, username, and command path.
 - Verify selected recipe is supported in your target environment.
