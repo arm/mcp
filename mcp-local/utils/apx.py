@@ -270,13 +270,16 @@ def discover_run_keys_mounts(
         return []
 
     mount_targets: List[str] = []
-    for line in mounts_path.read_text(encoding="utf-8").splitlines():
-        parts = line.split()
-        if len(parts) < 2:
-            continue
-        target = _decode_mount_field(parts[1])
-        if target == str(run_keys_dir) or target.startswith(f"{run_keys_dir}/"):
-            mount_targets.append(target)
+    try:
+        for line in mounts_path.read_text(encoding="utf-8").splitlines():
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            target = _decode_mount_field(parts[1])
+            if target == str(run_keys_dir) or target.startswith(f"{run_keys_dir}/"):
+                mount_targets.append(target)
+    except (OSError, UnicodeDecodeError):
+        return []
 
     # Preserve input order while removing duplicates.
     return list(dict.fromkeys(mount_targets))
