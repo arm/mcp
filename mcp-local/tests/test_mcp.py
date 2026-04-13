@@ -241,14 +241,9 @@ def test_mcp_stdio_transport_responds(platform):
             apx_args["remote_usr"] = os.getenv("APX_TEST_REMOTE_USER", apx_args["remote_usr"])
             apx_args["cmd"] = os.getenv("APX_TEST_CMD", apx_args["cmd"])
 
-            print("\n***APX Remote User:", apx_args["remote_usr"])
-            print("\n***APX Remote IP:", apx_args["remote_ip_addr"])
-            print("\n***APX Workload Cmd:", apx_args["cmd"])
-
             raw_socket.sendall(_encode_mcp_message(apx_request))
             check_apx_recipe_run_response = _read_response(8, timeout=60)
             apx_structured = check_apx_recipe_run_response.get("result", {}).get("structuredContent", {})
-            print("\n***APX Recipe Run Tool Response Structured Content: ", json.dumps(apx_structured, indent=2))
             assert apx_structured.get("recipe") == "code_hotspots", "Test Failed: MCP apx_recipe_run tool failed: recipe mismatch. Expected: code_hotspots, Received: {}".format(apx_structured.get("recipe"))
             assert apx_structured.get("status") in {"success"}, "Test Failed: MCP apx_recipe_run tool failed: unexpected status. Received: {}".format(apx_structured.get("status"))
             print("\n***Test Passed: MCP apx_recipe_run tool call completed")

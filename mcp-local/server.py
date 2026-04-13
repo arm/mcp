@@ -294,6 +294,7 @@ def apx_recipe_run(cmd:str, remote_ip_addr:str, remote_usr:str, recipe:str="code
     apx_dir = os.environ.get("APX_HOME", "/opt/apx")
     key_path = os.getenv("SSH_KEY_PATH", "/run/keys/ssh-key.pem")
     known_hosts_path = os.getenv("KNOWN_HOSTS_PATH", "/run/keys/known_hosts")
+    include_debug_trace = os.getenv("APX_DEBUG_TRACE", "").strip().lower() in {"1", "true", "yes", "on"}
 
     if not key_path or not known_hosts_path:
         return {
@@ -310,7 +311,7 @@ def apx_recipe_run(cmd:str, remote_ip_addr:str, remote_usr:str, recipe:str="code
 
     target_add_res = prepare_target(remote_ip_addr, remote_usr, key_path, apx_dir)
     if "error" in target_add_res:
-        return {
+        error_response = {
             "status": "error",
             "recipe": recipe,
             "stage": "target_prepare",
@@ -321,13 +322,15 @@ def apx_recipe_run(cmd:str, remote_ip_addr:str, remote_usr:str, recipe:str="code
             ),
             "details": target_add_res.get("details", ""),
             "raw_output": target_add_res.get("raw_output", ""),
-            "debug_trace": target_add_res.get("debug_trace", []),
         }
+        if include_debug_trace:
+            error_response["debug_trace"] = target_add_res.get("debug_trace", [])
+        return error_response
     prepare_debug_trace = target_add_res.get("debug_trace", [])
     
     run_res = run_workload(cmd, target_add_res["target_id"], recipe, apx_dir)
     if "error" in run_res:
-        return {
+        error_response = {
             "status": "error",
             "recipe": recipe,
             "stage": "workload_run",
@@ -337,17 +340,20 @@ def apx_recipe_run(cmd:str, remote_ip_addr:str, remote_usr:str, recipe:str="code
                 "is supported for your PMU permissions."
             ),
             "details": run_res.get("details", ""),
-            "debug_trace": {
+        }
+        if include_debug_trace:
+            error_response["debug_trace"] = {
                 "prepare_target": prepare_debug_trace,
                 "run_workload": run_res.get("debug_trace", []),
-            },
-        }
+            }
+        return error_response
     
     results = get_results(run_res["run_id"], recipe, apx_dir)
-    results["debug_trace"] = {
-        "prepare_target": prepare_debug_trace,
-        "run_workload": run_res.get("debug_trace", []),
-    }
+    if include_debug_trace:
+        results["debug_trace"] = {
+            "prepare_target": prepare_debug_trace,
+            "run_workload": run_res.get("debug_trace", []),
+        }
     
     return results
 

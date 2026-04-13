@@ -9,6 +9,11 @@ from typing import Any, Dict, List, Optional, Tuple
 
 QUERY_REGISTRY_PATH = Path(__file__).resolve().parent.parent / "sql" / "queries.sql"
 ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+SSH_PRIVATE_KEY_BLOCK_RE = re.compile(
+    r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
+    re.DOTALL,
+)
+SSH_KEY_PATH_RE = re.compile(r"(/[^\s:]+\.pem)\b")
 
 
 def load_recipe_query_map(sql_file_path: Path) -> Dict[str, Dict[str, str]]:
@@ -90,6 +95,25 @@ def _trim_output(text: str, max_chars: int = 50_000) -> str:
 
 def _sanitize_apx_output(output: str) -> str:
     return ANSI_ESCAPE_RE.sub("", output or "")
+
+
+def _redact_sensitive_text(text: str) -> str:
+    if not text:
+        return ""
+    redacted = SSH_PRIVATE_KEY_BLOCK_RE.sub("[REDACTED_PRIVATE_KEY]", text)
+    redacted = SSH_KEY_PATH_RE.sub("[REDACTED_KEY_PATH]", redacted)
+    return redacted
+
+
+def _redact_command(command: List[str]) -> List[str]:
+    redacted: List[str] = []
+    for part in command:
+        if isinstance(part, str) and re.search(r"@[^\s:]+:\d+:[^\s]+\.pem$", part):
+            user_host, _, _ = part.rpartition(":")
+            redacted.append(f"{user_host}:[REDACTED_KEY_PATH]")
+            continue
+        redacted.append(_redact_sensitive_text(part) if isinstance(part, str) else part)
+    return redacted
 
 
 def _extract_session_id(render_output: str) -> Tuple[Optional[str], Optional[str]]:
@@ -239,13 +263,13 @@ def _build_atp_error_response(
         "stage": stage,
         "message": message,
         "suggestion": suggestion,
-        "details": _trim_output(details),
+        "details": _trim_output(_redact_sensitive_text(details)),
         "warnings": [],
     }
     if query:
         response["query"] = query
     if raw_output:
-        response["raw_output"] = _trim_output(raw_output)
+        response["raw_output"] = _trim_output(_redact_sensitive_text(raw_output))
     return response
 
 def extract_run_id(output: str) -> str:
@@ -267,8 +291,7 @@ def run_command(command: list, cwd: str, parse_output=None) -> tuple:
         #print(command)
         result = subprocess.run(command, cwd=cwd, timeout=60*60*3, capture_output=True, text=True)
     except subprocess.TimeoutExpired as e:
-        print(f"Command timed out: {e}")
-        return -1, None
+        return -1, _redact_sensitive_text(str(e))
     output = result.stdout
     
     if parse_output:
@@ -289,9 +312,9 @@ def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, apx_
     def _record_debug(command: List[str], status: int, output: Optional[str]) -> None:
         debug_trace.append(
             {
-                "command": command,
+                "command": _redact_command(command),
                 "status": status,
-                "output": _trim_output(output or ""),
+                "output": _trim_output(_redact_sensitive_text(output or "")),
             }
         )
 
@@ -359,15 +382,15 @@ def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, apx_
         return {
             "error": "Check that the file permissions allow read access to the SSH key file. If ATP still cannot read the file, contact Arm support.",
             "details": f"Please run: chmod 0600 on your SSH key and then restart the mcp server.",
-            "raw_output": add_output,
+            "raw_output": _redact_sensitive_text(add_output),
             "debug_trace": debug_trace,
         }
 
     if add_status != 0:
         return {
             "error": "Failed to add target before preparation.",
-            "details": add_output or "apx target add returned a non-zero status.",
-            "raw_output": add_output or "",
+            "details": _redact_sensitive_text(add_output or "apx target add returned a non-zero status."),
+            "raw_output": _redact_sensitive_text(add_output or ""),
             "debug_trace": debug_trace,
         }
 
@@ -381,7 +404,7 @@ def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, apx_
             return {
                 "error": "Target add reported success, but the target was not found in target list.",
                 "details": f"Expected target name '{generated_name}' was missing after add.",
-                "raw_output": post_add_list_output or "",
+                "raw_output": _redact_sensitive_text(post_add_list_output or ""),
                 "debug_trace": debug_trace,
             }
 
@@ -395,7 +418,7 @@ def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, apx_
     if status != 0 or not target_id:
         return {
             "error": "Failed to prepare target. Check the connection details and make sure you have the correct username and ip address. Sometimes when you mean to connect to localhost, you are running from a docker container so the ip address needs to be 172.17.0.1",
-            "details": target_id,
+            "details": _redact_sensitive_text(target_id or ""),
             "debug_trace": debug_trace,
         }
     return {
@@ -414,9 +437,9 @@ def run_workload(cmd:str, target: str, recipe:str, apx_dir:str) -> dict:
     def _record_debug(command: List[str], status: int, output: Optional[str]) -> None:
         debug_trace.append(
             {
-                "command": command,
+                "command": _redact_command(command),
                 "status": status,
-                "output": _trim_output(output or ""),
+                "output": _trim_output(_redact_sensitive_text(output or "")),
             }
         )
 
@@ -442,7 +465,7 @@ def run_workload(cmd:str, target: str, recipe:str, apx_dir:str) -> dict:
     if (ready_status != 0 or (ready_output and ready_output.strip())) and not is_expected_predeploy_state:
         return {
             "error": "The recipe is not ready to run on the target machine.",
-            "details": ready_output if ready_output else "Recipe readiness check failed.",
+            "details": _redact_sensitive_text(ready_output) if ready_output else "Recipe readiness check failed.",
             "suggestion": "You may need to run 'target prepare' or use '--deploy-tools' flag.",
             "debug_trace": debug_trace,
         }
@@ -461,8 +484,8 @@ def run_workload(cmd:str, target: str, recipe:str, apx_dir:str) -> dict:
     run_id = extract_run_id(output_text) if status == 0 else ""
     if not run_id or "Error" in output_text:
         return {
-            "error": output_text if output_text else "Failed to run workload.",
-            "details": output_text,
+            "error": _redact_sensitive_text(output_text) if output_text else "Failed to run workload.",
+            "details": _redact_sensitive_text(output_text),
             "debug_trace": debug_trace,
         }
     return {
