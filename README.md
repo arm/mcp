@@ -117,7 +117,6 @@ Add to `~/.kiro/settings/mcp.json`:
         "-v", "/path/to/your/workspace:/workspace",
         "-v", "/path/to/your/ssh/private_key:/run/keys/ssh-key.pem:ro",
         "-v", "/path/to/your/ssh/known_hosts:/run/keys/known_hosts:ro",
-        "--name", "arm-mcp",
         "armlimited/arm-mcp"
       ],
       "timeout": 60000
