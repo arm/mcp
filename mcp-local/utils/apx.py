@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 QUERY_REGISTRY_PATH = Path(__file__).resolve().parent.parent / "sql" / "queries.sql"
 ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+RUN_KEYS_DIR = Path("/run/keys")
+PROC_MOUNTS_PATH = Path("/proc/self/mounts")
 
 
 def load_recipe_query_map(sql_file_path: Path) -> Dict[str, Dict[str, str]]:
@@ -247,6 +249,179 @@ def _build_atp_error_response(
     if raw_output:
         response["raw_output"] = _trim_output(raw_output)
     return response
+
+
+def _decode_mount_field(field: str) -> str:
+    return re.sub(
+        r"\\([0-7]{3})",
+        lambda match: chr(int(match.group(1), 8)),
+        field,
+    )
+
+
+def discover_run_keys_mounts(
+    mounts_path: Optional[Path] = None,
+    run_keys_dir: Optional[Path] = None,
+) -> List[str]:
+    mounts_path = mounts_path or PROC_MOUNTS_PATH
+    run_keys_dir = run_keys_dir or RUN_KEYS_DIR
+
+    if not mounts_path.exists():
+        return []
+
+    mount_targets: List[str] = []
+    try:
+        for line in mounts_path.read_text(encoding="utf-8").splitlines():
+            parts = line.split()
+            if len(parts) < 2:
+                continue
+            target = _decode_mount_field(parts[1])
+            if target == str(run_keys_dir) or target.startswith(f"{run_keys_dir}/"):
+                mount_targets.append(target)
+    except (OSError, UnicodeDecodeError):
+        return []
+
+    # Preserve input order while removing duplicates.
+    return list(dict.fromkeys(mount_targets))
+
+
+def _select_known_hosts_path(mount_targets: List[str]) -> Tuple[Optional[str], Optional[str]]:
+    matches = [
+        path for path in mount_targets
+        if "known_hosts" in Path(path).name.lower().replace("-", "_")
+    ]
+    if len(matches) == 1:
+        return matches[0], None
+    if len(matches) > 1:
+        return None, f"Multiple known_hosts mount targets were found: {matches}."
+    return None, "No known_hosts mount target was found."
+
+
+def _select_ssh_key_path(
+    mount_targets: List[str],
+    known_hosts_path: Optional[str],
+) -> Tuple[Optional[str], Optional[str]]:
+    candidates = [path for path in mount_targets if path != known_hosts_path]
+    if not candidates:
+        return None, "No SSH key mount target was found."
+    if len(candidates) == 1:
+        return candidates[0], None
+
+    key_like = [
+        path for path in candidates
+        if any(
+            token in Path(path).name.lower()
+            for token in ("ssh", "key", ".pem", "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa")
+        )
+    ]
+    if len(key_like) == 1:
+        return key_like[0], None
+    if len(key_like) > 1:
+        return None, (
+            f"Multiple SSH key-like mount targets were found: {key_like}. "
+            "Mount only one SSH private key file under /run/keys."
+        )
+    return None, (
+        f"Unable to identify the SSH private key from mount target names. "
+        f"Candidate non-known_hosts mounts: {candidates}."
+    )
+
+
+def _list_run_keys_files(run_keys_dir: Optional[Path] = None) -> List[str]:
+    run_keys_dir = run_keys_dir or RUN_KEYS_DIR
+    if not run_keys_dir.exists() or not run_keys_dir.is_dir():
+        return []
+
+    return sorted(
+        str(path)
+        for path in run_keys_dir.iterdir()
+        if path.is_file()
+    )
+
+
+def build_apx_ssh_mount_help(
+    mount_targets: List[str],
+    run_keys_dir: Optional[Path] = None,
+    known_hosts_reason: Optional[str] = None,
+    key_reason: Optional[str] = None,
+) -> Dict[str, str]:
+    run_keys_dir = run_keys_dir or RUN_KEYS_DIR
+    mount_summary = mount_targets if mount_targets else "none"
+    run_keys_files = _list_run_keys_files(run_keys_dir)
+    mount_hint = (
+        "Mount the files individually as described in the README, for example "
+        "'-v /path/to/your/ssh/private_key:/run/keys/ssh-key.pem:ro' and "
+        "'-v /path/to/your/ssh/known_hosts:/run/keys/known_hosts:ro'."
+    )
+
+    suggestion = (
+        "Mount the SSH private key and known_hosts as individual files under /run/keys, then retry."
+    )
+    resolution_reasons = [reason for reason in (known_hosts_reason, key_reason) if reason]
+    reason_text = ""
+    if resolution_reasons:
+        reason_text = " Resolution detail: " + " ".join(resolution_reasons)
+
+    if mount_targets == [str(run_keys_dir)] and run_keys_files:
+        file_summary = run_keys_files
+        details = (
+            "APX auto-discovers individual file mounts under /run/keys from /proc/self/mounts. "
+            f"No individual file mounts were discovered. "
+            f"Discovered mounts: {mount_summary}. Files currently present under {run_keys_dir}: {file_summary}. "
+            "This usually means a directory was mounted, for example '-v ~/.ssh:/run/keys:ro', so "
+            "auto-discovery cannot infer which file is the key and which file is known_hosts from mount data alone. "
+            f"{mount_hint}{reason_text}"
+        )
+    else:
+        details = (
+            "APX auto-discovers individual file mounts under /run/keys from /proc/self/mounts. "
+            f"Discovered mounts: {mount_summary}. "
+            "Make sure both files are mounted individually under /run/keys as described in the README, "
+            "for example '-v /path/to/your/ssh/private_key:/run/keys/ssh-key.pem:ro' and "
+            f"'-v /path/to/your/ssh/known_hosts:/run/keys/known_hosts:ro'.{reason_text}"
+        )
+
+    return {
+        "suggestion": suggestion,
+        "details": details,
+    }
+
+
+def resolve_apx_ssh_mount_env() -> Dict[str, Any]:
+    key_path = os.getenv("SSH_KEY_PATH")
+    known_hosts_path = os.getenv("KNOWN_HOSTS_PATH")
+    mount_targets: List[str] = []
+    key_reason: Optional[str] = None
+    known_hosts_reason: Optional[str] = None
+
+    if key_path and known_hosts_path:
+        return {
+            "key_path": key_path,
+            "known_hosts_path": known_hosts_path,
+            "mount_targets": mount_targets,
+            "key_reason": key_reason,
+            "known_hosts_reason": known_hosts_reason,
+        }
+
+    mount_targets = discover_run_keys_mounts()
+
+    if not known_hosts_path:
+        known_hosts_path, known_hosts_reason = _select_known_hosts_path(mount_targets)
+        if known_hosts_path:
+            os.environ["KNOWN_HOSTS_PATH"] = known_hosts_path
+
+    if not key_path:
+        key_path, key_reason = _select_ssh_key_path(mount_targets, known_hosts_path)
+        if key_path:
+            os.environ["SSH_KEY_PATH"] = key_path
+
+    return {
+        "key_path": key_path,
+        "known_hosts_path": known_hosts_path,
+        "mount_targets": mount_targets,
+        "key_reason": key_reason,
+        "known_hosts_reason": known_hosts_reason,
+    }
 
 def extract_run_id(output: str) -> str:
     if not output:
