@@ -163,13 +163,26 @@ def register_source(site_name, license_type, display_name, url, keywords):
         return False
     
     known_source_urls.add(url)
-    all_sources.append({
+    source_entry = {
         'site_name': site_name,
         'license_type': license_type,
         'display_name': display_name,
         'url': url,
         'keywords': keywords if isinstance(keywords, str) else '; '.join(keywords)
-    })
+    }
+
+    # Keep discovered sources grouped with their existing site section instead of
+    # appending them to the very end of the CSV and fragmenting that block.
+    insert_at = None
+    for index, existing_source in enumerate(all_sources):
+        if existing_source.get('site_name') == site_name:
+            insert_at = index + 1
+
+    if insert_at is None:
+        all_sources.append(source_entry)
+    else:
+        all_sources.insert(insert_at, source_entry)
+
     print(f"[NEW SOURCE] {display_name}: {url}")
     return True
 

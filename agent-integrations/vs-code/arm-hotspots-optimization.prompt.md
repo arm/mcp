@@ -2,7 +2,7 @@
      Invoke using /performance-beginner in the chat.
 -->
 ---
-name: 'performance-beginner'
+name: 'arm-hotspots-optimization'
 description: 'Guide a beginner through Arm cloud performance tuning using ATP code_hotspots baseline, targeted code changes, and delta validation'
 agent: 'agent'
 tools: ['search/codebase', 'edit/editFiles', 'arm-mcp/apx_recipe_run', 'arm-mcp/knowledge_base_search', 'arm-mcp/mca', 'arm-mcp/sysreport_instructions', 'arm-mcp/migrate_ease_scan', 'arm-mcp/check_image', 'arm-mcp/skopeo']

@@ -2,7 +2,7 @@
      Invoke using /compare-post-migration in the chat.
 -->
 ---
-name: 'compare-post-migration'
+name: 'arm-vs-x86-performance-comparison'
 description: 'Guide a user through APX code_hotspots profiling on x86 and Arm hosts, then report architecture-driven performance delta and price-performance signals'
 agent: 'agent'
 tools: ['arm-mcp/apx_recipe_run', 'arm-mcp/sysreport_instructions', 'arm-mcp/knowledge_base_search', 'search/codebase', 'edit/editFiles']
