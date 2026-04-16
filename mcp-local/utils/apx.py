@@ -118,6 +118,14 @@ def _redact_command(command: List[str]) -> List[str]:
     return redacted
 
 
+def _combine_command_output(stdout: str, stderr: str) -> str:
+    stdout = stdout or ""
+    stderr = stderr or ""
+    if stdout and stderr:
+        return f"{stdout}\n[stderr]\n{stderr}"
+    return stdout or stderr
+
+
 def _extract_session_id(render_output: str) -> Tuple[Optional[str], Optional[str]]:
     """Extract session_id from apx render output, trying full JSON then line-by-line JSON."""
     clean_output = (render_output or "").strip()
@@ -418,6 +426,18 @@ def resolve_apx_ssh_mount_env() -> Dict[str, Any]:
     key_reason: Optional[str] = None
     known_hosts_reason: Optional[str] = None
 
+    if key_path and not Path(key_path).is_file():
+        key_reason = (
+            f"SSH_KEY_PATH was set to '{key_path}', but that file was not present in the container."
+        )
+        key_path = None
+
+    if known_hosts_path and not Path(known_hosts_path).is_file():
+        known_hosts_reason = (
+            f"KNOWN_HOSTS_PATH was set to '{known_hosts_path}', but that file was not present in the container."
+        )
+        known_hosts_path = None
+
     if key_path and known_hosts_path:
         return {
             "key_path": key_path,
@@ -460,17 +480,21 @@ def run_command(command: list, cwd: str, parse_output=None) -> tuple:
     """
     Run a shell command as a child process and wait for it to finish.
     Optionally parse the output using a provided function.
-    Returns (returncode, parsed_output or stdout).
+    Returns (returncode, parsed_output or combined stdout/stderr).
     """
     try:
         #print(command)
         result = subprocess.run(command, cwd=cwd, timeout=60*60*3, capture_output=True, text=True)
     except subprocess.TimeoutExpired as e:
         return -1, _redact_sensitive_text(str(e))
-    output = result.stdout
+    stdout = result.stdout or ""
+    stderr = result.stderr or ""
+    output = stdout
     
     if parse_output:
         output = parse_output(output)
+    else:
+        output = _combine_command_output(stdout, stderr)
     return result.returncode, output
 
 def read_file_contents(file_path: str) -> str:
@@ -568,20 +592,6 @@ def prepare_target(remote_ip_addr: str, remote_usr: str, ssh_key_path: str, apx_
             "raw_output": _redact_sensitive_text(add_output or ""),
             "debug_trace": debug_trace,
         }
-
-    # Validate that target now exists before prepare to catch add/list state issues.
-    post_add_list_command = ["./apx", "target", "list", "--json"]
-    post_add_status, post_add_list_output = run_command(post_add_list_command, cwd=apx_dir)
-    _record_debug(post_add_list_command, post_add_status, post_add_list_output)
-    if post_add_status == 0:
-        post_add_targets = _extract_targets(post_add_list_output or "")
-        if generated_name not in post_add_targets:
-            return {
-                "error": "Target add reported success, but the target was not found in target list.",
-                "details": f"Expected target name '{generated_name}' was missing after add.",
-                "raw_output": _redact_sensitive_text(post_add_list_output or ""),
-                "debug_trace": debug_trace,
-            }
 
     command = [
         "./apx",

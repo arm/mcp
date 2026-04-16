@@ -251,7 +251,7 @@ CHECK_APX_RECIPE_RUN_REQUEST = {
             "params": {
                 "name": "apx_recipe_run",
                 "arguments": {
-                    "cmd": "python3 /app/mcp-local/tests/test.py",
+                    "cmd": "python3 -c \"print('Hello, world!')\"",
                     "remote_ip_addr": "localhost",
                     "remote_usr": "base",
                     "recipe": "code_hotspots",
