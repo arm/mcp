@@ -212,7 +212,15 @@ def test_mcp_stdio_transport_responds(platform):
 
             raw_socket.sendall(_encode_mcp_message(apx_request))
             check_apx_recipe_run_response = _read_response(8, timeout=60)
+            print(
+                "\n***APX Recipe Run Tool Raw Response: ",
+                json.dumps(check_apx_recipe_run_response, indent=2),
+            )
             apx_structured = check_apx_recipe_run_response.get("result", {}).get("structuredContent", {})
+            print(
+                "\n***APX Recipe Run Tool Structured Content: ",
+                json.dumps(apx_structured, indent=2),
+            )
             assert apx_structured.get("recipe") == "code_hotspots", "Test Failed: MCP apx_recipe_run tool failed: recipe mismatch. Expected: code_hotspots, Received: {}".format(apx_structured.get("recipe"))
             assert apx_structured.get("status") in {"success"}, "Test Failed: MCP apx_recipe_run tool failed: unexpected status. Received: {}".format(apx_structured.get("status"))
             print("\n***Test Passed: MCP apx_recipe_run tool call completed")
