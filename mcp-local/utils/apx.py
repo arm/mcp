@@ -2,6 +2,7 @@ import json
 import subprocess
 import os
 import re
+import shutil
 from textwrap import dedent
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -15,6 +16,7 @@ SSH_PRIVATE_KEY_BLOCK_RE = re.compile(
 )
 SSH_KEY_PATH_RE = re.compile(r"(/[^\s:]+\.pem)\b")
 RUN_KEYS_DIR = Path("/run/keys")
+APX_RUNTIME_KEYS_DIR = Path("/tmp/apx-ssh")
 PROC_MOUNTS_PATH = Path("/proc/self/mounts")
 
 
@@ -419,6 +421,60 @@ def build_apx_ssh_mount_help(
     }
 
 
+def _stage_apx_ssh_runtime_files(
+    key_path: str,
+    known_hosts_path: str,
+    runtime_keys_dir: Optional[Path] = None,
+) -> Dict[str, str]:
+    runtime_keys_dir = runtime_keys_dir or APX_RUNTIME_KEYS_DIR
+    runtime_keys_dir.mkdir(parents=True, exist_ok=True)
+
+    staged_key_path = runtime_keys_dir / "ssh-key.pem"
+    staged_known_hosts_path = runtime_keys_dir / "known_hosts"
+    current_uid = os.getuid()
+    current_gid = os.getgid()
+
+    shutil.copyfile(key_path, staged_key_path)
+    os.chown(staged_key_path, current_uid, current_gid)
+    os.chmod(staged_key_path, 0o600)
+
+    shutil.copyfile(known_hosts_path, staged_known_hosts_path)
+    os.chown(staged_known_hosts_path, current_uid, current_gid)
+    os.chmod(staged_known_hosts_path, 0o644)
+
+    return {
+        "key_path": str(staged_key_path),
+        "known_hosts_path": str(staged_known_hosts_path),
+    }
+
+
+def prepare_apx_ssh_paths(
+    key_path: str,
+    known_hosts_path: str,
+    runtime_keys_dir: Optional[Path] = None,
+) -> Dict[str, str]:
+    try:
+        key_stat = os.stat(key_path)
+    except OSError:
+        return {
+            "key_path": key_path,
+            "known_hosts_path": known_hosts_path,
+        }
+
+    key_mode = key_stat.st_mode & 0o777
+    if key_stat.st_uid == os.getuid() and key_mode == 0o600:
+        return {
+            "key_path": key_path,
+            "known_hosts_path": known_hosts_path,
+        }
+
+    return _stage_apx_ssh_runtime_files(
+        key_path=key_path,
+        known_hosts_path=known_hosts_path,
+        runtime_keys_dir=runtime_keys_dir,
+    )
+
+
 def resolve_apx_ssh_mount_env() -> Dict[str, Any]:
     key_path = os.getenv("SSH_KEY_PATH")
     known_hosts_path = os.getenv("KNOWN_HOSTS_PATH")
@@ -458,6 +514,13 @@ def resolve_apx_ssh_mount_env() -> Dict[str, Any]:
         key_path, key_reason = _select_ssh_key_path(mount_targets, known_hosts_path)
         if key_path:
             os.environ["SSH_KEY_PATH"] = key_path
+
+    if key_path and known_hosts_path:
+        prepared_paths = prepare_apx_ssh_paths(key_path, known_hosts_path)
+        key_path = prepared_paths["key_path"]
+        known_hosts_path = prepared_paths["known_hosts_path"]
+        os.environ["SSH_KEY_PATH"] = key_path
+        os.environ["KNOWN_HOSTS_PATH"] = known_hosts_path
 
     return {
         "key_path": key_path,

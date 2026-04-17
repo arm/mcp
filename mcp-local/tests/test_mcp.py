@@ -15,7 +15,6 @@
 import json
 import constants
 import os
-import shutil
 import subprocess
 import tempfile
 import time
@@ -104,15 +103,14 @@ def test_mcp_stdio_transport_responds(platform):
 
     with tempfile.TemporaryDirectory(prefix="apx-test-keys-") as temp_keys_dir:
         temp_keys_path = Path(temp_keys_dir)
-        pem_path = temp_keys_path / "ssh-key.pem"
-        known_hosts_path = temp_keys_path / "known_hosts"
+        ssh_key_path = external_ssh_key_path
+        known_hosts_path = external_known_hosts_path
         pub_key_path = temp_keys_path / "ssh-key.pem.pub"
 
-        if external_ssh_key_path:
-            shutil.copyfile(external_ssh_key_path, pem_path)
-        else:
+        if not ssh_key_path:
+            ssh_key_path = str(temp_keys_path / "ssh-key.pem")
             subprocess.run(
-                ["ssh-keygen", "-t", "ed25519", "-N", "", "-f", str(pem_path)],
+                ["ssh-keygen", "-t", "ed25519", "-N", "", "-f", ssh_key_path],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -120,45 +118,23 @@ def test_mcp_stdio_transport_responds(platform):
             if pub_key_path.exists():
                 pub_key_path.unlink()
 
-        if external_known_hosts_path:
-            shutil.copyfile(external_known_hosts_path, known_hosts_path)
-        else:
-            known_hosts_path.write_text(
+        if not known_hosts_path:
+            known_hosts_path = str(temp_keys_path / "known_hosts")
+            Path(known_hosts_path).write_text(
                 "172.17.0.1 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKnownHostKeyForIntegrationTestsOnly\n",
                 encoding="utf-8",
             )
 
-        os.chmod(pem_path, 0o600)
+        os.chmod(ssh_key_path, 0o600)
         os.chmod(known_hosts_path, 0o644)
 
         with (
             DockerContainer(image)
             .with_volume_mapping(str(repo_root), "/workspace")
-            .with_volume_mapping(str(temp_keys_path), "/run/keys", mode="ro")
-            .with_env("SSH_KEY_PATH", "/tmp/ssh-key.pem")
-            .with_env("KNOWN_HOSTS_PATH", "/tmp/known_hosts")
+            .with_volume_mapping(ssh_key_path, "/run/keys/ssh-key.pem", mode="ro")
+            .with_volume_mapping(known_hosts_path, "/run/keys/known_hosts", mode="ro")
             .with_kwargs(stdin_open=True, tty=False)
         ) as container:
-            prep_paths_cmd = (
-                "cp /run/keys/ssh-key.pem /tmp/ssh-key.pem && "
-                "cp /run/keys/known_hosts /tmp/known_hosts && "
-                "chown 0:0 /tmp/ssh-key.pem /tmp/known_hosts && "
-                "chmod 600 /tmp/ssh-key.pem && "
-                "chmod 644 /tmp/known_hosts"
-            )
-            prep_result = container.get_wrapped_container().exec_run(
-                ["/bin/sh", "-lc", prep_paths_cmd]
-            )
-            prep_output = (
-                prep_result.output.decode("utf-8", errors="replace")
-                if isinstance(prep_result.output, (bytes, bytearray))
-                else str(prep_result.output)
-            )
-            assert prep_result.exit_code == 0, (
-                f"Failed to prepare SSH files in container. Exit code: {prep_result.exit_code}. "
-                f"Output: {prep_output}"
-            )
-
             wait_for_logs(container, "Starting MCP server", timeout=60)
             socket_wrapper = container.get_wrapped_container().attach_socket(
                 params={"stdin": 1, "stdout": 1, "stderr": 1, "stream": 1}
