@@ -23,9 +23,6 @@ if str(MCP_LOCAL_DIR) not in sys.path:
 from utils.search_utils import build_bm25_index, deduplicate_urls, hybrid_search, load_metadata, load_usearch_index  # noqa: E402
 
 
-DEFAULT_OPENAI_BASE_URL = "https://openai-api-proxy.geo.arm.com/api/providers/openai/v1/"
-
-
 def sentence_transformer_cache_folder() -> str | None:
     return os.getenv("SENTENCE_TRANSFORMERS_HOME") or None
 
@@ -295,6 +292,20 @@ def call_openai_report(
     return parse_json_response(response_text), response_json
 
 
+def resolve_openai_base_url(cli_value: str | None) -> str:
+    if cli_value:
+        return cli_value.rstrip("/")
+
+    env_value = os.getenv("OPENAI_BASE_URL") or os.getenv("OPENAI_API_BASE_URL")
+    if env_value:
+        return env_value.rstrip("/")
+
+    raise EnvironmentError(
+        "OpenAI base URL is required. Set OPENAI_BASE_URL (or OPENAI_API_BASE_URL) "
+        "or pass --openai-base-url."
+    )
+
+
 def normalize_report_counts(report: dict[str, Any]) -> dict[str, Any]:
     topics = report.get("topics")
     if not isinstance(topics, list):
@@ -458,9 +469,9 @@ def main() -> int:
     parser.add_argument("--output-path", default="question_links_found.json")
     parser.add_argument("--report-json-path", default="content_checker_report.json")
     parser.add_argument("--report-markdown-path", default="content_checker_report.md")
-    parser.add_argument("--responses-json-path", default="content_checker_openai_response.json")
+    parser.add_argument("--responses-json-path", help="Optional path for the raw OpenAI response JSON.")
     parser.add_argument("--openai-model", default="gpt-5.4")
-    parser.add_argument("--openai-base-url", default=DEFAULT_OPENAI_BASE_URL)
+    parser.add_argument("--openai-base-url", help="OpenAI-compatible base URL. Defaults to OPENAI_BASE_URL env var.")
     parser.add_argument("--timeout", type=int, default=300)
     parser.add_argument("--ca-bundle", help="Path to a CA bundle PEM file for the OpenAI proxy.")
     parser.add_argument("--insecure-skip-tls-verify", action="store_true")
@@ -490,6 +501,7 @@ def main() -> int:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise EnvironmentError("OPENAI_API_KEY must be set unless --skip-llm is used.")
+    openai_base_url = resolve_openai_base_url(args.openai_base_url)
 
     verify: bool | str = True
     if args.ca_bundle:
@@ -500,7 +512,7 @@ def main() -> int:
 
     report, raw_response = call_openai_report(
         api_key=api_key,
-        base_url=args.openai_base_url,
+        base_url=openai_base_url,
         model=args.openai_model,
         question_links_found=question_links_found,
         timeout=args.timeout,
@@ -509,13 +521,15 @@ def main() -> int:
     report = normalize_report_counts(report)
     write_json(Path(args.report_json_path), report)
     write_markdown_report(Path(args.report_markdown_path), report)
-    write_json(Path(args.responses_json_path), raw_response)
+    if args.responses_json_path:
+        write_json(Path(args.responses_json_path), raw_response)
 
     print_summary(report)
     print()
     print(f"Wrote model report to {args.report_json_path}")
     print(f"Wrote markdown report to {args.report_markdown_path}")
-    print(f"Wrote raw OpenAI response to {args.responses_json_path}")
+    if args.responses_json_path:
+        print(f"Wrote raw OpenAI response to {args.responses_json_path}")
     return 0
 
 
