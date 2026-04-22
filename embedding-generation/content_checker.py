@@ -371,6 +371,38 @@ def normalize_report_counts(report: dict[str, Any]) -> dict[str, Any]:
     return report
 
 
+def enrich_report_with_best_links(report: dict[str, Any], question_links_found: dict[str, Any]) -> dict[str, Any]:
+    topic_lookup = question_links_found.get("topics", {})
+
+    for topic in report.get("topics", []):
+        topic_name = topic.get("topic")
+        retrieved_rows = topic_lookup.get(topic_name, [])
+        question_to_results = {
+            normalize_text(row.get("question", "")): row.get("results", [])
+            for row in retrieved_rows
+        }
+
+        for evaluation in topic.get("question_evaluations", []):
+            question_key = normalize_text(evaluation.get("question", ""))
+            results = question_to_results.get(question_key, [])
+            existing_urls = [
+                normalize_text(url)
+                for url in evaluation.get("best_urls", [])
+                if normalize_text(url)
+            ]
+
+            if not existing_urls:
+                for result in results:
+                    candidate = normalize_text(result.get("resolved_url") or result.get("url") or "")
+                    if candidate:
+                        existing_urls = [candidate]
+                        break
+
+            evaluation["best_urls"] = existing_urls
+
+    return report
+
+
 def write_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n")
 
@@ -388,7 +420,27 @@ def format_accuracy(correct: int, total: int) -> str:
     return f"{(correct / total) * 100:.1f}%"
 
 
-def write_markdown_report(path: Path, report: dict[str, Any]) -> None:
+def collect_topic_links(question_links_found: dict[str, Any], topic_name: str) -> list[dict[str, str]]:
+    topic_rows = question_links_found.get("topics", {}).get(topic_name, [])
+    collected: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    for row in topic_rows:
+        for result in row.get("results", []):
+            url = normalize_text(result.get("resolved_url") or result.get("url") or "")
+            if not url or url in seen:
+                continue
+            collected.append(
+                {
+                    "url": url,
+                    "title": normalize_text(result.get("title") or ""),
+                }
+            )
+            seen.add(url)
+    return collected
+
+
+def write_markdown_report(path: Path, report: dict[str, Any], question_links_found: dict[str, Any] | None = None) -> None:
     overall = report.get("overall", {})
     lines = [
         "# Content Checker Report",
@@ -449,6 +501,17 @@ def write_markdown_report(path: Path, report: dict[str, Any]) -> None:
                     lines.append(f"  Reason: {reason}")
                 if best_urls:
                     lines.append(f"  Best URLs: {', '.join(best_urls)}")
+
+        lines.extend(["", "### All Retrieved Links", ""])
+        topic_links = collect_topic_links(question_links_found or {}, topic_name)
+        if not topic_links:
+            lines.append("- None captured for this section.")
+        else:
+            for item in topic_links:
+                if item["title"]:
+                    lines.append(f"- {item['title']}: {item['url']}")
+                else:
+                    lines.append(f"- {item['url']}")
 
     report_markdown = report.get("report_markdown")
     if isinstance(report_markdown, str) and normalize_text(report_markdown):
@@ -535,8 +598,9 @@ def main() -> int:
         verify=verify,
     )
     report = normalize_report_counts(report)
+    report = enrich_report_with_best_links(report, question_links_found)
     write_json(Path(args.report_json_path), report)
-    write_markdown_report(Path(args.report_markdown_path), report)
+    write_markdown_report(Path(args.report_markdown_path), report, question_links_found)
     if args.responses_json_path:
         write_json(Path(args.responses_json_path), raw_response)
 

@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Arm KB Gap Wizard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='kb_gap_wizard.css') }}">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Arm MCP Knowledge Base</p>
+          <h1>Content Gap Wizard</h1>
+          <p class="lede">
+            This wizard helps define what content to probe in the knowledge base so you can identify
+            where coverage is strong, where it is shallow, and where your target topics still need work.
+          </p>
+        </div>
+        <div class="hero-panel">
+          <div class="hero-stat">
+            <span class="stat-label">Output</span>
+            <strong>Sectioned JSON questions</strong>
+          </div>
+          <div class="hero-stat">
+            <span class="stat-label">Next step</span>
+            <strong>Run with <code>content_checker.py</code></strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="wizard-card">
+        <div class="wizard-header">
+          <div>
+            <p class="section-tag">Question Builder</p>
+            <h2>Define the target topic and the gaps you care about</h2>
+          </div>
+          <div class="step-indicator">
+            <span id="stepLabel">Step 1 of 4</span>
+          </div>
+        </div>
+
+        <form id="wizardForm" class="wizard-form">
+          <section class="step is-active" data-step="1">
+            <h3>Topic focus</h3>
+            <label>
+              <span>Primary topic</span>
+              <input type="text" name="topic" placeholder="Example: SME2 optimization for on-device inference" required>
+            </label>
+            <label>
+              <span>Audience</span>
+              <input type="text" name="audience" placeholder="Example: ML engineers shipping Arm edge workloads">
+            </label>
+            <label>
+              <span>Subtopics to cover</span>
+              <textarea name="subtopics" rows="3" placeholder="Comma-separated. Example: compiler flags, profiling, runtime validation"></textarea>
+            </label>
+          </section>
+
+          <section class="step" data-step="2">
+            <h3>Scope and material type</h3>
+            <fieldset>
+              <legend>Target environments</legend>
+              <div class="chips">
+                <label><input type="checkbox" name="environments" value="Linux servers"> Linux servers</label>
+                <label><input type="checkbox" name="environments" value="Android"> Android</label>
+                <label><input type="checkbox" name="environments" value="IoT and edge devices"> IoT and edge devices</label>
+                <label><input type="checkbox" name="environments" value="Windows on Arm"> Windows on Arm</label>
+                <label><input type="checkbox" name="environments" value="Cloud VMs"> Cloud VMs</label>
+                <label><input type="checkbox" name="environments" value="Bare metal"> Bare metal</label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Content types you expect to find</legend>
+              <div class="chips">
+                <label><input type="checkbox" name="content_types" value="Tutorials"> Tutorials</label>
+                <label><input type="checkbox" name="content_types" value="Reference documentation"> Reference documentation</label>
+                <label><input type="checkbox" name="content_types" value="Benchmarks and performance guidance"> Benchmarks and performance guidance</label>
+                <label><input type="checkbox" name="content_types" value="Troubleshooting guides"> Troubleshooting guides</label>
+                <label><input type="checkbox" name="content_types" value="Sample code and walkthroughs"> Sample code and walkthroughs</label>
+                <label><input type="checkbox" name="content_types" value="Compatibility and support matrices"> Compatibility and support matrices</label>
+              </div>
+            </fieldset>
+          </section>
+
+          <section class="step" data-step="3">
+            <h3>User intent and likely gaps</h3>
+            <fieldset>
+              <legend>What is the user trying to do?</legend>
+              <div class="chips">
+                <label><input type="checkbox" name="goals" value="learn the fundamentals"> Learn fundamentals</label>
+                <label><input type="checkbox" name="goals" value="get something running quickly"> Get running quickly</label>
+                <label><input type="checkbox" name="goals" value="optimize performance"> Optimize performance</label>
+                <label><input type="checkbox" name="goals" value="debug a problem"> Debug a problem</label>
+                <label><input type="checkbox" name="goals" value="validate support on Arm"> Validate support on Arm</label>
+                <label><input type="checkbox" name="goals" value="integrate the technology into an existing stack"> Integrate into an existing stack</label>
+              </div>
+            </fieldset>
+
+            <label>
+              <span>Known weak spots or suspected gaps</span>
+              <textarea name="known_gaps" rows="3" placeholder="Comma-separated. Example: lack of ABI guidance, missing device support lists, no debugging examples"></textarea>
+            </label>
+            <label>
+              <span>Must-cover terms</span>
+              <textarea name="keywords" rows="3" placeholder="Comma-separated. Example: SME2, ExecuTorch, KleidiAI, streaming mode"></textarea>
+            </label>
+          </section>
+
+          <section class="step" data-step="4">
+            <h3>Output shape</h3>
+            <label>
+              <span>Approximate question budget</span>
+              <input type="range" id="questionBudget" name="question_budget" min="8" max="48" step="4" value="20">
+              <div class="range-row">
+                <small>Lean</small>
+                <strong id="questionBudgetValue">20 questions</strong>
+                <small>Broad</small>
+              </div>
+            </label>
+
+            <div class="note">
+              The generated output is a JSON object keyed by section so it can be fed directly into the knowledge-base evaluation flow.
+            </div>
+          </section>
+
+          <div class="wizard-actions">
+            <button type="button" id="backButton" class="button ghost" disabled>Back</button>
+            <button type="button" id="nextButton" class="button secondary">Next</button>
+            <button type="submit" id="generateButton" class="button primary">Generate Questions</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="resultPanel" class="result-panel is-hidden">
+        <div class="result-header">
+          <div>
+            <p class="section-tag">Generated Plan</p>
+            <h2 id="resultTitle">Knowledge base check</h2>
+          </div>
+          <div class="result-actions">
+            <button id="saveButton" class="button primary">Save JSON</button>
+          </div>
+        </div>
+
+        <p id="resultSummary" class="result-summary"></p>
+
+        <div class="result-meta">
+          <div>
+            <span class="meta-label">Questions</span>
+            <strong id="questionCount">0</strong>
+          </div>
+          <div>
+            <span class="meta-label">Suggested file</span>
+            <strong id="suggestedFilename">-</strong>
+          </div>
+        </div>
+
+        <div class="command-block">
+          <span class="meta-label">Suggested next command</span>
+          <pre id="suggestedCommand"></pre>
+        </div>
+
+        <div class="result-grid">
+          <div class="result-column">
+            <h3>Sections</h3>
+            <div id="sectionList" class="section-list"></div>
+          </div>
+          <div class="result-column">
+            <h3>JSON preview</h3>
+            <pre id="jsonPreview" class="json-preview"></pre>
+          </div>
+        </div>
+
+        <div id="saveStatus" class="save-status" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='kb_gap_wizard.js') }}"></script>
+  </body>
+</html>

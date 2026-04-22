@@ -1,4 +1,5 @@
 requests
+flask
 beautifulsoup4
 pyyaml
 usearch
