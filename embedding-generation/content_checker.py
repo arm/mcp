@@ -23,6 +23,10 @@ if str(MCP_LOCAL_DIR) not in sys.path:
 from utils.search_utils import build_bm25_index, deduplicate_urls, hybrid_search, load_metadata, load_usearch_index  # noqa: E402
 
 
+DEFAULT_MODEL_NAME = "all-MiniLM-L6-v2"
+DEFAULT_TOP_K = 5
+
+
 def sentence_transformer_cache_folder() -> str | None:
     return os.getenv("SENTENCE_TRANSFORMERS_HOME") or None
 
@@ -36,6 +40,22 @@ def trim_text(text: str, limit: int) -> str:
     if len(normalized) <= limit:
         return normalized
     return normalized[: max(0, limit - 3)].rstrip() + "..."
+
+
+def load_embedding_model(model_name: str) -> SentenceTransformer:
+    try:
+        return SentenceTransformer(
+            model_name,
+            cache_folder=sentence_transformer_cache_folder(),
+            local_files_only=True,
+        )
+    except Exception as exc:
+        print(f"Local cache miss for embedding model '{model_name}', retrying with network access: {exc}")
+        return SentenceTransformer(
+            model_name,
+            cache_folder=sentence_transformer_cache_folder(),
+            local_files_only=False,
+        )
 
 
 def load_question_sections(path: Path) -> dict[str, list[str]]:
@@ -78,11 +98,7 @@ def build_runtime(index_path: Path, metadata_path: Path, model_name: str) -> dic
     if not metadata:
         raise ValueError(f"Metadata not found or empty: {metadata_path}")
 
-    embedding_model = SentenceTransformer(
-        model_name,
-        cache_folder=sentence_transformer_cache_folder(),
-        local_files_only=True,
-    )
+    embedding_model = load_embedding_model(model_name)
     usearch_index = load_usearch_index(
         str(index_path),
         embedding_model.get_sentence_embedding_dimension(),
@@ -463,8 +479,8 @@ def main() -> int:
     parser.add_argument("questions_path", help="Path to a JSON object keyed by topic with lists of questions.")
     parser.add_argument("--index-path", default="usearch_index.bin")
     parser.add_argument("--metadata-path", default="metadata.json")
-    parser.add_argument("--model-name", default="all-MiniLM-L6-v2")
-    parser.add_argument("--top-k", type=int, default=5)
+    parser.add_argument("--model-name", default=DEFAULT_MODEL_NAME)
+    parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
     parser.add_argument("--chunk-chars", type=int, default=700)
     parser.add_argument("--output-path", default="question_links_found.json")
     parser.add_argument("--report-json-path", default="content_checker_report.json")
