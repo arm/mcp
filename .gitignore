@@ -18,6 +18,10 @@ build/
 .eggs/
 *.egg
 
+# Documentation updater artifacts
+documentation-updater/workdir/
+documentation-updater/reports/
+
 # IDE
 .idea/
 .vscode/
@@ -27,4 +31,3 @@ build/
 # OS
 .DS_Store
 Thumbs.db
-
