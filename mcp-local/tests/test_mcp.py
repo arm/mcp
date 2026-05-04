@@ -235,6 +235,7 @@ def test_mcp_stdio_transport_responds(platform):
             apx_java_args["remote_ip_addr"] = os.getenv("APX_TEST_REMOTE_IP", apx_java_args["remote_ip_addr"])
             apx_java_args["remote_usr"] = os.getenv("APX_TEST_REMOTE_USER", apx_java_args["remote_usr"])
             apx_java_args["cmd"] = os.getenv("APX_TEST_JAVA_CMD", apx_java_args["cmd"])
+            print("\n***APX CPU Hotspots (Java) Workload Cmd: ", apx_java_args["cmd"])
 
             raw_socket.sendall(_encode_mcp_message(apx_java_request))
             check_apx_java_response = _read_response(9, timeout=120)
@@ -247,6 +248,26 @@ def test_mcp_stdio_transport_responds(platform):
                 "\n***APX CPU Hotspots (Java) Structured Content: ",
                 json.dumps(apx_java_structured, indent=2),
             )
+            java_rows = apx_java_structured.get("rows", [])
+            if java_rows:
+                def _hotspot_value(row):
+                    value = row.get("periodic_samples_self", 0)
+                    try:
+                        return float(value)
+                    except (TypeError, ValueError):
+                        return 0
+                top_hotspots = sorted(java_rows, key=_hotspot_value, reverse=True)[:5]
+                print("\n***APX CPU Hotspots (Java) Top Functions:")
+                for idx, row in enumerate(top_hotspots, start=1):
+                    print(
+                        "  {}. {} ({}) - {} samples ({}%)".format(
+                            idx,
+                            row.get("function_name", "unknown"),
+                            row.get("node_type", "unknown"),
+                            row.get("periodic_samples_self", "n/a"),
+                            row.get("periodic_samples_self_percent", "n/a"),
+                        )
+                    )
             assert apx_java_structured.get("recipe") == "code_hotspots", "Test Failed: MCP apx_recipe_run (Java) tool failed: recipe mismatch. Expected: code_hotspots, Received: {}".format(apx_java_structured.get("recipe"))
             assert apx_java_structured.get("status") in {"success"}, "Test Failed: MCP apx_recipe_run (Java) tool failed: unexpected status. Received: {}".format(apx_java_structured.get("status"))
             print("\n***Test Passed: MCP apx_recipe_run (Java CpuBurner) tool call completed")
