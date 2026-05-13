@@ -1,79 +1,117 @@
 [
   {
     "question": "How should worker_processes, worker_connections, and keepalive settings be tuned for NGINX on Ampere processors?",
-    "expected_urls": ["https://amperecomputing.com/tuning-guides/nginx-tuning-guide"]
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/nginx-tuning-guide"
+    ]
   },
   {
     "question": "Which MySQL configuration and benchmarking steps are recommended to improve OLTP performance on Ampere systems?",
-    "expected_urls": ["https://amperecomputing.com/tuning-guides/mysql-tuning-guide"]
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/mysql-tuning-guide"
+    ]
   },
   {
     "question": "What Redis server settings and benchmark client parameters does the Ampere tuning guide focus on?",
-    "expected_urls": ["https://amperecomputing.com/tuning-guides/Redis-setup-and-tuning-guide"]
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/Redis-setup-and-tuning-guide"
+    ]
   },
   {
     "question": "How should Kafka brokers, storage, and benchmark settings be tuned on Ampere for better throughput and latency?",
-    "expected_urls": ["https://amperecomputing.com/tuning-guides/apache-kafka-tuning-guide"]
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/apache-kafka-tuning-guide"
+    ]
   },
   {
     "question": "What JVM flags, profiling workflow, and GC advice are recommended for Java on Ampere Altra family processors?",
-    "expected_urls": ["https://amperecomputing.com/tuning-guides/unlocking-java-performance-tuning-guide"]
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/unlocking-java-performance-tuning-guide"
+    ]
   },
   {
     "question": "How do locking primitives and memory ordering work on Ampere Altra, and when are barriers required?",
-    "expected_urls": ["https://amperecomputing.com/tuning-guides/locking-primitives-and-memory-ordering"]
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/locking-primitives-and-memory-ordering"
+    ]
   },
   {
     "question": "What huge page sizes are available on Arm64, and when should larger page sizes be used for performance tuning?",
-    "expected_urls": ["https://amperecomputing.com/tuning-guides/understanding-memory-page-sizes-on-arm64"]
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/understanding-memory-page-sizes-on-arm64"
+    ]
   },
   {
     "question": "Which GCC compiler options and tuning recommendations are called out in the 2025 Ampere GCC guide?",
-    "expected_urls": ["https://amperecomputing.com/tutorials/gcc-guide-ampere-processors"]
+    "expected_urls": [
+      "https://amperecomputing.com/tutorials/gcc-guide-ampere-processors"
+    ]
   },
   {
     "question": "How do I use the Ampere Porting Advisor to inspect Arm64 migration issues before porting an application?",
-    "expected_urls": ["https://amperecomputing.com/tutorials/porting-advisor"]
+    "expected_urls": [
+      "https://amperecomputing.com/tutorials/porting-advisor"
+    ]
   },
   {
     "question": "What are the main deployment steps in the reference architecture for running an ELK stack on Google Tau T2A?",
-    "expected_urls": ["https://amperecomputing.com/reference-architecture/deploying-an-elk-stack-on-google-tau-t2a"]
+    "expected_urls": [
+      "https://amperecomputing.com/reference-architecture/deploying-an-elk-stack-on-google-tau-t2a"
+    ]
   },
   {
     "question": "How do I build and tune DPDK cryptography workloads on Ampere systems?",
-    "expected_urls": ["https://amperecomputing.com/tuning-guides/dpdk-cryptography-build-and-tuning-guide"]
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/dpdk-cryptography-build-and-tuning-guide"
+    ]
   },
   {
     "question": "What huge page, NIC, and core-affinity setup is recommended in the DPDK setup and tuning guide for Ampere?",
-    "expected_urls": ["https://amperecomputing.com/tuning-guides/DPDK-setup-and-tuning-guide"]
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/DPDK-setup-and-tuning-guide"
+    ]
   },
   {
     "question": "What bare-metal tuning advice does the Hadoop guide provide for Ampere processors?",
-    "expected_urls": ["https://amperecomputing.com/tuning-guides/hadoop-tuning-guide-on-bare-metal"]
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/hadoop-tuning-guide-on-bare-metal"
+    ]
   },
   {
     "question": "How should MongoDB be configured and benchmarked on Ampere processors for better performance?",
-    "expected_urls": ["https://amperecomputing.com/tuning-guides/mongoDB-tuning-guide"]
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/mongoDB-tuning-guide"
+    ]
   },
   {
     "question": "What thread-count, connection, and benchmarking guidance does the Memcached tuning guide give for Ampere?",
-    "expected_urls": ["https://amperecomputing.com/tuning-guides/memcached-tuning-guide"]
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/memcached-tuning-guide"
+    ]
   },
   {
     "question": "How can cryptography libraries be accelerated on Ampere processors according to the Ampere tutorial?",
-    "expected_urls": ["https://amperecomputing.com/tutorials/cryptography"]
+    "expected_urls": [
+      "https://amperecomputing.com/tutorials/cryptography"
+    ]
   },
   {
     "question": "What does the Azure Dpsv5 workload brief say about running AI inference workloads on Ampere-based virtual machines?",
-    "expected_urls": ["https://amperecomputing.com/briefs/ai-inference-on-azure-brief"]
+    "expected_urls": [
+      "https://amperecomputing.com/briefs/ai-inference-on-azure-brief"
+    ]
   },
   {
     "question": "Which storage layout and deployment pattern is described in the MinIO single-node workload brief on Ampere?",
-    "expected_urls": ["https://www.amperecomputing.com/briefs/minio-on-single-node-brief"]
+    "expected_urls": [
+      "https://www.amperecomputing.com/briefs/minio-on-single-node-brief"
+    ]
   },
   {
     "question": "How do I get started with cloud-native FreeBSD on OCI Ampere A1 using Terraform?",
-    "expected_urls": ["https://amperecomputing.com/blogs/getting-cloud-native-with-freebsd-on-oci-ampere-a1-with-terraform-"]
+    "expected_urls": [
+      "https://amperecomputing.com/blogs/getting-cloud-native-with-freebsd-on-oci-ampere-a1-with-terraform-"
+    ]
   },
   {
     "question": "What Google Axion-backed Compute Engine machine series are available for Arm VMs, and how do C4A and N4A differ?",
@@ -205,6 +243,2340 @@
     "question": "If Arm Performix reports insufficient PMU counters, why does that matter for recipe metrics and what should I do about profiling tools, virtual machines, or bare metal runs?",
     "expected_urls": [
       "https://developer.arm.com/documentation/110163/latest/Known-issues-and-limitations/Resolve-insufficient-PMU-counters-error/What-you-can-do?lang=en"
+    ]
+  },
+  {
+    "question": "How do I deploy Open AD Kit containerized autonomous driving simulation on Arm Neoverse?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/openadkit1_container/"
+    ]
+  },
+  {
+    "question": "How do I prototype safety-critical isolation for autonomous driving systems on Neoverse?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/openadkit2_safetyisolation/"
+    ]
+  },
+  {
+    "question": "How do I develop Arm automotive software on the System76 Thelio Astra?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/system76-auto/"
+    ]
+  },
+  {
+    "question": "How do I debug Arm Zena CSS Reference Software Stack with Arm Development Studio?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/zenacssdebug/"
+    ]
+  },
+  {
+    "question": "How do I write Neon intrinsics using GitHub Copilot to improve Adler32 performance?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/adler32/"
+    ]
+  },
+  {
+    "question": "How do I automate MCP server testing using Pytest and Testcontainers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/automate-mcp-with-testcontainers/"
+    ]
+  },
+  {
+    "question": "How do I integrate Arm Virtual Hardware into a GitHub Actions CI/CD workflow?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/avh_cicd/"
+    ]
+  },
+  {
+    "question": "How do I integrate Arm Virtual Hardware into GitHub Actions CI/CD using AWS for GitHub integration?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/avh_cicd2/"
+    ]
+  },
+  {
+    "question": "How do I get started with Realm Management Extension (RME)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/cca_rme/"
+    ]
+  },
+  {
+    "question": "How do I boost C++ performance by optimizing loops with boundary information?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/cpp-loop-size-context/"
+    ]
+  },
+  {
+    "question": "How do I build multi-architecture container images with Docker Build Cloud?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/docker-build-cloud/"
+    ]
+  },
+  {
+    "question": "How do I use Docker?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/docker/"
+    ]
+  },
+  {
+    "question": "How do I write a Dynamic Memory Allocator?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/dynamic-memory-allocator/"
+    ]
+  },
+  {
+    "question": "How do I use the Eigen Linear Algebra Library on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/eigen-linear-algebra-on-arm/"
+    ]
+  },
+  {
+    "question": "How do I run ERNIE-4.5 Mixture of Experts model on Armv9 with llama.cpp?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/ernie_moe_v9/"
+    ]
+  },
+  {
+    "question": "How do I understand floating-point behavior across x86 and Arm architectures?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/floating-point-behavior/"
+    ]
+  },
+  {
+    "question": "How do I learn about function multiversioning?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/function-multiversioning/"
+    ]
+  },
+  {
+    "question": "How do I build multi-architecture container images with GitHub Arm-hosted runners?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/github-arm-runners/"
+    ]
+  },
+  {
+    "question": "How do I build a CI/CD pipeline using GitLab-hosted Arm runners?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/gitlab-managed-runners/"
+    ]
+  },
+  {
+    "question": "How do I build a CI/CD pipeline with GitLab on Google Axion?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/gitlab/"
+    ]
+  },
+  {
+    "question": "How do I learn about integer and floating-point conversions?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/integer-vs-floats/"
+    ]
+  },
+  {
+    "question": "How do I port architecture specific intrinsics?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/intrinsics/"
+    ]
+  },
+  {
+    "question": "Where can I find guidance on custom software for simulation with IP Explorer?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/ipexplorer/"
+    ]
+  },
+  {
+    "question": "How do I accelerate Generative AI workloads using KleidiAI?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/kleidiai-explainer/"
+    ]
+  },
+  {
+    "question": "How do I learn about Autovectorization?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/loop-reflowing/"
+    ]
+  },
+  {
+    "question": "How do I develop a native C++ library on an Arm-based machine?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/matrix/"
+    ]
+  },
+  {
+    "question": "How do I learn about LLVM Machine Code Analyzer?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/mca-godbolt/"
+    ]
+  },
+  {
+    "question": "How do I deploy an MCP Server on Raspberry Pi 5 for AI Agent Interaction using OpenAI SDK?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/mcp-ai-agent/"
+    ]
+  },
+  {
+    "question": "Where can I find guidance on memory latency for application software developers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/memory-latency/"
+    ]
+  },
+  {
+    "question": "How do I accelerate Matrix Multiplication Performance with SME2?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/"
+    ]
+  },
+  {
+    "question": "How do I create and train a PyTorch model for digit classification using the MNIST dataset?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/pytorch-digit-classification-arch-training/"
+    ]
+  },
+  {
+    "question": "How do I access remote devices with Remote.It?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/remoteit/"
+    ]
+  },
+  {
+    "question": "How do I understand the `restrict` keyword in C99?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/restrict-keyword-c99/"
+    ]
+  },
+  {
+    "question": "How do I build an Embedded Application with Rust and Debug with Arm Development Studio?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/rust_armds/"
+    ]
+  },
+  {
+    "question": "Where can I find guidance on introduction to SIMD.info?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/simd-info-demo/"
+    ]
+  },
+  {
+    "question": "Where can I find a SIMD Loops code kata for practicing SVE and SME?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/simd-loops/"
+    ]
+  },
+  {
+    "question": "How do I write SIMD code on Arm using Rust?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/simd-on-rust/"
+    ]
+  },
+  {
+    "question": "How do I profile ExecuTorch models with SME2 on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/sme-executorch-profiling/"
+    ]
+  },
+  {
+    "question": "How do I deploy Tinkerblox UltraEdge HPC-I for AI and mixed workloads on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/tinkerblox_ultraedge/"
+    ]
+  },
+  {
+    "question": "How do I compare Arm Neoverse and Intel x86 top-down performance analysis with PMU counters?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/topdown-compare/"
+    ]
+  },
+  {
+    "question": "How do I migrate x86-64 SIMD to Arm64?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/vectorization-comparison/"
+    ]
+  },
+  {
+    "question": "How do I optimize SIMD code with vectorization-friendly data layout?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/vectorization-friendly-data-layout/"
+    ]
+  },
+  {
+    "question": "How do I sample Instructions with WindowsPerf and Arm SPE?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/windowsperf_sampling_cpython_spe/"
+    ]
+  },
+  {
+    "question": "How do I deploy a Windows on Arm virtual machine on Microsoft Azure?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/woa_azure/"
+    ]
+  },
+  {
+    "question": "How do I build and deploy multi-node Zenoh systems on Raspberry Pi?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/zenoh-multinode-ros2/"
+    ]
+  },
+  {
+    "question": "How do I design an AXI-Lite peripheral to control GPIOs?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/advanced_soc/"
+    ]
+  },
+  {
+    "question": "How do I run image classification on an Alif Ensemble E8 DevKit using ExecuTorch and Ethos-U85?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/alif-image-classification/"
+    ]
+  },
+  {
+    "question": "Where can I find guidance on embedded programming with Arduino on the Raspberry Pi Pico?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/arduino-pico/"
+    ]
+  },
+  {
+    "question": "How do I get started with Arm Development Studio?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/armds/"
+    ]
+  },
+  {
+    "question": "How do I write Arm Assembler functions?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/asm/"
+    ]
+  },
+  {
+    "question": "How do I deploy IoT applications with Balena Cloud and Arm Virtual Hardware?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/avh_balena/"
+    ]
+  },
+  {
+    "question": "How do I deploy IoT applications with AWS IoT Greengrass and Arm Virtual Hardware?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/avh_greengrass/"
+    ]
+  },
+  {
+    "question": "How do I develop for Matter with Arm Virtual Hardware?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/avh_matter/"
+    ]
+  },
+  {
+    "question": "How do I deploy PaddlePaddle on Arm Cortex-M with Arm Virtual Hardware?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/avh_ppocr/"
+    ]
+  },
+  {
+    "question": "How do I implement an example Virtual Peripheral with Arm Virtual Hardware?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/avh_vio/"
+    ]
+  },
+  {
+    "question": "How do I build IoT Solutions in Azure for Arm Devices?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/azure-iot/"
+    ]
+  },
+  {
+    "question": "How do I create an Armv8-A embedded application?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/bare-metal/"
+    ]
+  },
+  {
+    "question": "How do I deploy firmware on hybrid edge systems using containers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cloud-native-deployment-on-hybrid-edge-systems/"
+    ]
+  },
+  {
+    "question": "How do I build an RTX5 RTOS application with Keil uVision?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cmsis_rtx/"
+    ]
+  },
+  {
+    "question": "How do I build an RTX5 RTOS application with Keil Studio (VS Code)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cmsis_rtx_vs/"
+    ]
+  },
+  {
+    "question": "How do I get started with CMSIS-DSP using Python?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cmsisdsp-dev-with-python/"
+    ]
+  },
+  {
+    "question": "How do I learn about context switching on Arm Cortex-M processors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/context-switch-cortex-m/"
+    ]
+  },
+  {
+    "question": "How do I get started with Keil MDK Code Coverage?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/coverage_mdk/"
+    ]
+  },
+  {
+    "question": "How do I prepare Docker image for Arm embedded development?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/docker/"
+    ]
+  },
+  {
+    "question": "How do I run AI on Edge devices using Arduino Nano RP2040?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/edge/"
+    ]
+  },
+  {
+    "question": "How do I build and run an image classification NN model on an STM32L4 Discovery board?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/img_nn_stcube/"
+    ]
+  },
+  {
+    "question": "How do I get started with Microcontrollers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/intro/"
+    ]
+  },
+  {
+    "question": "Where can I find guidance on introduction to TinyML on Arm using PyTorch and ExecuTorch?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/introduction-to-tinyml-on-arm/"
+    ]
+  },
+  {
+    "question": "How do I build and run Arm Total Solutions for IoT?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/iot-sdk/"
+    ]
+  },
+  {
+    "question": "How do I get started with object detection using a Jetson Orin Nano?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/jetson_object_detection/"
+    ]
+  },
+  {
+    "question": "How do I get started with Keil Studio Cloud?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/keilstudiocloud/"
+    ]
+  },
+  {
+    "question": "How do I use Linux on the NXP FRDM i.MX 93 board?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/linux-nxp-board/"
+    ]
+  },
+  {
+    "question": "How do I debug Trusted Firmware-A and the Linux kernel on Arm FVP with Arm Development Studio?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/linux-on-fvp/"
+    ]
+  },
+  {
+    "question": "How do I run a local LLM chatbot on a Raspberry Pi 5?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/llama-python-cpu/"
+    ]
+  },
+  {
+    "question": "How do I migrate x86_64 workloads to aarch64?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/migration/"
+    ]
+  },
+  {
+    "question": "How do I build and run the Arm Machine Learning Evaluation Kit examples?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/mlek/"
+    ]
+  },
+  {
+    "question": "How do I navigate Machine Learning development with Ethos-U processors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/nav-mlek/"
+    ]
+  },
+  {
+    "question": "How do I add new debug targets to Arm Development Studio?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/new_debug_targets_armds/"
+    ]
+  },
+  {
+    "question": "How do I deploy ExecuTorch firmware on NXP FRDM i.MX 93 for Ethos-U65 acceleration?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/observing-ethos-u-on-nxp/"
+    ]
+  },
+  {
+    "question": "How do I migrate CMSIS-Packs to CMSIS v6?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/pack-migration-cmsis-v6/"
+    ]
+  },
+  {
+    "question": "How do I migrate Projects to CMSIS v6?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/project-migration-cmsis-v6/"
+    ]
+  },
+  {
+    "question": "How do I build a Privacy-First LLM Smart Home on Raspberry Pi 5?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/raspberry-pi-smart-home/"
+    ]
+  },
+  {
+    "question": "How do I create a ChatGPT voice bot on a Raspberry Pi?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/raspberry_pi_chatgpt_bot/"
+    ]
+  },
+  {
+    "question": "How do I run Llama 3 on a Raspberry Pi 5 using ExecuTorch?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/rpi-llama3/"
+    ]
+  },
+  {
+    "question": "How do I build embedded Linux applications on an Arm server?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/rpi-mxnet/"
+    ]
+  },
+  {
+    "question": "How do I get started with the Raspberry Pi 4?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/rpi/"
+    ]
+  },
+  {
+    "question": "How do I get started with Raspberry Pi Pico?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/rpi_pico/"
+    ]
+  },
+  {
+    "question": "How do I profile the Linux kernel with Arm Streamline?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/streamline-kernel-module/"
+    ]
+  },
+  {
+    "question": "How do I build and run a letter recognition NN model on an STM32L4 Discovery board?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/tflow_nn_stcube/"
+    ]
+  },
+  {
+    "question": "How do I get started with Trusted Firmware-M?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/tfm/"
+    ]
+  },
+  {
+    "question": "Where can I find guidance on edge AI on Arm: PyTorch and ExecuTorch rock-paper-scissors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/training-inference-pytorch/"
+    ]
+  },
+  {
+    "question": "How do I get started with TrustZone on NXP LPCXpresso55S69?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/trustzone_nxp_lpc/"
+    ]
+  },
+  {
+    "question": "How do I build a Universal Single Board Computer Rack Mount System?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/universal-sbc-chassis/"
+    ]
+  },
+  {
+    "question": "How do I start debugging with Keil uVision?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/uv_debug/"
+    ]
+  },
+  {
+    "question": "How do I convert uvprojx-based projects to csolution?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/uvprojx-conversion/"
+    ]
+  },
+  {
+    "question": "How do I install tools on the command line using vcpkg?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/vcpkg-tool-installation/"
+    ]
+  },
+  {
+    "question": "How do I visualize Ethos-U NPU performance with ExecuTorch on Arm FVPs?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/visualizing-ethos-u-performance/"
+    ]
+  },
+  {
+    "question": "How do I get started with Yocto Linux on Qemu?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/yocto_qemu/"
+    ]
+  },
+  {
+    "question": "How do I run a Computer Vision Model on a Himax Microcontroller?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/yolo-on-himax/"
+    ]
+  },
+  {
+    "question": "How do I run the Zephyr RTOS on Arm Corstone-300?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/zephyr/"
+    ]
+  },
+  {
+    "question": "How do I build Zephyr projects with Workbench for Zephyr in VS Code?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/zephyr_vsworkbench/"
+    ]
+  },
+  {
+    "question": "How do I install Ubuntu on ChromeOS Crostini as an LXC container?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/chrome-os-lxc/"
+    ]
+  },
+  {
+    "question": "How do I build Robot Simulation and Reinforcement Learning Workflows with Isaac Sim and Isaac Lab on DGX Spark?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/dgx_spark_isaac_robotics/"
+    ]
+  },
+  {
+    "question": "How do I unlock quantized LLM performance on Arm-based NVIDIA DGX Spark?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/dgx_spark_llamacpp/"
+    ]
+  },
+  {
+    "question": "How do I build a RAG pipeline on Arm-based NVIDIA DGX Spark?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/dgx_spark_rag/"
+    ]
+  },
+  {
+    "question": "How do I build an offline voice chatbot with faster-whisper and vLLM on DGX Spark?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/dgx_spark_voicechatbot/"
+    ]
+  },
+  {
+    "question": "How do I run AI models with Docker Model Runner?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/docker-models/"
+    ]
+  },
+  {
+    "question": "How do I develop cross-platform desktop applications with Electron on Windows on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/electron/"
+    ]
+  },
+  {
+    "question": "How do I automate Windows on Arm Builds with GitHub Arm-hosted Runners?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/gh-arm-runners-win/"
+    ]
+  },
+  {
+    "question": "How do I create Linux virtual machines with Hyper-V?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/hyper-v/"
+    ]
+  },
+  {
+    "question": "How do I get started with Laptops and Desktops?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/intro/"
+    ]
+  },
+  {
+    "question": "How do I build and test KleidiCV on macOS?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/kleidicv-on-mac/"
+    ]
+  },
+  {
+    "question": "How do I build a Windows on Arm native application with clang?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/llvm_putty/"
+    ]
+  },
+  {
+    "question": "How do I add Memory Tagging to a Dynamic Memory Allocator?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/memory-tagged-dynamic-memory-allocator/"
+    ]
+  },
+  {
+    "question": "How do I install Arch Linux with the i3 window manager on a Pinebook Pro?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/pinebook-pro/"
+    ]
+  },
+  {
+    "question": "How do I fine-tune PyTorch models on DGX Spark?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/pytorch-finetuning-on-spark/"
+    ]
+  },
+  {
+    "question": "How do I use Self-Hosted Arm64-based runners in GitHub Actions for CI/CD?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/self_hosted_cicd_github/"
+    ]
+  },
+  {
+    "question": "How do I create OpenCV applications on Windows on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win-opencv/"
+    ]
+  },
+  {
+    "question": "How do I measure application resource and power usage on Windows on Arm with FFmpeg and PowerShell?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win-resource-ps1/"
+    ]
+  },
+  {
+    "question": "How do I automate Windows on Arm virtual machine deployment with QEMU and KVM on Arm Linux?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win11-vm-automation/"
+    ]
+  },
+  {
+    "question": "How do I use Arm64EC with Windows 11 on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_arm64ec/"
+    ]
+  },
+  {
+    "question": "How do I port Applications to Arm64 using Arm64EC?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_arm64ec_porting/"
+    ]
+  },
+  {
+    "question": "How do I build and run a native Windows on Arm Qt application?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_arm_qt/"
+    ]
+  },
+  {
+    "question": "How do I run ASP.NET Core Web Server on Arm64?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_asp_net8/"
+    ]
+  },
+  {
+    "question": "How do I create IoT applications with Windows on Arm and AWS IoT Core?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_aws_iot/"
+    ]
+  },
+  {
+    "question": "How do I use Amazon DynamoDB for IoT applications running on Arm64?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_aws_iot_dynamodb/"
+    ]
+  },
+  {
+    "question": "How do I use AWS Lambda for IoT applications running on Arm64?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_aws_iot_lambda/"
+    ]
+  },
+  {
+    "question": "How do I integrate AWS Lambda with DynamoDB for IoT applications running Windows on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_aws_iot_lambda_dynamodb/"
+    ]
+  },
+  {
+    "question": "How do I use Amazon S3 for IoT applications running Windows on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_aws_iot_s3/"
+    ]
+  },
+  {
+    "question": "How do I develop desktop applications with Chromium Embedded Framework on Windows on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_cef/"
+    ]
+  },
+  {
+    "question": "How do I develop desktop applications with Windows Forms on Windows on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_forms/"
+    ]
+  },
+  {
+    "question": "How do I build a Windows on Arm native application with .NET?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_net/"
+    ]
+  },
+  {
+    "question": "How do I benchmark .NET 8 applications on Windows on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_net8/"
+    ]
+  },
+  {
+    "question": "How do I build .NET MAUI Applications on Arm64?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_net_maui/"
+    ]
+  },
+  {
+    "question": "How do I run Phi-3 on Windows on Arm using ONNX Runtime?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_on_arm_build_onnxruntime/"
+    ]
+  },
+  {
+    "question": "How do I optimize C++ applications on Windows on Arm using Profile-Guided Optimization?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_profile_guided_optimisation/"
+    ]
+  },
+  {
+    "question": "How do I build native Windows on Arm applications with Python?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_python/"
+    ]
+  },
+  {
+    "question": "How do I deploy GitHub Actions workflows using Windows Sandbox?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_sandbox_dot_net_cicd/"
+    ]
+  },
+  {
+    "question": "How do I port the Win32 library to Arm64?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_win32_dll_porting/"
+    ]
+  },
+  {
+    "question": "How do I develop Windows applications with WinUI3 on Windows on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_winui3/"
+    ]
+  },
+  {
+    "question": "How do I develop applications with Windows Presentation Foundation (WPF) on Windows on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_wpf/"
+    ]
+  },
+  {
+    "question": "How do I develop cross-platform applications with Xamarin Forms on Windows on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_xamarin_forms/"
+    ]
+  },
+  {
+    "question": "How do I optimize Windows applications using Arm Performance Libraries?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/windows_armpl/"
+    ]
+  },
+  {
+    "question": "How do I implement CI/CD with Windows on Arm host?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/windows_cicd_github/"
+    ]
+  },
+  {
+    "question": "How do I use the Visual Studio extension for WindowsPerf?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/windowsperf-vs-extension/"
+    ]
+  },
+  {
+    "question": "How do I get started with WindowsPerf?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/windowsperf/"
+    ]
+  },
+  {
+    "question": "How do I sample CPython with WindowsPerf?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/windowsperf_sampling_cpython/"
+    ]
+  },
+  {
+    "question": "How do I get started with the Windows Performance Analyzer (WPA) plugin for WindowsPerf?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/windowsperf_wpa_plugin/"
+    ]
+  },
+  {
+    "question": "How do I get started with Windows Subsystem for Linux (WSL) on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/wsl2/"
+    ]
+  },
+  {
+    "question": "How do I learn about Arm Fixed Rate Compression (AFRC)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/afrc/"
+    ]
+  },
+  {
+    "question": "How do I accelerate Denoising, Background Blur and Low-Light Camera Effects with SME2?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/ai-camera-pipelines/"
+    ]
+  },
+  {
+    "question": "How do I get started with Arm Performance Studio?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/ams/"
+    ]
+  },
+  {
+    "question": "How do I analyze a frame with Frame Advisor?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/analyze_a_frame_with_frame_advisor/"
+    ]
+  },
+  {
+    "question": "How do I build high-performance image processing with Halide on Android?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/android_halide/"
+    ]
+  },
+  {
+    "question": "How do I create Computer Vision Applications with OpenCV on Android Devices?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/android_opencv_camera/"
+    ]
+  },
+  {
+    "question": "How do I detect faces with OpenCV on Android Devices?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/android_opencv_facedetection/"
+    ]
+  },
+  {
+    "question": "How do I accelerate an OpenCV-based Android Application with KleidiCV?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/android_opencv_kleidicv/"
+    ]
+  },
+  {
+    "question": "How do I get started with Scalable Vector Extension 2 (SVE2) on Android?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/android_sve2/"
+    ]
+  },
+  {
+    "question": "How do I build and profile a simple WebGPU Android Application?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/android_webgpu_dawn/"
+    ]
+  },
+  {
+    "question": "Where can I find guidance on best Practices for hardware ray tracing with Lumen on Android Devices?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/best-practices-for-hwrt-lumen-performance/"
+    ]
+  },
+  {
+    "question": "How do I build an Android chat application with ONNX Runtime API?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/build-android-chat-app-using-onnxruntime/"
+    ]
+  },
+  {
+    "question": "How do I build a Hands-Free Selfie Android Application with MediaPipe?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/build-android-selfie-app-using-mediapipe-multimodality/"
+    ]
+  },
+  {
+    "question": "How do I build an Android chat app with Llama, KleidiAI, ExecuTorch, and XNNPACK?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/build-llama3-chat-android-app-using-executorch-and-xnnpack/"
+    ]
+  },
+  {
+    "question": "How do I build a customer support chatbot on Android with Llama and ExecuTorch?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/customer-support-chatbot-with-llama-and-executorch-on-arm-based-mobile-devices/"
+    ]
+  },
+  {
+    "question": "How do I debug with MTE on Google Pixel 8?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/debugging_with_mte_on_pixel8/"
+    ]
+  },
+  {
+    "question": "How do I get started with Arm Accuracy Super Resolution (Arm ASR)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/get-started-with-arm-asr/"
+    ]
+  },
+  {
+    "question": "How do I get started with Unity on Android?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/get-started-with-unity-on-android/"
+    ]
+  },
+  {
+    "question": "How do I profile Android game performance in Godot with Arm Performance Studio?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/godot_packages/"
+    ]
+  },
+  {
+    "question": "How do I Enable Hardware Ray Tracing on Lumen for Android Devices?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/how-to-enable-hwrt-on-lumen-for-android-devices/"
+    ]
+  },
+  {
+    "question": "How do I get started with Arm hardware?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/intro/"
+    ]
+  },
+  {
+    "question": "How do I understand KleidiAI SME2 matmul microkernels?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/kai_sme2_matmul_ukernel_explained/"
+    ]
+  },
+  {
+    "question": "Where can I find guidance on LLM inference on Android with KleidiAI, MediaPipe, and XNNPACK?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/kleidiai-on-android-with-mediapipe-and-xnnpack/"
+    ]
+  },
+  {
+    "question": "How do I query Arm GPU configuration information?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/libgpuinfo/"
+    ]
+  },
+  {
+    "question": "How do I accelerate LiteRT Models on Android with KleidiAI and SME2?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/litert-sme/"
+    ]
+  },
+  {
+    "question": "How do I benchmark a KleidiAI micro-kernel in ExecuTorch?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/measure-kleidiai-kernel-performance-on-executorch/"
+    ]
+  },
+  {
+    "question": "How do I fine-tune neural graphics models with Model Gym?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/model-training-gym/"
+    ]
+  },
+  {
+    "question": "How do I learn about the Arm Memory Tagging Extension?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/mte/"
+    ]
+  },
+  {
+    "question": "Where can I find guidance on memory Tagging Extension on Google Pixel 8?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/mte_on_pixel8/"
+    ]
+  },
+  {
+    "question": "Where can I find guidance on neural Super Sampling in Unreal Engine?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/nss-unreal/"
+    ]
+  },
+  {
+    "question": "How do I build, optimize, and deploy ML models with ONNX on Arm64 and mobile devices?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/onnx/"
+    ]
+  },
+  {
+    "question": "How do I optimize graphics vertex efficiency for Arm GPUs?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/optimizing-vertex-efficiency/"
+    ]
+  },
+  {
+    "question": "How do I measure LLM inference performance with KleidiAI and SME2 on Android?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/performance_llama_cpp_sme2/"
+    ]
+  },
+  {
+    "question": "How do I profile ONNX model performance with SME2 using KleidiAI and ONNX Runtime?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/performance_onnxruntime_kleidiai_sme2/"
+    ]
+  },
+  {
+    "question": "How do I profile the Performance of AI and ML Mobile Applications on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/profiling-ml-on-arm/"
+    ]
+  },
+  {
+    "question": "How do I profile Unity apps on Android?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/profiling-unity-apps-on-android/"
+    ]
+  },
+  {
+    "question": "How do I quantize neural upscaling models with ExecuTorch?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/quantize-neural-upscaling-models/"
+    ]
+  },
+  {
+    "question": "How do I learn about Ray Tracing with Vulkan on Android?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/ray_tracing/"
+    ]
+  },
+  {
+    "question": "How do I optimize graphics using Frame Advisor's render graphs?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/render-graph-optimization/"
+    ]
+  },
+  {
+    "question": "How do I generate audio with Stable Audio Open Small on LiteRT?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/run-stable-audio-open-small-with-lite-rt/"
+    ]
+  },
+  {
+    "question": "How do I generate audio with Stable Audio Open Small using ExecuTorch?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/run-stable-audio-with-executorch/"
+    ]
+  },
+  {
+    "question": "How do I install a Unity Game on a single board computer (Orange Pi 5)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/unity_on_orange_pi/"
+    ]
+  },
+  {
+    "question": "How do I install and use Arm integration packages for Unity?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/unity_packages/"
+    ]
+  },
+  {
+    "question": "How do I use Neon intrinsics to optimize Unity on Android?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/using-neon-intrinsics-to-optimize-unity-on-android/"
+    ]
+  },
+  {
+    "question": "How do I use Unity's Machine Learning Agents on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/using_unity_machine_learning_agents/"
+    ]
+  },
+  {
+    "question": "Where can I find guidance on vision LLM inference on Android with KleidiAI and MNN?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/vision-llm-inference-on-android-with-kleidiai-and-mnn/"
+    ]
+  },
+  {
+    "question": "How do I accelerate multimodal Voice Assistant performance with KleidiAI and SME2?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/voice-assistant/"
+    ]
+  },
+  {
+    "question": "How do I get started with neural graphics using ML Extensions for Vulkan?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/vulkan-ml-sample/"
+    ]
+  },
+  {
+    "question": "How do I deploy an AI Agent on Arm with llama.cpp and llama-cpp-agent using KleidiAI?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/ai-agent-on-cpu/"
+    ]
+  },
+  {
+    "question": "How do I create an Arm-based Kubernetes cluster on Microsoft Azure Kubernetes Service?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/aks/"
+    ]
+  },
+  {
+    "question": "How do I deploy High-Performance Analytics with Apache Arrow and Arrow Flight on Google Cloud C4A Axion processors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/apache_arrow_and_flight/"
+    ]
+  },
+  {
+    "question": "How do I deploy Arcee AFM-4.5B on Arm-based AWS Graviton4 with Llama.cpp?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arcee-foundation-model-on-aws/"
+    ]
+  },
+  {
+    "question": "How do I deploy Arcee AFM-4.5B on Arm-based Google Cloud Axion with Llama.cpp?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arcee-foundation-model-on-gcp/"
+    ]
+  },
+  {
+    "question": "How do I deploy applications on Arm-based GKE using GitOps with Argo CD?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/argo-cd-gcp/"
+    ]
+  },
+  {
+    "question": "How do I learn about the C++ memory model for porting applications to Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arm-cpp-memory-model/"
+    ]
+  },
+  {
+    "question": "How do I automate x86-to-Arm application migration using Arm MCP Server?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arm-mcp-server/"
+    ]
+  },
+  {
+    "question": "How do I migrate applications between Arm platforms using Kiro Arm SoC Migration Power?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arm-soc-migration-learning-path/"
+    ]
+  },
+  {
+    "question": "How do I explore performance gains by increasing the Linux kernel page size on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arm_linux_page_size/"
+    ]
+  },
+  {
+    "question": "How do I use the Arm Performance Monitoring Unit and System Counter?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arm_pmu/"
+    ]
+  },
+  {
+    "question": "How do I use AWS Graviton processors on AWS Fargate with Copilot?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/aws-copilot/"
+    ]
+  },
+  {
+    "question": "How do I deploy Arm Instances on AWS using Terraform?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/aws-terraform/"
+    ]
+  },
+  {
+    "question": "How do I deploy Arm-based Cobalt 100 VMs using Azure Resource Manager templates?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/azure-arm-template/"
+    ]
+  },
+  {
+    "question": "How do I deploy a .NET application on Microsoft Azure Cobalt 100 VMs?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/azure-cobalt-cicd-aks/"
+    ]
+  },
+  {
+    "question": "How do I deploy Arm virtual machines on Microsoft Azure with Terraform?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/azure-terraform/"
+    ]
+  },
+  {
+    "question": "How do I create an Azure Linux 3.0 virtual machine with Cobalt 100 processors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/azure-vm/"
+    ]
+  },
+  {
+    "question": "How do I accelerate Natural Language Processing (NLP) models from Hugging Face on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/benchmark-nlp/"
+    ]
+  },
+  {
+    "question": "How do I accelerate Bitmap Scanning with Neon and SVE Instructions on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/bitmap_scan_sve2/"
+    ]
+  },
+  {
+    "question": "How do I optimize AArch64 binaries with LLVM BOLT?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/bolt-demo/"
+    ]
+  },
+  {
+    "question": "How do I optimize Arm applications and shared libraries with BOLT?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/bolt-merge/"
+    ]
+  },
+  {
+    "question": "How do I optimize an application with BOLT?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/bolt/"
+    ]
+  },
+  {
+    "question": "How do I create multi-architecture Docker images with Buildkite on Google Axion?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/buildkite-gcp/"
+    ]
+  },
+  {
+    "question": "How do I deploy Cassandra on a Google Axion C4A virtual machine?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cassandra-on-gcp/"
+    ]
+  },
+  {
+    "question": "How do I run an application in a Realm using the Arm Confidential Compute Architecture (CCA)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cca-container/"
+    ]
+  },
+  {
+    "question": "How do I explore secure device attach in Arm CCA Realms?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cca-device-attach/"
+    ]
+  },
+  {
+    "question": "How do I run an end-to-end Attestation Flow with Arm CCA?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cca-essentials/"
+    ]
+  },
+  {
+    "question": "How do I run Confidential Containers with encrypted images using Arm CCA and Trustee?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cca-kata/"
+    ]
+  },
+  {
+    "question": "How do I run an end-to-end attestation flow with Arm CCA and Trustee?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cca-trustee/"
+    ]
+  },
+  {
+    "question": "How do I build a CCA Attestation Service on AWS with Veraison?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cca-veraison-aws/"
+    ]
+  },
+  {
+    "question": "How do I get started with CCA Attestation and Veraison?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cca-veraison/"
+    ]
+  },
+  {
+    "question": "How do I run CircleCI Arm Native Workflows on a SUSE Arm GCP VM?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/circleci-gcp/"
+    ]
+  },
+  {
+    "question": "How do I deploy CircleCI Arm Native Workflows on AWS EC2 Graviton?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/circleci-on-aws/"
+    ]
+  },
+  {
+    "question": "How do I use Clair to scan container images and generate vulnerability reports?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/clair/"
+    ]
+  },
+  {
+    "question": "How do I build a real-time analytics pipeline with ClickHouse on Google Cloud Axion?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/clickhouse-gcp/"
+    ]
+  },
+  {
+    "question": "How do I measure performance of ClickHouse on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/clickhouse/"
+    ]
+  },
+  {
+    "question": "How do I deploy a Cobalt 100 Virtual Machine on Azure?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cobalt/"
+    ]
+  },
+  {
+    "question": "How do I build and share Docker images using AWS CodeBuild?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/codebuild/"
+    ]
+  },
+  {
+    "question": "How do I run x265 (H.265 codec) on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/codec/"
+    ]
+  },
+  {
+    "question": "How do I run the AV1 and VP9 codecs on Arm Linux?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/codec1/"
+    ]
+  },
+  {
+    "question": "How do I deploy Couchbase on Google Cloud C4A?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/couchbase-on-gcp/"
+    ]
+  },
+  {
+    "question": "How do I learn about optimization techniques using the g++ compiler?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cplusplus_compilers_flags/"
+    ]
+  },
+  {
+    "question": "How do I optimize C++ performance with profile-Guided Optimization and Google Benchmark?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cpp-profile-guided-optimisation/"
+    ]
+  },
+  {
+    "question": "How do I get started with Arm-based cloud instances?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/csp/"
+    ]
+  },
+  {
+    "question": "How do I deploy DeepSeek-R1 on Arm Servers with llama.cpp?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/deepseek-cpu/"
+    ]
+  },
+  {
+    "question": "How do I microbenchmark storage performance with fio on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/disk-io-benchmark/"
+    ]
+  },
+  {
+    "question": "How do I run distributed inference with llama.cpp on Arm-based AWS Graviton4 instances?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/distributed-inference-with-llama-cpp/"
+    ]
+  },
+  {
+    "question": "How do I deploy Django on Arm-based Google Cloud C4A?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/django-on-gcp/"
+    ]
+  },
+  {
+    "question": "How do I deploy a Django application?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/django/"
+    ]
+  },
+  {
+    "question": "How do I build and benchmark DLRM on Arm Neoverse V2 with MLPerf?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/dlrm/"
+    ]
+  },
+  {
+    "question": "How do I automate x86 to Arm Migration with Docker MCP Toolkit, VS Code and GitHub Copilot?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/docker-mcp-toolkit/"
+    ]
+  },
+  {
+    "question": "How do I migrate a .NET application to Azure Cobalt 100?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/dotnet-migration/"
+    ]
+  },
+  {
+    "question": "How do I monitor Azure Cobalt 100 Arm64 virtual machines using Dynatrace OneAgent?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/dynatrace-azure/"
+    ]
+  },
+  {
+    "question": "How do I deploy containers on Amazon ECS with AWS Graviton processors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/ecs/"
+    ]
+  },
+  {
+    "question": "How do I build and deploy a multi-architecture application on Amazon EKS?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/eks-multi-arch/"
+    ]
+  },
+  {
+    "question": "How do I deploy WordPress with MySQL on Elastic Kubernetes Service (EKS)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/eks/"
+    ]
+  },
+  {
+    "question": "How do I deploy Envoy Proxy on Google Cloud C4A (Arm-based Axion VMs)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/envoy-gcp/"
+    ]
+  },
+  {
+    "question": "How do I deploy Envoy?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/envoy/"
+    ]
+  },
+  {
+    "question": "How do I tune Envoy?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/envoy_tune/"
+    ]
+  },
+  {
+    "question": "How do I learn about the impact of stack buffer overflows?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/exploiting-stack-buffer-overflow-aarch64/"
+    ]
+  },
+  {
+    "question": "How do I analyze cache behavior with Perf C2C on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/false-sharing-arm-spe/"
+    ]
+  },
+  {
+    "question": "How do I benchmark Linux kernel performance on Arm servers with Fastpath?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/fastpath/"
+    ]
+  },
+  {
+    "question": "How do I optimize exponential functions with FEXPA?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/fexpa/"
+    ]
+  },
+  {
+    "question": "How do I deploy Apache Flink on Google Cloud C4A (Arm-based Axion VMs)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/flink-on-gcp/"
+    ]
+  },
+  {
+    "question": "How do I benchmark the performance of Flink on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/flink/"
+    ]
+  },
+  {
+    "question": "How do I deploy .NET applications to Arm Virtual Machines and Container Registry in Microsoft Azure?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/from-iot-to-the-cloud-part1/"
+    ]
+  },
+  {
+    "question": "How do I deploy a containerized application using Azure Container Instances?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/from-iot-to-the-cloud-part2/"
+    ]
+  },
+  {
+    "question": "How do I deploy an application to Azure Kubernetes Service?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/from-iot-to-the-cloud-part3/"
+    ]
+  },
+  {
+    "question": "How do I use Infrastructure as Code and Pulumi to provision Azure resources?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/from-iot-to-the-cloud-part4/"
+    ]
+  },
+  {
+    "question": "How do I deploy ModelScope FunASR Model on Arm Servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/funasr/"
+    ]
+  },
+  {
+    "question": "How do I deploy Gardener on Google Cloud C4A (Arm-based Axion VMs)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/gardener-gcp/"
+    ]
+  },
+  {
+    "question": "How do I optimize performance using Link-Time Optimization with GCC?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/gcc-lto/"
+    ]
+  },
+  {
+    "question": "How do I deploy Arm virtual machines on Google Cloud Platform (GCP) using Terraform?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/gcp/"
+    ]
+  },
+  {
+    "question": "How do I run Geekbench on Arm Linux systems?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/geekbench/"
+    ]
+  },
+  {
+    "question": "How do I optimize MLOps with Arm-hosted GitHub Runners?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/gh-runners/"
+    ]
+  },
+  {
+    "question": "Where can I find guidance on managed, self-hosted Arm runners for GitHub Actions?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/github-actions-runner/"
+    ]
+  },
+  {
+    "question": "How do I deploy GitHub Actions Self-Hosted Runner on Google Axion C4A virtual machine?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/github-on-arm/"
+    ]
+  },
+  {
+    "question": "How do I migrate x86 workloads to Arm on Google Kubernetes Engine with Axion processors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/gke-multi-arch-axion/"
+    ]
+  },
+  {
+    "question": "How do I migrate an x86 application to multi-architecture with Arm-based on Google Axion Processor on GKE?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/gke-multi-arch/"
+    ]
+  },
+  {
+    "question": "How do I create an Arm-based Kubernetes cluster on Google Cloud Platform (GCP)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/gke/"
+    ]
+  },
+  {
+    "question": "How do I learn about glibc with Large System Extensions (LSE) for performance improvement?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/glibc-with-lse/"
+    ]
+  },
+  {
+    "question": "How do I benchmark Go performance with Sweet and Benchstat?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/go-benchmarking-with-sweet/"
+    ]
+  },
+  {
+    "question": "How do I deploy Golang on Azure Cobalt 100 on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/golang-on-azure/"
+    ]
+  },
+  {
+    "question": "How do I install and validate Helm on Google Cloud C4A Arm-based VMs?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/helm-on-gcp/"
+    ]
+  },
+  {
+    "question": "How do I get started with Servers and Cloud Computing?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/intro/"
+    ]
+  },
+  {
+    "question": "How do I optimize network interrupt handling on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/irq-tuning-guide/"
+    ]
+  },
+  {
+    "question": "How do I tune the Performance of the Java Garbage Collector?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/java-gc-tuning/"
+    ]
+  },
+  {
+    "question": "How do I run Java applications on Google Axion processors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/java-on-axion/"
+    ]
+  },
+  {
+    "question": "How do I deploy Java applications on Azure Cobalt 100 processors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/java-on-azure/"
+    ]
+  },
+  {
+    "question": "How do I analyze Java performance on Arm servers using flame graphs?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/java-perf-flamegraph/"
+    ]
+  },
+  {
+    "question": "How do I deploy and validate Jenkins on Arm cloud servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/jenkins/"
+    ]
+  },
+  {
+    "question": "How do I deploy Apache Kafka on Arm-based Microsoft Azure Cobalt 100 virtual machines?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/kafka-azure/"
+    ]
+  },
+  {
+    "question": "How do I deploy a Kafka Cluster on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/kafka/"
+    ]
+  },
+  {
+    "question": "How do I autoscale HTTP applications on Kubernetes with KEDA and Kedify?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/kedify-http-autoscaling/"
+    ]
+  },
+  {
+    "question": "How do I use Keras Core with TensorFlow, PyTorch, and JAX backends?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/keras-core/"
+    ]
+  },
+  {
+    "question": "How do I build Linux kernels for Arm cloud instances?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/kernel-build/"
+    ]
+  },
+  {
+    "question": "How do I migrate containers to Arm using KubeArchInspect?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/kubearchinspect/"
+    ]
+  },
+  {
+    "question": "How do I deploy AWS Lambda functions?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/lambda_functions/"
+    ]
+  },
+  {
+    "question": "How do I increase application performance with libhugetlbfs?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/libhugetlbfs/"
+    ]
+  },
+  {
+    "question": "How do I deploy a Large Language Model (LLM) chatbot with llama.cpp using KleidiAI on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/llama-cpu/"
+    ]
+  },
+  {
+    "question": "How do I deploy a LLM-based Vision Chatbot with PyTorch and Hugging Face Transformers on Google Axion processors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/llama-vision/"
+    ]
+  },
+  {
+    "question": "How do I profile llama.cpp performance with Arm Streamline and KleidiAI LLM kernels?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/llama_cpp_streamline/"
+    ]
+  },
+  {
+    "question": "How do I learn about Large System Extensions (LSE)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/lse/"
+    ]
+  },
+  {
+    "question": "How do I deploy MariaDB on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mariadb/"
+    ]
+  },
+  {
+    "question": "How do I run memcached on Arm servers and measure its performance?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/memcached/"
+    ]
+  },
+  {
+    "question": "How do I deploy Memcached as a cache for MySQL and PostgreSQL on Arm based servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/memcached_cache/"
+    ]
+  },
+  {
+    "question": "How do I explore Thread Synchronization in the Arm memory model?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/memory_consistency/"
+    ]
+  },
+  {
+    "question": "How do I microbenchmark and tune network performance with iPerf3 and Linux traffic control?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/microbenchmark-network-iperf3/"
+    ]
+  },
+  {
+    "question": "How do I migrate applications to Arm servers using migrate-ease?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/migrate-ease/"
+    ]
+  },
+  {
+    "question": "Where can I find the general Learning Path for migrating applications to Arm servers across C/C++, Java, and Go?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/migration/"
+    ]
+  },
+  {
+    "question": "How do I build a RAG application using Zilliz Cloud on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/milvus-rag/"
+    ]
+  },
+  {
+    "question": "How do I measure Machine Learning Inference Performance on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/ml-perf/"
+    ]
+  },
+  {
+    "question": "How do I run MongoDB on Arm-based Azure Cobalt 100 instances?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mongodb-on-azure/"
+    ]
+  },
+  {
+    "question": "How do I deploy MongoDB on an Arm-based Google Axion C4A VM?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mongodb-on-gcp/"
+    ]
+  },
+  {
+    "question": "How do I analyze the performance of MongoDB on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mongodb/"
+    ]
+  },
+  {
+    "question": "How do I get started with parallel application development?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mpi/"
+    ]
+  },
+  {
+    "question": "How do I control floating-point accuracy modes in Arm Performance Libraries?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/multi-accuracy-libamath/"
+    ]
+  },
+  {
+    "question": "How do I build a multi-architecture Kubernetes cluster running nginx on Azure AKS?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/multiarch_nginx_on_aks/"
+    ]
+  },
+  {
+    "question": "How do I add Arm nodes to my GKE cluster using a multi-architecture Ollama container image?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/multiarch_ollama_on_gke/"
+    ]
+  },
+  {
+    "question": "How do I deploy MySQL on Microsoft Azure Cobalt 100 processors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mysql-azure/"
+    ]
+  },
+  {
+    "question": "How do I deploy MySQL?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mysql/"
+    ]
+  },
+  {
+    "question": "How do I benchmark MySQL with Sysbench?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mysql_benchmark/"
+    ]
+  },
+  {
+    "question": "How do I tune MySQL?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mysql_tune/"
+    ]
+  },
+  {
+    "question": "How do I develop and validate firmware pre-silicon on Arm Neoverse CSS V3?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/neoverse-rdv3-swstack/"
+    ]
+  },
+  {
+    "question": "How do I run a .NET Aspire application on Arm-based VMs on AWS and GCP?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/net-aspire/"
+    ]
+  },
+  {
+    "question": "How do I deploy NGINX on Azure Cobalt 100 Arm-based virtual machines?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/nginx-on-azure/"
+    ]
+  },
+  {
+    "question": "How do I deploy Nginx?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/nginx/"
+    ]
+  },
+  {
+    "question": "How do I tune Nginx?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/nginx_tune/"
+    ]
+  },
+  {
+    "question": "How do I run a Natural Language Processing (NLP) model from Hugging Face on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/nlp-hugging-face/"
+    ]
+  },
+  {
+    "question": "How do I deploy Node.js on Google Cloud C4A Arm-based Axion VMs?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/node-js-gcp/"
+    ]
+  },
+  {
+    "question": "How do I deploy Arm Instances on Oracle Cloud Infrastructure (OCI) using Terraform?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/oci-terraform/"
+    ]
+  },
+  {
+    "question": "How do I deploy SqueezeNet 1.0 INT8 model with ONNX Runtime on Azure Cobalt 100?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/onnx-on-azure/"
+    ]
+  },
+  {
+    "question": "How do I deploy Phi-4-mini model with ONNX Runtime on Azure Cobalt 100?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/onnx/"
+    ]
+  },
+  {
+    "question": "How do I simulate OpenBMC and UEFI pre-silicon on Neoverse RD-V3?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/openbmc-rdv3/"
+    ]
+  },
+  {
+    "question": "How do I build multi-architecture applications with Red Hat OpenShift Pipelines on AWS?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/openshift/"
+    ]
+  },
+  {
+    "question": "How do I deploy OpenTelemetry on Google Cloud C4A Axion processors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/opentelemetry/"
+    ]
+  },
+  {
+    "question": "How do I understand Arm Pointer Authentication?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/pac/"
+    ]
+  },
+  {
+    "question": "How do I deploy PHP on Google Cloud C4A Arm-based Axion VMs?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/php-on-gcp/"
+    ]
+  },
+  {
+    "question": "How do I optimize application performance with CPU affinity?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/pinning-threads/"
+    ]
+  },
+  {
+    "question": "How do I implement Code level Performance Analysis using the PMUv3 plugin?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/pmuv3_plugin_learning_path/"
+    ]
+  },
+  {
+    "question": "How do I deploy PostgreSQL?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/postgresql/"
+    ]
+  },
+  {
+    "question": "How do I tune PostgreSQL?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/postgresql_tune/"
+    ]
+  },
+  {
+    "question": "How do I monitor processes on an Arm machine with Process Watch?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/processwatch/"
+    ]
+  },
+  {
+    "question": "How do I profile for Neoverse with Streamline CLI Tools?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/profiling-for-neoverse/"
+    ]
+  },
+  {
+    "question": "How do I deploy Puppet on Google Cloud C4A?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/puppet-on-gcp/"
+    ]
+  },
+  {
+    "question": "How do I run a Large Language Model (LLM) chatbot with PyTorch using KleidiAI on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/pytorch-llama/"
+    ]
+  },
+  {
+    "question": "How do I deploy RabbitMQ on Arm64 Cloud Platforms (Azure and GCP)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/rabbitmq-gcp/"
+    ]
+  },
+  {
+    "question": "How do I deploy a RAG-based Chatbot with llama-cpp-python using KleidiAI on Google Axion processors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/rag/"
+    ]
+  },
+  {
+    "question": "How do I get started with the Arm 5G RAN Acceleration Library (ArmRAL)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/ran/"
+    ]
+  },
+  {
+    "question": "How do I deploy Redis for data searching on Google Cloud C4A?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/redis-data-searching/"
+    ]
+  },
+  {
+    "question": "How do I deploy Redis on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/redis/"
+    ]
+  },
+  {
+    "question": "How do I deploy Redis as a cache for MySQL and PostgreSQL on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/redis_cache/"
+    ]
+  },
+  {
+    "question": "How do I tune Redis?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/redis_tune/"
+    ]
+  },
+  {
+    "question": "How do I debug Neoverse N2 Reference Design with Arm Development Studio?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/refinfra-debug/"
+    ]
+  },
+  {
+    "question": "How do I get started with the Neoverse Reference Design software stack?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/refinfra-quick-start/"
+    ]
+  },
+  {
+    "question": "How do I enable reproducible math functions across vector extensions with Arm Performance Libraries?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/reproducible-libamath/"
+    ]
+  },
+  {
+    "question": "How do I create a virtual machine in a Realm using Arm Confidential Compute Architecture (CCA)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/rme-cca-basics/"
+    ]
+  },
+  {
+    "question": "How do I run an LLM chatbot with rtp-llm on Arm-based servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/rtp-llm/"
+    ]
+  },
+  {
+    "question": "How do I deploy Ruby on Rails on Arm-based Google Cloud C4A virtual machines?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/ruby-on-rails/"
+    ]
+  },
+  {
+    "question": "How do I deploy Rust on Google Cloud C4A (Arm-based Axion VMs)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/rust-on-gcp/"
+    ]
+  },
+  {
+    "question": "How do I perform Sentiment Analysis on X on Arm-based EKS clusters?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sentiment-analysis-eks/"
+    ]
+  },
+  {
+    "question": "How do I deploy AWS services using the Serverless Framework?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/serverless-framework-aws-intro/"
+    ]
+  },
+  {
+    "question": "How do I deploy and integrate AWS Lambda with DynamoDB using the Serverless Framework?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/serverless-framework-aws-lambda-dynamodb/"
+    ]
+  },
+  {
+    "question": "How do I deploy a static website to Amazon S3 and integrate with AWS Lambda and DynamoDB using the Serverless Framework?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/serverless-framework-aws-s3/"
+    ]
+  },
+  {
+    "question": "How do I measure performance of compression libraries on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/snappy/"
+    ]
+  },
+  {
+    "question": "How do I optimize the performance of Snort 3 using multithreading?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/snort3-multithreading/"
+    ]
+  },
+  {
+    "question": "How do I run Spark applications on Microsoft Azure Cobalt 100 processors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/spark-on-azure/"
+    ]
+  },
+  {
+    "question": "How do I deploy Apache Spark on Google Axion processors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/spark-on-gcp/"
+    ]
+  },
+  {
+    "question": "How do I deploy Spark on AWS Graviton2?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/spark/"
+    ]
+  },
+  {
+    "question": "How do I access running containers using Supervisor, SSH, and Remote.It?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/supervisord/"
+    ]
+  },
+  {
+    "question": "How do I port Code to Arm Scalable Vector Extension (SVE)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sve/"
+    ]
+  },
+  {
+    "question": "How do I accelerate search performance with SVE2 MATCH on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sve2-match/"
+    ]
+  },
+  {
+    "question": "How do I get ready for performance analysis with Sysreport?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sysreport/"
+    ]
+  },
+  {
+    "question": "How do I deploy TensorFlow on Google Cloud C4A (Arm-based Axion VMs)?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/tensorflow-gcp/"
+    ]
+  },
+  {
+    "question": "How do I run Text Classification with ThirdAI on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/thirdai-sentiment-analysis/"
+    ]
+  },
+  {
+    "question": "How do I deploy a live sensor dashboard with TimescaleDB and Grafana on Google Cloud C4A?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/timescaledb-on-gcp/"
+    ]
+  },
+  {
+    "question": "How do I learn the Arm Neoverse N1 performance analysis methodology?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/top-down-n1/"
+    ]
+  },
+  {
+    "question": "How do I measure and accelerate PyTorch Inference on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/torchbench/"
+    ]
+  },
+  {
+    "question": "How do I learn about Neoverse Non-cache PMU events using C and Assembly Language?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/triggering-pmu-events-2/"
+    ]
+  },
+  {
+    "question": "How do I learn about Neoverse Cache PMU Events using C and Assembly Language?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/triggering-pmu-events/"
+    ]
+  },
+  {
+    "question": "How do I scan multi-architecture containers with Trivy on Azure Cobalt 100?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/trivy-on-gcpp/"
+    ]
+  },
+  {
+    "question": "How do I tune network workloads on Arm-based bare-metal instances?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/tune-network-workloads-on-bare-metal/"
+    ]
+  },
+  {
+    "question": "How do I deploy TypeScript on Google Cloud C4A virtual machines?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/typescript-on-gcp/"
+    ]
+  },
+  {
+    "question": "How do I migrate applications that leverage performance libraries?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/using-and-porting-performance-libs/"
+    ]
+  },
+  {
+    "question": "How do I install Vectorscan (Hyperscan on Arm) and use it with Snort 3?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/vectorscan/"
+    ]
+  },
+  {
+    "question": "How do I run vLLM inference with INT4 quantization on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/vllm-acceleration/"
+    ]
+  },
+  {
+    "question": "How do I build and run vLLM on Arm Servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/vllm/"
+    ]
+  },
+  {
+    "question": "How do I run the vvenc H.266 encoder on Arm servers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/vvenc/"
+    ]
+  },
+  {
+    "question": "How do I accelerate Whisper on Arm with Hugging Face Transformers?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/whisper/"
+    ]
+  },
+  {
+    "question": "How do I deploy MySQL and WordPress on an always free tier Arm shape?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/wordpress/"
+    ]
+  },
+  {
+    "question": "How do I improve data compression performance on Arm servers with zlib-ng?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/zlib/"
+    ]
+  },
+  {
+    "question": "How do I learn and explore in the Arm Migration Toolkit learning path?",
+    "expected_urls": [
+      "https://learn.arm.com/migration"
     ]
   }
 ]
