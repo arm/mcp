@@ -533,11 +533,18 @@ def resolve_apx_ssh_mount_env() -> Dict[str, Any]:
 def extract_run_id(output: str) -> str:
     if not output:
         return ""
-    try:
-        data = json.loads(output.split("\n")[1])
-        return data.get("data", {}).get("run_id", {})
-    except Exception:
-        return ""
+    raw = output.strip()
+    candidates = [raw] if raw else []
+    candidates.extend(line.strip() for line in output.splitlines() if line.strip().startswith("{"))
+    for candidate in candidates:
+        try:
+            data = json.loads(candidate)
+            run_id = data.get("data", {}).get("run_id")
+            if run_id:
+                return run_id
+        except Exception:
+            continue
+    return ""
 
 def run_command(command: list, cwd: str, parse_output=None) -> tuple:
     """

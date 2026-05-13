@@ -69,7 +69,7 @@ jobs:
           sudo visudo -cf "/etc/sudoers.d/90-${APX_SSH_USER}-nopasswd"
 
           sudo apt-get update
-          sudo apt-get install -y openssh-server
+          sudo apt-get install -y openssh-server default-jdk-headless
           sudo mkdir -p /run/sshd
           sudo sed -i 's/^#\?PubkeyAuthentication .*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
           sudo sed -i 's/^#\?PasswordAuthentication .*/PasswordAuthentication no/' /etc/ssh/sshd_config
@@ -96,6 +96,17 @@ jobs:
             echo "APX_TEST_REMOTE_USER=${APX_SSH_USER}"
             echo "APX_TEST_REMOTE_IP=172.17.0.1"
           } >> "${GITHUB_ENV}"
+
+      - name: Prepare Java CpuBurner workload
+        run: |
+          set -euxo pipefail
+          APX_SSH_USER="apxci"
+          CPUBURNER_DIR="/home/${APX_SSH_USER}/cpuburner"
+
+          sudo -u "${APX_SSH_USER}" mkdir -p "${CPUBURNER_DIR}"
+          sudo cp mcp-local/tests/CpuBurnerOriginal.java "${CPUBURNER_DIR}/CpuBurner.java"
+          sudo chown -R "${APX_SSH_USER}:${APX_SSH_USER}" "${CPUBURNER_DIR}"
+          sudo -u "${APX_SSH_USER}" javac "${CPUBURNER_DIR}/CpuBurner.java"
 
       - name: Run integration tests
         env:
