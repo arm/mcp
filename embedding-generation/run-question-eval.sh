@@ -117,4 +117,4 @@ echo "Creating local vector store"
 "$python_bin" local_vectorstore_creation.py
 
 echo "Evaluating retrieval questions from $eval_file"
-"$python_bin" evaluate_retrieval.py --eval-path "$eval_file" --model-name "$embedding_model" --top-k "$top_k"
+"$python_bin" evaluate_local_retrieval.py --eval-path "$eval_file" --model-name "$embedding_model" --top-k "$top_k"

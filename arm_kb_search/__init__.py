@@ -13,6 +13,14 @@
 # limitations under the License.
 
 from .loaders import load_metadata, load_usearch_index
+from .evaluation import (
+    EvaluationResult,
+    RetrievalError,
+    RetrievalMiss,
+    evaluate_retrieval,
+    load_eval_rows,
+    print_evaluation,
+)
 from .search import (
     build_bm25_index,
     bm25_search,
@@ -29,10 +37,16 @@ __all__ = [
     "bm25_search",
     "deduplicate_urls",
     "embedding_search",
+    "evaluate_retrieval",
+    "EvaluationResult",
     "hybrid_search",
+    "load_eval_rows",
     "load_metadata",
     "load_usearch_index",
+    "print_evaluation",
     "rerank_candidates",
+    "RetrievalError",
+    "RetrievalMiss",
     "salient_tokens",
     "tokenize_for_search",
 ]
