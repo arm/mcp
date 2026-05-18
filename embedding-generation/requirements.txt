@@ -3,6 +3,6 @@ beautifulsoup4
 pyyaml
 usearch
 boto3
-sentence-transformers
+sentence-transformers>=5.4
 pypdf
 rank-bm25

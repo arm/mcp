@@ -22,8 +22,6 @@ DATA_DIR = os.path.join(os.path.dirname(BASE_DIR), "data")
 USEARCH_INDEX_PATH = os.path.join(DATA_DIR, "usearch_index.bin")
 METADATA_PATH = os.path.join(DATA_DIR, "metadata.json")
 MODEL_NAME = 'all-MiniLM-L6-v2'
-DISTANCE_THRESHOLD = 1.1
-K_RESULTS = 5
 
 # Docker architecture checking configuration
 TARGET_ARCHITECTURES = {'amd64', 'arm64'}

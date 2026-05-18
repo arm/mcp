@@ -13,8 +13,6 @@
 # limitations under the License.
 
 from typing import Any, Dict, List, Optional
-import json
-import os
 import re
 
 import numpy as np
@@ -55,35 +53,6 @@ def tokenize_for_search(text: str) -> List[str]:
 
 def salient_tokens(text: str) -> List[str]:
     return [token for token in tokenize_for_search(text) if token not in SEARCH_STOPWORDS]
-
-
-def load_usearch_index(index_path: str, dimension: int) -> Optional[Index]:
-    """Load USearch index from file."""
-    if not os.path.exists(index_path):
-        print(f"Error: USearch index file '{index_path}' does not exist.")
-        return None
-    if dimension <= 0:
-        print("Error: Invalid embedding dimension.")
-        return None
-    index = Index(
-        ndim=dimension,
-        metric="l2sq",
-        dtype="f32",
-        connectivity=16,
-        expansion_add=128,
-        expansion_search=64,
-    )
-    index.load(index_path)
-    return index
-
-
-def load_metadata(metadata_path: str) -> List[Dict]:
-    """Load metadata from JSON file."""
-    if not os.path.exists(metadata_path):
-        print(f"Error: Metadata file '{metadata_path}' does not exist.")
-        return []
-    with open(metadata_path, "r") as file:
-        return json.load(file)
 
 
 def build_bm25_index(metadata: List[Dict]) -> Optional[BM25Okapi]:

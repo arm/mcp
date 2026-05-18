@@ -13,12 +13,10 @@
 # limitations under the License.
 
 from fastmcp import FastMCP
-from typing import List, Dict, Any, Optional
 import os
-from sentence_transformers import SentenceTransformer
+from typing import List, Dict, Any, Optional
+import arm_kb_search
 from utils.config import METADATA_PATH, USEARCH_INDEX_PATH, MODEL_NAME, SUPPORTED_SCANNERS, DEFAULT_ARCH
-from utils.search_utils import build_bm25_index, deduplicate_urls, hybrid_search, load_metadata, load_usearch_index
-from utils.kb_response import add_disclaimer_to_arm_results
 from utils.docker_utils import check_docker_image_architectures
 from utils.apx import (
     prepare_target,
@@ -37,34 +35,12 @@ from utils.error_handling import format_tool_error
 mcp = FastMCP("arm-mcp")
 
 
-def sentence_transformer_cache_folder() -> str | None:
-    return os.getenv("SENTENCE_TRANSFORMERS_HOME") or None
-
-
-def load_embedding_model() -> SentenceTransformer:
-    try:
-        return SentenceTransformer(
-            MODEL_NAME,
-            cache_folder=sentence_transformer_cache_folder(),
-            local_files_only=True,
-        )
-    except Exception as exc:
-        print(f"Local cache miss for embedding model '{MODEL_NAME}', retrying with network access: {exc}")
-        return SentenceTransformer(
-            MODEL_NAME,
-            cache_folder=sentence_transformer_cache_folder(),
-            local_files_only=False,
-        )
-
-
 # Load USearch index and metadata at module load time
-METADATA = load_metadata(METADATA_PATH)
-EMBEDDING_MODEL = load_embedding_model()
-USEARCH_INDEX = load_usearch_index(
-    USEARCH_INDEX_PATH,
-    EMBEDDING_MODEL.get_sentence_embedding_dimension(),
+SEARCH_RESOURCES = arm_kb_search.load_search_resources(
+    metadata_path=METADATA_PATH,
+    usearch_index_path=USEARCH_INDEX_PATH,
+    model_name=MODEL_NAME,
 )
-BM25_INDEX = build_bm25_index(METADATA)
 
 
 # error formatter now lives in utils/error_handling.py
@@ -90,23 +66,7 @@ def knowledge_base_search(query: str, invocation_reason: Optional[str] = None) -
         List of dictionaries with metadata including url and text snippets.
     """
     try:
-        search_results = hybrid_search(query, USEARCH_INDEX, METADATA, EMBEDDING_MODEL, BM25_INDEX)
-        deduped = deduplicate_urls(search_results)
-        # Only return the relevant fields
-        formatted = [
-            {
-                "url": item["metadata"].get("url"),
-                "snippet": item["metadata"].get("original_text", item["metadata"].get("content", "")),
-                "title": item["metadata"].get("title", ""),
-                "heading": item["metadata"].get("heading", ""),
-                "doc_type": item["metadata"].get("doc_type", ""),
-                "product": item["metadata"].get("product", ""),
-                "distance": item.get("distance"),
-                "score": item.get("rerank_score", item.get("rrf_score")),
-            }
-            for item in deduped
-        ]
-        return add_disclaimer_to_arm_results(formatted)
+        return arm_kb_search.search(query, SEARCH_RESOURCES)
     except Exception as e:
         return format_tool_error(
             tool="knowledge_base_search",

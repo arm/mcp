@@ -1,9 +1,8 @@
-"""Run a small retrieval evaluation over the local metadata and index."""
+"""Run a retrieval evaluation over the local metadata and index."""
 
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from pathlib import Path
@@ -12,11 +11,11 @@ from sentence_transformers import SentenceTransformer
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-MCP_LOCAL_DIR = REPO_ROOT / "mcp-local"
-if str(MCP_LOCAL_DIR) not in sys.path:
-    sys.path.insert(0, str(MCP_LOCAL_DIR))
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-from utils.search_utils import build_bm25_index, deduplicate_urls, hybrid_search, load_metadata, load_usearch_index  # noqa: E402
+from arm_kb_search import build_bm25_index, deduplicate_urls, hybrid_search, load_metadata, load_usearch_index  # noqa: E402
+from arm_kb_search.evaluation import evaluate_retrieval, load_eval_rows, print_evaluation  # noqa: E402
 
 
 def sentence_transformer_cache_folder() -> str | None:
@@ -36,22 +35,14 @@ def evaluate(index_path: Path, metadata_path: Path, eval_path: Path, model_name:
     )
     usearch_index = load_usearch_index(
         str(index_path),
-        embedding_model.get_sentence_embedding_dimension(),
+        embedding_model.get_embedding_dimension(),
     )
     bm25_index = build_bm25_index(metadata)
+    eval_rows = load_eval_rows(eval_path)
 
-    with eval_path.open() as file:
-        eval_rows = json.load(file)
-
-    hits_at_1 = 0
-    hits_at_3 = 0
-    hits_at_5 = 0
-    reciprocal_ranks = []
-    misses = []
-
-    for row in eval_rows:
+    def retrieve_urls(question: str, top_k: int) -> list[str | None]:
         raw_results = hybrid_search(
-            row["question"],
+            question,
             usearch_index,
             metadata,
             embedding_model,
@@ -59,45 +50,11 @@ def evaluate(index_path: Path, metadata_path: Path, eval_path: Path, model_name:
             k=top_k,
         )
         results = deduplicate_urls(raw_results, max_chunks_per_url=1)[:top_k]
-        ranked_urls = [item["metadata"].get("url") for item in results]
-        expected = set(row["expected_urls"])
+        return [item["metadata"].get("url") for item in results]
 
-        match_rank = None
-        for index, url in enumerate(ranked_urls, start=1):
-            if url in expected:
-                match_rank = index
-                break
-
-        if match_rank == 1:
-            hits_at_1 += 1
-        if match_rank is not None and match_rank <= 3:
-            hits_at_3 += 1
-        if match_rank is not None and match_rank <= 5:
-            hits_at_5 += 1
-        reciprocal_ranks.append(0 if match_rank is None else 1 / match_rank)
-
-        if match_rank is None:
-            misses.append(
-                {
-                    "question": row["question"],
-                    "expected_urls": row["expected_urls"],
-                    "ranked_urls": ranked_urls,
-                }
-            )
-
-    total = len(eval_rows)
-    print(f"Questions: {total}")
-    print(f"Hit@1: {hits_at_1 / total:.2%}")
-    print(f"Hit@3: {hits_at_3 / total:.2%}")
-    print(f"Hit@5: {hits_at_5 / total:.2%}")
-    print(f"MRR: {sum(reciprocal_ranks) / total:.3f}")
-    print(f"Misses: {len(misses)}")
-    for miss in misses[:10]:
-        print()
-        print(f"Q: {miss['question']}")
-        print(f"Expected: {miss['expected_urls']}")
-        print(f"Got: {miss['ranked_urls']}")
-    return 0
+    result = evaluate_retrieval(eval_rows, retrieve_urls, top_k)
+    print_evaluation(result)
+    return 1 if result.errors else 0
 
 
 def main() -> int:

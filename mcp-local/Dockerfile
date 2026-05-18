@@ -100,6 +100,7 @@ COPY --from=embeddings /embedding-data/metadata.json ./data/metadata.json
 COPY --from=embeddings /embedding-data/usearch_index.bin ./data/usearch_index.bin
 
 COPY mcp-local/utils/ ./utils/
+COPY arm_kb_search/ ./arm_kb_search/
 COPY mcp-local/sql ./sql/
 COPY mcp-local/server.py .
 
