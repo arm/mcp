@@ -14,6 +14,7 @@
 
 from .loaders import load_metadata, load_usearch_index
 from .evaluation import (
+    EvaluationCaseResult,
     EvaluationResult,
     RetrievalError,
     RetrievalMiss,
@@ -52,6 +53,7 @@ __all__ = [
     "deduplicate_urls",
     "embedding_search",
     "evaluate_retrieval",
+    "EvaluationCaseResult",
     "EvaluationResult",
     "hybrid_search",
     "is_arm_domain_url",

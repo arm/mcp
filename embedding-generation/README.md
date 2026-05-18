@@ -49,7 +49,7 @@ Run the full local question eval:
 ./run-question-eval.sh
 ```
 
-That command copies intrinsic chunks from the embedding base image if needed, regenerates chunks, caches the embedding model if needed, rebuilds the local USearch index, and runs `evaluate_local_retrieval.py`.
+That command copies intrinsic chunks from the embedding base image if needed, regenerates chunks, caches the embedding model if needed, rebuilds the local USearch index, and runs `evaluate_retrieval.py`.
 
 Useful options:
 

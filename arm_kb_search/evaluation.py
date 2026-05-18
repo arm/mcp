@@ -38,12 +38,36 @@ class RetrievalError:
 
 
 @dataclass
+class EvaluationCaseResult:
+    question_id: str
+    question: str
+    expected_urls: list[str]
+    ranked_urls: list[str | None]
+    match_rank: int | None
+    reciprocal_rank: float
+    error: str | None = None
+
+    @property
+    def hit_at_1(self) -> bool:
+        return self.match_rank == 1
+
+    @property
+    def hit_at_3(self) -> bool:
+        return self.match_rank is not None and self.match_rank <= 3
+
+    @property
+    def hit_at_5(self) -> bool:
+        return self.match_rank is not None and self.match_rank <= 5
+
+
+@dataclass
 class EvaluationResult:
     total: int
     hits_at_1: int
     hits_at_3: int
     hits_at_5: int
     reciprocal_ranks: list[float]
+    cases: list[EvaluationCaseResult]
     misses: list[RetrievalMiss]
     errors: list[RetrievalError]
 
@@ -77,18 +101,22 @@ def evaluate_retrieval(eval_rows: list[EvalRow], retrieve_urls: RetrieveUrls, to
     hits_at_3 = 0
     hits_at_5 = 0
     reciprocal_ranks = []
+    cases = []
     misses = []
     errors = []
 
     for row in eval_rows:
+        question_id = str(row.get("id") or row["question"])
         question = str(row["question"])
         expected_urls = list(row["expected_urls"])
+        error = None
 
         try:
             ranked_urls = retrieve_urls(question, top_k)[:top_k]
         except Exception as exc:
             ranked_urls = []
-            errors.append(RetrievalError(question=question, error=str(exc)))
+            error = str(exc)
+            errors.append(RetrievalError(question=question, error=error))
 
         expected = set(expected_urls)
         match_rank = None
@@ -103,7 +131,19 @@ def evaluate_retrieval(eval_rows: list[EvalRow], retrieve_urls: RetrieveUrls, to
             hits_at_3 += 1
         if match_rank is not None and match_rank <= 5:
             hits_at_5 += 1
-        reciprocal_ranks.append(0 if match_rank is None else 1 / match_rank)
+        reciprocal_rank = 0 if match_rank is None else 1 / match_rank
+        reciprocal_ranks.append(reciprocal_rank)
+        cases.append(
+            EvaluationCaseResult(
+                question_id=question_id,
+                question=question,
+                expected_urls=expected_urls,
+                ranked_urls=ranked_urls,
+                match_rank=match_rank,
+                reciprocal_rank=reciprocal_rank,
+                error=error,
+            )
+        )
 
         if match_rank is None:
             misses.append(
@@ -120,6 +160,7 @@ def evaluate_retrieval(eval_rows: list[EvalRow], retrieve_urls: RetrieveUrls, to
         hits_at_3=hits_at_3,
         hits_at_5=hits_at_5,
         reciprocal_ranks=reciprocal_ranks,
+        cases=cases,
         misses=misses,
         errors=errors,
     )
