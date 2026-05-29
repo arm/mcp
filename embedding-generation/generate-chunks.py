@@ -613,6 +613,7 @@ def getDeveloperArmComSearchResults(searchterm: str, searchurl: str, maxitems: i
             "title": item.get("title") or item.get("raw", {}).get("title"),
             "url": item.get("clickUri") or item.get("uri") or item.get("url"),
             "type": item.get("raw", {}).get("navigationhierarchiescontenttype"),
+            "author": item.get("raw", {}).get("author") or item.get("raw", {}).get("sysauthor"),
             "products": item.get("raw", {}).get("navigationhierarchiesproducts"),
             "objecttype": item.get("raw", {}).get("objecttype"),
             "keywords": item.get("raw", {}).get("navigationhierarchiestopics")
@@ -696,25 +697,64 @@ def processDeveloperArmCom(url, title, type, keywords, emit_chunks=True):
     )
     chunkizeLearningPath(url,itemtitle,keywords)
 
+def item_is_relevant(item) -> bool:
+    match item["type"]:
+        case "Guide":
+            return item["title"] in {
+                    "What is SME/SME2?",
+                    "Overview of SME",
+                    "Assembly code",
+                    "Streaming SVE",
+                    "Load and Store",
+                    "Z registers",
+                    "Real world examples",
+                    "ZA storage",
+                    "Predication"
+            }
+
+        case "Programmer's Guide":
+            for pattern in {
+                r"/SME-Overview/",
+                r"/CME",
+                r"/matmul-fp32",
+                r"/lut-gemv-rm-int8",
+                r"/matmul-int8",
+                r"/gemv-cm-int8.+/",
+                r"/109246/.*/Introduction(\?|/The.+/)",
+                r"/Introduction-to-CME",
+                r"/Toolchains-and-model-support/(?!Quick-start)",
+                r"/Memory-access.(?!Implications)",
+                r"/Performance-monitoring",
+                r"/Matrix-Multiply-Unit"
+            }:
+                if re.search(pattern, item["url"]):
+                    return True
+            return False
+
+        case "Blog Post":
+            if item["author"] in {"Zenon_Xiu","KhalidS"} and item["title"][0:4] == "Part" and "SME" in item["title"]:
+                return True
+            if item["author"] == "mweidmann" and item["title"][0:41] == "Introducing the Scalable Matrix Extension":
+                return True
+            return False
+
 def createDeveloperArmComChunks(emit_chunks=True):
     search_base = "https://developer.arm.com/search#numberOfResults=48&f-navigationhierarchiescontenttype="
     content_types = [
-        "Blog Post"
-        "Developer Guide",
+        "Blog Post",
         "Guide",
-        "Programmer's Guide",
-        "Migration Guide",
-        "Getting Started Guide"
+        "Programmer's Guide"
     ]
 
     search_url = search_base+",".join([quote(x) for x in content_types])+"&q="
     for searchterm in ["SME"]:
         pages = getDeveloperArmComSearchResults(searchterm, search_url+searchterm)
-        for i, page in enumerate(pages):
-            keywords =  list(set( [searchterm] +
-                                  [key for key_list in (page["keywords"] or []) for key in key_list.split(sep="|")] +
-                                  [key for key_list in (page["products"] or []) for key in key_list.split(sep="|")[2:]]))
-            processDeveloperArmCom(page["url"], page["title"], page["type"], keywords, emit_chunks=emit_chunks)
+        for page in pages:
+            if item_is_relevant(page):
+                keywords =  list(set( [searchterm] +
+                                    [key for key_list in (page["keywords"] or []) for key in key_list.split(sep="|")] +
+                                    [key for key_list in (page["products"] or []) for key in key_list.split(sep="|")[2:]]))
+                processDeveloperArmCom(page["url"], page["title"], page["type"], keywords, emit_chunks=emit_chunks)
 
 
 
