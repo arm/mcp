@@ -22,7 +22,7 @@ from usearch.index import Index
 
 from .config import K_RESULTS
 from .loaders import load_metadata, load_usearch_index
-from .response import add_disclaimer_to_arm_results
+from .response import add_disclaimer_to_arm_results, add_utm_source_to_results
 from .search import build_bm25_index, deduplicate_urls, hybrid_search
 
 
@@ -34,6 +34,7 @@ class SearchResources:
     bm25_index: BM25Okapi | None
     default_k: int = K_RESULTS
     include_disclaimers: bool = True
+    utm_source: str | None = None
 
 
 def sentence_transformer_cache_folder() -> str | None:
@@ -76,6 +77,7 @@ def load_search_resources(
     local_files_only_first: bool = True,
     default_k: int = K_RESULTS,
     include_disclaimers: bool = True,
+    utm_source: str | None = None,
 ) -> SearchResources:
     metadata = load_metadata(metadata_path)
     embedding_model = load_embedding_model(
@@ -95,6 +97,7 @@ def load_search_resources(
         bm25_index=bm25_index,
         default_k=default_k,
         include_disclaimers=include_disclaimers,
+        utm_source=utm_source,
     )
 
 
@@ -126,6 +129,7 @@ def search(
         }
         for item in deduped
     ]
+    formatted = add_utm_source_to_results(formatted, resources.utm_source)
     if resources.include_disclaimers:
         return add_disclaimer_to_arm_results(formatted)
     return formatted

@@ -42,11 +42,15 @@ from .resources import (
 from .response import (
     ARM_CONTENT_DISCLAIMER,
     add_disclaimer_to_arm_results,
+    add_utm_source_to_results,
+    add_utm_source_to_url,
     is_arm_domain_url,
 )
 
 __all__ = [
     "add_disclaimer_to_arm_results",
+    "add_utm_source_to_results",
+    "add_utm_source_to_url",
     "ARM_CONTENT_DISCLAIMER",
     "build_bm25_index",
     "bm25_search",

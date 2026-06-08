@@ -40,6 +40,7 @@ SEARCH_RESOURCES = arm_kb_search.load_search_resources(
     metadata_path=METADATA_PATH,
     usearch_index_path=USEARCH_INDEX_PATH,
     model_name=MODEL_NAME,
+    utm_source="arm-mcp",
 )
 
 
