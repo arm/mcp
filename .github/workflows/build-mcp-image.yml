@@ -97,17 +97,27 @@ jobs:
         env:
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
+          IS_MAIN: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
+          # Only publish the stable latest/version tags from main, to avoid
+          # overwriting them with images built from other branches.
+          if [ "${IS_MAIN}" = "true" ]; then
+            STABLE_TAG_ARGS="-t armlimited/arm-mcp:latest -t armlimited/arm-mcp:${TAG_VERSION}"
+            STABLE_TAG_DESC="latest, ${TAG_VERSION}"
+          else
+            STABLE_TAG_ARGS=""
+            STABLE_TAG_DESC="(skipped: not main)"
+          fi
+
           if [ "${DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would create manifest tags: ${BUILD_DATE}, latest, ${TAG_VERSION}"
+            echo "[dry-run] Would create manifest tags: ${BUILD_DATE}, ${STABLE_TAG_DESC}"
             echo "[dry-run] from sources: ${BUILD_DATE}-amd64, ${BUILD_DATE}-arm64"
             exit 0
           fi
           docker buildx imagetools create \
             -t armlimited/arm-mcp:${BUILD_DATE} \
-            -t armlimited/arm-mcp:latest \
-            -t armlimited/arm-mcp:${TAG_VERSION} \
+            ${STABLE_TAG_ARGS} \
             armlimited/arm-mcp:${BUILD_DATE}-amd64 \
             armlimited/arm-mcp:${BUILD_DATE}-arm64
 
