@@ -112,7 +112,7 @@ jobs:
             armlimited/arm-mcp:${BUILD_DATE}-arm64
 
       - name: Create and push matching git tag
-        if: ${{ github.ref == 'refs/heads/main' }}
+        if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}
         env:
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
