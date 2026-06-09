@@ -116,14 +116,15 @@ jobs:
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
+          GIT_TAG="v${TAG_VERSION}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git rev-parse -q --verify "refs/tags/${TAG_VERSION}" >/dev/null; then
-            echo "Git tag ${TAG_VERSION} already exists; skipping."
+          if git rev-parse -q --verify "refs/tags/${GIT_TAG}" >/dev/null; then
+            echo "Git tag ${GIT_TAG} already exists; skipping."
           elif [ "${DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would create and push git tag ${TAG_VERSION}."
+            echo "[dry-run] Would create and push git tag ${GIT_TAG}."
           else
-            git tag -a "${TAG_VERSION}" -m "Release ${TAG_VERSION} (matches Docker Hub armlimited/arm-mcp:${TAG_VERSION})"
-            git push origin "refs/tags/${TAG_VERSION}"
-            echo "Created and pushed git tag ${TAG_VERSION}."
+            git tag -a "${GIT_TAG}" -m "Release ${GIT_TAG} (matches Docker Hub armlimited/arm-mcp:${TAG_VERSION})"
+            git push origin "refs/tags/${GIT_TAG}"
+            echo "Created and pushed git tag ${GIT_TAG}."
           fi
