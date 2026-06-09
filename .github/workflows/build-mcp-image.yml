@@ -5,6 +5,11 @@ on:
     workflows: ["Build Embeddings Image"]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build without pushing images, manifests, or git tags"
+        type: boolean
+        default: false
 
 jobs:
   build-arch-images:
@@ -55,7 +60,7 @@ jobs:
           context: .
           file: mcp-local/Dockerfile
           platforms: ${{ matrix.platform }}
-          push: true
+          push: ${{ github.event.inputs.dry_run != 'true' }}
           tags: armlimited/arm-mcp:${{ env.BUILD_DATE }}-${{ matrix.tag }}
           build-args: |
             EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-latest
@@ -64,10 +69,15 @@ jobs:
     needs: build-arch-images
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
+      contents: write
       packages: write
     if: ${{ needs.build-arch-images.result == 'success' }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -77,11 +87,43 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Determine version tag
+        id: version
+        run: |
+          TAG_VERSION="2.2.0"
+          echo "tag_version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Create multi-arch manifest for date tag
         env:
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
+          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "[dry-run] Would create manifest tags: ${BUILD_DATE}, latest, ${TAG_VERSION}"
+            echo "[dry-run] from sources: ${BUILD_DATE}-amd64, ${BUILD_DATE}-arm64"
+            exit 0
+          fi
           docker buildx imagetools create \
-            -t armlimited/arm-mcp:${{ env.BUILD_DATE }} \
-            armlimited/arm-mcp:${{ env.BUILD_DATE }}-amd64 \
-            armlimited/arm-mcp:${{ env.BUILD_DATE }}-arm64
+            -t armlimited/arm-mcp:${BUILD_DATE} \
+            -t armlimited/arm-mcp:latest \
+            -t armlimited/arm-mcp:${TAG_VERSION} \
+            armlimited/arm-mcp:${BUILD_DATE}-amd64 \
+            armlimited/arm-mcp:${BUILD_DATE}-arm64
+
+      - name: Create and push matching git tag
+        env:
+          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git rev-parse -q --verify "refs/tags/${TAG_VERSION}" >/dev/null; then
+            echo "Git tag ${TAG_VERSION} already exists; skipping."
+          elif [ "${DRY_RUN}" = "true" ]; then
+            echo "[dry-run] Would create and push git tag ${TAG_VERSION}."
+          else
+            git tag -a "${TAG_VERSION}" -m "Release ${TAG_VERSION} (matches Docker Hub armlimited/arm-mcp:${TAG_VERSION})"
+            git push origin "refs/tags/${TAG_VERSION}"
+            echo "Created and pushed git tag ${TAG_VERSION}."
+          fi
