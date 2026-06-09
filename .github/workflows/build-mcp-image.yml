@@ -76,6 +76,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          # For workflow_run triggers, check out the exact commit the upstream
+          # build ran on (head_sha) so created git tags point at the build input
+          # commit, not whatever later landed on the default branch. Falls back
+          # to the default ref for other triggers (e.g. workflow_dispatch).
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
       - name: Set up Docker Buildx
