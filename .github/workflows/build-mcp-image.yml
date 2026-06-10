@@ -33,6 +33,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # For workflow_run triggers, build from the exact commit the upstream
+          # run used (head_sha) so images, manifests, and git tags all reference
+          # the same commit. Falls back to the default ref for other triggers.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set build date (UTC)
         id: build_date
@@ -60,7 +65,9 @@ jobs:
           context: .
           file: mcp-local/Dockerfile
           platforms: ${{ matrix.platform }}
-          push: ${{ github.event.inputs.dry_run != 'true' }}
+          # Skip pushing on dry runs. Handle dry_run surfaced as either a boolean
+          # (true) or a string ('true'); push only when it is neither.
+          push: ${{ !(github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true') }}
           tags: armlimited/arm-mcp:${{ env.BUILD_DATE }}-${{ matrix.tag }}
           build-args: |
             EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-latest
