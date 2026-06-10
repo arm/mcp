@@ -4,12 +4,19 @@ on:
   workflow_run:
     workflows: ["Build Embeddings Image"]
     types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       dry_run:
         description: "Build without pushing images, manifests, or git tags"
         type: boolean
         default: false
+
+# Serialize runs so overlapping builds can't race on computing/publishing the
+# same auto-incremented version (alias + git tag).
+concurrency:
+  group: build-mcp-image
+  cancel-in-progress: false
 
 jobs:
   build-arch-images:
@@ -99,55 +106,123 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Determine version tag
-        id: version
-        run: |
-          TAG_VERSION="2.2.0"
-          echo "tag_version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
-
       - name: Create multi-arch manifest for date tag
         env:
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
-          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
-          IS_MAIN: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
-          # Only publish the stable latest/version tags from main, to avoid
-          # overwriting them with images built from other branches.
-          if [ "${IS_MAIN}" = "true" ]; then
-            STABLE_TAG_ARGS="-t armlimited/arm-mcp:latest -t armlimited/arm-mcp:${TAG_VERSION}"
-            STABLE_TAG_DESC="latest, ${TAG_VERSION}"
-          else
-            STABLE_TAG_ARGS=""
-            STABLE_TAG_DESC="(skipped: not main)"
-          fi
-
+          # Publish only the immutable date tag here. The stable latest/version
+          # aliases are added later, once this merged manifest is verified.
           if [ "${DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would create manifest tags: ${BUILD_DATE}, ${STABLE_TAG_DESC}"
+            echo "[dry-run] Would create date manifest tag: ${BUILD_DATE}"
             echo "[dry-run] from sources: ${BUILD_DATE}-amd64, ${BUILD_DATE}-arm64"
             exit 0
           fi
           docker buildx imagetools create \
             -t armlimited/arm-mcp:${BUILD_DATE} \
-            ${STABLE_TAG_ARGS} \
             armlimited/arm-mcp:${BUILD_DATE}-amd64 \
             armlimited/arm-mcp:${BUILD_DATE}-arm64
 
+      - name: Verify date-tagged manifest
+        env:
+          BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "[dry-run] Would inspect manifest armlimited/arm-mcp:${BUILD_DATE}"
+            exit 0
+          fi
+          echo "Inspecting armlimited/arm-mcp:${BUILD_DATE} ..."
+          INSPECT=$(docker buildx imagetools inspect armlimited/arm-mcp:${BUILD_DATE})
+          echo "${INSPECT}"
+          # Fail if either architecture is missing from the merged manifest, so
+          # latest/version aliases are never applied to a broken image.
+          for arch in amd64 arm64; do
+            if ! echo "${INSPECT}" | grep -q "linux/${arch}"; then
+              echo "::error::Manifest armlimited/arm-mcp:${BUILD_DATE} is missing linux/${arch}."
+              exit 1
+            fi
+          done
+          echo "Verified: date manifest contains linux/amd64 and linux/arm64."
+
+      - name: Determine version tag
+        id: version
+        run: |
+          # Auto-increment the minor version in 2.X.0 based on existing git tags.
+          # Find the highest existing v2.<minor>.0 tag and bump <minor> by one.
+          # Falls back to 2.0.0 when no matching tag exists yet.
+          MAX_MINOR=-1
+          for t in $(git tag -l 'v2.*.0'); do
+            minor=$(echo "$t" | sed -E 's/^v2\.([0-9]+)\.0$/\1/')
+            # Skip tags that don't match the exact v2.<int>.0 shape.
+            case "$minor" in
+              ''|*[!0-9]*) continue ;;
+            esac
+            if [ "$minor" -gt "$MAX_MINOR" ]; then
+              MAX_MINOR="$minor"
+            fi
+          done
+          NEXT_MINOR=$((MAX_MINOR + 1))
+          TAG_VERSION="2.${NEXT_MINOR}.0"
+          echo "Next version tag: ${TAG_VERSION}"
+          echo "tag_version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Add latest and version aliases to verified date tag
+        if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}
+        env:
+          BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
+          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          # Alias the already-verified date tag as latest and the version tag.
+          # imagetools create copies the manifest, so these point at the exact
+          # digest that was verified above.
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "[dry-run] Would alias armlimited/arm-mcp:${BUILD_DATE} as latest and ${TAG_VERSION}"
+            exit 0
+          fi
+          docker buildx imagetools create \
+            -t armlimited/arm-mcp:latest \
+            -t armlimited/arm-mcp:${TAG_VERSION} \
+            armlimited/arm-mcp:${BUILD_DATE}
+          echo "Aliased ${BUILD_DATE} as latest and ${TAG_VERSION}."
+
       - name: Create and push matching git tag
+        id: gittag
         if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}
         env:
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
           GIT_TAG="v${TAG_VERSION}"
+          echo "git_tag=${GIT_TAG}" >> "$GITHUB_OUTPUT"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           if git rev-parse -q --verify "refs/tags/${GIT_TAG}" >/dev/null; then
             echo "Git tag ${GIT_TAG} already exists; skipping."
+            echo "created=false" >> "$GITHUB_OUTPUT"
           elif [ "${DRY_RUN}" = "true" ]; then
             echo "[dry-run] Would create and push git tag ${GIT_TAG}."
+            echo "created=false" >> "$GITHUB_OUTPUT"
           else
             git tag -a "${GIT_TAG}" -m "Release ${GIT_TAG} (matches Docker Hub armlimited/arm-mcp:${TAG_VERSION})"
             git push origin "refs/tags/${GIT_TAG}"
             echo "Created and pushed git tag ${GIT_TAG}."
+            echo "created=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Create GitHub Release with changelog
+        if: ${{ steps.gittag.outputs.created == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_TAG: ${{ steps.gittag.outputs.git_tag }}
+          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
+          BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
+        run: |
+          # Auto-generate release notes (changelog) from merged PRs/commits since
+          # the previous tag, prepended with the matching Docker image reference.
+          gh release create "${GIT_TAG}" \
+            --title "${GIT_TAG}" \
+            --generate-notes \
+            --notes "Docker image: \`armlimited/arm-mcp:${TAG_VERSION}\` (built ${BUILD_DATE})"
+          echo "Created GitHub Release ${GIT_TAG}."
