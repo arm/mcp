@@ -85,6 +85,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      pull-requests: write
     if: ${{ needs.build-arch-images.result == 'success' }}
     steps:
       - name: Checkout
@@ -226,3 +227,86 @@ jobs:
             --generate-notes \
             --notes "Docker image: \`armlimited/arm-mcp:${TAG_VERSION}\` (built ${BUILD_DATE})"
           echo "Created GitHub Release ${GIT_TAG}."
+
+      - name: Update server.json version
+        if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          # Bump mcp-local/server.json to the computed version (top-level
+          # "version" + OCI package "identifier" docker tag) and open a PR
+          # against main. PR-based so it works with branch protection; the bump
+          # is always rebased onto the latest origin/main, with push retries to
+          # tolerate concurrent updates.
+          SERVER_JSON="mcp-local/server.json"
+          BUMP_BRANCH="chore/bump-server-json-${TAG_VERSION}"
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "[dry-run] Would bump ${SERVER_JSON} to ${TAG_VERSION} and open a PR from ${BUMP_BRANCH} to main"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          apply_bump() {
+            # Re-create the bump branch from the freshest origin/main and apply
+            # the edit on top, so we never carry a stale base.
+            git fetch origin main
+            git checkout -B "${BUMP_BRANCH}" origin/main
+            tmp="$(mktemp)"
+            jq --arg v "${TAG_VERSION}" '
+              .version = $v
+              | .packages |= map(
+                  if (.identifier // "") | startswith("docker.io/armlimited/arm-mcp:")
+                  then .identifier = "docker.io/armlimited/arm-mcp:\($v)"
+                  else . end
+                )
+            ' "${SERVER_JSON}" > "${tmp}"
+            mv "${tmp}" "${SERVER_JSON}"
+          }
+
+          apply_bump
+          if git diff --quiet -- "${SERVER_JSON}"; then
+            echo "${SERVER_JSON} already at version ${TAG_VERSION} on main; nothing to do."
+            exit 0
+          fi
+          echo "Updated ${SERVER_JSON} to version ${TAG_VERSION}:"
+          cat "${SERVER_JSON}"
+          git add "${SERVER_JSON}"
+          git commit -m "chore: bump server.json to ${TAG_VERSION} [skip ci]"
+
+          # Push the bump branch, retrying with a fresh rebase if origin/main moved.
+          pushed=false
+          for attempt in 1 2 3; do
+            if git push --force-with-lease origin "${BUMP_BRANCH}"; then
+              pushed=true
+              break
+            fi
+            echo "Push attempt ${attempt} failed; rebasing onto latest origin/main and retrying..."
+            apply_bump
+            git add "${SERVER_JSON}"
+            git commit -m "chore: bump server.json to ${TAG_VERSION} [skip ci]" || true
+          done
+          if [ "${pushed}" != "true" ]; then
+            echo "::error::Failed to push ${BUMP_BRANCH} after multiple attempts."
+            exit 1
+          fi
+
+          # Open a PR if one doesn't already exist for this branch.
+          if gh pr view "${BUMP_BRANCH}" >/dev/null 2>&1; then
+            echo "PR for ${BUMP_BRANCH} already exists; updated branch only."
+          else
+            # NOTE: gh pr create uses GITHUB_TOKEN. This requires the org/repo
+            # setting "Allow GitHub Actions to create and approve pull requests"
+            # (Settings > Actions > General > Workflow permissions) to be enabled.
+            # If it is disabled, replace GH_TOKEN with a PAT or GitHub App token
+            # that has pull-requests: write.
+            gh pr create \
+              --base main \
+              --head "${BUMP_BRANCH}" \
+              --title "chore: bump server.json to ${TAG_VERSION}" \
+              --body "Automated bump of \`${SERVER_JSON}\` to version \`${TAG_VERSION}\` (matches Docker Hub \`armlimited/arm-mcp:${TAG_VERSION}\`)."
+            echo "Opened PR to bump ${SERVER_JSON} to ${TAG_VERSION}."
+          fi
