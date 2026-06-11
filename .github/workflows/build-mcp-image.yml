@@ -7,6 +7,13 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      bump_type:
+        description: "Manual version bump: major (X.0.0) or hotfix (x.y.Z). Minor (x.Y.0) is automatic on knowledge-base rebuilds."
+        type: choice
+        options:
+          - major
+          - hotfix
+        default: major
       dry_run:
         description: "Build without pushing images, manifests, or git tags"
         type: boolean
@@ -148,24 +155,56 @@ jobs:
 
       - name: Determine version tag
         id: version
+        env:
+          # Minor bumps are automatic (workflow_run knowledge-base rebuilds).
+          # Manual runs must choose major or hotfix via the bump_type input.
+          BUMP_TYPE: ${{ github.event_name == 'workflow_run' && 'minor' || github.event.inputs.bump_type }}
         run: |
-          # Auto-increment the minor version in 2.X.0 based on existing git tags.
-          # Find the highest existing v2.<minor>.0 tag and bump <minor> by one.
-          # Falls back to 2.0.0 when no matching tag exists yet.
-          MAX_MINOR=-1
-          for t in $(git tag -l 'v2.*.0'); do
-            minor=$(echo "$t" | sed -E 's/^v2\.([0-9]+)\.0$/\1/')
-            # Skip tags that don't match the exact v2.<int>.0 shape.
-            case "$minor" in
-              ''|*[!0-9]*) continue ;;
-            esac
-            if [ "$minor" -gt "$MAX_MINOR" ]; then
-              MAX_MINOR="$minor"
-            fi
+          # Docker Hub is the source of truth for versions. Find the highest
+          # X.Y.Z tag published on armlimited/arm-mcp and bump from it:
+          #   minor  -> x.(Y+1).0   (default; used by automatic KB rebuilds)
+          #   major  -> (X+1).0.0
+          #   hotfix -> x.y.(Z+1)
+          # Docker Hub tags are unprefixed (e.g. 2.2.0). Paginate the tags API
+          # and keep the highest semver-shaped tag.
+          MAX_MAJOR=0; MAX_MINOR=0; MAX_PATCH=0
+          echo "Querying Docker Hub for the highest X.Y.Z tag..."
+          url="https://hub.docker.com/v2/repositories/armlimited/arm-mcp/tags?page_size=100"
+          while [ -n "${url}" ] && [ "${url}" != "null" ]; do
+            resp="$(curl -fsSL "${url}")" || { echo "::error::Docker Hub tags query failed."; exit 1; }
+            for ver in $(echo "${resp}" | jq -r '.results[].name | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))'); do
+              maj="${ver%%.*}"; rest="${ver#*.}"; min="${rest%%.*}"; pat="${rest##*.}"
+              key=$((maj * 1000000 + min * 1000 + pat))
+              maxkey=$((MAX_MAJOR * 1000000 + MAX_MINOR * 1000 + MAX_PATCH))
+              if [ "$key" -gt "$maxkey" ]; then
+                MAX_MAJOR=$maj; MAX_MINOR=$min; MAX_PATCH=$pat
+              fi
+            done
+            url="$(echo "${resp}" | jq -r '.next')"
           done
-          NEXT_MINOR=$((MAX_MINOR + 1))
-          TAG_VERSION="2.${NEXT_MINOR}.0"
-          echo "Next version tag: ${TAG_VERSION}"
+
+          BUMP_TYPE="${BUMP_TYPE:-minor}"
+          case "${BUMP_TYPE}" in
+            major)  TAG_VERSION="$((MAX_MAJOR + 1)).0.0" ;;
+            minor)  TAG_VERSION="${MAX_MAJOR}.$((MAX_MINOR + 1)).0" ;;
+            hotfix) TAG_VERSION="${MAX_MAJOR}.${MAX_MINOR}.$((MAX_PATCH + 1))" ;;
+            *) echo "::error::Unknown bump_type '${BUMP_TYPE}'."; exit 1 ;;
+          esac
+
+          echo "Highest Docker Hub version: ${MAX_MAJOR}.${MAX_MINOR}.${MAX_PATCH}"
+          echo "Next (${BUMP_TYPE}) version tag: ${TAG_VERSION}"
+          echo "tag_version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
+
+          BUMP_TYPE="${BUMP_TYPE:-minor}"
+          case "${BUMP_TYPE}" in
+            major)  TAG_VERSION="$((MAX_MAJOR + 1)).0.0" ;;
+            minor)  TAG_VERSION="${MAX_MAJOR}.$((MAX_MINOR + 1)).0" ;;
+            hotfix) TAG_VERSION="${MAX_MAJOR}.${MAX_MINOR}.$((MAX_PATCH + 1))" ;;
+            *) echo "::error::Unknown bump_type '${BUMP_TYPE}'."; exit 1 ;;
+          esac
+
+          echo "Highest existing version: ${MAX_MAJOR}.${MAX_MINOR}.${MAX_PATCH}"
+          echo "Next (${BUMP_TYPE}) version tag: ${TAG_VERSION}"
           echo "tag_version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Add latest and version aliases to verified date tag
