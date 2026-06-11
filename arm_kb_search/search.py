@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 import re
 
 import numpy as np
@@ -25,6 +25,8 @@ from .config import DISTANCE_THRESHOLD, K_RESULTS
 
 SEARCH_TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_\-+.]*", re.IGNORECASE)
 RRF_K = 60
+LEXICAL_PREPASS_DEPTH = 400
+PINNED_LEXICAL_CANDIDATES = 20
 SEARCH_STOPWORDS = {
     "a", "an", "and", "are", "be", "better", "can", "configured", "configuration", "for",
     "called", "how", "i", "improve", "in", "is", "it", "of", "on", "or", "out", "performance", "processor",
@@ -45,6 +47,28 @@ REFERENCE_ARCHITECTURE_INTENT_TOKENS = {
 TUTORIAL_INTENT_TOKENS = {
     "how", "install", "migration", "migrate", "port", "porting", "setup", "tutorial",
 }
+SUPPORT_INTENT_TOKENS = {
+    "available", "availability", "capable", "capabilities", "capability", "compatible",
+    "compatibility", "device", "devices", "hardware", "processor", "processors", "server",
+    "servers", "support", "supported", "supporting", "supports",
+}
+VERSIONED_CAPABILITY_PREFIXES = {
+    "sme",
+    "sve",
+}
+NEGATIVE_SUPPORT_PATTERNS = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"\bdoes\s+not\s+support\b",
+        r"\bdo\s+not\s+support\b",
+        r"\bdoesn't\s+support\b",
+        r"\bdon't\s+support\b",
+        r"\bnot\s+supported\b",
+        r"\bno\s+support\b",
+        r"\bwithout\s+support\b",
+        r"\bunsupported\b",
+    )
+)
 
 
 def tokenize_for_search(text: str) -> List[str]:
@@ -53,6 +77,158 @@ def tokenize_for_search(text: str) -> List[str]:
 
 def salient_tokens(text: str) -> List[str]:
     return [token for token in tokenize_for_search(text) if token not in SEARCH_STOPWORDS]
+
+
+def _metadata_text(metadata: Dict[str, Any], fields: Iterable[str]) -> str:
+    values: List[str] = []
+    for field in fields:
+        value = metadata.get(field)
+        if isinstance(value, list):
+            values.append(" ".join(str(item) for item in value))
+        elif value:
+            values.append(str(value))
+    return " ".join(values)
+
+
+def _token_match_count(query_tokens: set[str], document_tokens: set[str]) -> int:
+    matches = 0
+    for token in query_tokens:
+        if token in document_tokens:
+            matches += 1
+            continue
+        if token in VERSIONED_CAPABILITY_PREFIXES and any(
+            doc_token.startswith(token) and doc_token[len(token):].isdigit()
+            for doc_token in document_tokens
+        ):
+            matches += 1
+    return matches
+
+
+def _capability_tokens(tokens: set[str]) -> set[str]:
+    capability_tokens = set()
+    for token in tokens:
+        if token in VERSIONED_CAPABILITY_PREFIXES:
+            capability_tokens.add(token)
+            continue
+        for prefix in VERSIONED_CAPABILITY_PREFIXES:
+            if token.startswith(prefix) and token[len(prefix):].isdigit():
+                capability_tokens.add(token)
+    return capability_tokens
+
+
+def _has_negative_support_evidence(text: str) -> bool:
+    return any(pattern.search(text) for pattern in NEGATIVE_SUPPORT_PATTERNS)
+
+
+def _support_evidence_score(query_tokens: set[str], text_tokens: set[str], text: str) -> float:
+    if not (query_tokens & SUPPORT_INTENT_TOKENS):
+        return 0.0
+
+    capability_query_tokens = _capability_tokens(query_tokens)
+    if not capability_query_tokens:
+        return 0.0
+
+    capability_matches = _token_match_count(capability_query_tokens, text_tokens)
+    if capability_matches == 0:
+        return 0.0
+
+    support_terms = text_tokens & SUPPORT_INTENT_TOKENS
+    if not support_terms:
+        return 0.0
+
+    score = 0.12 * capability_matches
+    if {"device", "devices"} & query_tokens and {"device", "devices"} & text_tokens:
+        score += 0.20
+    if {"server", "servers"} & query_tokens and {"server", "servers"} & text_tokens:
+        score += 0.10
+    if {"support", "supported", "supports", "capable"} & text_tokens:
+        score += 0.15
+    if _has_negative_support_evidence(text):
+        score += 0.25
+    return score
+
+
+def _lexical_prepass_score(query: str, metadata: Dict[str, Any], bm25_score: float) -> float:
+    query_tokens = set(tokenize_for_search(query))
+    salient_query_tokens = set(salient_tokens(query))
+    if not query_tokens:
+        return 0.0
+
+    weighted_overlap = 0.0
+    field_weights = (
+        (("title",), 0.45),
+        (("heading", "heading_path"), 0.50),
+        (("url", "resolved_url"), 0.35),
+        (("keywords", "product", "doc_type"), 0.25),
+        (("search_text",), 0.20),
+    )
+    for fields, weight in field_weights:
+        field_text = _metadata_text(metadata, fields)
+        field_tokens = set(tokenize_for_search(field_text))
+        if not field_tokens:
+            continue
+        denominator = len(salient_query_tokens) or len(query_tokens)
+        overlap = _token_match_count(salient_query_tokens or query_tokens, field_tokens) / denominator
+        weighted_overlap += weight * overlap
+
+    all_text = _metadata_text(
+        metadata,
+        ("title", "heading", "heading_path", "url", "resolved_url", "keywords", "search_text"),
+    )
+    all_text_lower = all_text.lower()
+    all_tokens = set(tokenize_for_search(all_text))
+
+    phrase_bonus = 0.0
+    salient_sequence = salient_tokens(query)
+    for index in range(len(salient_sequence) - 1):
+        phrase = " ".join(salient_sequence[index:index + 2])
+        if phrase and phrase in all_text_lower:
+            phrase_bonus += 0.08
+    for index in range(len(salient_sequence) - 2):
+        phrase = " ".join(salient_sequence[index:index + 3])
+        if phrase and phrase in all_text_lower:
+            phrase_bonus += 0.12
+
+    support_bonus = _support_evidence_score(query_tokens, all_tokens, all_text)
+    sparse_score = min(1.0, bm25_score / 25.0)
+    return sparse_score + weighted_overlap + phrase_bonus + support_bonus
+
+
+def lexical_prepass_search(
+    query: str,
+    metadata: List[Dict],
+    bm25_index: Optional[BM25Okapi],
+    k: int = PINNED_LEXICAL_CANDIDATES,
+    candidate_depth: int = LEXICAL_PREPASS_DEPTH,
+) -> List[Dict[str, Any]]:
+    """Return high-exactness lexical candidates before dense retrieval is merged."""
+    prepass_depth = max(k, candidate_depth)
+    candidates = bm25_search(query, metadata, bm25_index, prepass_depth)
+    if not candidates:
+        candidates = [
+            {
+                "rank": rank,
+                "bm25_score": 0.0,
+                "metadata": item,
+            }
+            for rank, item in enumerate(metadata, start=1)
+        ]
+    scored_candidates: List[Dict[str, Any]] = []
+    for candidate in candidates:
+        lexical_score = _lexical_prepass_score(
+            query,
+            candidate["metadata"],
+            candidate.get("bm25_score", 0.0),
+        )
+        if lexical_score <= 0:
+            continue
+        scored_candidates.append({**candidate, "lexical_prepass_score": lexical_score})
+
+    scored_candidates.sort(key=lambda item: item["lexical_prepass_score"], reverse=True)
+    pinned = []
+    for rank, candidate in enumerate(scored_candidates[:k], start=1):
+        pinned.append({**candidate, "lexical_prepass_rank": rank, "pinned_lexical": True})
+    return pinned
 
 
 def build_bm25_index(metadata: List[Dict]) -> Optional[BM25Okapi]:
@@ -153,7 +329,13 @@ def rerank_candidates(query: str, candidates: List[Dict[str, Any]]) -> List[Dict
         title_tokens = set(tokenize_for_search(metadata.get("title", "")))
         heading_tokens = set(tokenize_for_search(" ".join(metadata.get("heading_path", []))))
         url_tokens = set(tokenize_for_search(metadata.get("url", "")))
+        resolved_url_tokens = set(tokenize_for_search(metadata.get("resolved_url", "")))
         doc_type = (metadata.get("doc_type", "") or "").strip().lower()
+        support_evidence_bonus = _support_evidence_score(
+            query_tokens,
+            full_text_tokens | title_tokens | heading_tokens | url_tokens | resolved_url_tokens,
+            _metadata_text(metadata, ("search_text", "title", "heading", "heading_path", "url", "resolved_url")),
+        )
         overlap = len(query_tokens & full_text_tokens) / len(query_tokens)
         title_overlap = len(query_tokens & title_tokens) / len(query_tokens)
         heading_overlap = len(query_tokens & heading_tokens) / len(query_tokens)
@@ -168,6 +350,9 @@ def rerank_candidates(query: str, candidates: List[Dict[str, Any]]) -> List[Dict
         if candidate.get("distance") is not None:
             dense_bonus = max(0.0, (DISTANCE_THRESHOLD - candidate["distance"]) / DISTANCE_THRESHOLD)
         sparse_bonus = min(1.0, candidate.get("bm25_score", 0.0) / 10.0)
+        lexical_prepass_bonus = min(1.0, candidate.get("lexical_prepass_score", 0.0) / 2.0)
+        if candidate.get("pinned_lexical"):
+            lexical_prepass_bonus += 1 / (RRF_K + candidate.get("lexical_prepass_rank", RRF_K))
         doc_type_bonus = 0.0
         if prefers_tuning_guide:
             if doc_type == "tuning guide":
@@ -190,6 +375,8 @@ def rerank_candidates(query: str, candidates: List[Dict[str, Any]]) -> List[Dict
             + (0.20 * entity_overlap)
             + (0.15 * dense_bonus)
             + (0.15 * sparse_bonus)
+            + (0.35 * lexical_prepass_bonus)
+            + support_evidence_bonus
             + exact_entity_bonus
             + doc_type_bonus
         )
@@ -206,13 +393,31 @@ def hybrid_search(
     k: int = K_RESULTS,
 ) -> List[Dict[str, Any]]:
     candidate_depth = max(k * 20, 100)
+    lexical_results = lexical_prepass_search(
+        query,
+        metadata,
+        bm25_index,
+        k=max(k * 3, PINNED_LEXICAL_CANDIDATES),
+        candidate_depth=max(candidate_depth, LEXICAL_PREPASS_DEPTH),
+    )
     dense_results = embedding_search(query, usearch_index, metadata, embedding_model, candidate_depth)
     sparse_results = bm25_search(query, metadata, bm25_index, candidate_depth)
 
     candidates: Dict[str, Dict[str, Any]] = {}
+    for result in lexical_results:
+        chunk_uuid = result["metadata"].get("chunk_uuid") or result["metadata"].get("uuid")
+        candidates[chunk_uuid] = {
+            **result,
+            "rrf_score": 1 / (RRF_K + result["lexical_prepass_rank"]),
+        }
+
     for result in dense_results:
         chunk_uuid = result["metadata"].get("chunk_uuid") or result["metadata"].get("uuid")
-        candidates[chunk_uuid] = {**result, "rrf_score": 1 / (RRF_K + result["rank"])}
+        existing = candidates.get(chunk_uuid, {"metadata": result["metadata"], "rrf_score": 0.0})
+        existing["rank"] = min(existing.get("rank", result["rank"]), result["rank"])
+        existing["distance"] = result["distance"]
+        existing["rrf_score"] += 1 / (RRF_K + result["rank"])
+        candidates[chunk_uuid] = existing
 
     for result in sparse_results:
         chunk_uuid = result["metadata"].get("chunk_uuid") or result["metadata"].get("uuid")

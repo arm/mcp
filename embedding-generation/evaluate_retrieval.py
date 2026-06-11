@@ -14,7 +14,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from arm_kb_search import build_bm25_index, deduplicate_urls, hybrid_search, load_metadata, load_usearch_index  # noqa: E402
+from arm_kb_search import (  # noqa: E402
+    build_bm25_index,
+    deduplicate_urls,
+    embedding_dimension,
+    hybrid_search,
+    load_metadata,
+    load_usearch_index,
+)
 from arm_kb_search.evaluation import evaluate_retrieval, load_eval_rows, print_evaluation  # noqa: E402
 
 
@@ -35,7 +42,7 @@ def evaluate(index_path: Path, metadata_path: Path, eval_path: Path, model_name:
     )
     usearch_index = load_usearch_index(
         str(index_path),
-        embedding_model.get_embedding_dimension(),
+        embedding_dimension(embedding_model),
     )
     bm25_index = build_bm25_index(metadata)
     eval_rows = load_eval_rows(eval_path)
