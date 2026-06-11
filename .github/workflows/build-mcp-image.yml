@@ -153,12 +153,15 @@ jobs:
             exit 0
           fi
           echo "Inspecting armlimited/arm-mcp:${BUILD_DATE} ..."
-          INSPECT=$(docker buildx imagetools inspect armlimited/arm-mcp:${BUILD_DATE})
-          echo "${INSPECT}"
+          # Parse the raw manifest JSON so the check is robust to formatting
+          # changes in the human-readable inspect output.
+          RAW=$(docker buildx imagetools inspect --raw armlimited/arm-mcp:${BUILD_DATE})
+          echo "${RAW}"
           # Fail if either architecture is missing from the merged manifest, so
           # latest/version aliases are never applied to a broken image.
           for arch in amd64 arm64; do
-            if ! echo "${INSPECT}" | grep -q "linux/${arch}"; then
+            if ! echo "${RAW}" | jq -e --arg a "${arch}" \
+              'any(.manifests[]?.platform; .os == "linux" and .architecture == $a)' >/dev/null; then
               echo "::error::Manifest armlimited/arm-mcp:${BUILD_DATE} is missing linux/${arch}."
               exit 1
             fi
