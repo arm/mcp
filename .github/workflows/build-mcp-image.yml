@@ -114,6 +114,18 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Resolve publish gate
+        id: gate
+        run: |
+          # Single source of truth for "should this run publish stable tags?".
+          # True only when the originating ref is main (head_branch for
+          # workflow_run triggers, github.ref otherwise).
+          if [ "${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}" = "true" ]; then
+            echo "is_main=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_main=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create multi-arch manifest for date tag
         env:
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
@@ -195,20 +207,8 @@ jobs:
           echo "Next (${BUMP_TYPE}) version tag: ${TAG_VERSION}"
           echo "tag_version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
 
-          BUMP_TYPE="${BUMP_TYPE:-minor}"
-          case "${BUMP_TYPE}" in
-            major)  TAG_VERSION="$((MAX_MAJOR + 1)).0.0" ;;
-            minor)  TAG_VERSION="${MAX_MAJOR}.$((MAX_MINOR + 1)).0" ;;
-            hotfix) TAG_VERSION="${MAX_MAJOR}.${MAX_MINOR}.$((MAX_PATCH + 1))" ;;
-            *) echo "::error::Unknown bump_type '${BUMP_TYPE}'."; exit 1 ;;
-          esac
-
-          echo "Highest existing version: ${MAX_MAJOR}.${MAX_MINOR}.${MAX_PATCH}"
-          echo "Next (${BUMP_TYPE}) version tag: ${TAG_VERSION}"
-          echo "tag_version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
-
       - name: Add latest and version aliases to verified date tag
-        if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}
+        if: ${{ steps.gate.outputs.is_main == 'true' }}
         env:
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
@@ -229,7 +229,7 @@ jobs:
 
       - name: Create and push matching git tag
         id: gittag
-        if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}
+        if: ${{ steps.gate.outputs.is_main == 'true' }}
         env:
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
@@ -268,7 +268,7 @@ jobs:
           echo "Created GitHub Release ${GIT_TAG}."
 
       - name: Update server.json version
-        if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}
+        if: ${{ steps.gate.outputs.is_main == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
