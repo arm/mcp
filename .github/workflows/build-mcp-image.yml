@@ -45,6 +45,21 @@ jobs:
     outputs:
       build_date: ${{ steps.build_date.outputs.build_date }}
     steps:
+      - name: Guard non-main runs against publishing
+        env:
+          IS_MAIN: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}
+          IS_DRY_RUN: ${{ github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true' }}
+        run: |
+          # Publishing (date manifests, stable aliases, git tags, releases) is
+          # only allowed from main. Fail fast for any non-main run that hasn't
+          # opted into dry_run, so an accidental dry_run=false dispatch from a
+          # feature branch can't attempt to publish and surface as confusing
+          # failures in later steps.
+          if [ "${IS_MAIN}" != "true" ] && [ "${IS_DRY_RUN}" != "true" ]; then
+            echo "::error::This run is not from main. Non-main runs must set dry_run=true (they build for validation only and never publish). Re-run with dry_run enabled."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -79,9 +94,12 @@ jobs:
           context: .
           file: mcp-local/Dockerfile
           platforms: ${{ matrix.platform }}
-          # Skip pushing on dry runs. Handle dry_run surfaced as either a boolean
-          # (true) or a string ('true'); push only when it is neither.
-          push: ${{ !(github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true') }}
+          # Publish the date-tagged arch images only when this run both targets
+          # the shared registry (main) and is not a dry run. Non-main
+          # workflow_dispatch runs build for validation but must never push, so
+          # they can't clobber the shared date tag for that day. dry_run may
+          # surface as a boolean (true) or a string ('true').
+          push: ${{ !(github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true') && ((github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main')) }}
           tags: armlimited/arm-mcp:${{ env.BUILD_DATE }}-${{ matrix.tag }}
           build-args: |
             EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-latest
@@ -127,12 +145,14 @@ jobs:
           fi
 
       - name: Create multi-arch manifest for date tag
+        if: ${{ steps.gate.outputs.is_main == 'true' }}
         env:
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
           # Publish only the immutable date tag here. The stable latest/version
           # aliases are added later, once this merged manifest is verified.
+          # Gated to main so non-main runs never overwrite the shared date tag.
           if [ "${DRY_RUN}" = "true" ]; then
             echo "[dry-run] Would create date manifest tag: ${BUILD_DATE}"
             echo "[dry-run] from sources: ${BUILD_DATE}-amd64, ${BUILD_DATE}-arm64"
@@ -144,6 +164,7 @@ jobs:
             armlimited/arm-mcp:${BUILD_DATE}-arm64
 
       - name: Verify date-tagged manifest
+        if: ${{ steps.gate.outputs.is_main == 'true' }}
         env:
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
@@ -155,7 +176,10 @@ jobs:
           echo "Inspecting armlimited/arm-mcp:${BUILD_DATE} ..."
           # Parse the raw manifest JSON so the check is robust to formatting
           # changes in the human-readable inspect output.
-          RAW=$(docker buildx imagetools inspect --raw armlimited/arm-mcp:${BUILD_DATE})
+          if ! RAW=$(docker buildx imagetools inspect --raw armlimited/arm-mcp:${BUILD_DATE}); then
+            echo "::error::Failed to inspect manifest armlimited/arm-mcp:${BUILD_DATE}. The tag may not exist or the registry is unreachable; cannot verify architectures."
+            exit 1
+          fi
           echo "${RAW}"
           # Fail if either architecture is missing from the merged manifest, so
           # latest/version aliases are never applied to a broken image.
@@ -197,6 +221,15 @@ jobs:
             done
             url="$(echo "${resp}" | jq -r '.next')"
           done
+
+          # Refuse to bump from a zero baseline. If no X.Y.Z tag was found (fresh
+          # or renamed repo, transient API error returning no results), bumping
+          # would yield 0.1.0/1.0.0 and regress below the current published
+          # floor. Fail loudly instead of silently shipping a lower version.
+          if [ "$((MAX_MAJOR + MAX_MINOR + MAX_PATCH))" -eq 0 ]; then
+            echo "::error::No X.Y.Z tags found on Docker Hub for armlimited/arm-mcp; refusing to bump from 0.0.0. Verify the repository and tags API response."
+            exit 1
+          fi
 
           BUMP_TYPE="${BUMP_TYPE:-minor}"
           case "${BUMP_TYPE}" in
@@ -317,7 +350,7 @@ jobs:
           echo "Updated ${SERVER_JSON} to version ${TAG_VERSION}:"
           cat "${SERVER_JSON}"
           git add "${SERVER_JSON}"
-          git commit -m "chore: bump server.json to ${TAG_VERSION} [skip ci]"
+          git commit -m "chore: bump server.json to ${TAG_VERSION}"
 
           # Push the bump branch, retrying with a fresh rebase if origin/main moved.
           pushed=false
@@ -329,7 +362,7 @@ jobs:
             echo "Push attempt ${attempt} failed; rebasing onto latest origin/main and retrying..."
             apply_bump
             git add "${SERVER_JSON}"
-            git commit -m "chore: bump server.json to ${TAG_VERSION} [skip ci]" || true
+            git commit -m "chore: bump server.json to ${TAG_VERSION}" || true
           done
           if [ "${pushed}" != "true" ]; then
             echo "::error::Failed to push ${BUMP_BRANCH} after multiple attempts."
