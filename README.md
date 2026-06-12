@@ -224,6 +224,9 @@ When contributing:
 - Update documentation for any new features or changes
 - Ensure the Docker image builds successfully before submitting
 
+**Note:**
+The container builds with `latest` tag, should be treated as the **prod** environment whereas the weekly dated container builds with tags, such as `2026-05-31`, should be treated as the **stage** environment for development purposes. The **dev** environment refers only to locally built containers created by individual developers. 
+
 ## License
 
 Copyright © 2025, Arm Limited and Contributors. All rights reserved.
