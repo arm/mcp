@@ -19,10 +19,22 @@ on:
         type: boolean
         default: false
 
-# Serialize runs so overlapping builds can't race on computing/publishing the
-# same auto-incremented version (alias + git tag).
+# Serialize only publishing runs so overlapping builds can't race on
+# computing/publishing the same auto-incremented version (alias + git tag).
+# Publishing runs (from main, not dry_run) share a single static group so they
+# queue behind one another. Non-publishing runs (dry_run or non-main) never
+# touch shared version/tag state, so they get a unique per-run group and run
+# concurrently without blocking the publishing queue.
 concurrency:
-  group: build-mcp-image
+  group: >-
+    ${{
+      (
+        ((github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main'))
+        && !(github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true')
+      )
+      && 'build-mcp-image-publish'
+      || format('build-mcp-image-{0}', github.run_id)
+    }}
   cancel-in-progress: false
 
 jobs:
