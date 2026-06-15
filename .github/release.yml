@@ -7,8 +7,13 @@ changelog:
       - ignore-for-release
       - skip-changelog
     authors:
+      # Bot accounts author PRs/commits under their "[bot]" login (e.g.
+      # dependabot[bot], github-actions[bot]). The bare names without the
+      # "[bot]" suffix won't match, so exclude both forms to be safe.
       - dependabot
+      - dependabot[bot]
       - github-actions
+      - github-actions[bot]
   categories:
     - title: Breaking Changes 🛠
       labels:

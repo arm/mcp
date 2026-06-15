@@ -320,12 +320,21 @@ jobs:
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
         run: |
-          # Auto-generate release notes (changelog) from merged PRs/commits since
-          # the previous tag, prepended with the matching Docker image reference.
+          # Create the release with auto-generated notes (changelog) from merged
+          # PRs/commits since the previous tag. --generate-notes and --notes are
+          # mutually exclusive (a custom body replaces the generated changelog),
+          # so generate first, then prepend the Docker image header via a follow-up
+          # edit that re-reads and preserves the generated body.
           gh release create "${GIT_TAG}" \
             --title "${GIT_TAG}" \
-            --generate-notes \
-            --notes "Docker image: \`armlimited/arm-mcp:${TAG_VERSION}\` (built ${BUILD_DATE})"
+            --generate-notes
+          # Re-read the generated notes and prepend the matching Docker image
+          # reference, then write the combined body back to the release.
+          GENERATED_NOTES="$(gh release view "${GIT_TAG}" --json body --jq '.body')"
+          HEADER="Docker image: \`armlimited/arm-mcp:${TAG_VERSION}\` (built ${BUILD_DATE})"
+          printf '%s\n\n%s\n' "${HEADER}" "${GENERATED_NOTES}" > release_notes.md
+          gh release edit "${GIT_TAG}" --notes-file release_notes.md
+          rm -f release_notes.md
           echo "Created GitHub Release ${GIT_TAG}."
 
       - name: Update server.json version
