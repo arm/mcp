@@ -295,7 +295,15 @@ jobs:
           #   - If it exists and already points at this date tag's digest:
           #     idempotent no-op (safe to proceed; e.g. a retried run).
           #   - If it exists pointing at a different digest: refuse and fail.
-          DATE_DIGEST="$(docker buildx imagetools inspect armlimited/arm-mcp:${BUILD_DATE} --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"')"
+          # The date tag was just created and verified above, so its digest must
+          # resolve. Fail loudly if it doesn't (e.g. imagetools --format output
+          # changed or the registry erred) rather than comparing against an empty
+          # string, which would silently defeat the immutability guard below.
+          DATE_DIGEST="$(docker buildx imagetools inspect armlimited/arm-mcp:${BUILD_DATE} --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          if [ -z "${DATE_DIGEST}" ]; then
+            echo "::error::Could not resolve the digest of armlimited/arm-mcp:${BUILD_DATE}. Cannot safely enforce ${TAG_VERSION} immutability; aborting."
+            exit 1
+          fi
           if EXISTING_DIGEST="$(docker buildx imagetools inspect armlimited/arm-mcp:${TAG_VERSION} --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"')" \
              && [ -n "${EXISTING_DIGEST}" ]; then
             if [ "${EXISTING_DIGEST}" = "${DATE_DIGEST}" ]; then
