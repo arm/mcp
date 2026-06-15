@@ -1,6 +1,6 @@
-# Configures GitHub's auto-generated release notes (used by `gh release create
-# --generate-notes` and the "Create Release" workflow). PRs are grouped into
-# the categories below based on their labels.
+# Configures GitHub's auto-generated release notes (used by
+# `gh release create --generate-notes` and the "Create Release" workflow). PRs
+# are grouped into the categories below based on their labels.
 changelog:
   exclude:
     labels:

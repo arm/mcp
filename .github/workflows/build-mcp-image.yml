@@ -53,7 +53,6 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
-      packages: write
     outputs:
       build_date: ${{ steps.build_date.outputs.build_date }}
     steps:
@@ -125,7 +124,6 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-      packages: write
       pull-requests: write
     if: ${{ needs.build-arch-images.result == 'success' }}
     steps:
