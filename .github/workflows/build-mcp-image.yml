@@ -178,6 +178,17 @@ jobs:
             echo "[dry-run] from sources: ${BUILD_DATE}-amd64, ${BUILD_DATE}-arm64"
             exit 0
           fi
+
+          # The date tag is meant to be immutable (it identifies the "stage"
+          # image for that day). imagetools create would silently re-point an
+          # existing ${BUILD_DATE} tag to freshly-rebuilt arch images on a rerun,
+          # changing what that day's stage image refers to. Skip creation if it
+          # already exists so reruns are non-destructive; the next step still
+          # verifies the existing manifest.
+          if docker buildx imagetools inspect armlimited/arm-mcp:${BUILD_DATE} >/dev/null 2>&1; then
+            echo "Date tag armlimited/arm-mcp:${BUILD_DATE} already exists; leaving it unchanged (immutable). Skipping manifest creation."
+            exit 0
+          fi
           docker buildx imagetools create \
             -t armlimited/arm-mcp:${BUILD_DATE} \
             armlimited/arm-mcp:${BUILD_DATE}-amd64 \
@@ -438,18 +449,34 @@ jobs:
             git fetch origin main
             git checkout -B "${BUMP_BRANCH}" origin/main
             tmp="$(mktemp)"
-            jq --arg v "${TAG_VERSION}" '
+            # Fail fast if jq errors. Without this, a failing jq (e.g. malformed
+            # JSON or a future filter typo) would still exit the redirection with
+            # an empty ${tmp}, and the unconditional mv below would clobber
+            # ${SERVER_JSON} with an empty file. Check jq's exit status and abort
+            # before moving the temp file into place.
+            if ! jq --arg v "${TAG_VERSION}" '
               .version = $v
               | .packages |= map(
                   if (.identifier // "") | startswith("docker.io/armlimited/arm-mcp:")
                   then .identifier = "docker.io/armlimited/arm-mcp:\($v)"
                   else . end
                 )
-            ' "${SERVER_JSON}" > "${tmp}"
+            ' "${SERVER_JSON}" > "${tmp}"; then
+              echo "::error::jq failed to update ${SERVER_JSON}; leaving it unchanged."
+              rm -f "${tmp}"
+              return 1
+            fi
+            # Guard against an empty result even if jq returned success, so we
+            # never overwrite the file with nothing.
+            if [ ! -s "${tmp}" ]; then
+              echo "::error::jq produced empty output for ${SERVER_JSON}; refusing to overwrite it."
+              rm -f "${tmp}"
+              return 1
+            fi
             mv "${tmp}" "${SERVER_JSON}"
           }
 
-          apply_bump
+          apply_bump || exit 1
           if git diff --quiet -- "${SERVER_JSON}"; then
             echo "${SERVER_JSON} already at version ${TAG_VERSION} on main; nothing to do."
             exit 0
@@ -467,7 +494,7 @@ jobs:
               break
             fi
             echo "Push attempt ${attempt} failed; rebasing onto latest origin/main and retrying..."
-            apply_bump
+            apply_bump || exit 1
             # After re-basing onto the freshest origin/main, the bump may already
             # be present (e.g. a concurrent run landed the same version). In that
             # case there's nothing to commit/push, and pushing a branch identical
