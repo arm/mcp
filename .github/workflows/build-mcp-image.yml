@@ -282,6 +282,31 @@ jobs:
             echo "[dry-run] Would alias armlimited/arm-mcp:${BUILD_DATE} as latest and ${TAG_VERSION}"
             exit 0
           fi
+
+          # The semver tag is meant to be immutable: imagetools create would
+          # silently re-point an existing ${TAG_VERSION} to a new digest on a
+          # re-run, breaking release integrity. Guard it explicitly.
+          #   - If ${TAG_VERSION} doesn't exist yet: create it (normal case;
+          #     the version is computed as a fresh bump above).
+          #   - If it exists and already points at this date tag's digest:
+          #     idempotent no-op (safe to proceed; e.g. a retried run).
+          #   - If it exists pointing at a different digest: refuse and fail.
+          DATE_DIGEST="$(docker buildx imagetools inspect armlimited/arm-mcp:${BUILD_DATE} --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"')"
+          if EXISTING_DIGEST="$(docker buildx imagetools inspect armlimited/arm-mcp:${TAG_VERSION} --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"')" \
+             && [ -n "${EXISTING_DIGEST}" ]; then
+            if [ "${EXISTING_DIGEST}" = "${DATE_DIGEST}" ]; then
+              echo "Version tag ${TAG_VERSION} already exists and points at the same digest (${EXISTING_DIGEST}); skipping version alias (idempotent)."
+              echo "Updating latest -> ${BUILD_DATE} (${DATE_DIGEST})."
+              docker buildx imagetools create \
+                -t armlimited/arm-mcp:latest \
+                armlimited/arm-mcp:${BUILD_DATE}
+              echo "Aliased ${BUILD_DATE} as latest."
+              exit 0
+            fi
+            echo "::error::Refusing to overwrite existing immutable tag armlimited/arm-mcp:${TAG_VERSION}. It already points at ${EXISTING_DIGEST}, but this run would re-point it to ${DATE_DIGEST}. Version tags must not be reused; investigate the version computation or the prior release."
+            exit 1
+          fi
+
           docker buildx imagetools create \
             -t armlimited/arm-mcp:latest \
             -t armlimited/arm-mcp:${TAG_VERSION} \
@@ -299,8 +324,20 @@ jobs:
           echo "git_tag=${GIT_TAG}" >> "$GITHUB_OUTPUT"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # The commit this run built/tagged from (the checked-out head_sha).
+          HEAD_SHA="$(git rev-parse HEAD)"
           if git rev-parse -q --verify "refs/tags/${GIT_TAG}" >/dev/null; then
-            echo "Git tag ${GIT_TAG} already exists; skipping."
+            # The tag already exists. Before treating this as a safe no-op, make
+            # sure it points at the same commit we just built; otherwise the
+            # Docker aliases we may have updated would no longer correspond to
+            # what this git tag/release describes. Resolve to the tagged commit
+            # (^{commit} dereferences annotated tags) and compare to HEAD.
+            EXISTING_SHA="$(git rev-parse -q --verify "refs/tags/${GIT_TAG}^{commit}")"
+            if [ "${EXISTING_SHA}" != "${HEAD_SHA}" ]; then
+              echo "::error::Git tag ${GIT_TAG} already exists but points at ${EXISTING_SHA}, not the commit being built (${HEAD_SHA}). Refusing to proceed: the version may have been released from a different commit. Investigate the version computation or the existing tag."
+              exit 1
+            fi
+            echo "Git tag ${GIT_TAG} already exists and matches HEAD (${HEAD_SHA}); skipping creation."
             echo "created=false" >> "$GITHUB_OUTPUT"
           elif [ "${DRY_RUN}" = "true" ]; then
             echo "[dry-run] Would create and push git tag ${GIT_TAG}."
