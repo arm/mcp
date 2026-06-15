@@ -242,9 +242,16 @@ jobs:
             resp="$(curl -fsSL "${url}")" || { echo "::error::Docker Hub tags query failed."; exit 1; }
             for ver in $(echo "${resp}" | jq -r '.results[].name | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))'); do
               maj="${ver%%.*}"; rest="${ver#*.}"; min="${rest%%.*}"; pat="${rest##*.}"
-              key=$((maj * 1000000 + min * 1000 + pat))
-              maxkey=$((MAX_MAJOR * 1000000 + MAX_MINOR * 1000 + MAX_PATCH))
-              if [ "$key" -gt "$maxkey" ]; then
+              # Compare the (major, minor, patch) tuple component-by-component
+              # rather than a single weighted key. A weighted key (e.g.
+              # maj*1e6 + min*1e3 + pat) collides once a component exceeds its
+              # weight (1.0.1000 and 1.1.0 both map to 1001000), which could
+              # pick the wrong "highest" tag. Force base-10 arithmetic with 10#
+              # so any zero-padded component isn't misread as octal.
+              if [ "$((10#$maj))" -gt "$((10#$MAX_MAJOR))" ] || {
+                   [ "$((10#$maj))" -eq "$((10#$MAX_MAJOR))" ] && {
+                     [ "$((10#$min))" -gt "$((10#$MAX_MINOR))" ] || {
+                       [ "$((10#$min))" -eq "$((10#$MAX_MINOR))" ] && [ "$((10#$pat))" -gt "$((10#$MAX_PATCH))" ]; }; }; }; then
                 MAX_MAJOR=$maj; MAX_MINOR=$min; MAX_PATCH=$pat
               fi
             done
