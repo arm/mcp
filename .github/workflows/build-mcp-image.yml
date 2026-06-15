@@ -203,10 +203,6 @@ jobs:
           echo "${RAW}"
           # Fail if either architecture is missing from the merged manifest, so
           # latest/version aliases are never applied to a broken image.
-          # Gated to main publishing runs. Non-main runs are dry_run-only and never
-          # consume this output (aliases, git tag, and server.json steps are all
-          # is_main-gated), so there's no reason to hit the Docker Hub tags API and
-          # risk failing a validation run on a transient/rate-limited API error.
           for arch in amd64 arm64; do
             if ! echo "${RAW}" | jq -e --arg a "${arch}" \
               'any(.manifests[]?.platform; .os == "linux" and .architecture == $a)' >/dev/null; then
@@ -218,6 +214,11 @@ jobs:
 
       - name: Determine version tag
         id: version
+        # Gated to main publishing runs. Non-main runs are dry_run-only and never
+        # consume this output (aliases, git tag, and server.json steps are all
+        # is_main-gated), so there's no reason to hit the Docker Hub tags API and
+        # risk failing a validation run on a transient/rate-limited API error.
+        if: ${{ steps.gate.outputs.is_main == 'true' }}
         env:
           # Minor bumps are automatic (workflow_run knowledge-base rebuilds).
           # Manual runs must choose major or hotfix via the bump_type input.
