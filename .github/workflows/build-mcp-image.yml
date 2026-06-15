@@ -214,10 +214,14 @@ jobs:
 
       - name: Determine version tag
         id: version
-        # Gated to main publishing runs. Non-main runs are dry_run-only and never
-        # consume this output (aliases, git tag, and server.json steps are all
-        # is_main-gated), so there's no reason to hit the Docker Hub tags API and
-        # risk failing a validation run on a transient/rate-limited API error.
+        # Gated to main only (not non-main). This intentionally still runs on
+        # main dry_run executions so a dry run can preview the version that would
+        # be published; the step is read-only (queries the Docker Hub tags API
+        # via curl/jq and writes no tags), so it has no external side effects.
+        # Non-main runs are dry_run-only and never consume this output (aliases,
+        # git tag, and server.json steps are all is_main-gated), so skipping it
+        # there avoids needlessly hitting (and possibly being rate-limited by)
+        # the Docker Hub API on validation runs.
         if: ${{ steps.gate.outputs.is_main == 'true' }}
         env:
           # Minor bumps are automatic (workflow_run knowledge-base rebuilds).
@@ -339,24 +343,41 @@ jobs:
             fi
             echo "Git tag ${GIT_TAG} already exists and matches HEAD (${HEAD_SHA}); skipping creation."
             echo "created=false" >> "$GITHUB_OUTPUT"
+            # The tag exists on the remote, so a release can/should exist for it.
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
           elif [ "${DRY_RUN}" = "true" ]; then
             echo "[dry-run] Would create and push git tag ${GIT_TAG}."
             echo "created=false" >> "$GITHUB_OUTPUT"
+            # No tag was pushed in a dry run, so there is nothing to release.
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
           else
             git tag -a "${GIT_TAG}" -m "Release ${GIT_TAG} (matches Docker Hub armlimited/arm-mcp:${TAG_VERSION})"
             git push origin "refs/tags/${GIT_TAG}"
             echo "Created and pushed git tag ${GIT_TAG}."
             echo "created=true" >> "$GITHUB_OUTPUT"
+            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create GitHub Release with changelog
-        if: ${{ steps.gittag.outputs.created == 'true' }}
+        # Run whenever the version tag exists on the remote (newly created this
+        # run OR pre-existing), not only when it was created here. This makes the
+        # release idempotent: if a prior run pushed the tag but failed before
+        # creating the release, a rerun still backfills it. The step itself skips
+        # creation when a release already exists. tag_exists is false on dry runs.
+        if: ${{ steps.gittag.outputs.tag_exists == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GIT_TAG: ${{ steps.gittag.outputs.git_tag }}
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
         run: |
+          # If a release already exists for this tag, leave it untouched and
+          # exit; otherwise create it below. This keeps reruns safe and avoids
+          # clobbering a release that was edited after the fact.
+          if gh release view "${GIT_TAG}" >/dev/null 2>&1; then
+            echo "GitHub Release ${GIT_TAG} already exists; nothing to do."
+            exit 0
+          fi
           # Create the release with auto-generated notes (changelog) from merged
           # PRs/commits since the previous tag. --generate-notes and --notes are
           # mutually exclusive (a custom body replaces the generated changelog),
