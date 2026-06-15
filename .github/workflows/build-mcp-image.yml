@@ -432,8 +432,17 @@ jobs:
             fi
             echo "Push attempt ${attempt} failed; rebasing onto latest origin/main and retrying..."
             apply_bump
+            # After re-basing onto the freshest origin/main, the bump may already
+            # be present (e.g. a concurrent run landed the same version). In that
+            # case there's nothing to commit/push, and pushing a branch identical
+            # to main would make `gh pr create` fail with "no commits between base
+            # and head". Treat this as success and stop.
+            if git diff --quiet -- "${SERVER_JSON}"; then
+              echo "${SERVER_JSON} already at version ${TAG_VERSION} on latest origin/main; nothing to push."
+              exit 0
+            fi
             git add "${SERVER_JSON}"
-            git commit -m "chore: bump server.json to ${TAG_VERSION}" || true
+            git commit -m "chore: bump server.json to ${TAG_VERSION}"
           done
           if [ "${pushed}" != "true" ]; then
             echo "::error::Failed to push ${BUMP_BRANCH} after multiple attempts."
