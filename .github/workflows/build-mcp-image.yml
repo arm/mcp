@@ -95,6 +95,10 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
+        # Only authenticate when this run will actually push (main + not dry_run).
+        # Validation runs (non-main and/or dry_run) build without pushing, so
+        # they must not depend on the Docker Hub secrets being present.
+        if: ${{ !(github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true') && ((github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main')) }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -139,6 +143,10 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
+        # Only authenticate when this run will actually push manifests/aliases
+        # (main + not dry_run). Validation runs (non-main and/or dry_run) never
+        # write to the registry, so they must not require the Docker Hub secrets.
+        if: ${{ !(github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true') && ((github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main')) }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -195,6 +203,10 @@ jobs:
           echo "${RAW}"
           # Fail if either architecture is missing from the merged manifest, so
           # latest/version aliases are never applied to a broken image.
+          # Gated to main publishing runs. Non-main runs are dry_run-only and never
+          # consume this output (aliases, git tag, and server.json steps are all
+          # is_main-gated), so there's no reason to hit the Docker Hub tags API and
+          # risk failing a validation run on a transient/rate-limited API error.
           for arch in amd64 arm64; do
             if ! echo "${RAW}" | jq -e --arg a "${arch}" \
               'any(.manifests[]?.platform; .os == "linux" and .architecture == $a)' >/dev/null; then
