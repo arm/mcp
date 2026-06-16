@@ -148,6 +148,40 @@ def _support_evidence_score(query_tokens: set[str], text_tokens: set[str], text:
     return score
 
 
+def _linked_reference_target_tokens(metadata: Dict[str, Any]) -> set[str]:
+    text = _metadata_text(metadata, ("search_text", "original_text"))
+    link_text_match = re.search(r"\bLinked reference:\s*(.*?)\s+Target URL:", text, re.IGNORECASE | re.DOTALL)
+    target_url_match = re.search(r"\bTarget URL:\s*(\S+)", text, re.IGNORECASE)
+    target_text = " ".join(
+        value
+        for value in (
+            link_text_match.group(1) if link_text_match else "",
+            target_url_match.group(1) if target_url_match else "",
+            metadata.get("url", ""),
+            metadata.get("resolved_url", ""),
+        )
+        if value
+    )
+    return set(tokenize_for_search(target_text))
+
+
+def _linked_reference_adjustment(query_tokens: set[str], metadata: Dict[str, Any]) -> float:
+    content_type = (metadata.get("content_type") or "").lower()
+    if not content_type.endswith(":linked-reference"):
+        return 0.0
+
+    target_tokens = _linked_reference_target_tokens(metadata)
+    if not target_tokens:
+        return -0.10
+
+    target_overlap = len(query_tokens & target_tokens) / len(query_tokens)
+    if target_overlap >= 0.35:
+        return 0.08
+    if target_overlap >= 0.20:
+        return 0.0
+    return -0.18
+
+
 def _lexical_prepass_score(query: str, metadata: Dict[str, Any], bm25_score: float) -> float:
     query_tokens = set(tokenize_for_search(query))
     salient_query_tokens = set(salient_tokens(query))
@@ -190,8 +224,9 @@ def _lexical_prepass_score(query: str, metadata: Dict[str, Any], bm25_score: flo
             phrase_bonus += 0.12
 
     support_bonus = _support_evidence_score(query_tokens, all_tokens, all_text)
+    linked_reference_adjustment = _linked_reference_adjustment(query_tokens, metadata)
     sparse_score = min(1.0, bm25_score / 25.0)
-    return sparse_score + weighted_overlap + phrase_bonus + support_bonus
+    return sparse_score + weighted_overlap + phrase_bonus + support_bonus + linked_reference_adjustment
 
 
 def lexical_prepass_search(
@@ -205,14 +240,7 @@ def lexical_prepass_search(
     prepass_depth = max(k, candidate_depth)
     candidates = bm25_search(query, metadata, bm25_index, prepass_depth)
     if not candidates:
-        candidates = [
-            {
-                "rank": rank,
-                "bm25_score": 0.0,
-                "metadata": item,
-            }
-            for rank, item in enumerate(metadata, start=1)
-        ]
+        return []
     scored_candidates: List[Dict[str, Any]] = []
     for candidate in candidates:
         lexical_score = _lexical_prepass_score(
@@ -331,6 +359,7 @@ def rerank_candidates(query: str, candidates: List[Dict[str, Any]]) -> List[Dict
         url_tokens = set(tokenize_for_search(metadata.get("url", "")))
         resolved_url_tokens = set(tokenize_for_search(metadata.get("resolved_url", "")))
         doc_type = (metadata.get("doc_type", "") or "").strip().lower()
+        linked_reference_adjustment = _linked_reference_adjustment(query_tokens, metadata)
         support_evidence_bonus = _support_evidence_score(
             query_tokens,
             full_text_tokens | title_tokens | heading_tokens | url_tokens | resolved_url_tokens,
@@ -377,11 +406,21 @@ def rerank_candidates(query: str, candidates: List[Dict[str, Any]]) -> List[Dict
             + (0.15 * sparse_bonus)
             + (0.35 * lexical_prepass_bonus)
             + support_evidence_bonus
+            + linked_reference_adjustment
             + exact_entity_bonus
             + doc_type_bonus
         )
         reranked.append({**candidate, "rerank_score": rerank_score})
     return sorted(reranked, key=lambda item: item["rerank_score"], reverse=True)
+
+
+def _candidate_key(result: Dict[str, Any]) -> str:
+    metadata = result.get("metadata", {})
+    chunk_uuid = metadata.get("chunk_uuid")
+    if not chunk_uuid:
+        url = metadata.get("url") or metadata.get("resolved_url") or "<unknown url>"
+        raise ValueError(f"Search metadata missing required chunk_uuid for {url}")
+    return str(chunk_uuid)
 
 
 def hybrid_search(
@@ -405,27 +444,27 @@ def hybrid_search(
 
     candidates: Dict[str, Dict[str, Any]] = {}
     for result in lexical_results:
-        chunk_uuid = result["metadata"].get("chunk_uuid") or result["metadata"].get("uuid")
-        candidates[chunk_uuid] = {
+        candidate_key = _candidate_key(result)
+        candidates[candidate_key] = {
             **result,
             "rrf_score": 1 / (RRF_K + result["lexical_prepass_rank"]),
         }
 
     for result in dense_results:
-        chunk_uuid = result["metadata"].get("chunk_uuid") or result["metadata"].get("uuid")
-        existing = candidates.get(chunk_uuid, {"metadata": result["metadata"], "rrf_score": 0.0})
+        candidate_key = _candidate_key(result)
+        existing = candidates.get(candidate_key, {"metadata": result["metadata"], "rrf_score": 0.0})
         existing["rank"] = min(existing.get("rank", result["rank"]), result["rank"])
         existing["distance"] = result["distance"]
         existing["rrf_score"] += 1 / (RRF_K + result["rank"])
-        candidates[chunk_uuid] = existing
+        candidates[candidate_key] = existing
 
     for result in sparse_results:
-        chunk_uuid = result["metadata"].get("chunk_uuid") or result["metadata"].get("uuid")
-        existing = candidates.get(chunk_uuid, {"metadata": result["metadata"], "rrf_score": 0.0})
+        candidate_key = _candidate_key(result)
+        existing = candidates.get(candidate_key, {"metadata": result["metadata"], "rrf_score": 0.0})
         existing["rank"] = min(existing.get("rank", result["rank"]), result["rank"])
         existing["bm25_score"] = result["bm25_score"]
         existing["rrf_score"] += 1 / (RRF_K + result["rank"])
-        candidates[chunk_uuid] = existing
+        candidates[candidate_key] = existing
 
     combined = rerank_candidates(query, list(candidates.values()))
     return combined[:k]
