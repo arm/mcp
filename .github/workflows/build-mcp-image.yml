@@ -19,6 +19,14 @@ on:
         type: boolean
         default: false
 
+# Shared expressions, exported to every run step and usable in step if:/with:
+# (env context). NOTE: `concurrency` below can't read env (github/inputs/vars
+# only), so that one main+dry check stays inline.
+env:
+  IMAGE: armlimited/arm-mcp
+  IS_MAIN: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}
+  IS_DRY_RUN: ${{ github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true' }}
+
 # Serialize only publishing runs so overlapping builds can't race on
 # computing/publishing the same auto-incremented version (alias + git tag).
 # Publishing runs (from main, not dry_run) share a single static group so they
@@ -56,27 +64,21 @@ jobs:
     outputs:
       build_date: ${{ steps.build_date.outputs.build_date }}
     steps:
-      - name: Guard non-main runs against publishing
-        env:
-          IS_MAIN: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}
-          IS_DRY_RUN: ${{ github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true' }}
+      - name: Guard against non-main publishing
         run: |
-          # Publishing (date manifests, stable aliases, git tags, releases) is
-          # only allowed from main. Fail fast for any non-main run that hasn't
-          # opted into dry_run, so an accidental dry_run=false dispatch from a
-          # feature branch can't attempt to publish and surface as confusing
-          # failures in later steps.
+          # workflow_dispatch can be started from any branch (GitHub has no
+          # branch filter for it). Publishing is main-only; non-main runs are
+          # allowed solely as dry_run validation, else fail fast.
           if [ "${IS_MAIN}" != "true" ] && [ "${IS_DRY_RUN}" != "true" ]; then
-            echo "::error::This run is not from main. Non-main runs must set dry_run=true (they build for validation only and never publish). Re-run with dry_run enabled."
+            echo "::error::Non-main runs must set dry_run=true (build/validate only, never publish)."
             exit 1
           fi
 
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # For workflow_run triggers, build from the exact commit the upstream
-          # run used (head_sha) so images, manifests, and git tags all reference
-          # the same commit. Falls back to the default ref for other triggers.
+          # Build the exact upstream commit (head_sha) for workflow_run so
+          # images, manifests, and git tags all reference the same commit.
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set build date (UTC)
@@ -94,10 +96,9 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
-        # Only authenticate when this run will actually push (main + not dry_run).
-        # Validation runs (non-main and/or dry_run) build without pushing, so
-        # they must not depend on the Docker Hub secrets being present.
-        if: ${{ !(github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true') && ((github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main')) }}
+        # Authenticate only when actually pushing, so dry/non-main validation
+        # runs don't need the Docker Hub secrets.
+        if: ${{ env.IS_MAIN == 'true' && env.IS_DRY_RUN != 'true' }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -109,15 +110,11 @@ jobs:
           context: .
           file: mcp-local/Dockerfile
           platforms: ${{ matrix.platform }}
-          # Publish the date-tagged arch images only when this run both targets
-          # the shared registry (main) and is not a dry run. Non-main
-          # workflow_dispatch runs build for validation but must never push, so
-          # they can't clobber the shared date tag for that day. dry_run may
-          # surface as a boolean (true) or a string ('true').
-          push: ${{ !(github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true') && ((github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main')) }}
-          tags: armlimited/arm-mcp:${{ env.BUILD_DATE }}-${{ matrix.tag }}
+          # Push the date-tagged arch image only on a main, non-dry run.
+          push: ${{ env.IS_MAIN == 'true' && env.IS_DRY_RUN != 'true' }}
+          tags: ${{ env.IMAGE }}:${{ env.BUILD_DATE }}-${{ matrix.tag }}
           build-args: |
-            EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-latest
+            EMBEDDINGS_IMAGE=${{ env.IMAGE }}:embeddings-latest
 
   merge-manifests:
     needs: build-arch-images
@@ -141,122 +138,78 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
-        # Only authenticate when this run will actually push manifests/aliases
-        # (main + not dry_run). Validation runs (non-main and/or dry_run) never
-        # write to the registry, so they must not require the Docker Hub secrets.
-        if: ${{ !(github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true') && ((github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main')) }}
+        # Authenticate only when actually pushing manifests/aliases; dry/non-main
+        # runs never write to the registry.
+        if: ${{ env.IS_MAIN == 'true' && env.IS_DRY_RUN != 'true' }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Resolve publish gate
-        id: gate
-        run: |
-          # Single source of truth for "should this run publish stable tags?".
-          # True only when the originating ref is main (head_branch for
-          # workflow_run triggers, github.ref otherwise).
-          if [ "${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}" = "true" ]; then
-            echo "is_main=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "is_main=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Create multi-arch manifest for date tag
-        if: ${{ steps.gate.outputs.is_main == 'true' }}
+        if: ${{ env.IS_MAIN == 'true' }}
         env:
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
-          DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
-          # Publish only the immutable date tag here. The stable latest/version
-          # aliases are added later, once this merged manifest is verified.
-          # Gated to main so non-main runs never overwrite the shared date tag.
-          if [ "${DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would create date manifest tag: ${BUILD_DATE}"
-            echo "[dry-run] from sources: ${BUILD_DATE}-amd64, ${BUILD_DATE}-arm64"
+          # Publish only the immutable date tag; latest/version aliases come
+          # later, after this manifest is verified.
+          if [ "${IS_DRY_RUN}" = "true" ]; then
+            echo "[dry-run] Would create ${IMAGE}:${BUILD_DATE} from ${BUILD_DATE}-amd64/-arm64"
             exit 0
           fi
-
-          # The date tag is meant to be immutable (it identifies the "stage"
-          # image for that day). imagetools create would silently re-point an
-          # existing ${BUILD_DATE} tag to freshly-rebuilt arch images on a rerun,
-          # changing what that day's stage image refers to. Skip creation if it
-          # already exists so reruns are non-destructive; the next step still
-          # verifies the existing manifest.
-          if docker buildx imagetools inspect armlimited/arm-mcp:${BUILD_DATE} >/dev/null 2>&1; then
-            echo "Date tag armlimited/arm-mcp:${BUILD_DATE} already exists; leaving it unchanged (immutable). Skipping manifest creation."
+          # Immutable: don't re-point an existing date tag on reruns.
+          if docker buildx imagetools inspect "${IMAGE}:${BUILD_DATE}" >/dev/null 2>&1; then
+            echo "Date tag ${IMAGE}:${BUILD_DATE} already exists; leaving it unchanged."
             exit 0
           fi
           docker buildx imagetools create \
-            -t armlimited/arm-mcp:${BUILD_DATE} \
-            armlimited/arm-mcp:${BUILD_DATE}-amd64 \
-            armlimited/arm-mcp:${BUILD_DATE}-arm64
+            -t "${IMAGE}:${BUILD_DATE}" \
+            "${IMAGE}:${BUILD_DATE}-amd64" \
+            "${IMAGE}:${BUILD_DATE}-arm64"
 
       - name: Verify date-tagged manifest
-        if: ${{ steps.gate.outputs.is_main == 'true' }}
+        if: ${{ env.IS_MAIN == 'true' }}
         env:
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
-          DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
-          if [ "${DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would inspect manifest armlimited/arm-mcp:${BUILD_DATE}"
+          if [ "${IS_DRY_RUN}" = "true" ]; then
+            echo "[dry-run] Would verify ${IMAGE}:${BUILD_DATE}"
             exit 0
           fi
-          echo "Inspecting armlimited/arm-mcp:${BUILD_DATE} ..."
-          # Parse the raw manifest JSON so the check is robust to formatting
-          # changes in the human-readable inspect output.
-          if ! RAW=$(docker buildx imagetools inspect --raw armlimited/arm-mcp:${BUILD_DATE}); then
-            echo "::error::Failed to inspect manifest armlimited/arm-mcp:${BUILD_DATE}. The tag may not exist or the registry is unreachable; cannot verify architectures."
+          # Parse the raw manifest JSON (robust to inspect formatting changes).
+          if ! RAW=$(docker buildx imagetools inspect --raw "${IMAGE}:${BUILD_DATE}"); then
+            echo "::error::Failed to inspect ${IMAGE}:${BUILD_DATE} (missing tag or registry unreachable)."
             exit 1
           fi
-          echo "${RAW}"
-          # Fail if either architecture is missing from the merged manifest, so
-          # latest/version aliases are never applied to a broken image.
+          # Fail unless both architectures are present, so aliases never apply
+          # to a broken image.
           for arch in amd64 arm64; do
             if ! echo "${RAW}" | jq -e --arg a "${arch}" \
               'any(.manifests[]?.platform; .os == "linux" and .architecture == $a)' >/dev/null; then
-              echo "::error::Manifest armlimited/arm-mcp:${BUILD_DATE} is missing linux/${arch}."
+              echo "::error::Manifest ${IMAGE}:${BUILD_DATE} is missing linux/${arch}."
               exit 1
             fi
           done
-          echo "Verified: date manifest contains linux/amd64 and linux/arm64."
+          echo "Verified: ${IMAGE}:${BUILD_DATE} has linux/amd64 and linux/arm64."
 
       - name: Determine version tag
         id: version
-        # Gated to main only (not non-main). This intentionally still runs on
-        # main dry_run executions so a dry run can preview the version that would
-        # be published; the step is read-only (queries the Docker Hub tags API
-        # via curl/jq and writes no tags), so it has no external side effects.
-        # Non-main runs are dry_run-only and never consume this output (aliases,
-        # git tag, and server.json steps are all is_main-gated), so skipping it
-        # there avoids needlessly hitting (and possibly being rate-limited by)
-        # the Docker Hub API on validation runs.
-        if: ${{ steps.gate.outputs.is_main == 'true' }}
+        # Read-only Docker Hub query (writes no tags), so it also runs on dry
+        # runs to preview the version. Restricted to main by the guard job.
+        if: ${{ env.IS_MAIN == 'true' }}
         env:
-          # Minor bumps are automatic (workflow_run knowledge-base rebuilds).
-          # Manual runs must choose major or hotfix via the bump_type input.
+          # minor is automatic for KB rebuilds; manual runs pick major/hotfix.
           BUMP_TYPE: ${{ github.event_name == 'workflow_run' && 'minor' || github.event.inputs.bump_type }}
         run: |
-          # Docker Hub is the source of truth for versions. Find the highest
-          # X.Y.Z tag published on armlimited/arm-mcp and bump from it:
-          #   minor  -> x.(Y+1).0   (default; used by automatic KB rebuilds)
-          #   major  -> (X+1).0.0
-          #   hotfix -> x.y.(Z+1)
-          # Docker Hub tags are unprefixed (e.g. 2.2.0). Paginate the tags API
-          # and keep the highest semver-shaped tag.
+          # Docker Hub is the source of truth: find the highest X.Y.Z tag and
+          # bump it (minor x.Y+1.0 | major X+1.0.0 | hotfix x.y.Z+1).
           MAX_MAJOR=0; MAX_MINOR=0; MAX_PATCH=0
-          echo "Querying Docker Hub for the highest X.Y.Z tag..."
-          url="https://hub.docker.com/v2/repositories/armlimited/arm-mcp/tags?page_size=100"
+          url="https://hub.docker.com/v2/repositories/${IMAGE}/tags?page_size=100"
           while [ -n "${url}" ] && [ "${url}" != "null" ]; do
             resp="$(curl -fsSL "${url}")" || { echo "::error::Docker Hub tags query failed."; exit 1; }
             for ver in $(echo "${resp}" | jq -r '.results[].name | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))'); do
               maj="${ver%%.*}"; rest="${ver#*.}"; min="${rest%%.*}"; pat="${rest##*.}"
-              # Compare the (major, minor, patch) tuple component-by-component
-              # rather than a single weighted key. A weighted key (e.g.
-              # maj*1e6 + min*1e3 + pat) collides once a component exceeds its
-              # weight (1.0.1000 and 1.1.0 both map to 1001000), which could
-              # pick the wrong "highest" tag. Force base-10 arithmetic with 10#
-              # so any zero-padded component isn't misread as octal.
+              # Tuple compare (10# forces base-10) to avoid weighted-key collisions.
               if [ "$((10#$maj))" -gt "$((10#$MAX_MAJOR))" ] || {
                    [ "$((10#$maj))" -eq "$((10#$MAX_MAJOR))" ] && {
                      [ "$((10#$min))" -gt "$((10#$MAX_MINOR))" ] || {
@@ -266,128 +219,94 @@ jobs:
             done
             url="$(echo "${resp}" | jq -r '.next')"
           done
-
-          # Refuse to bump from a zero baseline. If no X.Y.Z tag was found (fresh
-          # or renamed repo, transient API error returning no results), bumping
-          # would yield 0.1.0/1.0.0 and regress below the current published
-          # floor. Fail loudly instead of silently shipping a lower version.
+          # Never bump from a zero baseline (would regress below the floor).
           if [ "$((MAX_MAJOR + MAX_MINOR + MAX_PATCH))" -eq 0 ]; then
-            echo "::error::No X.Y.Z tags found on Docker Hub for armlimited/arm-mcp; refusing to bump from 0.0.0. Verify the repository and tags API response."
+            echo "::error::No X.Y.Z tags found on Docker Hub for ${IMAGE}; refusing to bump from 0.0.0."
             exit 1
           fi
-
-          BUMP_TYPE="${BUMP_TYPE:-minor}"
-          case "${BUMP_TYPE}" in
+          case "${BUMP_TYPE:-minor}" in
             major)  TAG_VERSION="$((MAX_MAJOR + 1)).0.0" ;;
             minor)  TAG_VERSION="${MAX_MAJOR}.$((MAX_MINOR + 1)).0" ;;
             hotfix) TAG_VERSION="${MAX_MAJOR}.${MAX_MINOR}.$((MAX_PATCH + 1))" ;;
             *) echo "::error::Unknown bump_type '${BUMP_TYPE}'."; exit 1 ;;
           esac
-
-          echo "Highest Docker Hub version: ${MAX_MAJOR}.${MAX_MINOR}.${MAX_PATCH}"
-          echo "Next (${BUMP_TYPE}) version tag: ${TAG_VERSION}"
+          echo "Highest ${MAX_MAJOR}.${MAX_MINOR}.${MAX_PATCH} -> next (${BUMP_TYPE}): ${TAG_VERSION}"
           echo "tag_version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Add latest and version aliases to verified date tag
-        if: ${{ steps.gate.outputs.is_main == 'true' }}
+        if: ${{ env.IS_MAIN == 'true' }}
         env:
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
-          DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
-          # Alias the already-verified date tag as latest and the version tag.
-          # imagetools create copies the manifest, so these point at the exact
-          # digest that was verified above.
-          if [ "${DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would alias armlimited/arm-mcp:${BUILD_DATE} as latest and ${TAG_VERSION}"
+          # Alias the verified date tag as latest and the version tag
+          # (imagetools create copies the verified manifest by digest).
+          if [ "${IS_DRY_RUN}" = "true" ]; then
+            echo "[dry-run] Would alias ${IMAGE}:${BUILD_DATE} as latest and ${TAG_VERSION}"
             exit 0
           fi
-
-          # The semver tag is meant to be immutable: imagetools create would
-          # silently re-point an existing ${TAG_VERSION} to a new digest on a
-          # re-run, breaking release integrity. Guard it explicitly.
-          #   - If ${TAG_VERSION} doesn't exist yet: create it (normal case;
-          #     the version is computed as a fresh bump above).
-          #   - If it exists and already points at this date tag's digest:
-          #     idempotent no-op (safe to proceed; e.g. a retried run).
-          #   - If it exists pointing at a different digest: refuse and fail.
-          # The date tag was just created and verified above, so its digest must
-          # resolve. Fail loudly if it doesn't (e.g. imagetools --format output
-          # changed or the registry erred) rather than comparing against an empty
-          # string, which would silently defeat the immutability guard below.
-          DATE_DIGEST="$(docker buildx imagetools inspect armlimited/arm-mcp:${BUILD_DATE} --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          # Version tag is immutable. Resolve the verified date digest (must
+          # exist), then guard against re-pointing an existing version tag:
+          # same digest -> idempotent rerun; different digest -> refuse.
+          DATE_DIGEST="$(docker buildx imagetools inspect "${IMAGE}:${BUILD_DATE}" --format '{{json .Manifest.Digest}}' | tr -d '"')"
           if [ -z "${DATE_DIGEST}" ]; then
-            echo "::error::Could not resolve the digest of armlimited/arm-mcp:${BUILD_DATE}. Cannot safely enforce ${TAG_VERSION} immutability; aborting."
+            echo "::error::Could not resolve digest of ${IMAGE}:${BUILD_DATE}; aborting."
             exit 1
           fi
-          if EXISTING_DIGEST="$(docker buildx imagetools inspect armlimited/arm-mcp:${TAG_VERSION} --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"')" \
+          if EXISTING_DIGEST="$(docker buildx imagetools inspect "${IMAGE}:${TAG_VERSION}" --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"')" \
              && [ -n "${EXISTING_DIGEST}" ]; then
             if [ "${EXISTING_DIGEST}" = "${DATE_DIGEST}" ]; then
-              echo "Version tag ${TAG_VERSION} already exists and points at the same digest (${EXISTING_DIGEST}); skipping version alias (idempotent)."
-              echo "Updating latest -> ${BUILD_DATE} (${DATE_DIGEST})."
-              docker buildx imagetools create \
-                -t armlimited/arm-mcp:latest \
-                armlimited/arm-mcp:${BUILD_DATE}
-              echo "Aliased ${BUILD_DATE} as latest."
+              echo "${IMAGE}:${TAG_VERSION} already at ${EXISTING_DIGEST}; refreshing latest only."
+              docker buildx imagetools create -t "${IMAGE}:latest" "${IMAGE}:${BUILD_DATE}"
               exit 0
             fi
-            echo "::error::Refusing to overwrite existing immutable tag armlimited/arm-mcp:${TAG_VERSION}. It already points at ${EXISTING_DIGEST}, but this run would re-point it to ${DATE_DIGEST}. Version tags must not be reused; investigate the version computation or the prior release."
+            echo "::error::${IMAGE}:${TAG_VERSION} exists at ${EXISTING_DIGEST} but this run would re-point it to ${DATE_DIGEST}. Version tags must not be reused."
             exit 1
           fi
-
           docker buildx imagetools create \
-            -t armlimited/arm-mcp:latest \
-            -t armlimited/arm-mcp:${TAG_VERSION} \
-            armlimited/arm-mcp:${BUILD_DATE}
+            -t "${IMAGE}:latest" \
+            -t "${IMAGE}:${TAG_VERSION}" \
+            "${IMAGE}:${BUILD_DATE}"
           echo "Aliased ${BUILD_DATE} as latest and ${TAG_VERSION}."
 
       - name: Create and push matching git tag
         id: gittag
-        if: ${{ steps.gate.outputs.is_main == 'true' }}
+        if: ${{ env.IS_MAIN == 'true' }}
         env:
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
-          DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
           GIT_TAG="v${TAG_VERSION}"
           echo "git_tag=${GIT_TAG}" >> "$GITHUB_OUTPUT"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # The commit this run built/tagged from (the checked-out head_sha).
           HEAD_SHA="$(git rev-parse HEAD)"
           if git rev-parse -q --verify "refs/tags/${GIT_TAG}" >/dev/null; then
-            # The tag already exists. Before treating this as a safe no-op, make
-            # sure it points at the same commit we just built; otherwise the
-            # Docker aliases we may have updated would no longer correspond to
-            # what this git tag/release describes. Resolve to the tagged commit
-            # (^{commit} dereferences annotated tags) and compare to HEAD.
+            # Existing tag must point at the built commit (^{commit} derefs
+            # annotated tags), else aliases/release would describe another commit.
             EXISTING_SHA="$(git rev-parse -q --verify "refs/tags/${GIT_TAG}^{commit}")"
             if [ "${EXISTING_SHA}" != "${HEAD_SHA}" ]; then
-              echo "::error::Git tag ${GIT_TAG} already exists but points at ${EXISTING_SHA}, not the commit being built (${HEAD_SHA}). Refusing to proceed: the version may have been released from a different commit. Investigate the version computation or the existing tag."
+              echo "::error::${GIT_TAG} exists at ${EXISTING_SHA}, not the built commit ${HEAD_SHA}."
               exit 1
             fi
-            echo "Git tag ${GIT_TAG} already exists and matches HEAD (${HEAD_SHA}); skipping creation."
+            echo "${GIT_TAG} already exists and matches HEAD; skipping creation."
             echo "created=false" >> "$GITHUB_OUTPUT"
-            # The tag exists on the remote, so a release can/should exist for it.
             echo "tag_exists=true" >> "$GITHUB_OUTPUT"
-          elif [ "${DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would create and push git tag ${GIT_TAG}."
+          elif [ "${IS_DRY_RUN}" = "true" ]; then
+            echo "[dry-run] Would create and push ${GIT_TAG}."
             echo "created=false" >> "$GITHUB_OUTPUT"
-            # No tag was pushed in a dry run, so there is nothing to release.
             echo "tag_exists=false" >> "$GITHUB_OUTPUT"
           else
-            git tag -a "${GIT_TAG}" -m "Release ${GIT_TAG} (matches Docker Hub armlimited/arm-mcp:${TAG_VERSION})"
+            git tag -a "${GIT_TAG}" -m "Release ${GIT_TAG} (matches ${IMAGE}:${TAG_VERSION})"
             git push origin "refs/tags/${GIT_TAG}"
-            echo "Created and pushed git tag ${GIT_TAG}."
+            echo "Created and pushed ${GIT_TAG}."
             echo "created=true" >> "$GITHUB_OUTPUT"
             echo "tag_exists=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create GitHub Release with changelog
-        # Run whenever the version tag exists on the remote (newly created this
-        # run OR pre-existing), not only when it was created here. This makes the
-        # release idempotent: if a prior run pushed the tag but failed before
-        # creating the release, a rerun still backfills it. The step itself skips
-        # creation when a release already exists. tag_exists is false on dry runs.
+        # Runs whenever the tag exists (idempotent backfill if a prior run pushed
+        # the tag but didn't create the release); skips if a release exists.
+        # tag_exists is false on dry runs.
         if: ${{ steps.gittag.outputs.tag_exists == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -395,63 +314,42 @@ jobs:
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
         run: |
-          # If a release already exists for this tag, leave it untouched and
-          # exit; otherwise create it below. This keeps reruns safe and avoids
-          # clobbering a release that was edited after the fact.
           if gh release view "${GIT_TAG}" >/dev/null 2>&1; then
-            echo "GitHub Release ${GIT_TAG} already exists; nothing to do."
+            echo "Release ${GIT_TAG} already exists; nothing to do."
             exit 0
           fi
-          # Create the release with auto-generated notes (changelog) from merged
-          # PRs/commits since the previous tag. --generate-notes and --notes are
-          # mutually exclusive (a custom body replaces the generated changelog),
-          # so generate first, then prepend the Docker image header via a follow-up
-          # edit that re-reads and preserves the generated body.
-          gh release create "${GIT_TAG}" \
-            --title "${GIT_TAG}" \
-            --generate-notes
-          # Re-read the generated notes and prepend the matching Docker image
-          # reference, then write the combined body back to the release.
-          GENERATED_NOTES="$(gh release view "${GIT_TAG}" --json body --jq '.body')"
-          HEADER="Docker image: \`armlimited/arm-mcp:${TAG_VERSION}\` (built ${BUILD_DATE})"
-          printf '%s\n\n%s\n' "${HEADER}" "${GENERATED_NOTES}" > release_notes.md
+          # --generate-notes and --notes are mutually exclusive, so generate the
+          # changelog first, then prepend the image header via edit.
+          gh release create "${GIT_TAG}" --title "${GIT_TAG}" --generate-notes
+          NOTES="$(gh release view "${GIT_TAG}" --json body --jq '.body')"
+          printf 'Docker image: `%s:%s` (built %s)\n\n%s\n' "${IMAGE}" "${TAG_VERSION}" "${BUILD_DATE}" "${NOTES}" > release_notes.md
           gh release edit "${GIT_TAG}" --notes-file release_notes.md
           rm -f release_notes.md
           echo "Created GitHub Release ${GIT_TAG}."
 
       - name: Update server.json version
-        if: ${{ steps.gate.outputs.is_main == 'true' }}
+        if: ${{ env.IS_MAIN == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
-          DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
-          # Bump mcp-local/server.json to the computed version (top-level
-          # "version" + OCI package "identifier" docker tag) and open a PR
-          # against main. PR-based so it works with branch protection; the bump
-          # is always rebased onto the latest origin/main, with push retries to
-          # tolerate concurrent updates.
+          # Bump version + OCI identifier in server.json and open a PR to main.
+          # PR-based (branch-protection friendly); always rebased onto fresh
+          # origin/main with push retries to tolerate concurrent updates.
           SERVER_JSON="mcp-local/server.json"
           BUMP_BRANCH="chore/bump-server-json-${TAG_VERSION}"
-          if [ "${DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would bump ${SERVER_JSON} to ${TAG_VERSION} and open a PR from ${BUMP_BRANCH} to main"
+          if [ "${IS_DRY_RUN}" = "true" ]; then
+            echo "[dry-run] Would bump ${SERVER_JSON} to ${TAG_VERSION} and open a PR to main."
             exit 0
           fi
-
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           apply_bump() {
-            # Re-create the bump branch from the freshest origin/main and apply
-            # the edit on top, so we never carry a stale base.
             git fetch origin main
             git checkout -B "${BUMP_BRANCH}" origin/main
             tmp="$(mktemp)"
-            # Fail fast if jq errors. Without this, a failing jq (e.g. malformed
-            # JSON or a future filter typo) would still exit the redirection with
-            # an empty ${tmp}, and the unconditional mv below would clobber
-            # ${SERVER_JSON} with an empty file. Check jq's exit status and abort
-            # before moving the temp file into place.
+            # Fail fast on jq error/empty output so we never write an empty file.
             if ! jq --arg v "${TAG_VERSION}" '
               .version = $v
               | .packages |= map(
@@ -460,69 +358,46 @@ jobs:
                   else . end
                 )
             ' "${SERVER_JSON}" > "${tmp}"; then
-              echo "::error::jq failed to update ${SERVER_JSON}; leaving it unchanged."
-              rm -f "${tmp}"
-              return 1
+              echo "::error::jq failed to update ${SERVER_JSON}."; rm -f "${tmp}"; return 1
             fi
-            # Guard against an empty result even if jq returned success, so we
-            # never overwrite the file with nothing.
             if [ ! -s "${tmp}" ]; then
-              echo "::error::jq produced empty output for ${SERVER_JSON}; refusing to overwrite it."
-              rm -f "${tmp}"
-              return 1
+              echo "::error::jq produced empty output for ${SERVER_JSON}."; rm -f "${tmp}"; return 1
             fi
             mv "${tmp}" "${SERVER_JSON}"
           }
 
           apply_bump || exit 1
           if git diff --quiet -- "${SERVER_JSON}"; then
-            echo "${SERVER_JSON} already at version ${TAG_VERSION} on main; nothing to do."
+            echo "${SERVER_JSON} already at ${TAG_VERSION}; nothing to do."
             exit 0
           fi
-          echo "Updated ${SERVER_JSON} to version ${TAG_VERSION}:"
-          cat "${SERVER_JSON}"
           git add "${SERVER_JSON}"
           git commit -m "chore: bump server.json to ${TAG_VERSION}"
 
-          # Push the bump branch, retrying with a fresh rebase if origin/main moved.
           pushed=false
           for attempt in 1 2 3; do
-            if git push --force-with-lease origin "${BUMP_BRANCH}"; then
-              pushed=true
-              break
-            fi
-            echo "Push attempt ${attempt} failed; rebasing onto latest origin/main and retrying..."
+            if git push --force-with-lease origin "${BUMP_BRANCH}"; then pushed=true; break; fi
+            echo "Push ${attempt} failed; rebasing onto origin/main and retrying..."
             apply_bump || exit 1
-            # After re-basing onto the freshest origin/main, the bump may already
-            # be present (e.g. a concurrent run landed the same version). In that
-            # case there's nothing to commit/push, and pushing a branch identical
-            # to main would make `gh pr create` fail with "no commits between base
-            # and head". Treat this as success and stop.
+            # If the bump already landed concurrently, stop cleanly (an identical
+            # branch would make `gh pr create` fail with no commits).
             if git diff --quiet -- "${SERVER_JSON}"; then
-              echo "${SERVER_JSON} already at version ${TAG_VERSION} on latest origin/main; nothing to push."
+              echo "${SERVER_JSON} already at ${TAG_VERSION} on origin/main; nothing to push."
               exit 0
             fi
             git add "${SERVER_JSON}"
             git commit -m "chore: bump server.json to ${TAG_VERSION}"
           done
-          if [ "${pushed}" != "true" ]; then
-            echo "::error::Failed to push ${BUMP_BRANCH} after multiple attempts."
-            exit 1
-          fi
+          [ "${pushed}" = "true" ] || { echo "::error::Failed to push ${BUMP_BRANCH}."; exit 1; }
 
-          # Open a PR if one doesn't already exist for this branch.
           if gh pr view "${BUMP_BRANCH}" >/dev/null 2>&1; then
-            echo "PR for ${BUMP_BRANCH} already exists; updated branch only."
+            echo "PR for ${BUMP_BRANCH} already exists; branch updated."
           else
-            # NOTE: gh pr create uses GITHUB_TOKEN. This requires the org/repo
-            # setting "Allow GitHub Actions to create and approve pull requests"
-            # (Settings > Actions > General > Workflow permissions) to be enabled.
-            # If it is disabled, replace GH_TOKEN with a PAT or GitHub App token
-            # that has pull-requests: write.
+            # Requires "Allow GitHub Actions to create and approve pull requests"
+            # (or a PAT/App token with pull-requests: write).
             gh pr create \
-              --base main \
-              --head "${BUMP_BRANCH}" \
+              --base main --head "${BUMP_BRANCH}" \
               --title "chore: bump server.json to ${TAG_VERSION}" \
-              --body "Automated bump of \`${SERVER_JSON}\` to version \`${TAG_VERSION}\` (matches Docker Hub \`armlimited/arm-mcp:${TAG_VERSION}\`)."
+              --body "Automated bump of \`${SERVER_JSON}\` to \`${TAG_VERSION}\` (matches \`armlimited/arm-mcp:${TAG_VERSION}\`)."
             echo "Opened PR to bump ${SERVER_JSON} to ${TAG_VERSION}."
           fi
