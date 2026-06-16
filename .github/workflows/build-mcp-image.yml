@@ -167,42 +167,30 @@ jobs:
 
       - name: Determine version tag
         id: version
-        # Read-only Docker Hub query (writes no tags); previews the version on
-        # dry runs too. Publishing is enforced by the top-level guard.
+        # Read-only (computes a version, writes nothing); previews on dry runs
+        # too. Publishing is enforced by the top-level guard.
         env:
           # minor is automatic for KB rebuilds; manual runs pick major/hotfix.
           BUMP_TYPE: ${{ github.event_name == 'workflow_run' && 'minor' || github.event.inputs.bump_type }}
         run: |
-          # Docker Hub is the source of truth: find the highest X.Y.Z tag and
-          # bump it (minor x.Y+1.0 | major X+1.0.0 | hotfix x.y.Z+1).
-          MAX_MAJOR=0; MAX_MINOR=0; MAX_PATCH=0
-          url="https://hub.docker.com/v2/repositories/${IMAGE}/tags?page_size=100"
-          while [ -n "${url}" ] && [ "${url}" != "null" ]; do
-            resp="$(curl -fsSL "${url}")" || { echo "::error::Docker Hub tags query failed."; exit 1; }
-            for ver in $(echo "${resp}" | jq -r '.results[].name | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))'); do
-              maj="${ver%%.*}"; rest="${ver#*.}"; min="${rest%%.*}"; pat="${rest##*.}"
-              # Tuple compare (10# forces base-10) to avoid weighted-key collisions.
-              if [ "$((10#$maj))" -gt "$((10#$MAX_MAJOR))" ] || {
-                   [ "$((10#$maj))" -eq "$((10#$MAX_MAJOR))" ] && {
-                     [ "$((10#$min))" -gt "$((10#$MAX_MINOR))" ] || {
-                       [ "$((10#$min))" -eq "$((10#$MAX_MINOR))" ] && [ "$((10#$pat))" -gt "$((10#$MAX_PATCH))" ]; }; }; }; then
-                MAX_MAJOR=$maj; MAX_MINOR=$min; MAX_PATCH=$pat
-              fi
-            done
-            url="$(echo "${resp}" | jq -r '.next')"
-          done
-          # Never bump from a zero baseline (would regress below the floor).
-          if [ "$((MAX_MAJOR + MAX_MINOR + MAX_PATCH))" -eq 0 ]; then
-            echo "::error::No X.Y.Z tags found on Docker Hub for ${IMAGE}; refusing to bump from 0.0.0."
+          # Git tags are the source of truth: pick the highest vX.Y.Z tag (sort
+          # -V orders versions correctly) and bump it
+          # (minor x.Y+1.0 | major X+1.0.0 | hotfix x.y.Z+1).
+          git fetch --tags --force --quiet
+          latest="$(git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+          if [ -z "${latest}" ]; then
+            echo "::error::No vX.Y.Z git tags found; refusing to bump from 0.0.0."
             exit 1
           fi
+          ver="${latest#v}"
+          major="${ver%%.*}"; rest="${ver#*.}"; minor="${rest%%.*}"; patch="${rest##*.}"
           case "${BUMP_TYPE:-minor}" in
-            major)  TAG_VERSION="$((MAX_MAJOR + 1)).0.0" ;;
-            minor)  TAG_VERSION="${MAX_MAJOR}.$((MAX_MINOR + 1)).0" ;;
-            hotfix) TAG_VERSION="${MAX_MAJOR}.${MAX_MINOR}.$((MAX_PATCH + 1))" ;;
+            major)  TAG_VERSION="$((major + 1)).0.0" ;;
+            minor)  TAG_VERSION="${major}.$((minor + 1)).0" ;;
+            hotfix) TAG_VERSION="${major}.${minor}.$((patch + 1))" ;;
             *) echo "::error::Unknown bump_type '${BUMP_TYPE}'."; exit 1 ;;
           esac
-          echo "Highest ${MAX_MAJOR}.${MAX_MINOR}.${MAX_PATCH} -> next (${BUMP_TYPE}): ${TAG_VERSION}"
+          echo "Highest ${latest} -> next (${BUMP_TYPE}): ${TAG_VERSION}"
           echo "tag_version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Add latest and version aliases to verified date tag
