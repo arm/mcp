@@ -41,6 +41,12 @@ def sentence_transformer_cache_folder() -> str | None:
     return os.getenv("SENTENCE_TRANSFORMERS_HOME") or None
 
 
+def embedding_dimension(embedding_model: SentenceTransformer) -> int:
+    if hasattr(embedding_model, "get_embedding_dimension"):
+        return int(embedding_model.get_embedding_dimension())
+    return int(embedding_model.get_sentence_embedding_dimension())
+
+
 def load_embedding_model(
     model_name: str,
     cache_folder: str | None = None,
@@ -87,7 +93,7 @@ def load_search_resources(
     )
     usearch_index = load_usearch_index(
         usearch_index_path,
-        embedding_model.get_embedding_dimension(),
+        embedding_dimension(embedding_model),
     )
     bm25_index = build_bm25_index(metadata)
     return SearchResources(
