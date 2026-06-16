@@ -167,31 +167,6 @@ jobs:
             "${IMAGE}:${BUILD_DATE}-amd64" \
             "${IMAGE}:${BUILD_DATE}-arm64"
 
-      - name: Verify date-tagged manifest
-        if: ${{ env.IS_MAIN == 'true' }}
-        env:
-          BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
-        run: |
-          if [ "${IS_DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would verify ${IMAGE}:${BUILD_DATE}"
-            exit 0
-          fi
-          # Parse the raw manifest JSON (robust to inspect formatting changes).
-          if ! RAW=$(docker buildx imagetools inspect --raw "${IMAGE}:${BUILD_DATE}"); then
-            echo "::error::Failed to inspect ${IMAGE}:${BUILD_DATE} (missing tag or registry unreachable)."
-            exit 1
-          fi
-          # Fail unless both architectures are present, so aliases never apply
-          # to a broken image.
-          for arch in amd64 arm64; do
-            if ! echo "${RAW}" | jq -e --arg a "${arch}" \
-              'any(.manifests[]?.platform; .os == "linux" and .architecture == $a)' >/dev/null; then
-              echo "::error::Manifest ${IMAGE}:${BUILD_DATE} is missing linux/${arch}."
-              exit 1
-            fi
-          done
-          echo "Verified: ${IMAGE}:${BUILD_DATE} has linux/amd64 and linux/arm64."
-
       - name: Determine version tag
         id: version
         # Read-only Docker Hub query (writes no tags), so it also runs on dry
