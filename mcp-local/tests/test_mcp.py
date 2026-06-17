@@ -19,6 +19,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 import pytest
 from testcontainers.core.container import DockerContainer
@@ -27,6 +28,20 @@ from testcontainers.core.waiting_utils import wait_for_logs
 def _encode_mcp_message(payload: dict) -> bytes:
     # FastMCP stdio expects raw JSON per message (newline-delimited).
     return (json.dumps(payload) + "\n").encode("utf-8")
+
+
+def _base_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    parsed = urlparse(url)
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path.rstrip("/") or "/", parsed.params, "", ""))
+
+
+def _result_urls(structured_content: dict) -> list[str]:
+    result = structured_content.get("result", [])
+    if not isinstance(result, list):
+        return []
+    return [item.get("url") for item in result if isinstance(item, dict) and item.get("url")]
 
 
 def _read_docker_frame(sock, timeout: float) -> bytes:
@@ -181,8 +196,10 @@ def test_mcp_stdio_transport_responds(platform):
             #Check NGINX Query Test
             raw_socket.sendall(_encode_mcp_message(constants.CHECK_NGINX_REQUEST))
             check_nginx_response = _read_response(4, timeout=60)
-            urls = json.dumps(check_nginx_response["result"]["structuredContent"])
-            assert any(expected in urls for expected in constants.EXPECTED_CHECK_NGINX_RESPONSE), "Test Failed: MCP check_nginx tool failed: content mismatch., Expected one of: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_NGINX_RESPONSE,indent=2), json.dumps(check_nginx_response.get("result")["structuredContent"],indent=2))
+            nginx_structured_content = check_nginx_response["result"]["structuredContent"]
+            expected_nginx_urls = {_base_url(expected) for expected in constants.EXPECTED_CHECK_NGINX_RESPONSE}
+            actual_nginx_urls = {_base_url(url) for url in _result_urls(nginx_structured_content)}
+            assert expected_nginx_urls & actual_nginx_urls, "Test Failed: MCP check_nginx tool failed: content mismatch., Expected one of: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_NGINX_RESPONSE,indent=2), json.dumps(check_nginx_response.get("result")["structuredContent"],indent=2))
             print("\n***Test Passed: MCP check_nginx tool succeeded")
 
             #Check Migrate Ease Tool Test

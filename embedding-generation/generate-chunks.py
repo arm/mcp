@@ -35,6 +35,7 @@ from document_chunking import (
     derive_product,
     derive_version,
     is_arm_developer_documentation_url,
+    learn_learning_path_step_urls,
     normalize_source_url,
     parse_arm_documentation_api_json,
     parse_document_content,
@@ -882,35 +883,46 @@ def create_chunks_for_source(source_url, source_name, doc_type, keywords_value):
     if is_arm_developer_documentation_url(source_url):
         return create_arm_documentation_chunks(source_url, source_name, doc_type, keywords_value)
 
-    fetch_url = source_to_fetch_url(source_url)
+    normalized_source_url = normalize_source_url(source_url)
+    fetch_url = source_to_fetch_url(normalized_source_url)
     response = fetch_with_logging(fetch_url)
     if response is None:
         print('not valid, ', fetch_url)
         return []
-    parsed_document = parse_document_content(
-        source_url=normalize_source_url(source_url),
-        resolved_url=response.url,
-        response_content=response.content,
-        content_type=response.headers.get("content-type", ""),
-        fallback_title=source_name,
-    )
+
+    sources_to_parse = [(normalized_source_url, response)]
+    for step_url in learn_learning_path_step_urls(normalized_source_url, response.content):
+        step_response = fetch_with_logging(source_to_fetch_url(step_url))
+        if step_response is not None:
+            sources_to_parse.append((step_url, step_response))
+
     keywords = parse_keywords(keywords_value, source_name)
-    return [
-        createChunk(
-            text_snippet=payload["content"],
-            WEBSITE_url=payload["url"],
-            keywords=keywords,
-            title=payload["title"],
-            heading=payload["heading"],
-            heading_path=payload["heading_path"],
-            doc_type=payload["doc_type"],
-            product=payload["product"],
-            version=payload["version"],
-            resolved_url=payload["resolved_url"],
-            content_type=payload["content_type"],
+    chunks = []
+    for display_url, source_response in sources_to_parse:
+        parsed_document = parse_document_content(
+            source_url=display_url,
+            resolved_url=source_response.url,
+            response_content=source_response.content,
+            content_type=source_response.headers.get("content-type", ""),
+            fallback_title=source_name,
         )
-        for payload in chunk_parsed_document(parsed_document, doc_type=doc_type or "Documentation", keywords=keywords)
-    ]
+        for payload in chunk_parsed_document(parsed_document, doc_type=doc_type or "Documentation", keywords=keywords):
+            chunks.append(
+                createChunk(
+                    text_snippet=payload["content"],
+                    WEBSITE_url=payload["url"],
+                    keywords=keywords,
+                    title=payload["title"],
+                    heading=payload["heading"],
+                    heading_path=payload["heading_path"],
+                    doc_type=payload["doc_type"],
+                    product=payload["product"],
+                    version=payload["version"],
+                    resolved_url=payload["resolved_url"],
+                    content_type=payload["content_type"],
+                )
+            )
+    return chunks
 
 
 def _arm_topic_links(topic):
