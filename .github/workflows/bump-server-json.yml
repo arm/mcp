@@ -1,0 +1,138 @@
+name: Bump server.json version
+
+# Syncs mcp-local/server.json to a released vX.Y.Z tag and opens a PR to main.
+# Called by build-mcp-image.yml via workflow_call (a `release` trigger wouldn't
+# fire, since the release is created with the default GITHUB_TOKEN).
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag to sync server.json to (e.g. v2.3.0)"
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to sync server.json to (e.g. v2.3.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: bump-server-json
+  cancel-in-progress: false
+
+jobs:
+  bump-server-json:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The job fetches origin/main itself, so full history isn't needed.
+          fetch-depth: 1
+
+      - name: Bump server.json and open PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # inputs.tag is provided by both workflow_call and workflow_dispatch.
+          GIT_TAG: ${{ inputs.tag }}
+        run: |
+          SERVER_JSON="mcp-local/server.json"
+          # Validate the tag as-is (must be a vX.Y.Z release tag) before
+          # deriving the bare X.Y.Z version, so a non-v tag is rejected.
+          if ! printf '%s' "${GIT_TAG}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Tag '${GIT_TAG}' is not a vX.Y.Z release tag."; exit 1
+          fi
+          TAG_VERSION="${GIT_TAG#v}"
+          BUMP_BRANCH="chore/bump-server-json-${TAG_VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Apply the version bump to server.json (in-memory, single write).
+          apply_bump_file() {
+            if ! updated="$(jq --arg v "${TAG_VERSION}" '
+              .version = $v
+              | .packages |= map(
+                  if (.identifier // "") | startswith("docker.io/armlimited/arm-mcp:")
+                  then .identifier = "docker.io/armlimited/arm-mcp:\($v)"
+                  else . end
+                )
+            ' "${SERVER_JSON}")"; then
+              echo "::error::jq failed to update ${SERVER_JSON}."; return 1
+            fi
+            if [ -z "${updated}" ]; then
+              echo "::error::jq produced empty output for ${SERVER_JSON}."; return 1
+            fi
+            printf '%s\n' "${updated}" > "${SERVER_JSON}"
+          }
+
+          # Rebase bump branch on origin/main, apply bump, and commit if changed.
+          # Returns 2 when already up to date (clean no-op).
+          refresh_branch_with_bump() {
+            git fetch origin main
+            git checkout -B "${BUMP_BRANCH}" origin/main
+            apply_bump_file || return 1
+            if git diff --quiet -- "${SERVER_JSON}"; then
+              return 2
+            fi
+            git add "${SERVER_JSON}"
+            git commit -m "chore: bump server.json to ${TAG_VERSION}"
+            return 0
+          }
+
+          # Retry helper: refresh branch state or exit on no-op/failure.
+          refresh_or_exit() {
+            refresh_branch_with_bump
+            case "$?" in
+              0) return 0 ;;
+              2) echo "${SERVER_JSON} already at ${TAG_VERSION} on origin/main; nothing to push."; exit 0 ;;
+              *) exit 1 ;;
+            esac
+          }
+
+          # Ensure a PR exists for the bump branch (create if missing).
+          # NOTE: gh pr create uses GITHUB_TOKEN (inherited from the caller).
+          # This requires the org/repo setting "Allow GitHub Actions to create
+          # and approve pull requests" to be enabled; otherwise use a PAT/App
+          # token with pull-requests: write.
+          ensure_bump_pr() {
+            if gh pr view "${BUMP_BRANCH}" >/dev/null 2>&1; then
+              echo "PR for ${BUMP_BRANCH} already exists; branch updated."
+            else
+              gh pr create \
+                --base main --head "${BUMP_BRANCH}" \
+                --title "chore: bump server.json to ${TAG_VERSION}" \
+                --body "Automated bump of \`${SERVER_JSON}\` to \`${TAG_VERSION}\` (matches \`armlimited/arm-mcp:${TAG_VERSION}\`)."
+              echo "Opened PR to bump ${SERVER_JSON} to ${TAG_VERSION}."
+            fi
+          }
+
+          refresh_branch_with_bump
+          case "$?" in
+            0) ;;
+            2) echo "${SERVER_JSON} already at ${TAG_VERSION}; nothing to do."; exit 0 ;;
+            *) exit 1 ;;
+          esac
+
+          pushed=false
+          attempts=3
+          for attempt in $(seq 1 "${attempts}"); do
+            # The bump branch is fully automation-owned and recreated from
+            # origin/main on every attempt, so a plain --force is correct here:
+            # there's no human work on it to clobber, and --force-with-lease
+            # would keep failing against a stale lease (we never fetch the
+            # branch's remote ref) on a genuine concurrent update.
+            if git push --force origin "${BUMP_BRANCH}"; then pushed=true; break; fi
+            # Only rebase between attempts; refreshing after the last push would
+            # build a commit we never push.
+            if [ "${attempt}" -lt "${attempts}" ]; then
+              echo "Push ${attempt} failed; rebasing onto origin/main and retrying..."
+              refresh_or_exit
+            fi
+          done
+          [ "${pushed}" = "true" ] || { echo "::error::Failed to push ${BUMP_BRANCH} after ${attempts} attempts."; exit 1; }
+          ensure_bump_pr

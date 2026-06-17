@@ -130,14 +130,15 @@ jobs:
       contents: write
       pull-requests: write
     if: ${{ needs.build-arch-images.result == 'success' }}
+    outputs:
+      git_tag: ${{ steps.gittag.outputs.git_tag }}
+      tag_exists: ${{ steps.gittag.outputs.tag_exists }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # For workflow_run triggers, check out the exact commit the upstream
-          # build ran on (head_sha) so created git tags point at the build input
-          # commit, not whatever later landed on the default branch. Falls back
-          # to the default ref for other triggers (e.g. workflow_dispatch).
+          # Check out the upstream build's commit (head_sha) so git tags match
+          # the built images; falls back to github.sha for other triggers.
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
@@ -233,86 +234,18 @@ jobs:
           printf 'Docker image: `%s:%s` (built %s)\n\n%s\n' "${IMAGE}" "${TAG_VERSION}" "${BUILD_DATE}" "${NOTES}" | gh release edit "${GIT_TAG}" --notes-file -
           echo "Created GitHub Release ${GIT_TAG}."
 
-      - name: Update server.json version
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
-        run: |
-          SERVER_JSON="mcp-local/server.json"
-          BUMP_BRANCH="chore/bump-server-json-${TAG_VERSION}"
-          if [ "${IS_DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would bump ${SERVER_JSON} to ${TAG_VERSION} and open a PR to main."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Apply the version bump to server.json without a temp file.
-          apply_bump_file() {
-            if ! updated="$(jq --arg v "${TAG_VERSION}" '
-              .version = $v
-              | .packages |= map(
-                  if (.identifier // "") | startswith("docker.io/armlimited/arm-mcp:")
-                  then .identifier = "docker.io/armlimited/arm-mcp:\($v)"
-                  else . end
-                )
-            ' "${SERVER_JSON}")"; then
-              echo "::error::jq failed to update ${SERVER_JSON}."; return 1
-            fi
-            if [ -z "${updated}" ]; then
-              echo "::error::jq produced empty output for ${SERVER_JSON}."; return 1
-            fi
-            printf '%s\n' "${updated}" > "${SERVER_JSON}"
-          }
-
-          # Rebase bump branch on origin/main, apply bump, and commit if changed.
-          refresh_branch_with_bump() {
-            git fetch origin main
-            git checkout -B "${BUMP_BRANCH}" origin/main
-            apply_bump_file || return 1
-            if git diff --quiet -- "${SERVER_JSON}"; then
-              return 2
-            fi
-            git add "${SERVER_JSON}"
-            git commit -m "chore: bump server.json to ${TAG_VERSION}"
-            return 0
-          }
-
-          # Retry helper: refresh branch state or exit on no-op/failure.
-          refresh_or_exit() {
-            refresh_branch_with_bump
-            case "$?" in
-              0) return 0 ;;
-              2) echo "${SERVER_JSON} already at ${TAG_VERSION} on origin/main; nothing to push."; exit 0 ;;
-              *) exit 1 ;;
-            esac
-          }
-
-          # Ensure a PR exists for the bump branch (create if missing).
-          ensure_bump_pr() {
-            if gh pr view "${BUMP_BRANCH}" >/dev/null 2>&1; then
-              echo "PR for ${BUMP_BRANCH} already exists; branch updated."
-            else
-              gh pr create \
-                --base main --head "${BUMP_BRANCH}" \
-                --title "chore: bump server.json to ${TAG_VERSION}" \
-                --body "Automated bump of \`${SERVER_JSON}\` to \`${TAG_VERSION}\` (matches \`armlimited/arm-mcp:${TAG_VERSION}\`)."
-              echo "Opened PR to bump ${SERVER_JSON} to ${TAG_VERSION}."
-            fi
-          }
-
-          refresh_branch_with_bump
-          case "$?" in
-            0) ;;
-            2) echo "${SERVER_JSON} already at ${TAG_VERSION}; nothing to do."; exit 0 ;;
-            *) exit 1 ;;
-          esac
-
-          pushed=false
-          for attempt in 1 2 3; do
-            if git push --force-with-lease origin "${BUMP_BRANCH}"; then pushed=true; break; fi
-            echo "Push ${attempt} failed; rebasing onto origin/main and retrying..."
-            refresh_or_exit
-          done
-          [ "${pushed}" = "true" ] || { echo "::error::Failed to push ${BUMP_BRANCH}."; exit 1; }
-          ensure_bump_pr
+  # Sync server.json to the freshly published release. Called directly (not via
+  # a `release` event, which wouldn't fire for a GITHUB_TOKEN-created release).
+  # tag_exists is only 'true' on a real publishing run (false on dry runs).
+  bump-server-json:
+    needs: merge-manifests
+    if: ${{ needs.merge-manifests.outputs.tag_exists == 'true' }}
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/bump-server-json.yml
+    with:
+      tag: ${{ needs.merge-manifests.outputs.git_tag }}
+    # Pass caller secrets (incl. GITHUB_TOKEN) so the reusable workflow's
+    # gh pr view/create calls are authenticated.
+    secrets: inherit
