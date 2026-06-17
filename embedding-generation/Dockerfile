@@ -38,6 +38,7 @@ WORKDIR /embedding-data
 
 # Copy Python scripts and dependencies
 COPY generate-chunks.py .
+COPY generate_common.py .
 COPY document_chunking.py .
 COPY local_vectorstore_creation.py .
 COPY vector-db-sources.csv .
@@ -47,8 +48,7 @@ COPY requirements.txt .
 COPY --from=intrinsic-chunks /embedding-data/intrinsic_chunks ./intrinsic_chunks
 
 # Install Python dependencies (force CPU-only torch)
-RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt && \
-    playwright install --with-deps chromium
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
 # Pre-download the embedding model so local/offline loads succeed later in the build.
 RUN python3 -c "from sentence_transformers import SentenceTransformer; import os; SentenceTransformer(os.environ['SENTENCE_TRANSFORMER_MODEL'], cache_folder=os.environ['SENTENCE_TRANSFORMERS_HOME'])"
