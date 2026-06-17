@@ -156,8 +156,6 @@ jobs:
         env:
           DATE_TAG: ${{ needs.build-arch-images.outputs.date_tag }}
         run: |
-          # date_tag is unique per run (includes run_number), so this manifest
-          # always describes the images this run just built.
           if [ "${IS_DRY_RUN}" = "true" ]; then
             echo "[dry-run] Would create ${IMAGE}:${DATE_TAG} from ${DATE_TAG}-amd64/-arm64"
             exit 0
@@ -169,21 +167,12 @@ jobs:
 
       - name: Determine version tag
         id: version
-        # Read-only (computes a version, writes nothing); previews on dry runs
-        # too. Publishing is enforced by the top-level guard.
         env:
-          # minor is automatic for KB rebuilds; manual runs pick major/hotfix.
           BUMP_TYPE: ${{ github.event_name == 'workflow_run' && 'minor' || github.event.inputs.bump_type }}
         run: |
-          # Git tags are the source of truth: pick the highest vX.Y.Z tag (sort
-          # -V orders versions correctly) and bump it
-          # (minor x.Y+1.0 | major X+1.0.0 | hotfix x.y.Z+1).
           git fetch --tags --force --quiet
           latest="$(git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
-          if [ -z "${latest}" ]; then
-            echo "::error::No vX.Y.Z git tags found; refusing to bump from 0.0.0."
-            exit 1
-          fi
+          [ -n "${latest}" ] || { echo "::error::No vX.Y.Z tags found."; exit 1; }
           ver="${latest#v}"
           major="${ver%%.*}"; rest="${ver#*.}"; minor="${rest%%.*}"; patch="${rest##*.}"
           case "${BUMP_TYPE:-minor}" in
@@ -192,7 +181,7 @@ jobs:
             hotfix) TAG_VERSION="${major}.${minor}.$((patch + 1))" ;;
             *) echo "::error::Unknown bump_type '${BUMP_TYPE}'."; exit 1 ;;
           esac
-          echo "Highest ${latest} -> next (${BUMP_TYPE}): ${TAG_VERSION}"
+          echo "${latest} -> ${TAG_VERSION} (${BUMP_TYPE})"
           echo "tag_version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Add latest and version aliases to date tag
@@ -200,8 +189,6 @@ jobs:
           DATE_TAG: ${{ needs.build-arch-images.outputs.date_tag }}
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
         run: |
-          # Alias this run's unique date tag as latest and the version tag
-          # (imagetools create copies the manifest by digest).
           if [ "${IS_DRY_RUN}" = "true" ]; then
             echo "[dry-run] Would alias ${IMAGE}:${DATE_TAG} as latest and ${TAG_VERSION}"
             exit 0
@@ -219,36 +206,20 @@ jobs:
         run: |
           GIT_TAG="v${TAG_VERSION}"
           echo "git_tag=${GIT_TAG}" >> "$GITHUB_OUTPUT"
+          [ "${IS_DRY_RUN}" = "true" ] && { echo "[dry-run] Would create ${GIT_TAG}"; echo "tag_exists=false" >> "$GITHUB_OUTPUT"; exit 0; }
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          HEAD_SHA="$(git rev-parse HEAD)"
-          if git rev-parse -q --verify "refs/tags/${GIT_TAG}" >/dev/null; then
-            # Existing tag must point at the built commit (^{commit} derefs
-            # annotated tags), else aliases/release would describe another commit.
-            EXISTING_SHA="$(git rev-parse -q --verify "refs/tags/${GIT_TAG}^{commit}")"
-            if [ "${EXISTING_SHA}" != "${HEAD_SHA}" ]; then
-              echo "::error::${GIT_TAG} exists at ${EXISTING_SHA}, not the built commit ${HEAD_SHA}."
-              exit 1
-            fi
-            echo "${GIT_TAG} already exists and matches HEAD; skipping creation."
-            echo "created=false" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/${GIT_TAG}" >/dev/null 2>&1; then
+            echo "${GIT_TAG} already exists; skipping."
             echo "tag_exists=true" >> "$GITHUB_OUTPUT"
-          elif [ "${IS_DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would create and push ${GIT_TAG}."
-            echo "created=false" >> "$GITHUB_OUTPUT"
-            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
           else
             git tag -a "${GIT_TAG}" -m "Release ${GIT_TAG} (matches ${IMAGE}:${TAG_VERSION})"
             git push origin "refs/tags/${GIT_TAG}"
             echo "Created and pushed ${GIT_TAG}."
-            echo "created=true" >> "$GITHUB_OUTPUT"
             echo "tag_exists=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create GitHub Release with changelog
-        # Runs whenever the tag exists (idempotent backfill if a prior run pushed
-        # the tag but didn't create the release); skips if a release exists.
-        # tag_exists is false on dry runs.
         if: ${{ steps.gittag.outputs.tag_exists == 'true' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -256,17 +227,10 @@ jobs:
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
         run: |
-          if gh release view "${GIT_TAG}" >/dev/null 2>&1; then
-            echo "Release ${GIT_TAG} already exists; nothing to do."
-            exit 0
-          fi
-          # --generate-notes and --notes are mutually exclusive, so generate the
-          # changelog first, then prepend the image header via edit.
+          gh release view "${GIT_TAG}" >/dev/null 2>&1 && { echo "Release exists."; exit 0; }
           gh release create "${GIT_TAG}" --title "${GIT_TAG}" --generate-notes
           NOTES="$(gh release view "${GIT_TAG}" --json body --jq '.body')"
-          printf 'Docker image: `%s:%s` (built %s)\n\n%s\n' "${IMAGE}" "${TAG_VERSION}" "${BUILD_DATE}" "${NOTES}" > release_notes.md
-          gh release edit "${GIT_TAG}" --notes-file release_notes.md
-          rm -f release_notes.md
+          printf 'Docker image: `%s:%s` (built %s)\n\n%s\n' "${IMAGE}" "${TAG_VERSION}" "${BUILD_DATE}" "${NOTES}" | gh release edit "${GIT_TAG}" --notes-file -
           echo "Created GitHub Release ${GIT_TAG}."
 
       - name: Update server.json version
@@ -274,9 +238,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
         run: |
-          # Bump version + OCI identifier in server.json and open a PR to main.
-          # PR-based (branch-protection friendly); always rebased onto fresh
-          # origin/main with push retries to tolerate concurrent updates.
           SERVER_JSON="mcp-local/server.json"
           BUMP_BRANCH="chore/bump-server-json-${TAG_VERSION}"
           if [ "${IS_DRY_RUN}" = "true" ]; then
@@ -286,59 +247,72 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          apply_bump() {
-            git fetch origin main
-            git checkout -B "${BUMP_BRANCH}" origin/main
-            tmp="$(mktemp)"
-            # Fail fast on jq error/empty output so we never write an empty file.
-            if ! jq --arg v "${TAG_VERSION}" '
+          # Apply the version bump to server.json without a temp file.
+          apply_bump_file() {
+            if ! updated="$(jq --arg v "${TAG_VERSION}" '
               .version = $v
               | .packages |= map(
                   if (.identifier // "") | startswith("docker.io/armlimited/arm-mcp:")
                   then .identifier = "docker.io/armlimited/arm-mcp:\($v)"
                   else . end
                 )
-            ' "${SERVER_JSON}" > "${tmp}"; then
-              echo "::error::jq failed to update ${SERVER_JSON}."; rm -f "${tmp}"; return 1
+            ' "${SERVER_JSON}")"; then
+              echo "::error::jq failed to update ${SERVER_JSON}."; return 1
             fi
-            if [ ! -s "${tmp}" ]; then
-              echo "::error::jq produced empty output for ${SERVER_JSON}."; rm -f "${tmp}"; return 1
+            if [ -z "${updated}" ]; then
+              echo "::error::jq produced empty output for ${SERVER_JSON}."; return 1
             fi
-            mv "${tmp}" "${SERVER_JSON}"
+            printf '%s\n' "${updated}" > "${SERVER_JSON}"
           }
 
-          apply_bump || exit 1
-          if git diff --quiet -- "${SERVER_JSON}"; then
-            echo "${SERVER_JSON} already at ${TAG_VERSION}; nothing to do."
-            exit 0
-          fi
-          git add "${SERVER_JSON}"
-          git commit -m "chore: bump server.json to ${TAG_VERSION}"
+          # Rebase bump branch on origin/main, apply bump, and commit if changed.
+          refresh_branch_with_bump() {
+            git fetch origin main
+            git checkout -B "${BUMP_BRANCH}" origin/main
+            apply_bump_file || return 1
+            if git diff --quiet -- "${SERVER_JSON}"; then
+              return 2
+            fi
+            git add "${SERVER_JSON}"
+            git commit -m "chore: bump server.json to ${TAG_VERSION}"
+            return 0
+          }
+
+          # Retry helper: refresh branch state or exit on no-op/failure.
+          refresh_or_exit() {
+            refresh_branch_with_bump
+            case "$?" in
+              0) return 0 ;;
+              2) echo "${SERVER_JSON} already at ${TAG_VERSION} on origin/main; nothing to push."; exit 0 ;;
+              *) exit 1 ;;
+            esac
+          }
+
+          # Ensure a PR exists for the bump branch (create if missing).
+          ensure_bump_pr() {
+            if gh pr view "${BUMP_BRANCH}" >/dev/null 2>&1; then
+              echo "PR for ${BUMP_BRANCH} already exists; branch updated."
+            else
+              gh pr create \
+                --base main --head "${BUMP_BRANCH}" \
+                --title "chore: bump server.json to ${TAG_VERSION}" \
+                --body "Automated bump of \`${SERVER_JSON}\` to \`${TAG_VERSION}\` (matches \`armlimited/arm-mcp:${TAG_VERSION}\`)."
+              echo "Opened PR to bump ${SERVER_JSON} to ${TAG_VERSION}."
+            fi
+          }
+
+          refresh_branch_with_bump
+          case "$?" in
+            0) ;;
+            2) echo "${SERVER_JSON} already at ${TAG_VERSION}; nothing to do."; exit 0 ;;
+            *) exit 1 ;;
+          esac
 
           pushed=false
           for attempt in 1 2 3; do
             if git push --force-with-lease origin "${BUMP_BRANCH}"; then pushed=true; break; fi
             echo "Push ${attempt} failed; rebasing onto origin/main and retrying..."
-            apply_bump || exit 1
-            # If the bump already landed concurrently, stop cleanly (an identical
-            # branch would make `gh pr create` fail with no commits).
-            if git diff --quiet -- "${SERVER_JSON}"; then
-              echo "${SERVER_JSON} already at ${TAG_VERSION} on origin/main; nothing to push."
-              exit 0
-            fi
-            git add "${SERVER_JSON}"
-            git commit -m "chore: bump server.json to ${TAG_VERSION}"
+            refresh_or_exit
           done
           [ "${pushed}" = "true" ] || { echo "::error::Failed to push ${BUMP_BRANCH}."; exit 1; }
-
-          if gh pr view "${BUMP_BRANCH}" >/dev/null 2>&1; then
-            echo "PR for ${BUMP_BRANCH} already exists; branch updated."
-          else
-            # Requires "Allow GitHub Actions to create and approve pull requests"
-            # (or a PAT/App token with pull-requests: write).
-            gh pr create \
-              --base main --head "${BUMP_BRANCH}" \
-              --title "chore: bump server.json to ${TAG_VERSION}" \
-              --body "Automated bump of \`${SERVER_JSON}\` to \`${TAG_VERSION}\` (matches \`armlimited/arm-mcp:${TAG_VERSION}\`)."
-            echo "Opened PR to bump ${SERVER_JSON} to ${TAG_VERSION}."
-          fi
+          ensure_bump_pr
