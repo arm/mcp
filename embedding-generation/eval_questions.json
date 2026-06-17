@@ -2580,6 +2580,12 @@
     ]
   },
   {
+    "question": "nginx performance tweaks",
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/nginx-tuning-guide"
+    ]
+  },
+  {
     "question": "devices that support SME and SME2",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/1-get-started/#devices"
