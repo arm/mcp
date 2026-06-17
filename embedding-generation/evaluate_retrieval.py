@@ -56,6 +56,7 @@ def evaluate(index_path: Path, metadata_path: Path, eval_path: Path, model_name:
             embedding_model,
             bm25_index,
             k=deduplication_candidate_count(top_k),
+            candidate_depth=max(top_k * 20, 100),
         )
         results = deduplicate_urls(raw_results, max_chunks_per_url=1)[:top_k]
         return [item["metadata"].get("url") for item in results]
