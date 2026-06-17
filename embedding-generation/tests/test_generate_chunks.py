@@ -25,7 +25,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from document_chunking import chunk_parsed_document, parse_document_content
+from document_chunking import chunk_parsed_document, learn_learning_path_step_urls, parse_document_content
 
 
 def _arm_api_response(title, html):
@@ -167,7 +167,50 @@ class TestDocumentChunkingAnchors:
         assert chunks[0]["url"] == "https://learn.arm.com/example/1-get-started/#devices"
         assert chunks[0]["heading_path"] == ["Devices with native SME2 support"]
 
-    def test_markdown_links_emit_linked_reference_chunks(self):
+
+    def test_learn_learning_path_step_urls_discovers_same_path_steps(self):
+        html = (
+            b"<main>"
+            b"<a href='/learning-paths/cross-platform/example/1-get-started/'>Start</a>"
+            b"<a href='/learning-paths/cross-platform/example/1-get-started/#devices'>Devices</a>"
+            b"<a href='/learning-paths/cross-platform/other/1-get-started/'>Other</a>"
+            b"</main>"
+        )
+
+        assert learn_learning_path_step_urls(
+            "https://learn.arm.com/learning-paths/cross-platform/example/",
+            html,
+        ) == ["https://learn.arm.com/learning-paths/cross-platform/example/1-get-started/"]
+
+    def test_html_table_under_heading_is_returned_as_anchor_chunk(self):
+        parsed = parse_document_content(
+            source_url="https://learn.arm.com/example/1-get-started/",
+            resolved_url="https://learn.arm.com/example/1-get-started/",
+            response_content=(
+                b"<main><h1>Example</h1>"
+                b"<h2 id='devices'>Devices with native SME2 support</h2>"
+                b"<p>These Android phones support SME2 natively.</p>"
+                b"<table><tr><th>Device</th><th>Release Date</th><th>Chip Options</th></tr>"
+                b"<tr><td>Vivo X300</td><td>2025</td><td>MediaTek Dimensity 9500</td></tr>"
+                b"<tr><td>OPPO Find X9</td><td>2025</td><td>MediaTek Dimensity 9500</td></tr></table>"
+                b"<p>These Apple devices support SME2 natively.</p>"
+                b"<table><tr><th>Device</th><th>Release Date</th><th>Chip Options</th></tr>"
+                b"<tr><td>MacBook Air (2025)</td><td>2025</td><td>M4</td></tr></table>"
+                b"</main>"
+            ),
+            content_type="text/html",
+            fallback_title="Example",
+        )
+
+        chunks = chunk_parsed_document(parsed, doc_type="Learning Path", keywords=["SME2"], min_tokens=1)
+        devices_chunks = [chunk for chunk in chunks if chunk["url"] == "https://learn.arm.com/example/1-get-started/#devices"]
+
+        assert devices_chunks
+        assert "Vivo X300 | 2025 | MediaTek Dimensity 9500" in devices_chunks[0]["content"]
+        assert "OPPO Find X9 | 2025 | MediaTek Dimensity 9500" in devices_chunks[0]["content"]
+        assert "MacBook Air (2025) | 2025 | M4" in devices_chunks[0]["content"]
+
+    def test_markdown_links_stay_on_source_chunk_as_link_evidence(self):
         parsed = parse_document_content(
             source_url="https://learn.arm.com/example/",
             resolved_url="https://raw.githubusercontent.com/example/_index.md",
@@ -182,13 +225,13 @@ class TestDocumentChunkingAnchors:
         )
 
         chunks = chunk_parsed_document(parsed, doc_type="Learning Path", keywords=["SME2"], min_tokens=1)
-        linked_chunks = [chunk for chunk in chunks if chunk["content_type"].endswith(":linked-reference")]
 
-        assert linked_chunks[0]["url"] == "https://learn.arm.com/example/1-get-started/#devices"
-        assert "devices with SME2 support" in linked_chunks[0]["content"]
-        assert "Target URL: https://learn.arm.com/example/1-get-started/#devices" in linked_chunks[0]["content"]
+        assert not any(chunk["content_type"].endswith(":linked-reference") for chunk in chunks)
+        assert chunks[0]["url"] == "https://learn.arm.com/example/"
+        assert "devices with SME2 support" in chunks[0]["content"]
+        assert "https://learn.arm.com/example/1-get-started/#devices" in chunks[0]["content"]
 
-    def test_html_links_emit_linked_reference_chunks(self):
+    def test_html_links_stay_on_source_chunk_as_link_evidence(self):
         parsed = parse_document_content(
             source_url="https://learn.arm.com/example/",
             resolved_url="https://learn.arm.com/example/",
@@ -202,11 +245,11 @@ class TestDocumentChunkingAnchors:
         )
 
         chunks = chunk_parsed_document(parsed, doc_type="Learning Path", keywords=["SME2"], min_tokens=1)
-        linked_chunks = [chunk for chunk in chunks if chunk["content_type"].endswith(":linked-reference")]
 
-        assert linked_chunks[0]["url"] == "https://learn.arm.com/example/1-get-started/#devices"
-        assert "devices with SME2 support" in linked_chunks[0]["content"]
-        assert "Target URL: https://learn.arm.com/example/1-get-started/#devices" in linked_chunks[0]["content"]
+        assert not any(chunk["content_type"].endswith(":linked-reference") for chunk in chunks)
+        assert chunks[0]["url"] == "https://learn.arm.com/example/"
+        assert "devices with SME2 support" in chunks[0]["content"]
+        assert "https://learn.arm.com/example/1-get-started/#devices" in chunks[0]["content"]
 
 
 class TestSourceTracking:

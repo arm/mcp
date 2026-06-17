@@ -86,6 +86,42 @@ def normalize_source_url(url: str) -> str:
     return url
 
 
+def is_learn_learning_path_url(url: str) -> bool:
+    parsed = urlparse(normalize_source_url(url))
+    return (
+        parsed.scheme in {"http", "https"}
+        and parsed.netloc.lower() == "learn.arm.com"
+        and parsed.path.startswith("/learning-paths/")
+    )
+
+
+def learn_learning_path_step_urls(source_url: str, html: str | bytes) -> List[str]:
+    source_url = normalize_source_url(source_url)
+    if not is_learn_learning_path_url(source_url):
+        return []
+
+    source = urlparse(source_url)
+    source_path = source.path.rstrip("/") + "/"
+    soup = BeautifulSoup(html, "html.parser")
+    step_urls: List[str] = []
+    seen: set[str] = set()
+
+    for link in soup.find_all("a", href=True):
+        candidate = normalize_source_url(urljoin(source_url, link.get("href", "")))
+        parsed = urlparse(candidate)
+        if parsed.scheme not in {"http", "https"} or parsed.netloc.lower() != "learn.arm.com":
+            continue
+        path = parsed.path.rstrip("/") + "/"
+        if path == source_path or not path.startswith(source_path):
+            continue
+        step_url = urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
+        if step_url not in seen:
+            seen.add(step_url)
+            step_urls.append(step_url)
+
+    return step_urls
+
+
 def is_arm_developer_documentation_url(url: str) -> bool:
     parsed = urlparse(normalize_source_url(url))
     return parsed.scheme in {"http", "https"} and parsed.netloc.lower() == ARM_DEVELOPER_HOST and parsed.path.startswith("/documentation/")
@@ -591,30 +627,6 @@ def chunk_section_units(
     return [chunk for chunk in chunks if clean_text(chunk)]
 
 
-def build_link_reference_text(title: str, heading_path: List[str], link: Link, context: str) -> str:
-    normalized_heading_path = normalize_heading_path(title, heading_path)
-    heading_label = " > ".join(normalized_heading_path) if normalized_heading_path else title
-    return clean_text(
-        f"Document Title: {title}\n"
-        f"Heading Path: {heading_label}\n\n"
-        f"Linked reference: {link.text}\n"
-        f"Target URL: {link.url}\n"
-        f"Context: {context}"
-    )
-
-
-def unique_section_links(blocks: List[Block]) -> List[tuple[Link, str]]:
-    seen: set[tuple[str, str]] = set()
-    links: List[tuple[Link, str]] = []
-    for block in blocks:
-        for link in block.links or []:
-            key = (link.text.lower(), link.url)
-            if key in seen or not is_meaningful_retrieval_link(link):
-                continue
-            seen.add(key)
-            links.append((link, block.text))
-    return links
-
 
 def build_chunk_text(title: str, heading_path: List[str], body: str) -> str:
     normalized_heading_path = normalize_heading_path(title, heading_path)
@@ -674,21 +686,6 @@ def chunk_parsed_document(
                     "version": version,
                     "content_type": parsed_document.content_type,
                     "content": build_chunk_text(parsed_document.display_title, heading_path, chunk_body),
-                }
-            )
-        for link, context in unique_section_links(section.blocks):
-            chunks.append(
-                {
-                    "title": parsed_document.display_title,
-                    "url": link.url,
-                    "resolved_url": parsed_document.resolved_url,
-                    "heading": heading,
-                    "heading_path": heading_path,
-                    "doc_type": doc_type,
-                    "product": product,
-                    "version": version,
-                    "content_type": f"{parsed_document.content_type}:linked-reference",
-                    "content": build_link_reference_text(parsed_document.display_title, heading_path, link, context),
                 }
             )
     return chunks

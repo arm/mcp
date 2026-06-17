@@ -23,7 +23,7 @@ from usearch.index import Index
 from .config import K_RESULTS
 from .loaders import load_metadata, load_usearch_index
 from .response import add_disclaimer_to_arm_results, add_utm_source_to_results
-from .search import build_bm25_index, deduplicate_urls, hybrid_search
+from .search import build_bm25_index, deduplicate_urls, deduplication_candidate_count, hybrid_search
 
 
 @dataclass
@@ -119,9 +119,9 @@ def search(
         resources.metadata,
         resources.embedding_model,
         resources.bm25_index,
-        k=resolved_k,
+        k=deduplication_candidate_count(resolved_k),
     )
-    deduped = deduplicate_urls(search_results)
+    deduped = deduplicate_urls(search_results)[:resolved_k]
     formatted = [
         {
             "url": item["metadata"].get("url"),

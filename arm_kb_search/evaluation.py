@@ -18,6 +18,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 
 EvalRow = dict[str, object]
@@ -96,6 +97,26 @@ def load_eval_rows(eval_path: Path) -> list[EvalRow]:
     return rows
 
 
+def url_base(url: str | None) -> str | None:
+    if url is None:
+        return None
+    parsed = urlparse(url)
+    return urlunparse(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path.rstrip("/") or "/",
+            parsed.params,
+            "",
+            "",
+        )
+    )
+
+
+def url_without_anchor(url: str | None) -> str | None:
+    return url_base(url)
+
+
 def evaluate_retrieval(eval_rows: list[EvalRow], retrieve_urls: RetrieveUrls, top_k: int) -> EvaluationResult:
     hits_at_1 = 0
     hits_at_3 = 0
@@ -118,10 +139,10 @@ def evaluate_retrieval(eval_rows: list[EvalRow], retrieve_urls: RetrieveUrls, to
             error = str(exc)
             errors.append(RetrievalError(question=question, error=error))
 
-        expected = set(expected_urls)
+        expected = {url_base(url) for url in expected_urls}
         match_rank = None
         for index, url in enumerate(ranked_urls, start=1):
-            if url in expected:
+            if url_base(url) in expected:
                 match_rank = index
                 break
 

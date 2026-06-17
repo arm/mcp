@@ -17,6 +17,7 @@ if str(REPO_ROOT) not in sys.path:
 from arm_kb_search import (  # noqa: E402
     build_bm25_index,
     deduplicate_urls,
+    deduplication_candidate_count,
     embedding_dimension,
     hybrid_search,
     load_metadata,
@@ -54,7 +55,8 @@ def evaluate(index_path: Path, metadata_path: Path, eval_path: Path, model_name:
             metadata,
             embedding_model,
             bm25_index,
-            k=top_k,
+            k=deduplication_candidate_count(top_k),
+            candidate_depth=max(top_k * 20, 100),
         )
         results = deduplicate_urls(raw_results, max_chunks_per_url=1)[:top_k]
         return [item["metadata"].get("url") for item in results]
