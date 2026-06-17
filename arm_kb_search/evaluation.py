@@ -97,7 +97,7 @@ def load_eval_rows(eval_path: Path) -> list[EvalRow]:
     return rows
 
 
-def url_without_anchor(url: str | None) -> str | None:
+def url_base(url: str | None) -> str | None:
     if url is None:
         return None
     parsed = urlparse(url)
@@ -105,12 +105,16 @@ def url_without_anchor(url: str | None) -> str | None:
         (
             parsed.scheme,
             parsed.netloc,
-            parsed.path,
+            parsed.path.rstrip("/") or "/",
             parsed.params,
-            parsed.query,
+            "",
             "",
         )
     )
+
+
+def url_without_anchor(url: str | None) -> str | None:
+    return url_base(url)
 
 
 def evaluate_retrieval(eval_rows: list[EvalRow], retrieve_urls: RetrieveUrls, top_k: int) -> EvaluationResult:
@@ -135,10 +139,10 @@ def evaluate_retrieval(eval_rows: list[EvalRow], retrieve_urls: RetrieveUrls, to
             error = str(exc)
             errors.append(RetrievalError(question=question, error=error))
 
-        expected = {url_without_anchor(url) for url in expected_urls}
+        expected = {url_base(url) for url in expected_urls}
         match_rank = None
         for index, url in enumerate(ranked_urls, start=1):
-            if url_without_anchor(url) in expected:
+            if url_base(url) in expected:
                 match_rank = index
                 break
 
