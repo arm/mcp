@@ -63,6 +63,7 @@ jobs:
       contents: read
     outputs:
       build_date: ${{ steps.build_date.outputs.build_date }}
+      date_tag: ${{ steps.build_date.outputs.date_tag }}
     steps:
       - name: Guard against non-main publishing
         run: |
@@ -81,7 +82,7 @@ jobs:
           # images, manifests, and git tags all reference the same commit.
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-      - name: Set build date (UTC)
+      - name: Set build date and unique date tag (UTC)
         id: build_date
         run: |
           if [ -n "${{ github.event.workflow_run.created_at }}" ]; then
@@ -89,8 +90,14 @@ jobs:
           else
             BUILD_DATE=$(date -u +%Y-%m-%d)
           fi
+          # Append run_number so every run gets a distinct date tag. Without it,
+          # two runs on the same day would share one tag, and the later run would
+          # alias its version/git tag onto the earlier run's image digest.
+          DATE_TAG="${BUILD_DATE}-${{ github.run_number }}"
           echo "BUILD_DATE=$BUILD_DATE" >> "$GITHUB_ENV"
+          echo "DATE_TAG=$DATE_TAG" >> "$GITHUB_ENV"
           echo "build_date=$BUILD_DATE" >> "$GITHUB_OUTPUT"
+          echo "date_tag=$DATE_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -112,7 +119,7 @@ jobs:
           platforms: ${{ matrix.platform }}
           # Push only on publishing runs (non-dry implies main per the guard).
           push: ${{ env.IS_DRY_RUN != 'true' }}
-          tags: ${{ env.IMAGE }}:${{ env.BUILD_DATE }}-${{ matrix.tag }}
+          tags: ${{ env.IMAGE }}:${{ env.DATE_TAG }}-${{ matrix.tag }}
           build-args: |
             EMBEDDINGS_IMAGE=${{ env.IMAGE }}:embeddings-latest
 
@@ -147,23 +154,18 @@ jobs:
 
       - name: Create multi-arch manifest for date tag
         env:
-          BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
+          DATE_TAG: ${{ needs.build-arch-images.outputs.date_tag }}
         run: |
-          # Publish only the immutable date tag; latest/version aliases come
-          # later, after this manifest is verified.
+          # date_tag is unique per run (includes run_number), so this manifest
+          # always describes the images this run just built.
           if [ "${IS_DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would create ${IMAGE}:${BUILD_DATE} from ${BUILD_DATE}-amd64/-arm64"
-            exit 0
-          fi
-          # Immutable: don't re-point an existing date tag on reruns.
-          if docker buildx imagetools inspect "${IMAGE}:${BUILD_DATE}" >/dev/null 2>&1; then
-            echo "Date tag ${IMAGE}:${BUILD_DATE} already exists; leaving it unchanged."
+            echo "[dry-run] Would create ${IMAGE}:${DATE_TAG} from ${DATE_TAG}-amd64/-arm64"
             exit 0
           fi
           docker buildx imagetools create \
-            -t "${IMAGE}:${BUILD_DATE}" \
-            "${IMAGE}:${BUILD_DATE}-amd64" \
-            "${IMAGE}:${BUILD_DATE}-arm64"
+            -t "${IMAGE}:${DATE_TAG}" \
+            "${IMAGE}:${DATE_TAG}-amd64" \
+            "${IMAGE}:${DATE_TAG}-arm64"
 
       - name: Determine version tag
         id: version
@@ -193,40 +195,22 @@ jobs:
           echo "Highest ${latest} -> next (${BUMP_TYPE}): ${TAG_VERSION}"
           echo "tag_version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Add latest and version aliases to verified date tag
+      - name: Add latest and version aliases to date tag
         env:
-          BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
+          DATE_TAG: ${{ needs.build-arch-images.outputs.date_tag }}
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
         run: |
-          # Alias the verified date tag as latest and the version tag
-          # (imagetools create copies the verified manifest by digest).
+          # Alias this run's unique date tag as latest and the version tag
+          # (imagetools create copies the manifest by digest).
           if [ "${IS_DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would alias ${IMAGE}:${BUILD_DATE} as latest and ${TAG_VERSION}"
+            echo "[dry-run] Would alias ${IMAGE}:${DATE_TAG} as latest and ${TAG_VERSION}"
             exit 0
-          fi
-          # Version tag is immutable. Resolve the verified date digest (must
-          # exist), then guard against re-pointing an existing version tag:
-          # same digest -> idempotent rerun; different digest -> refuse.
-          DATE_DIGEST="$(docker buildx imagetools inspect "${IMAGE}:${BUILD_DATE}" --format '{{json .Manifest.Digest}}' | tr -d '"')"
-          if [ -z "${DATE_DIGEST}" ]; then
-            echo "::error::Could not resolve digest of ${IMAGE}:${BUILD_DATE}; aborting."
-            exit 1
-          fi
-          if EXISTING_DIGEST="$(docker buildx imagetools inspect "${IMAGE}:${TAG_VERSION}" --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"')" \
-             && [ -n "${EXISTING_DIGEST}" ]; then
-            if [ "${EXISTING_DIGEST}" = "${DATE_DIGEST}" ]; then
-              echo "${IMAGE}:${TAG_VERSION} already at ${EXISTING_DIGEST}; refreshing latest only."
-              docker buildx imagetools create -t "${IMAGE}:latest" "${IMAGE}:${BUILD_DATE}"
-              exit 0
-            fi
-            echo "::error::${IMAGE}:${TAG_VERSION} exists at ${EXISTING_DIGEST} but this run would re-point it to ${DATE_DIGEST}. Version tags must not be reused."
-            exit 1
           fi
           docker buildx imagetools create \
             -t "${IMAGE}:latest" \
             -t "${IMAGE}:${TAG_VERSION}" \
-            "${IMAGE}:${BUILD_DATE}"
-          echo "Aliased ${BUILD_DATE} as latest and ${TAG_VERSION}."
+            "${IMAGE}:${DATE_TAG}"
+          echo "Aliased ${DATE_TAG} as latest and ${TAG_VERSION}."
 
       - name: Create and push matching git tag
         id: gittag
