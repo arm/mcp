@@ -69,11 +69,8 @@ cross_platform_lps_dont_duplicate = []
 # multi-megabyte HTML document for every source row.
 ecosystem_dashboard_entries = None
 
-
 # Increase the file size limit, which defaults to '131,072'
 csv.field_size_limit(10**9) #1,000,000,000 (1 billion), smaller than 64-bit space but avoids 'python overflowerror'
-
-
 
 
 

@@ -88,6 +88,9 @@ known_source_urls = set()
 # Each entry is a dict: {site_name, license_type, display_name, url, keywords}
 all_sources = []
 
+# Increase the file size limit, which defaults to '131,072'
+csv.field_size_limit(10**9) #1,000,000,000 (1 billion), smaller than 64-bit space but avoids 'python overflowerror'
+
 
 def get_number_of_sources():
     global all_sources
