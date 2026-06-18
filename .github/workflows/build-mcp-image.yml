@@ -154,7 +154,7 @@ jobs:
           DATE_TAG: ${{ needs.build-arch-images.outputs.date_tag }}
         run: |
           if [ "${IS_DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would create ${IMAGE}:${DATE_TAG} from ${DATE_TAG}-amd64/-arm64"
+            echo "[dry-run] Would create ${IMAGE}:${DATE_TAG} from ${IMAGE}:${DATE_TAG}-amd64 and ${IMAGE}:${DATE_TAG}-arm64"
             exit 0
           fi
           docker buildx imagetools create \
