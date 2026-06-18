@@ -128,7 +128,6 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-      pull-requests: write
     if: ${{ needs.build-arch-images.result == 'success' }}
     outputs:
       git_tag: ${{ steps.gittag.outputs.git_tag }}
