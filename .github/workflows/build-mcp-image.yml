@@ -129,9 +129,6 @@ jobs:
     permissions:
       contents: write
     if: ${{ needs.build-arch-images.result == 'success' }}
-    outputs:
-      git_tag: ${{ steps.gittag.outputs.git_tag }}
-      tag_exists: ${{ steps.gittag.outputs.tag_exists }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -245,18 +242,49 @@ jobs:
           printf 'Docker image: `%s:%s` (built %s)\n\n%s\n' "${IMAGE}" "${TAG_VERSION}" "${BUILD_DATE}" "${NOTES}" | gh release edit "${GIT_TAG}" --notes-file -
           echo "Created GitHub Release ${GIT_TAG}."
 
-  # Sync server.json to the freshly published release. Called directly (not via
-  # a `release` event, which wouldn't fire for a GITHUB_TOKEN-created release).
-  # tag_exists is only 'true' on a real publishing run (false on dry runs).
-  bump-server-json:
-    needs: merge-manifests
-    if: ${{ needs.merge-manifests.outputs.tag_exists == 'true' }}
-    permissions:
-      contents: write
-      pull-requests: write
-    uses: ./.github/workflows/bump-server-json.yml
-    with:
-      tag: ${{ needs.merge-manifests.outputs.git_tag }}
-    # Pass caller secrets (incl. GITHUB_TOKEN) so the reusable workflow's
-    # gh pr view/create calls are authenticated.
-    secrets: inherit
+      # Sync server.json to the freshly published release by committing directly
+      # to main (unprotected). Runs only on a real publishing run (tag_exists),
+      # never on dry runs. The git tag is already a valid vX.Y.Z by construction.
+      - name: Bump server.json on main
+        if: ${{ steps.gittag.outputs.tag_exists == 'true' }}
+        env:
+          GIT_TAG: ${{ steps.gittag.outputs.git_tag }}
+        run: |
+          set -euo pipefail
+          SERVER_JSON="mcp-local/server.json"
+          TAG_VERSION="${GIT_TAG#v}"
+
+          # Apply the version bump to server.json (in-memory, single write).
+          apply_bump_file() {
+            local updated
+            if ! updated="$(jq --arg v "${TAG_VERSION}" '
+              .version = $v
+              | .packages |= map(
+                  if (.identifier // "") | startswith("docker.io/armlimited/arm-mcp:")
+                  then .identifier = "docker.io/armlimited/arm-mcp:\($v)"
+                  else . end
+                )
+            ' "${SERVER_JSON}")"; then
+              echo "::error::jq failed to update ${SERVER_JSON}."; return 1
+            fi
+            [ -n "${updated}" ] || { echo "::error::jq produced empty output for ${SERVER_JSON}."; return 1; }
+            printf '%s\n' "${updated}" > "${SERVER_JSON}"
+          }
+
+          # Commit the bump straight to main, rebasing if main moved underneath
+          # us. main is unprotected, so a normal push is allowed.
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git checkout -B main origin/main
+            apply_bump_file
+            if git diff --quiet -- "${SERVER_JSON}"; then
+              echo "${SERVER_JSON} already at ${TAG_VERSION}; nothing to do."; exit 0
+            fi
+            git add "${SERVER_JSON}"
+            git commit -m "chore: bump server.json to ${TAG_VERSION}"
+            if git push origin HEAD:main; then
+              echo "Pushed server.json bump to ${TAG_VERSION}."; exit 0
+            fi
+            echo "Push ${attempt} failed (main moved); retrying..."
+          done
+          echo "::error::Failed to push server.json bump after 3 attempts."; exit 1
