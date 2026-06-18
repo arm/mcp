@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from typing import Any, Dict, List
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 
 ARM_CONTENT_DISCLAIMER = (
@@ -40,5 +40,32 @@ def is_arm_domain_url(url: str | None) -> bool:
 def add_disclaimer_to_arm_results(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [
         {**item, "disclaimer": ARM_CONTENT_DISCLAIMER} if is_arm_domain_url(item.get("url")) else item
+        for item in results
+    ]
+
+
+def add_utm_source_to_url(url: str | None, utm_source: str | None) -> str | None:
+    if not url or not utm_source:
+        return url
+
+    parsed = urlparse(url)
+    query_params = [
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if key != "utm_source"
+    ]
+    query_params.append(("utm_source", utm_source))
+    return urlunparse(parsed._replace(query=urlencode(query_params)))
+
+
+def add_utm_source_to_results(
+    results: List[Dict[str, Any]],
+    utm_source: str | None,
+) -> List[Dict[str, Any]]:
+    if not utm_source:
+        return results
+
+    return [
+        {**item, "url": add_utm_source_to_url(item.get("url"), utm_source)} if "url" in item else item
         for item in results
     ]

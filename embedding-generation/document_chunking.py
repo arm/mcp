@@ -9,7 +9,7 @@ import json
 import math
 import re
 from typing import Dict, Iterable, List, Optional
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
@@ -19,7 +19,9 @@ TOKEN_PATTERN = re.compile(r"\w+|[^\w\s]", re.UNICODE)
 WORD_PATTERN = re.compile(r"\S+")
 SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+")
 MARKDOWN_HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.*)$")
+MARKDOWN_HEADING_ANCHOR_PATTERN = re.compile(r"^(.*?)\s*\{#([A-Za-z0-9_-]+)\}\s*$")
 MARKDOWN_FENCE_PATTERN = re.compile(r"^(```|~~~)")
+MARKDOWN_LINK_PATTERN = re.compile(r'(?<!!)\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)')
 HTML_HEADING_TAGS = {f"h{level}" for level in range(1, 7)}
 HTML_BLOCK_TAGS = HTML_HEADING_TAGS | {"p", "li", "pre", "code", "table"}
 BOILERPLATE_LINE_PATTERNS = [
@@ -47,15 +49,23 @@ ARM_DEVELOPER_HOST = "developer.arm.com"
 
 
 @dataclass
+class Link:
+    text: str
+    url: str
+
+
+@dataclass
 class Block:
     kind: str
     text: str
+    links: List[Link] | None = None
 
 
 @dataclass
 class Section:
     heading_path: List[str]
     blocks: List[Block]
+    url_fragment: Optional[str] = None
 
 
 @dataclass
@@ -74,6 +84,42 @@ def normalize_source_url(url: str) -> str:
         _, tail = url.split("https:/", 1)
         url = f"https://{tail.lstrip('/')}"
     return url
+
+
+def is_learn_learning_path_url(url: str) -> bool:
+    parsed = urlparse(normalize_source_url(url))
+    return (
+        parsed.scheme in {"http", "https"}
+        and parsed.netloc.lower() == "learn.arm.com"
+        and parsed.path.startswith("/learning-paths/")
+    )
+
+
+def learn_learning_path_step_urls(source_url: str, html: str | bytes) -> List[str]:
+    source_url = normalize_source_url(source_url)
+    if not is_learn_learning_path_url(source_url):
+        return []
+
+    source = urlparse(source_url)
+    source_path = source.path.rstrip("/") + "/"
+    soup = BeautifulSoup(html, "html.parser")
+    step_urls: List[str] = []
+    seen: set[str] = set()
+
+    for link in soup.find_all("a", href=True):
+        candidate = normalize_source_url(urljoin(source_url, link.get("href", "")))
+        parsed = urlparse(candidate)
+        if parsed.scheme not in {"http", "https"} or parsed.netloc.lower() != "learn.arm.com":
+            continue
+        path = parsed.path.rstrip("/") + "/"
+        if path == source_path or not path.startswith(source_path):
+            continue
+        step_url = urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
+        if step_url not in seen:
+            seen.add(step_url)
+            step_urls.append(step_url)
+
+    return step_urls
 
 
 def is_arm_developer_documentation_url(url: str) -> bool:
@@ -139,6 +185,53 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
+def tokenize_link_text(text: str) -> List[str]:
+    return [token.lower() for token in re.findall(r"[a-z0-9][a-z0-9_\-+.]*", text or "", re.IGNORECASE)]
+
+
+def resolve_link_url(base_url: str, href: str) -> str:
+    href = clean_text(href)
+    if not href or href.startswith(("mailto:", "tel:", "javascript:")):
+        return ""
+    return urljoin(base_url, href)
+
+
+def extract_markdown_links(text: str, base_url: str) -> List[Link]:
+    links: List[Link] = []
+    for match in MARKDOWN_LINK_PATTERN.finditer(text or ""):
+        link_text = clean_text(match.group(1))
+        link_url = resolve_link_url(base_url, match.group(2))
+        if link_text and link_url:
+            links.append(Link(link_text, link_url))
+    return links
+
+
+def extract_html_links(tag, base_url: str) -> List[Link]:
+    links: List[Link] = []
+    for link in tag.find_all("a", href=True):
+        link_text = clean_text(link.get_text(" ", strip=True))
+        link_url = resolve_link_url(base_url, link.get("href", ""))
+        if link_text and link_url:
+            links.append(Link(link_text, link_url))
+    return links
+
+
+def link_text_with_urls(text: str, links: List[Link]) -> str:
+    if not links:
+        return text
+    link_evidence = " ".join(f"{link.text} {link.url}" for link in links)
+    return clean_text(f"{text}\n\nLinked references: {link_evidence}")
+
+
+def is_meaningful_retrieval_link(link: Link) -> bool:
+    parsed = urlparse(link.url)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    stopwords = {"a", "an", "and", "for", "here", "in", "of", "or", "the", "this", "to"}
+    tokens = [token for token in tokenize_link_text(link.text) if token not in stopwords]
+    return bool(parsed.fragment) or len(tokens) >= 2
+
+
 def is_boilerplate_line(line: str) -> bool:
     line = clean_text(line)
     if not line:
@@ -168,10 +261,18 @@ def normalize_heading_path(title: str, heading_path: List[str]) -> List[str]:
     return normalized
 
 
+def url_with_fragment(url: str, fragment: str | None) -> str:
+    if not fragment:
+        return url
+    parsed = urlparse(url)
+    return urlunparse(parsed._replace(fragment=fragment))
+
+
 def parse_markdown(markdown: str, source_url: str, resolved_url: str, fallback_title: str) -> ParsedDocument:
     markdown = strip_frontmatter(markdown)
     lines = markdown.splitlines()
     heading_stack: List[str] = []
+    heading_anchor_stack: List[Optional[str]] = []
     sections: List[Section] = []
     current_blocks: List[Block] = []
     current_paragraph: List[str] = []
@@ -186,7 +287,8 @@ def parse_markdown(markdown: str, source_url: str, resolved_url: str, fallback_t
         paragraph = clean_text("\n".join(current_paragraph))
         current_paragraph = []
         if paragraph and not is_boilerplate_line(paragraph):
-            current_blocks.append(Block("paragraph", paragraph))
+            links = extract_markdown_links(paragraph, source_url)
+            current_blocks.append(Block("paragraph", link_text_with_urls(paragraph, links), links))
 
     def flush_code() -> None:
         nonlocal current_code
@@ -199,7 +301,8 @@ def parse_markdown(markdown: str, source_url: str, resolved_url: str, fallback_t
 
     def flush_section() -> None:
         if current_blocks:
-            sections.append(Section(list(heading_stack), list(current_blocks)))
+            section_anchor = next((anchor for anchor in reversed(heading_anchor_stack) if anchor), None)
+            sections.append(Section(list(heading_stack), list(current_blocks), section_anchor))
             current_blocks.clear()
 
     for line in lines:
@@ -222,11 +325,18 @@ def parse_markdown(markdown: str, source_url: str, resolved_url: str, fallback_t
             flush_section()
             level = len(heading_match.group(1))
             heading_text = clean_text(heading_match.group(2))
+            heading_anchor = None
+            anchor_match = MARKDOWN_HEADING_ANCHOR_PATTERN.match(heading_text)
+            if anchor_match:
+                heading_text = clean_text(anchor_match.group(1))
+                heading_anchor = clean_text(anchor_match.group(2))
             if level == 1 and fallback_title == document_title:
                 document_title = heading_text
             while len(heading_stack) >= level:
                 heading_stack.pop()
+                heading_anchor_stack.pop()
             heading_stack.append(heading_text)
+            heading_anchor_stack.append(heading_anchor)
             continue
         if not line.strip():
             flush_paragraph()
@@ -283,13 +393,15 @@ def parse_html(html: str, source_url: str, resolved_url: str, fallback_title: st
         title = clean_text(soup.title.get_text(" ", strip=True)) or title
 
     heading_stack: List[str] = []
+    heading_anchor_stack: List[Optional[str]] = []
     sections: List[Section] = []
     current_blocks: List[Block] = []
     first_h1_seen = False
 
     def flush_section() -> None:
         if current_blocks:
-            sections.append(Section(list(heading_stack), list(current_blocks)))
+            section_anchor = next((anchor for anchor in reversed(heading_anchor_stack) if anchor), None)
+            sections.append(Section(list(heading_stack), list(current_blocks), section_anchor))
             current_blocks.clear()
 
     for tag in root.find_all(list(HTML_BLOCK_TAGS)):
@@ -303,11 +415,14 @@ def parse_html(html: str, source_url: str, resolved_url: str, fallback_title: st
             level = int(tag.name[1])
             while len(heading_stack) >= level:
                 heading_stack.pop()
+                heading_anchor_stack.pop()
             heading_stack.append(text)
+            heading_anchor_stack.append(clean_text(tag.get("id", "")) or None)
             if level == 1 and not first_h1_seen:
                 title = text
                 first_h1_seen = True
             continue
+        links = extract_html_links(tag, source_url)
         if tag.name == "table":
             rows = []
             for row in tag.find_all("tr"):
@@ -317,11 +432,11 @@ def parse_html(html: str, source_url: str, resolved_url: str, fallback_title: st
                     rows.append(" | ".join(values))
             text = "\n".join(rows)
         if tag.name in {"pre", "code"}:
-            current_blocks.append(Block("code", f"```\n{text}\n```"))
+            current_blocks.append(Block("code", f"```\n{text}\n```", links))
         elif tag.name == "li":
-            current_blocks.append(Block("paragraph", f"- {text}"))
+            current_blocks.append(Block("paragraph", link_text_with_urls(f"- {text}", links), links))
         else:
-            current_blocks.append(Block("paragraph", text))
+            current_blocks.append(Block("paragraph", link_text_with_urls(text, links), links))
 
     flush_section()
     if not sections:
@@ -512,6 +627,7 @@ def chunk_section_units(
     return [chunk for chunk in chunks if clean_text(chunk)]
 
 
+
 def build_chunk_text(title: str, heading_path: List[str], body: str) -> str:
     normalized_heading_path = normalize_heading_path(title, heading_path)
     heading_label = " > ".join(normalized_heading_path) if normalized_heading_path else title
@@ -556,12 +672,12 @@ def chunk_parsed_document(
         units = merge_code_context(section.blocks)
         if not units:
             continue
+        heading = heading_path[-1] if heading_path else parsed_document.display_title
         for chunk_body in chunk_section_units(units, min_tokens, max_tokens, overlap_tokens):
-            heading = heading_path[-1] if heading_path else parsed_document.display_title
             chunks.append(
                 {
                     "title": parsed_document.display_title,
-                    "url": parsed_document.source_url,
+                    "url": url_with_fragment(parsed_document.source_url, section.url_fragment),
                     "resolved_url": parsed_document.resolved_url,
                     "heading": heading,
                     "heading_path": heading_path,

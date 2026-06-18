@@ -3,6 +3,6 @@ usearch
 pyyaml
 requests
 mcp
-sentence-transformers
+sentence-transformers>=5.4
 fastmcp
 rank-bm25
