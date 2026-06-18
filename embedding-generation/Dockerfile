@@ -38,6 +38,7 @@ WORKDIR /embedding-data
 
 # Copy Python scripts and dependencies
 COPY generate-chunks.py .
+COPY generate_common.py .
 COPY document_chunking.py .
 COPY local_vectorstore_creation.py .
 COPY vector-db-sources.csv .

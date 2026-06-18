@@ -259,9 +259,9 @@ class TestSourceTracking:
     known_source_urls and all_sources before and after each test.
     """
 
-    def test_register_source_new(self, gc):
+    def test_register_source_new(self, gcom):
         """Test registering a new source."""
-        result = gc.register_source(
+        result = gcom.register_source(
             site_name="Test Site",
             license_type="MIT",
             display_name="Test Display",
@@ -270,14 +270,14 @@ class TestSourceTracking:
         )
         
         assert result is True
-        assert "https://example.com/test" in gc.known_source_urls
-        assert len(gc.all_sources) == 1
-        assert gc.all_sources[0]['url'] == "https://example.com/test"
-        assert gc.all_sources[0]['keywords'] == "test; example"
+        assert "https://example.com/test" in gcom.known_source_urls
+        assert len(gcom.all_sources) == 1
+        assert gcom.all_sources[0]['url'] == "https://example.com/test"
+        assert gcom.all_sources[0]['keywords'] == "test; example"
 
-    def test_register_source_duplicate(self, gc):
+    def test_register_source_duplicate(self, gcom):
         """Test that duplicate URLs are rejected."""
-        gc.register_source(
+        gcom.register_source(
             site_name="Test Site",
             license_type="MIT",
             display_name="Test Display",
@@ -285,7 +285,7 @@ class TestSourceTracking:
             keywords="test"
         )
         
-        result = gc.register_source(
+        result = gcom.register_source(
             site_name="Test Site 2",
             license_type="Apache",
             display_name="Different Display",
@@ -294,11 +294,11 @@ class TestSourceTracking:
         )
         
         assert result is False
-        assert len(gc.all_sources) == 1
+        assert len(gcom.all_sources) == 1
 
-    def test_register_source_inserts_after_matching_site_group(self, gc):
+    def test_register_source_inserts_after_matching_site_group(self, gcom):
         """Test that new sources stay grouped with existing sources from the same site."""
-        gc.all_sources = [
+        gcom.all_sources = [
             {
                 'site_name': 'Google Cloud',
                 'license_type': 'CC4.0',
@@ -328,9 +328,9 @@ class TestSourceTracking:
                 'keywords': 'a1'
             },
         ]
-        gc.known_source_urls = {source['url'] for source in gc.all_sources}
+        gcom.known_source_urls = {source['url'] for source in gcom.all_sources}
 
-        result = gc.register_source(
+        result = gcom.register_source(
             site_name="Ecosystem Dashboard",
             license_type="Arm Proprietary",
             display_name="Dashboard 3",
@@ -339,7 +339,7 @@ class TestSourceTracking:
         )
 
         assert result is True
-        assert [source['display_name'] for source in gc.all_sources] == [
+        assert [source['display_name'] for source in gcom.all_sources] == [
             'Google 1',
             'Dashboard 1',
             'Dashboard 2',
@@ -347,9 +347,9 @@ class TestSourceTracking:
             'Graviton 1',
         ]
 
-    def test_register_source_url_normalization(self, gc):
+    def test_register_source_url_normalization(self, gcom):
         """Test that URLs are stripped of whitespace."""
-        gc.register_source(
+        gcom.register_source(
             site_name="Test",
             license_type="MIT",
             display_name="Test",
@@ -357,11 +357,11 @@ class TestSourceTracking:
             keywords="test"
         )
         
-        assert "https://example.com/test" in gc.known_source_urls
+        assert "https://example.com/test" in gcom.known_source_urls
 
-    def test_register_source_string_keywords(self, gc):
+    def test_register_source_string_keywords(self, gcom):
         """Test that string keywords are preserved as-is."""
-        gc.register_source(
+        gcom.register_source(
             site_name="Test",
             license_type="MIT",
             display_name="Test",
@@ -369,16 +369,16 @@ class TestSourceTracking:
             keywords="already; formatted; string"
         )
         
-        assert gc.all_sources[0]['keywords'] == "already; formatted; string"
+        assert gcom.all_sources[0]['keywords'] == "already; formatted; string"
 
-    def test_load_existing_sources_file_not_exists(self, gc, tmp_path):
+    def test_load_existing_sources_file_not_exists(self, gcom, tmp_path):
         """Test loading from non-existent file."""
-        gc.load_existing_sources(str(tmp_path / "nonexistent.csv"))
+        gcom.load_existing_sources(str(tmp_path / "nonexistent.csv"))
         
-        assert len(gc.all_sources) == 0
-        assert len(gc.known_source_urls) == 0
+        assert len(gcom.all_sources) == 0
+        assert len(gcom.known_source_urls) == 0
 
-    def test_load_existing_sources(self, gc, tmp_path):
+    def test_load_existing_sources(self, gcom, tmp_path):
         """Test loading sources from CSV file."""
         csv_file = tmp_path / "sources.csv"
         csv_file.write_text(
@@ -387,17 +387,17 @@ class TestSourceTracking:
             "Another Site,Apache,Another Display,https://example.com/2,key3\n"
         )
         
-        gc.load_existing_sources(str(csv_file))
+        gcom.load_existing_sources(str(csv_file))
         
-        assert len(gc.all_sources) == 2
-        assert "https://example.com/1" in gc.known_source_urls
-        assert "https://example.com/2" in gc.known_source_urls
-        assert gc.all_sources[0]['site_name'] == "Test Site"
-        assert gc.all_sources[1]['display_name'] == "Another Display"
+        assert len(gcom.all_sources) == 2
+        assert "https://example.com/1" in gcom.known_source_urls
+        assert "https://example.com/2" in gcom.known_source_urls
+        assert gcom.all_sources[0]['site_name'] == "Test Site"
+        assert gcom.all_sources[1]['display_name'] == "Another Display"
 
-    def test_save_sources_csv(self, gc, tmp_path):
+    def test_save_sources_csv(self, gcom, tmp_path):
         """Test saving sources to CSV file."""
-        gc.all_sources = [
+        gcom.all_sources = [
             {
                 'site_name': 'Site 1',
                 'license_type': 'MIT',
@@ -415,7 +415,7 @@ class TestSourceTracking:
         ]
         
         csv_file = tmp_path / "output.csv"
-        gc.save_sources_csv(str(csv_file))
+        gcom.save_sources_csv(str(csv_file))
         
         # Read and verify
         with open(csv_file, 'r') as f:
@@ -426,7 +426,7 @@ class TestSourceTracking:
         assert rows[1] == ['Site 1', 'MIT', 'Display 1', 'https://example.com/1', 'key1; key2']
         assert rows[2] == ['Site 2', 'Apache', 'Display 2', 'https://example.com/2', 'key3']
 
-    def test_load_and_save_roundtrip(self, gc, tmp_path):
+    def test_load_and_save_roundtrip(self, gcom, tmp_path):
         """Test that loading and saving preserves data."""
         csv_file = tmp_path / "sources.csv"
         original_content = (
@@ -436,10 +436,10 @@ class TestSourceTracking:
         csv_file.write_text(original_content)
         
         # Load
-        gc.load_existing_sources(str(csv_file))
+        gcom.load_existing_sources(str(csv_file))
         
         # Add a new source
-        gc.register_source(
+        gcom.register_source(
             site_name="New Site",
             license_type="Apache",
             display_name="New Display",
@@ -448,16 +448,16 @@ class TestSourceTracking:
         )
         
         # Save
-        gc.save_sources_csv(str(csv_file))
+        gcom.save_sources_csv(str(csv_file))
         
         # Verify
-        gc.known_source_urls = set()
-        gc.all_sources = []
-        gc.load_existing_sources(str(csv_file))
+        gcom.known_source_urls = set()
+        gcom.all_sources = []
+        gcom.load_existing_sources(str(csv_file))
         
-        assert len(gc.all_sources) == 2
-        assert "https://example.com/test" in gc.known_source_urls
-        assert "https://new.example.com" in gc.known_source_urls
+        assert len(gcom.all_sources) == 2
+        assert "https://example.com/test" in gcom.known_source_urls
+        assert "https://new.example.com" in gcom.known_source_urls
 
 
 class TestGetMarkdownGitHubURLsFromPage:
@@ -873,18 +873,18 @@ class TestArmDocumentationParsing:
 class TestCreateRetrySession:
     """Tests for create_retry_session function."""
 
-    def test_creates_session(self, gc):
+    def test_creates_session(self, gcom):
         """Test that a session is created."""
-        session = gc.create_retry_session()
+        session = gcom.create_retry_session()
         
         assert session is not None
         # Check that adapters are mounted
         assert 'http://' in session.adapters
         assert 'https://' in session.adapters
 
-    def test_custom_retry_settings(self, gc):
+    def test_custom_retry_settings(self, gcom):
         """Test session with custom retry settings."""
-        session = gc.create_retry_session(
+        session = gcom.create_retry_session(
             retries=3,
             backoff_factor=2,
             status_forcelist=(500, 503)
