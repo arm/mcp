@@ -171,8 +171,11 @@ jobs:
         env:
           BUMP_TYPE: ${{ github.event_name == 'workflow_run' && 'minor' || github.event.inputs.bump_type }}
         run: |
+          set -euo pipefail
           git fetch --tags --force --quiet
-          latest="$(git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+          # `|| true`: with pipefail, grep exits non-zero when no tag matches;
+          # the explicit empty-check below emits a clearer error than set -e.
+          latest="$(git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)" || true
           [ -n "${latest}" ] || { echo "::error::No vX.Y.Z tags found."; exit 1; }
           ver="${latest#v}"
           major="${ver%%.*}"; rest="${ver#*.}"; minor="${rest%%.*}"; patch="${rest##*.}"
@@ -205,9 +208,14 @@ jobs:
         env:
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
         run: |
+          set -euo pipefail
           GIT_TAG="v${TAG_VERSION}"
           echo "git_tag=${GIT_TAG}" >> "$GITHUB_OUTPUT"
-          [ "${IS_DRY_RUN}" = "true" ] && { echo "[dry-run] Would create ${GIT_TAG}"; echo "tag_exists=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          if [ "${IS_DRY_RUN}" = "true" ]; then
+            echo "[dry-run] Would create ${GIT_TAG}"
+            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           if git rev-parse -q --verify "refs/tags/${GIT_TAG}" >/dev/null 2>&1; then
@@ -228,7 +236,11 @@ jobs:
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
         run: |
-          gh release view "${GIT_TAG}" >/dev/null 2>&1 && { echo "Release exists."; exit 0; }
+          set -euo pipefail
+          if gh release view "${GIT_TAG}" >/dev/null 2>&1; then
+            echo "Release exists."
+            exit 0
+          fi
           gh release create "${GIT_TAG}" --title "${GIT_TAG}" --generate-notes
           NOTES="$(gh release view "${GIT_TAG}" --json body --jq '.body')"
           printf 'Docker image: `%s:%s` (built %s)\n\n%s\n' "${IMAGE}" "${TAG_VERSION}" "${BUILD_DATE}" "${NOTES}" | gh release edit "${GIT_TAG}" --notes-file -
