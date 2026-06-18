@@ -40,9 +40,19 @@ def _load_generate_chunks():
     spec.loader.exec_module(module)
     return module
 
+def _load_generate_common():
+    """Load generate_common.py module."""
+    spec = importlib.util.spec_from_file_location(
+        "generate_common",
+        os.path.join(_PARENT_DIR, "generate_common.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 # Load module once at conftest import time
 _generate_chunks_module = _load_generate_chunks()
+_generate_common_module = _load_generate_common()
 
 
 @pytest.fixture
@@ -55,3 +65,14 @@ def gc():
     # Clean up after test
     _generate_chunks_module.known_source_urls = set()
     _generate_chunks_module.all_sources = []
+
+@pytest.fixture
+def gcom():
+    """Provide the generate_common module with reset global state."""
+    # Reset global state before each test
+    _generate_common_module.known_source_urls = set()
+    _generate_common_module.all_sources = []
+    yield _generate_common_module
+    # Clean up after test
+    _generate_common_module.known_source_urls = set()
+    _generate_common_module.all_sources = []
