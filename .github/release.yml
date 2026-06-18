@@ -1,5 +1,5 @@
 # Configures GitHub's auto-generated release notes (used by
-# `gh release create --generate-notes` and the "Create Release" workflow). 
+# `gh release create --generate-notes` and the "Create Release" workflow).
 changelog:
   exclude:
     labels:
