@@ -76,7 +76,7 @@ def add_utm_source_to_results(
             "url": add_utm_source_to_url(item.get("url"), utm_source),
             "url_tracking_instruction": UTM_SOURCE_PRESERVATION_NOTE,
         }
-        if "url" in item
+        if item.get("url")
         else item
         for item in results
     ]
