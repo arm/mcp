@@ -184,75 +184,20 @@ jobs:
           echo "${latest} -> ${TAG_VERSION} (${BUMP_TYPE})"
           echo "tag_version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Add latest and version aliases to date tag
-        env:
-          DATE_TAG: ${{ needs.build-arch-images.outputs.date_tag }}
-          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
-        run: |
-          if [ "${IS_DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would alias ${IMAGE}:${DATE_TAG} as latest and ${TAG_VERSION}"
-            exit 0
-          fi
-          docker buildx imagetools create \
-            -t "${IMAGE}:latest" \
-            -t "${IMAGE}:${TAG_VERSION}" \
-            "${IMAGE}:${DATE_TAG}"
-          echo "Aliased ${DATE_TAG} as latest and ${TAG_VERSION}."
-
-      - name: Create and push matching git tag
-        id: gittag
-        env:
-          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
-        run: |
-          set -euo pipefail
-          GIT_TAG="v${TAG_VERSION}"
-          echo "git_tag=${GIT_TAG}" >> "$GITHUB_OUTPUT"
-          if [ "${IS_DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would create ${GIT_TAG}"
-            echo "tag_exists=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if git rev-parse -q --verify "refs/tags/${GIT_TAG}" >/dev/null 2>&1; then
-            echo "${GIT_TAG} already exists; skipping."
-            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
-          else
-            git tag -a "${GIT_TAG}" -m "Release ${GIT_TAG} (matches ${IMAGE}:${TAG_VERSION})"
-            git push origin "refs/tags/${GIT_TAG}"
-            echo "Created and pushed ${GIT_TAG}."
-            echo "tag_exists=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create GitHub Release with changelog
-        if: ${{ steps.gittag.outputs.tag_exists == 'true' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GIT_TAG: ${{ steps.gittag.outputs.git_tag }}
-          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
-          BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
-        run: |
-          set -euo pipefail
-          if gh release view "${GIT_TAG}" >/dev/null 2>&1; then
-            echo "Release exists."
-            exit 0
-          fi
-          gh release create "${GIT_TAG}" --title "${GIT_TAG}" --generate-notes
-          NOTES="$(gh release view "${GIT_TAG}" --json body --jq '.body')"
-          printf 'Docker image: `%s:%s` (built %s)\n\n%s\n' "${IMAGE}" "${TAG_VERSION}" "${BUILD_DATE}" "${NOTES}" | gh release edit "${GIT_TAG}" --notes-file -
-          echo "Created GitHub Release ${GIT_TAG}."
-
-      # Sync server.json to the freshly published release by committing directly
-      # to main (unprotected). Runs only on a real publishing run (tag_exists),
-      # never on dry runs. The git tag is already a valid vX.Y.Z by construction.
+      # Commit the server.json bump FIRST so the git tag/Release below point at
+      # a commit whose metadata already matches this version. Commits directly
+      # to main (unprotected); skipped on dry runs. The referenced image
+      # (${IMAGE}:${TAG_VERSION}) is published by the next step, before the tag.
       - name: Bump server.json on main
-        if: ${{ steps.gittag.outputs.tag_exists == 'true' }}
+        id: bump
+        if: ${{ env.IS_DRY_RUN != 'true' }}
         env:
-          GIT_TAG: ${{ steps.gittag.outputs.git_tag }}
+          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
         run: |
           set -euo pipefail
           SERVER_JSON="mcp-local/server.json"
-          TAG_VERSION="${GIT_TAG#v}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
           # Apply the version bump to server.json (in-memory, single write).
           apply_bump_file() {
@@ -272,19 +217,85 @@ jobs:
           }
 
           # Commit the bump straight to main, rebasing if main moved underneath
-          # us. main is unprotected, so a normal push is allowed.
+          # us. main is unprotected, so a normal push is allowed. Record the
+          # resulting commit SHA so the git tag below can point at it explicitly.
           for attempt in 1 2 3; do
             git fetch origin main
             git checkout -B main origin/main
             apply_bump_file
             if git diff --quiet -- "${SERVER_JSON}"; then
-              echo "${SERVER_JSON} already at ${TAG_VERSION}; nothing to do."; exit 0
+              echo "${SERVER_JSON} already at ${TAG_VERSION}; nothing to do."
+              echo "bump_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+              exit 0
             fi
             git add "${SERVER_JSON}"
             git commit -m "chore: bump server.json to ${TAG_VERSION}"
             if git push origin HEAD:main; then
-              echo "Pushed server.json bump to ${TAG_VERSION}."; exit 0
+              echo "Pushed server.json bump to ${TAG_VERSION}."
+              echo "bump_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+              exit 0
             fi
             echo "Push ${attempt} failed (main moved); retrying..."
           done
           echo "::error::Failed to push server.json bump after 3 attempts."; exit 1
+
+      # Promote production Docker tags before the git tag (the version cursor)
+      # advances. If this fails, no tag exists yet, so a re-run recomputes the
+      # SAME version; imagetools create overwrites, so re-runs are safe.
+      - name: Add latest and version aliases to date tag
+        env:
+          DATE_TAG: ${{ needs.build-arch-images.outputs.date_tag }}
+          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
+        run: |
+          if [ "${IS_DRY_RUN}" = "true" ]; then
+            echo "[dry-run] Would alias ${IMAGE}:${DATE_TAG} as latest and ${TAG_VERSION}"
+            exit 0
+          fi
+          docker buildx imagetools create \
+            -t "${IMAGE}:latest" \
+            -t "${IMAGE}:${TAG_VERSION}" \
+            "${IMAGE}:${DATE_TAG}"
+          echo "Aliased ${DATE_TAG} as latest and ${TAG_VERSION}."
+
+      # FINAL irreversible step: the git tag is the version cursor, so create
+      # it last. Every earlier step (bump, Docker aliases) is idempotent and
+      # leaves no tag on failure, so a re-run recomputes the SAME version and
+      # self-heals. Tag and Release are created together (both at the bump
+      # commit) to minimize the window between them.
+      - name: Create git tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
+          BUMP_SHA: ${{ steps.bump.outputs.bump_sha }}
+          BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
+        run: |
+          set -euo pipefail
+          GIT_TAG="v${TAG_VERSION}"
+          if [ "${IS_DRY_RUN}" = "true" ]; then
+            echo "[dry-run] Would create git tag ${GIT_TAG} at the bump commit and publish a GitHub Release."
+            exit 0
+          fi
+
+          # Idempotent re-entry: if the Release already exists, this version was
+          # fully published on a prior run -- nothing left to do.
+          if gh release view "${GIT_TAG}" >/dev/null 2>&1; then
+            echo "Release ${GIT_TAG} already exists; nothing to do."
+            exit 0
+          fi
+
+          # Create + push the annotated tag at the bump commit (only if missing,
+          # so a re-run after a partial failure reuses it). This advances the
+          # version cursor, so it stays paired with the Release creation below.
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git rev-parse -q --verify "refs/tags/${GIT_TAG}" >/dev/null 2>&1; then
+            git tag -a "${GIT_TAG}" "${BUMP_SHA}" -m "Release ${GIT_TAG} (matches ${IMAGE}:${TAG_VERSION})"
+            git push origin "refs/tags/${GIT_TAG}"
+            echo "Created and pushed ${GIT_TAG} at ${BUMP_SHA}."
+          fi
+
+          # Publish the Release on that tag with generated notes + image line.
+          gh release create "${GIT_TAG}" --title "${GIT_TAG}" --generate-notes
+          NOTES="$(gh release view "${GIT_TAG}" --json body --jq '.body')"
+          printf 'Docker image: `%s:%s` (built %s)\n\n%s\n' "${IMAGE}" "${TAG_VERSION}" "${BUILD_DATE}" "${NOTES}" | gh release edit "${GIT_TAG}" --notes-file -
+          echo "Published GitHub Release ${GIT_TAG}."
