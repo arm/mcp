@@ -86,8 +86,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # Build the exact upstream commit (head_sha) for workflow_run so
-          # images, manifests, and git tags all reference the same commit.
+          # Build the exact upstream commit (head_sha) for workflow_run so the
+          # images and manifests reference it. (The git tag is created later at
+          # the server.json bump commit, not this commit.)
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set build date and unique date tag (UTC)
@@ -151,8 +152,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # Check out the upstream build's commit (head_sha) so git tags match
-          # the built images; falls back to github.sha for other triggers.
+          # Check out the upstream build's commit (head_sha) as the base; the
+          # bump step commits server.json on top and the git tag is created at
+          # that bump commit. fetch-depth: 0 so version tags are available.
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
