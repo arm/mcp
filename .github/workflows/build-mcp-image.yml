@@ -74,6 +74,14 @@ jobs:
             echo "::error::Non-main runs must set dry_run=true (build/validate only, never publish)."
             exit 1
           fi
+          # Block publishing reruns: the version derives from existing git
+          # tags, so re-running after a tag was pushed would publish a NEW
+          # version for the same build. Reruns bump run_attempt; require
+          # attempt 1. Start a fresh run to recover instead.
+          if [ "${IS_DRY_RUN}" != "true" ] && [ "${{ github.run_attempt }}" != "1" ]; then
+            echo "::error::Publishing reruns are disabled (would republish a new version). Start a fresh workflow run instead."
+            exit 1
+          fi
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -130,6 +138,16 @@ jobs:
       contents: write
     if: ${{ needs.build-arch-images.result == 'success' }}
     steps:
+      - name: Block publishing reruns
+        # Repeated from build-arch-images: "Re-run failed jobs" reruns only
+        # this job, so that job's guard won't fire, but publishing happens
+        # here. See that step for the full rationale (reruns republish a new
+        # version). Start a fresh run to recover instead.
+        if: ${{ env.IS_DRY_RUN != 'true' && github.run_attempt != '1' }}
+        run: |
+          echo "::error::Publishing reruns are disabled (would republish a new version). Start a fresh workflow run instead."
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
