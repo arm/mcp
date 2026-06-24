@@ -205,14 +205,16 @@ jobs:
           echo "tag_version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
 
       # Commit the server.json bump FIRST so the git tag/Release below point at
-      # a commit whose metadata already matches this version. Commits directly
-      # to main (unprotected); skipped on dry runs. The referenced image
+      # a commit whose metadata already matches this version. Committed ON TOP
+      # OF the built commit (head_sha), not latest main, so the tag/Release stay
+      # traceable to the exact code in the image. The referenced image
       # (${IMAGE}:${TAG_VERSION}) is published by the next step, before the tag.
       - name: Bump server.json on main
         id: bump
         if: ${{ env.IS_DRY_RUN != 'true' }}
         env:
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
           SERVER_JSON="mcp-local/server.json"
@@ -236,28 +238,34 @@ jobs:
             printf '%s\n' "${updated}" > "${SERVER_JSON}"
           }
 
-          # Commit the bump straight to main, rebasing if main moved underneath
-          # us. main is unprotected, so a normal push is allowed. Record the
-          # resulting commit SHA so the git tag below can point at it explicitly.
-          for attempt in 1 2 3; do
-            git fetch origin main
-            git checkout -B main origin/main
-            apply_bump_file
-            if git diff --quiet -- "${SERVER_JSON}"; then
-              echo "${SERVER_JSON} already at ${TAG_VERSION}; nothing to do."
-              echo "bump_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            git add "${SERVER_JSON}"
-            git commit -m "chore: bump server.json to ${TAG_VERSION}"
-            if git push origin HEAD:main; then
-              echo "Pushed server.json bump to ${TAG_VERSION}."
-              echo "bump_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "Push ${attempt} failed (main moved); retrying..."
-          done
-          echo "::error::Failed to push server.json bump after 3 attempts."; exit 1
+          # Fail fast if main moved past the built commit (HEAD_SHA): committing
+          # the bump elsewhere would tag code that was never built into the
+          # image. Don't rebase -- a fresh run rebuilds from the new main.
+          git fetch origin main
+          ORIGIN_MAIN="$(git rev-parse origin/main)"
+          if [ "${ORIGIN_MAIN}" != "${HEAD_SHA}" ]; then
+            echo "::error::origin/main (${ORIGIN_MAIN}) no longer matches the built commit (${HEAD_SHA}); the image would not match the release. Start a fresh workflow run."
+            exit 1
+          fi
+
+          # Commit the bump on top of the exact commit that produced the images.
+          git checkout -B main "${HEAD_SHA}"
+          apply_bump_file
+          if git diff --quiet -- "${SERVER_JSON}"; then
+            echo "${SERVER_JSON} already at ${TAG_VERSION}; nothing to do."
+            echo "bump_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git add "${SERVER_JSON}"
+          git commit -m "chore: bump server.json to ${TAG_VERSION}"
+          # Non-force push (fast-forward from HEAD_SHA): rejected if main moved
+          # in the race window, so the tag never lands on an unbuilt commit.
+          if git push origin HEAD:main; then
+            echo "Pushed server.json bump to ${TAG_VERSION}."
+            echo "bump_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::error::Push rejected: origin/main moved during the run. Start a fresh workflow run."; exit 1
 
       # Promote production Docker tags before the git tag (the version cursor)
       # advances. If this fails, no tag exists yet, so a re-run recomputes the
