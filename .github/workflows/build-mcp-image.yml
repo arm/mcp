@@ -144,7 +144,7 @@ jobs:
         # this job, so that job's guard won't fire, but publishing happens
         # here. See that step for the full rationale (reruns republish a new
         # version). Start a fresh run to recover instead.
-        if: ${{ env.IS_DRY_RUN != 'true' && github.run_attempt != '1' }}
+        if: ${{ env.IS_DRY_RUN != 'true' && github.run_attempt != 1 }}
         run: |
           echo "::error::Publishing reruns are disabled (would republish a new version). Start a fresh workflow run instead."
           exit 1
@@ -222,13 +222,14 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           # Apply the version bump to server.json (in-memory, single write).
+          IMAGE_REF="docker.io/${IMAGE}"
           apply_bump_file() {
             local updated
-            if ! updated="$(jq --arg v "${TAG_VERSION}" '
+            if ! updated="$(jq --arg v "${TAG_VERSION}" --arg img "${IMAGE_REF}" '
               .version = $v
               | .packages |= map(
-                  if (.identifier // "") | startswith("docker.io/armlimited/arm-mcp:")
-                  then .identifier = "docker.io/armlimited/arm-mcp:\($v)"
+                  if (.identifier // "") | startswith($img + ":")
+                  then .identifier = $img + ":" + $v
                   else . end
                 )
             ' "${SERVER_JSON}")"; then
@@ -267,9 +268,9 @@ jobs:
           fi
           echo "::error::Push rejected: origin/main moved during the run. Start a fresh workflow run."; exit 1
 
-      # Promote production Docker tags before the git tag (the version cursor)
-      # advances. If this fails, no tag exists yet, so a re-run recomputes the
-      # SAME version; imagetools create overwrites, so re-runs are safe.
+      # Promote production Docker tags before the git tag (the version cursor) advances. 
+      # Self-healing via a FRESH run (reruns are blocked above): if this fails, no git tag was pushed, so a fresh run recomputes the SAME version 
+      # and overwrites these tags (imagetools create is idempotent) -- nothing to revert or clean up.
       - name: Add latest and version aliases to date tag
         env:
           DATE_TAG: ${{ needs.build-arch-images.outputs.date_tag }}
@@ -285,11 +286,9 @@ jobs:
             "${IMAGE}:${DATE_TAG}"
           echo "Aliased ${DATE_TAG} as latest and ${TAG_VERSION}."
 
-      # FINAL irreversible step: the git tag is the version cursor, so create
-      # it last. Every earlier step (bump, Docker aliases) is idempotent and
-      # leaves no tag on failure, so a re-run recomputes the SAME version and
-      # self-heals. Tag and Release are created together (both at the bump
-      # commit) to minimize the window between them.
+      # FINAL irreversible step: the git tag is the version cursor, so create it last. Every earlier step (bump, Docker aliases) is idempotent and
+      # leaves no tag on failure, so a FRESH run (reruns are blocked above) recomputes the SAME version and self-heals. Tag and Release are created
+      # together (both at the bump commit) to minimize the window between them.
       - name: Create git tag and GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
