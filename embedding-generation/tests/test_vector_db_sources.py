@@ -16,6 +16,7 @@
 
 import csv
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 SOURCES_FILE = Path(__file__).resolve().parents[1] / "vector-db-sources.csv"
@@ -28,6 +29,15 @@ EXPECTED_COLUMNS = [
     "Transcript Source URL",
 ]
 URL_COLUMNS = ("URL", "Transcript Source URL")
+
+
+def is_http_url(value):
+    parsed = urlparse(value)
+    return (
+        parsed.scheme in {"http", "https"}
+        and bool(parsed.netloc)
+        and not any(character.isspace() for character in value)
+    )
 
 
 def test_vector_db_sources_header_matches_schema():
@@ -63,7 +73,7 @@ def test_vector_db_source_urls_are_http_urls():
         for line_number, row in enumerate(reader, start=2):
             for column in URL_COLUMNS:
                 value = (row.get(column) or "").strip()
-                if value and not value.startswith(("http://", "https://")):
+                if value and not is_http_url(value):
                     invalid_urls.append(f"line {line_number}, {column}: {value}")
 
     assert not invalid_urls, (
