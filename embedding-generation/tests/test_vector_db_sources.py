@@ -19,20 +19,63 @@ from pathlib import Path
 
 
 SOURCES_FILE = Path(__file__).resolve().parents[1] / "vector-db-sources.csv"
-REQUIRED_COLUMNS = {"Display Name", "Keywords", "URL"}
+EXPECTED_COLUMNS = [
+    "Site Name",
+    "License Type",
+    "Display Name",
+    "URL",
+    "Keywords",
+    "Transcript Source URL",
+]
+URL_COLUMNS = ("URL", "Transcript Source URL")
+
+
+def test_vector_db_sources_header_matches_schema():
+    """The sources CSV must keep the expected six-column schema."""
+    with SOURCES_FILE.open(newline="", encoding="utf-8") as sources:
+        reader = csv.reader(sources)
+        header = next(reader)
+
+    assert header == EXPECTED_COLUMNS
+
+
+def test_vector_db_sources_have_no_extra_fields():
+    """Rows must not have extra unnamed fields, which usually means bad comma quoting."""
+    extra_field_rows = []
+    with SOURCES_FILE.open(newline="", encoding="utf-8") as sources:
+        reader = csv.DictReader(sources)
+        for line_number, row in enumerate(reader, start=2):
+            extra_fields = row.get(None)
+            if extra_fields:
+                extra_field_rows.append(f"line {line_number}: {extra_fields}")
+
+    assert not extra_field_rows, (
+        "Rows in vector-db-sources.csv have extra unnamed fields:\n"
+        + "\n".join(extra_field_rows)
+    )
+
+
+def test_vector_db_source_urls_are_http_urls():
+    """Source URL fields must be valid HTTP(S) URLs when present."""
+    invalid_urls = []
+    with SOURCES_FILE.open(newline="", encoding="utf-8") as sources:
+        reader = csv.DictReader(sources)
+        for line_number, row in enumerate(reader, start=2):
+            for column in URL_COLUMNS:
+                value = (row.get(column) or "").strip()
+                if value and not value.startswith(("http://", "https://")):
+                    invalid_urls.append(f"line {line_number}, {column}: {value}")
+
+    assert not invalid_urls, (
+        "Rows in vector-db-sources.csv have invalid URL values:\n"
+        + "\n".join(invalid_urls)
+    )
 
 
 def test_vector_db_sources_have_keywords():
     """Every document source row must include keywords for lexical retrieval."""
     with SOURCES_FILE.open(newline="", encoding="utf-8") as sources:
         reader = csv.DictReader(sources)
-
-        missing_columns = REQUIRED_COLUMNS - set(reader.fieldnames or [])
-        assert not missing_columns, (
-            f"{SOURCES_FILE.name} is missing required columns: "
-            f"{', '.join(sorted(missing_columns))}"
-        )
-
         rows_without_keywords = [
             f"line {line_number}: {row.get('Display Name', '').strip()} ({(row.get('URL') or '').strip()})"
             for line_number, row in enumerate(reader, start=2)
