@@ -4,7 +4,46 @@ on:
   workflow_run:
     workflows: ["Build Embeddings Image"]
     types: [completed]
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Manual version bump: major (X.0.0) or hotfix (x.y.Z). Minor (x.Y.0) is automatic on knowledge-base rebuilds."
+        type: choice
+        options:
+          - major
+          - hotfix
+        default: major
+      dry_run:
+        description: "Build without pushing images, manifests, or git tags"
+        type: boolean
+        default: false
+
+# Shared expressions, exported to every run step and usable in step if:/with:
+# (env context). NOTE: `concurrency` below can't read env (github/inputs/vars
+# only), so that one main+dry check stays inline.
+env:
+  IMAGE: armlimited/arm-mcp
+  IS_MAIN: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}
+  IS_DRY_RUN: ${{ github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true' }}
+
+# Serialize only publishing runs so overlapping builds can't race on
+# computing/publishing the same auto-incremented version (alias + git tag).
+# Publishing runs (from main, not dry_run) share a single static group so they
+# queue behind one another. Non-publishing runs (dry_run or non-main) never
+# touch shared version/tag state, so they get a unique per-run group and run
+# concurrently without blocking the publishing queue.
+concurrency:
+  group: >-
+    ${{
+      (
+        ((github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main'))
+        && !(github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true')
+      )
+      && 'build-mcp-image-publish'
+      || format('build-mcp-image-{0}', github.run_id)
+    }}
+  cancel-in-progress: false
 
 jobs:
   build-arch-images:
@@ -22,14 +61,37 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
-      packages: write
     outputs:
       build_date: ${{ steps.build_date.outputs.build_date }}
+      date_tag: ${{ steps.build_date.outputs.date_tag }}
     steps:
+      - name: Guard against non-main publishing
+        run: |
+          # workflow_dispatch can be started from any branch (GitHub has no
+          # branch filter for it). Publishing is main-only; non-main runs are
+          # allowed solely as dry_run validation, else fail fast.
+          if [ "${IS_MAIN}" != "true" ] && [ "${IS_DRY_RUN}" != "true" ]; then
+            echo "::error::Non-main runs must set dry_run=true (build/validate only, never publish)."
+            exit 1
+          fi
+          # Block publishing reruns: the version derives from existing git
+          # tags, so re-running after a tag was pushed would publish a NEW
+          # version for the same build. Reruns bump run_attempt; require
+          # attempt 1. Start a fresh run to recover instead.
+          if [ "${IS_DRY_RUN}" != "true" ] && [ "${{ github.run_attempt }}" != "1" ]; then
+            echo "::error::Publishing reruns are disabled (would republish a new version). Start a fresh workflow run instead."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Build the exact upstream commit (head_sha) for workflow_run so the
+          # images and manifests reference it. (The git tag is created later at
+          # the server.json bump commit, not this commit.)
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-      - name: Set build date (UTC)
+      - name: Set build date and unique date tag (UTC)
         id: build_date
         run: |
           if [ -n "${{ github.event.workflow_run.created_at }}" ]; then
@@ -37,13 +99,22 @@ jobs:
           else
             BUILD_DATE=$(date -u +%Y-%m-%d)
           fi
+          # Append run_number so every run gets a distinct date tag. Without it,
+          # two runs on the same day would share one tag, and the later run would
+          # alias its version/git tag onto the earlier run's image digest.
+          DATE_TAG="${BUILD_DATE}-${{ github.run_number }}"
           echo "BUILD_DATE=$BUILD_DATE" >> "$GITHUB_ENV"
+          echo "DATE_TAG=$DATE_TAG" >> "$GITHUB_ENV"
           echo "build_date=$BUILD_DATE" >> "$GITHUB_OUTPUT"
+          echo "date_tag=$DATE_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
+        # Only publishing runs push, so only they log in. Non-dry implies main
+        # (the top-level guard rejects non-main non-dry runs).
+        if: ${{ env.IS_DRY_RUN != 'true' }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -55,23 +126,44 @@ jobs:
           context: .
           file: mcp-local/Dockerfile
           platforms: ${{ matrix.platform }}
-          push: true
-          tags: armlimited/arm-mcp:${{ env.BUILD_DATE }}-${{ matrix.tag }}
+          # Push only on publishing runs (non-dry implies main per the guard).
+          push: ${{ env.IS_DRY_RUN != 'true' }}
+          tags: ${{ env.IMAGE }}:${{ env.DATE_TAG }}-${{ matrix.tag }}
           build-args: |
-            EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-latest
+            EMBEDDINGS_IMAGE=${{ env.IMAGE }}:embeddings-latest
 
   merge-manifests:
     needs: build-arch-images
     runs-on: ubuntu-24.04
     permissions:
-      contents: read
-      packages: write
+      contents: write
     if: ${{ needs.build-arch-images.result == 'success' }}
     steps:
+      - name: Block publishing reruns
+        # Repeated from build-arch-images: "Re-run failed jobs" reruns only
+        # this job, so that job's guard won't fire, but publishing happens
+        # here. See that step for the full rationale (reruns republish a new
+        # version). Start a fresh run to recover instead.
+        if: ${{ env.IS_DRY_RUN != 'true' && github.run_attempt != 1 }}
+        run: |
+          echo "::error::Publishing reruns are disabled (would republish a new version). Start a fresh workflow run instead."
+          exit 1
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Check out the upstream build's commit (head_sha) as the base; the
+          # bump step commits server.json on top and the git tag is created at
+          # that bump commit. fetch-depth: 0 so version tags are available.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
+        # Only publishing runs write to the registry (non-dry implies main).
+        if: ${{ env.IS_DRY_RUN != 'true' }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -79,9 +171,158 @@ jobs:
 
       - name: Create multi-arch manifest for date tag
         env:
+          DATE_TAG: ${{ needs.build-arch-images.outputs.date_tag }}
+        run: |
+          if [ "${IS_DRY_RUN}" = "true" ]; then
+            echo "[dry-run] Would create ${IMAGE}:${DATE_TAG} from ${IMAGE}:${DATE_TAG}-amd64 and ${IMAGE}:${DATE_TAG}-arm64"
+            exit 0
+          fi
+          docker buildx imagetools create \
+            -t "${IMAGE}:${DATE_TAG}" \
+            "${IMAGE}:${DATE_TAG}-amd64" \
+            "${IMAGE}:${DATE_TAG}-arm64"
+
+      - name: Determine version tag
+        id: version
+        env:
+          BUMP_TYPE: ${{ github.event_name == 'workflow_run' && 'minor' || github.event.inputs.bump_type }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force --quiet
+          # `|| true`: with pipefail, grep exits non-zero when no tag matches;
+          # the explicit empty-check below emits a clearer error than set -e.
+          latest="$(git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)" || true
+          [ -n "${latest}" ] || { echo "::error::No vX.Y.Z tags found."; exit 1; }
+          ver="${latest#v}"
+          major="${ver%%.*}"; rest="${ver#*.}"; minor="${rest%%.*}"; patch="${rest##*.}"
+          case "${BUMP_TYPE:-minor}" in
+            major)  TAG_VERSION="$((major + 1)).0.0" ;;
+            minor)  TAG_VERSION="${major}.$((minor + 1)).0" ;;
+            hotfix) TAG_VERSION="${major}.${minor}.$((patch + 1))" ;;
+            *) echo "::error::Unknown bump_type '${BUMP_TYPE}'."; exit 1 ;;
+          esac
+          echo "${latest} -> ${TAG_VERSION} (${BUMP_TYPE})"
+          echo "tag_version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
+
+      # Commit the server.json bump FIRST so the git tag/Release below point at
+      # a commit whose metadata already matches this version. Committed ON TOP
+      # OF the built commit (head_sha), not latest main, so the tag/Release stay
+      # traceable to the exact code in the image. The referenced image
+      # (${IMAGE}:${TAG_VERSION}) is published by the next step, before the tag.
+      - name: Bump server.json on main
+        id: bump
+        if: ${{ env.IS_DRY_RUN != 'true' }}
+        env:
+          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          SERVER_JSON="mcp-local/server.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Apply the version bump to server.json (in-memory, single write).
+          IMAGE_REF="docker.io/${IMAGE}"
+          apply_bump_file() {
+            local updated
+            if ! updated="$(jq --arg v "${TAG_VERSION}" --arg img "${IMAGE_REF}" '
+              .version = $v
+              | .packages |= map(
+                  if (.identifier // "") | startswith($img + ":")
+                  then .identifier = $img + ":" + $v
+                  else . end
+                )
+            ' "${SERVER_JSON}")"; then
+              echo "::error::jq failed to update ${SERVER_JSON}."; return 1
+            fi
+            [ -n "${updated}" ] || { echo "::error::jq produced empty output for ${SERVER_JSON}."; return 1; }
+            printf '%s\n' "${updated}" > "${SERVER_JSON}"
+          }
+
+          # Fail fast if main moved past the built commit (HEAD_SHA): committing
+          # the bump elsewhere would tag code that was never built into the
+          # image. Don't rebase -- a fresh run rebuilds from the new main.
+          git fetch origin main
+          ORIGIN_MAIN="$(git rev-parse origin/main)"
+          if [ "${ORIGIN_MAIN}" != "${HEAD_SHA}" ]; then
+            echo "::error::origin/main (${ORIGIN_MAIN}) no longer matches the built commit (${HEAD_SHA}); the image would not match the release. Start a fresh workflow run."
+            exit 1
+          fi
+
+          # Commit the bump on top of the exact commit that produced the images.
+          git checkout -B main "${HEAD_SHA}"
+          apply_bump_file
+          if git diff --quiet -- "${SERVER_JSON}"; then
+            echo "${SERVER_JSON} already at ${TAG_VERSION}; nothing to do."
+            echo "bump_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git add "${SERVER_JSON}"
+          git commit -m "chore: bump server.json to ${TAG_VERSION}"
+          # Non-force push (fast-forward from HEAD_SHA): rejected if main moved
+          # in the race window, so the tag never lands on an unbuilt commit.
+          if git push origin HEAD:main; then
+            echo "Pushed server.json bump to ${TAG_VERSION}."
+            echo "bump_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::error::Push rejected: origin/main moved during the run. Start a fresh workflow run."; exit 1
+
+      # Promote production Docker tags before the git tag (the version cursor) advances. 
+      # Self-healing via a FRESH run (reruns are blocked above): if this fails, no git tag was pushed, so a fresh run recomputes the SAME version 
+      # and overwrites these tags (imagetools create is idempotent) -- nothing to revert or clean up.
+      - name: Add latest and version aliases to date tag
+        env:
+          DATE_TAG: ${{ needs.build-arch-images.outputs.date_tag }}
+          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
+        run: |
+          if [ "${IS_DRY_RUN}" = "true" ]; then
+            echo "[dry-run] Would alias ${IMAGE}:${DATE_TAG} as latest and ${TAG_VERSION}"
+            exit 0
+          fi
+          docker buildx imagetools create \
+            -t "${IMAGE}:latest" \
+            -t "${IMAGE}:${TAG_VERSION}" \
+            "${IMAGE}:${DATE_TAG}"
+          echo "Aliased ${DATE_TAG} as latest and ${TAG_VERSION}."
+
+      # FINAL irreversible step: the git tag is the version cursor, so create it last. Every earlier step (bump, Docker aliases) is idempotent and
+      # leaves no tag on failure, so a FRESH run (reruns are blocked above) recomputes the SAME version and self-heals. Tag and Release are created
+      # together (both at the bump commit) to minimize the window between them.
+      - name: Create git tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
+          BUMP_SHA: ${{ steps.bump.outputs.bump_sha }}
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
         run: |
-          docker buildx imagetools create \
-            -t armlimited/arm-mcp:${{ env.BUILD_DATE }} \
-            armlimited/arm-mcp:${{ env.BUILD_DATE }}-amd64 \
-            armlimited/arm-mcp:${{ env.BUILD_DATE }}-arm64
+          set -euo pipefail
+          GIT_TAG="v${TAG_VERSION}"
+          if [ "${IS_DRY_RUN}" = "true" ]; then
+            echo "[dry-run] Would create git tag ${GIT_TAG} at the bump commit and publish a GitHub Release."
+            exit 0
+          fi
+
+          # Idempotent re-entry: if the Release already exists, this version was
+          # fully published on a prior run -- nothing left to do.
+          if gh release view "${GIT_TAG}" >/dev/null 2>&1; then
+            echo "Release ${GIT_TAG} already exists; nothing to do."
+            exit 0
+          fi
+
+          # Create + push the annotated tag at the bump commit (only if missing,
+          # so a re-run after a partial failure reuses it). This advances the
+          # version cursor, so it stays paired with the Release creation below.
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git rev-parse -q --verify "refs/tags/${GIT_TAG}" >/dev/null 2>&1; then
+            git tag -a "${GIT_TAG}" "${BUMP_SHA}" -m "Release ${GIT_TAG} (matches ${IMAGE}:${TAG_VERSION})"
+            git push origin "refs/tags/${GIT_TAG}"
+            echo "Created and pushed ${GIT_TAG} at ${BUMP_SHA}."
+          fi
+
+          # Publish the Release on that tag with generated notes + image line.
+          gh release create "${GIT_TAG}" --title "${GIT_TAG}" --generate-notes
+          NOTES="$(gh release view "${GIT_TAG}" --json body --jq '.body')"
+          printf 'Docker image: `%s:%s` (built %s)\n\n%s\n' "${IMAGE}" "${TAG_VERSION}" "${BUILD_DATE}" "${NOTES}" | gh release edit "${GIT_TAG}" --notes-file -
+          echo "Published GitHub Release ${GIT_TAG}."

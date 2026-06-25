@@ -224,6 +224,9 @@ When contributing:
 - Update documentation for any new features or changes
 - Ensure the Docker image builds successfully before submitting
 
+**Note:**
+Images tagged `latest` and semantic version tags (e.g., `2.3.0`) should be treated as the **prod** environment, while dated tags (`YYYY-MM-DD-<run_number>`, e.g., `2026-05-31-123`) should be treated as the **stage** environment. The **dev** environment refers only to locally built images created by individual developers.
+
 ## License
 
 Copyright © 2025, Arm Limited and Contributors. All rights reserved.
