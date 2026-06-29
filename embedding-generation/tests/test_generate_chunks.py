@@ -422,9 +422,59 @@ class TestSourceTracking:
             reader = csv.reader(f)
             rows = list(reader)
         
-        assert rows[0] == ['Site Name', 'License Type', 'Display Name', 'URL', 'Keywords']
-        assert rows[1] == ['Site 1', 'MIT', 'Display 1', 'https://example.com/1', 'key1; key2']
-        assert rows[2] == ['Site 2', 'Apache', 'Display 2', 'https://example.com/2', 'key3']
+        assert rows[0] == ['Site Name', 'License Type', 'Display Name', 'URL', 'Keywords', 'Transcript Source URL']
+        assert rows[1] == ['Site 1', 'MIT', 'Display 1', 'https://example.com/1', 'key1; key2', '']
+        assert rows[2] == ['Site 2', 'Apache', 'Display 2', 'https://example.com/2', 'key3', '']
+
+    def test_save_sources_csv_preserves_transcript_url(self, gc, tmp_path):
+        """Transcript Source URL must be written back to the CSV."""
+        gc.all_sources = [
+            {
+                'site_name': 'Educational Course',
+                'license_type': 'All rights reserved',
+                'display_name': 'Example Video',
+                'url': 'https://courses.edx.org/videos/example',
+                'keywords': 'arm; ai',
+                'transcript_source_url': 'https://github.com/arm-education/repo/blob/main/M1KV1.txt'
+            }
+        ]
+
+        csv_file = tmp_path / "output.csv"
+        gc.save_sources_csv(str(csv_file))
+
+        with open(csv_file, 'r') as f:
+            rows = list(csv.reader(f))
+
+        assert rows[0][-1] == 'Transcript Source URL'
+        assert rows[1] == [
+            'Educational Course',
+            'All rights reserved',
+            'Example Video',
+            'https://courses.edx.org/videos/example',
+            'arm; ai',
+            'https://github.com/arm-education/repo/blob/main/M1KV1.txt',
+        ]
+
+    def test_load_existing_sources_preserves_transcript_url(self, gc, tmp_path):
+        """Loading a CSV with a transcript column should retain it through a save round-trip."""
+        csv_file = tmp_path / "sources.csv"
+        csv_file.write_text(
+            "Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL\n"
+            "Educational Course,All rights reserved,Example Video,https://courses.edx.org/videos/example,arm; ai,"
+            "https://github.com/arm-education/repo/blob/main/M1KV1.txt\n"
+        )
+
+        gc.load_existing_sources(str(csv_file))
+
+        assert gc.all_sources[0]['transcript_source_url'] == (
+            "https://github.com/arm-education/repo/blob/main/M1KV1.txt"
+        )
+
+        gc.save_sources_csv(str(csv_file))
+
+        with open(csv_file, 'r') as f:
+            rows = list(csv.reader(f))
+        assert rows[1][-1] == "https://github.com/arm-education/repo/blob/main/M1KV1.txt"
 
     def test_load_and_save_roundtrip(self, gc, tmp_path):
         """Test that loading and saving preserves data."""
@@ -633,6 +683,37 @@ class TestReadInCSV:
         assert csv_dict['focus'] == ['key1', 'key2']
         assert csv_dict['site_names'] == ['Site1', 'Site2']
         assert csv_dict['license_types'] == ['MIT', 'Apache']
+
+    def test_read_csv_transcript_urls(self, gc, tmp_path):
+        """Test that the optional Transcript Source URL column is read."""
+        csv_file = tmp_path / "transcript.csv"
+        csv_file.write_text(
+            "Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL\n"
+            "Educational Course,All rights reserved,Video1,https://courses.edx.org/v/1,key1,"
+            "https://github.com/arm-education/repo/blob/main/M1KV1.txt\n"
+            "Site2,Apache,Display2,https://example.com/2,key2,\n"
+        )
+
+        csv_dict, length = gc.readInCSV(str(csv_file))
+
+        assert length == 2
+        assert csv_dict['transcript_urls'] == [
+            "https://github.com/arm-education/repo/blob/main/M1KV1.txt",
+            "",
+        ]
+
+    def test_read_csv_transcript_missing_column(self, gc, tmp_path):
+        """A CSV without the transcript column should yield empty transcript URLs."""
+        csv_file = tmp_path / "no_transcript.csv"
+        csv_file.write_text(
+            "Site Name,License Type,Display Name,URL,Keywords\n"
+            "Site1,MIT,Display1,https://example.com/1,key1\n"
+        )
+
+        csv_dict, length = gc.readInCSV(str(csv_file))
+
+        assert length == 1
+        assert csv_dict['transcript_urls'] == [""]
 
     def test_read_csv_empty(self, gc, tmp_path):
         """Test reading an empty CSV (header only)."""
@@ -868,6 +949,95 @@ class TestArmDocumentationParsing:
         assert "scalable vector extension" in chunks[0].content
         assert chunks[1].url == "https://developer.arm.com/documentation/102376/0100/install"
         assert "target CPU for Cortex-A builds" in chunks[1].content
+
+
+class TestCreateTranscriptChunks:
+    """Tests for transcript-backed sources (Transcript Source URL column)."""
+
+    def _transcript_response(self, url, text):
+        return SimpleNamespace(
+            url=url,
+            content=text.encode("utf-8"),
+            headers={"content-type": "text/plain"},
+        )
+
+    def test_transcript_used_instead_of_primary_url(self, gc, monkeypatch):
+        """When a transcript URL is set, content is fetched from the transcript."""
+        source_url = "https://courses.edx.org/videos/block-v1:example+type@video+block@abc"
+        transcript_url = "https://github.com/arm-education/repo/blob/main/M1KV1.txt"
+        raw_transcript_url = (
+            "https://raw.githubusercontent.com/arm-education/repo/main/M1KV1.txt"
+        )
+        transcript_text = (
+            "Arm processors deliver strong energy efficiency for AI inference workloads. "
+            * 60
+        )
+
+        fetched_urls = []
+
+        def fake_fetch(url):
+            fetched_urls.append(url)
+            return self._transcript_response(raw_transcript_url, transcript_text)
+
+        monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
+
+        chunks = gc.create_chunks_for_source(
+            source_url=source_url,
+            source_name="Energy efficiency for AI inference",
+            doc_type="Educational Course",
+            keywords_value="arm; ai; inference",
+            transcript_url=transcript_url,
+        )
+
+        # The GitHub blob URL must be resolved to a raw fetch URL.
+        assert fetched_urls == [raw_transcript_url]
+        assert len(chunks) >= 1
+        # User-facing link stays the primary source URL, not the transcript.
+        assert all(chunk.url == source_url for chunk in chunks)
+        assert all(chunk.doc_type == "Educational Course" for chunk in chunks)
+        assert "energy efficiency" in chunks[0].content.lower()
+
+    def test_transcript_fetch_failure_returns_empty(self, gc, monkeypatch):
+        """A failed transcript fetch should return no chunks."""
+        monkeypatch.setattr(gc, "fetch_with_logging", lambda url: None)
+
+        chunks = gc.create_chunks_for_source(
+            source_url="https://courses.edx.org/videos/example",
+            source_name="Example",
+            doc_type="Educational Course",
+            keywords_value="arm",
+            transcript_url="https://github.com/arm-education/repo/blob/main/missing.txt",
+        )
+
+        assert chunks == []
+
+    def test_blank_transcript_falls_back_to_primary_url(self, gc, monkeypatch):
+        """A blank transcript URL should not trigger transcript chunking."""
+        captured = {}
+
+        def fake_generic(source_url, source_name, doc_type, keywords_value):
+            captured["called"] = True
+            return ["sentinel"]
+
+        # create_chunks_for_source dispatches to the generic path via fetch; here we
+        # short-circuit by patching fetch to confirm the transcript branch is skipped.
+        def fake_fetch(url):
+            captured["fetched"] = url
+            return None
+
+        monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
+
+        chunks = gc.create_chunks_for_source(
+            source_url="https://learn.arm.com/learning-paths/example/",
+            source_name="Example",
+            doc_type="Learning Paths",
+            keywords_value="arm",
+            transcript_url="   ",
+        )
+
+        # Transcript branch skipped -> generic path attempted a fetch of the primary URL.
+        assert "fetched" in captured
+        assert chunks == []
 
 
 class TestCreateRetrySession:

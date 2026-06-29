@@ -27,11 +27,28 @@ The Dockerfile:
 Add one row to `vector-db-sources.csv` for each document:
 
 ```csv
-Site Name,License Type,Display Name,URL,Keywords
-Example Docs,CC4.0,Example Arm Guide,https://example.com/arm-guide,arm; migration; linux
+Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL
+Example Docs,CC4.0,Example Arm Guide,https://example.com/arm-guide,arm; migration; linux,
 ```
 
 Use clear keywords that users might include in questions. The `URL` is also what retrieval eval uses for expected matches.
+
+### Transcript-backed sources
+
+Some sources (for example edX course videos) do not have directly chunkable text
+at their primary `URL`. For these, populate the optional `Transcript Source URL`
+column with a link to a plain-text or markdown transcript (such as a GitHub
+`.../blob/...` file). When `Transcript Source URL` is set, `generate-chunks.py`
+fetches and chunks the transcript instead of the primary `URL`, but keeps the
+primary `URL` as the user-facing link returned by retrieval:
+
+```csv
+Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL
+Educational Course,All rights reserved,Example Video,https://courses.edx.org/videos/...,arm; ai; inference,https://github.com/arm-education/.../M1KV1.txt
+```
+
+Leave the column empty for sources that are chunked from their primary `URL`.
+
 
 ## Test Locally
 
