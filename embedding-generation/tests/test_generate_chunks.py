@@ -997,8 +997,8 @@ class TestCreateTranscriptChunks:
         assert all(chunk.doc_type == "Educational Course" for chunk in chunks)
         assert "energy efficiency" in chunks[0].content.lower()
 
-    def test_transcript_fetch_failure_returns_empty(self, gc, monkeypatch):
-        """A failed transcript fetch should return no chunks."""
+    def test_transcript_fetch_failure_returns_empty(self, gc, monkeypatch, capsys):
+        """A failed transcript fetch should return no chunks and log both URLs."""
         monkeypatch.setattr(gc, "fetch_with_logging", lambda url: None)
 
         chunks = gc.create_chunks_for_source(
@@ -1011,13 +1011,17 @@ class TestCreateTranscriptChunks:
 
         assert chunks == []
 
+        captured = capsys.readouterr()
+        assert "TRANSCRIPT FETCH FAILED" in captured.out
+        # Both the primary source URL and the transcript URL aid batch troubleshooting.
+        assert "https://courses.edx.org/videos/example" in captured.out
+        assert "https://github.com/arm-education/repo/blob/main/missing.txt" in captured.out
+        # The resolved raw fetch URL should also be logged.
+        assert "raw.githubusercontent.com/arm-education/repo/main/missing.txt" in captured.out
+
     def test_blank_transcript_falls_back_to_primary_url(self, gc, monkeypatch):
         """A blank transcript URL should not trigger transcript chunking."""
         captured = {}
-
-        def fake_generic(source_url, source_name, doc_type, keywords_value):
-            captured["called"] = True
-            return ["sentinel"]
 
         # create_chunks_for_source dispatches to the generic path via fetch; here we
         # short-circuit by patching fetch to confirm the transcript branch is skipped.

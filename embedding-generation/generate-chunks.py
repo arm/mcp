@@ -894,17 +894,20 @@ def create_transcript_chunks(source_url, transcript_url, source_name, doc_type, 
     fetch_url = source_to_fetch_url(normalize_source_url(transcript_url))
     response = fetch_with_logging(fetch_url)
     if response is None:
-        print('transcript not valid, ', fetch_url)
+        print(f"[TRANSCRIPT FETCH FAILED] for {normalized_source_url} (transcript: {transcript_url}): {fetch_url}")
         return []
 
     keywords = parse_keywords(keywords_value, source_name)
     parsed_document = parse_document_content(
-        source_url=normalized_source_url,
+        source_url=response.url,
         resolved_url=response.url,
         response_content=response.content,
         content_type=response.headers.get("content-type", ""),
         fallback_title=source_name,
     )
+    # Keep the primary URL as the user-facing link while still using the transcript
+    # URL as the base for resolving any relative links inside the transcript content.
+    parsed_document.source_url = normalized_source_url
 
     chunks = []
     for payload in chunk_parsed_document(parsed_document, doc_type=doc_type or "Transcript", keywords=keywords):
@@ -941,7 +944,7 @@ def create_chunks_for_source(source_url, source_name, doc_type, keywords_value, 
     fetch_url = source_to_fetch_url(normalized_source_url)
     response = fetch_with_logging(fetch_url)
     if response is None:
-        print('not valid, ', fetch_url)
+        print(f"Fetch failed for {normalized_source_url}: {fetch_url}")
         return []
 
     sources_to_parse = [(normalized_source_url, response)]
