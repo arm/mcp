@@ -1,5 +1,197 @@
 [
   {
+    "question": "How are multi-layer artificial neural networks structured, and what roles do layers, weights, biases, and activation functions play?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@dc338f5160934b888cbfb8be2446e2d4"
+    ]
+  },
+  {
+    "question": "Why is gradient descent used to train neural networks instead of trying every possible combination of weights?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@dc338f5160934b888cbfb8be2446e2d4"
+    ]
+  },
+  {
+    "question": "How does the training process of a supervised neural network use forward propagation and back propagation to improve prediction accuracy?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@dc338f5160934b888cbfb8be2446e2d4"
+    ]
+  },
+  {
+    "question": "Where can I learn about how neural networks are trained, including cost functions, gradient descent, and the role of backpropagation?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@dc338f5160934b888cbfb8be2446e2d4"
+    ]
+  },
+  {
+    "question": "How do large language models generate responses during inference, and what stages are involved in producing output tokens?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@aceb4905f1a048409ca84bb8589b24b1"
+    ]
+  },
+  {
+    "question": "What is KV caching, and how does it reduce the computational cost of generating responses from long prompts?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@aceb4905f1a048409ca84bb8589b24b1"
+    ]
+  },
+  {
+    "question": "Why can a chatbot generate text quickly without reprocessing the entire conversation history for every new token?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@aceb4905f1a048409ca84bb8589b24b1"
+    ]
+  },
+  {
+    "question": "Where can I learn about autoregressive text generation, prompt processing, and caching techniques used in modern large language models?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@aceb4905f1a048409ca84bb8589b24b1"
+    ]
+  },
+  {
+    "question": "How can I get started with hands-on materials for deploying and improving generative AI inference on Arm hardware across Raspberry Pi and Graviton?",
+    "expected_urls": [
+      "https://github.com/arm-education/AI-on-Arm/blob/main/README.md"
+    ]
+  },
+  {
+    "question": "How do Neon FP32 and INT8 matrix multiplication kernels help speed up AI workloads on a Raspberry Pi 5?",
+    "expected_urls": [
+      "https://github.com/arm-education/AI-on-Arm/blob/main/lab1.ipynb"
+    ]
+  },
+  {
+    "question": "How do I benchmark KleidiAI microkernels with Arm Neoverse features such as DotProd and I8MM and compare them against BLAS?",
+    "expected_urls": [
+      "https://github.com/arm-education/AI-on-Arm/blob/main/lab2.ipynb"
+    ]
+  },
+  {
+    "question": "Where can I learn about comparing cloud and edge LLM inference throughput, token generation rates, and quantization trade-offs on Arm devices?",
+    "expected_urls": [
+      "https://github.com/arm-education/AI-on-Arm/blob/main/lab3.ipynb"
+    ]
+  },
+  {
+    "question": "I want to build a model that routes different inputs to specialized neural network experts instead of evaluating the whole model every time. What workflow should I follow?",
+    "expected_urls": [
+      "https://github.com/arm-education/Advanced-AI-Mixture-of-Experts/blob/main/README.md"
+    ]
+  },
+  {
+    "question": "How do MoE architectures compare with dense models for inference efficiency, FLOP counts, memory use, and practical speedup?",
+    "expected_urls": [
+      "https://github.com/arm-education/Advanced-AI-Mixture-of-Experts/blob/main/Part-1-MoE-vs-Dense/Part_1_MOE_vs_Dense_Inference_Comparison_KIERAN_EDIT_AC_Ed.ipynb"
+    ]
+  },
+  {
+    "question": "How do I build a domain-labeled sentiment dataset from Amazon, Yelp, and IMDB reviews for Mixture of Experts routing experiments?",
+    "expected_urls": [
+      "https://github.com/arm-education/Advanced-AI-Mixture-of-Experts/blob/main/Part-2-Create-Sentiment-Detection/Part_2_Create_Sentiment_Detection_Data_KIERAN_Edit_AC_Ed.ipynb"
+    ]
+  },
+  {
+    "question": "Where can I learn about improving MoE routing balance with alternating expert and gate training, capacity constraints, and entropy regularization?",
+    "expected_urls": [
+      "https://github.com/arm-education/Advanced-AI-Mixture-of-Experts/blob/main/Part-5-Routing-and-Load-Balancing-Improved/Part-5-Routing-and-Load-Balancing-Improved_AC_Ed.ipynb"
+    ]
+  },
+  {
+    "question": "How can I make a generative AI model small and efficient enough for edge deployment while still understanding the trade-offs between compression, accuracy, and runtime performance?",
+    "expected_urls": [
+      "https://github.com/arm-education/Advanced-AI-Hardware-Software-Co-Design/blob/main/README.md"
+    ]
+  },
+  {
+    "question": "How can I quantize a language model below 8-bit precision and use quantization-aware training to recover accuracy after aggressive compression?",
+    "expected_urls": [
+      "https://github.com/arm-education/Advanced-AI-Hardware-Software-Co-Design/blob/main/lab1.ipynb"
+    ]
+  },
+  {
+    "question": "How do I replace PyTorch linear layers with quantized equivalents and search for the best per-layer bit widths to balance model size and quality?",
+    "expected_urls": [
+      "https://github.com/arm-education/Advanced-AI-Hardware-Software-Co-Design/blob/main/lab2.ipynb"
+    ]
+  },
+  {
+    "question": "Where can I learn how to convert, quantize, deploy, and benchmark a Llama-style model locally on an Android device using llama.cpp?",
+    "expected_urls": [
+      "https://github.com/arm-education/Advanced-AI-Hardware-Software-Co-Design/blob/main/lab3.md"
+    ]
+  },
+  {
+    "question": "How can I turn PyTorch models into lightweight edge inference applications that run efficiently on Arm CPUs and NPUs?",
+    "expected_urls": [
+      "https://github.com/arm-education/executorch_on_arm_labs/blob/main/README.md"
+    ]
+  },
+  {
+    "question": "How do I compare transformer inference using PyTorch versus ExecuTorch on an Arm edge device with the XNNPACK backend?",
+    "expected_urls": [
+      "https://github.com/arm-education/executorch_on_arm_labs/blob/main/Lab_1_Transformer_Inference_ExecuTorch.ipynb"
+    ]
+  },
+  {
+    "question": "How do I build an efficient image classification application with MobileNetV2, quantization, ExecuTorch, and a Raspberry Pi camera?",
+    "expected_urls": [
+      "https://github.com/arm-education/executorch_on_arm_labs/blob/main/Lab_2_Efficient_Image_Classification_ExecuTorch.ipynb"
+    ]
+  },
+  {
+    "question": "Where can I learn about lowering ExecuTorch models to Arm Ethos-U NPUs, inspecting TOSA graphs, and running inference on a Fixed Virtual Platform?",
+    "expected_urls": [
+      "https://github.com/arm-education/executorch_on_arm_labs/blob/main/Lab_3_Accelerating_ExecuTorch_Ethos_NPU.ipynb"
+    ]
+  },
+    {
+    "question": "I need to decide whether Arm Neoverse cloud instances are a good target for my server workload and understand which architecture, tooling, and platform choices matter before I start porting. What should I review?",
+    "expected_urls": [
+      "https://github.com/arm-education/Introduction-to-Cloud-Compute-on-Arm/blob/main/README.md"
+    ]
+  },
+  {
+    "question": "How do I choose between Neoverse V, N, and E cores for cloud, edge, HPC, or machine learning workloads?",
+    "expected_urls": [
+      "https://github.com/arm-education/Introduction-to-Cloud-Compute-on-Arm/blob/main/Part%201%20-%20Introduction%20to%20Neoverse%20Cores.md"
+    ]
+  },
+  {
+    "question": "How do Arm Neoverse systems organize boot firmware, UEFI, Linux, hypervisors, secure services, and CCA realms in the software stack?",
+    "expected_urls": [
+      "https://github.com/arm-education/Introduction-to-Cloud-Compute-on-Arm/blob/main/Part%202%20-%20The%20Software%20Stack.md"
+    ]
+  },
+  {
+    "question": "Where can I learn about planning, migrating, testing, and optimizing a cloud application for deployment on Arm Neoverse platforms?",
+    "expected_urls": [
+      "https://github.com/arm-education/Introduction-to-Cloud-Compute-on-Arm/blob/main/Part%203%20-%20Arm%20Neoverse%20Software%20and%20System%20Design.md"
+    ]
+  },
+  {
+    "question": "I want to accelerate DSP or machine learning workloads on a low-power Cortex-M device without adding a separate DSP. What Arm features and programming approaches should I consider?",
+    "expected_urls": [
+      "https://github.com/arm-education/Arm-Helium-Technology/blob/main/HeliumTechnology_referencebook.pdf"
+    ]
+  },
+  {
+    "question": "How does Helium avoid scalar cleanup code and branch overhead when vectorizing loops whose iteration count does not match the vector length?",
+    "expected_urls": [
+      "https://github.com/arm-education/Arm-Helium-Technology/blob/main/HeliumTechnology_referencebook.pdf"
+    ]
+  },
+  {
+    "question": "How do I implement efficient memory access patterns for FFTs, FIR filters, or image data using Helium scatter-gather, circular buffers, and interleaving loads and stores?",
+    "expected_urls": [
+      "https://github.com/arm-education/Arm-Helium-Technology/blob/main/HeliumTechnology_referencebook.pdf"
+    ]
+  },
+  {
+    "question": "Where can I learn about programming and optimizing Arm Helium for Cortex-M, including intrinsics, CMSIS-DSP, CMSIS-NN, performance counters, and ML deployment?",
+    "expected_urls": [
+      "https://github.com/arm-education/Arm-Helium-Technology/blob/main/HeliumTechnology_referencebook.pdf"
+    ]
+  },
+  {
     "question": "How should worker_processes, worker_connections, and keepalive settings be tuned for NGINX on Ampere processors?",
     "expected_urls": [
       "https://amperecomputing.com/tuning-guides/nginx-tuning-guide"
