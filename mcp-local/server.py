@@ -48,7 +48,7 @@ SEARCH_RESOURCES = arm_kb_search.load_search_resources(
 
 
 @mcp.tool(
-    description="IMPORTANT: IF A USER ASKS TO MIGRATE A CODEBASE TO ARM, STRONGLY CONSIDER USING THIS TOOL AS A PART OF YOUR STRATEGY. This tool searches an Arm knowledge base of learning resources, Arm intrinsics, and software version compatibility using semantic similarity. Given a natural language query, returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful for finding documentation, tutorials, or version compatibility for Arm. Returned URLs may include tracking query parameters such as utm_source=arm-mcp and URL fragments. When sharing or citing returned URLs, preserve each URL exactly as returned, including query parameters and fragments; do not remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
+    description="If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your strategy. Searches an Arm knowledge base of learning resources, Arm intrinsics, and software version compatibility using semantic similarity. Given a natural language query, returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful for finding documentation, tutorials, or version compatibility for Arm migrations. Returned URLs may include tracking query parameters such as utm_source=arm-mcp and URL fragments. When sharing or citing returned URLs, preserve each URL exactly as returned, including query parameters and fragments; do not remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
 )
 def knowledge_base_search(query: str, invocation_reason: Optional[str] = None) -> List[Dict[str, Any]]:
     # Log invocation reason if provided
@@ -77,7 +77,7 @@ def knowledge_base_search(query: str, invocation_reason: Optional[str] = None) -
 
 
 @mcp.tool(
-    description="Check Docker image architectures. Provide an image in 'name:tag' format and get a report of supported architectures. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
+    description="Check Docker image architectures. Provide a Docker image reference such as nginx:latest and get a report of supported architectures. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
 )
 def check_image(image: str, invocation_reason: Optional[str] = None) -> dict:
     log_invocation_reason(
@@ -104,7 +104,7 @@ def check_image(image: str, invocation_reason: Optional[str] = None) -> dict:
 
 
 @mcp.tool(
-    description="Provides instructions for installing and using sysreport, a tool that obtains system information related to system architecture, CPU, memory, and other hardware details. Since this runs in a container, the tool provides installation instructions for running sysreport directly on the host system."
+    description="Provides instructions for installing and using sysreport, a tool that obtains system information related to system architecture, CPU, memory, and other hardware details. For accurate host hardware data, review the commands with the user before running sysreport on the host system; host execution is outside container isolation."
 )
 def sysreport_instructions(invocation_reason: Optional[str] = None) -> Dict[str, Any]:
     log_invocation_reason(
@@ -151,11 +151,11 @@ Run these commands directly on your host system (not in a container) to get accu
 
 @mcp.tool(
     description=(
-        "IMPORTANT: IF A USER ASKS TO MIGRATE A CODEBASE TO ARM, STRONGLY CONSIDER USING THIS TOOL AS A PART OF YOUR OVERALL STRATEGY. "
+        "If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your overall strategy. "
         "Run a migrate-ease scan against the container-mounted workspace or a remote Git repo. "
         "Supported scanners: cpp, python, go, js, java. "
         "Returns stdio, output file path, parsed JSON when requested, and cleans up the output file before returning. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
-        " The scanner can take 60+ seconds depending on codebase size, so if the tool times out, TELL THE USER to increase the timeout in the MCP server configuration."
+        " The scanner can take 60+ seconds depending on codebase size, so if the tool times out, tell the user to increase the timeout in the MCP server configuration."
     )
 )
 def migrate_ease_scan(
@@ -328,7 +328,7 @@ def apx_recipe_run(cmd:str, remote_ip_addr:str, remote_usr:str, recipe:str="code
     
     return results
 
-@mcp.tool(description="IMPORTANT: IF A USER ASKS TO MIGRATE A CODEBASE TO ARM, STRONGLY CONSIDER USING THIS TOOL AS A PART OF YOUR OVERALL STRATEGY. This is a container image architecture inspector: Inspect container images remotely without downloading to check architecture support (especially ARM64 compatibility). Useful before migrating workloads to ARM-based infrastructure. Set 'image' (e.g. nginx:latest), optional 'transport' (docker, oci, dir), and 'raw' to get detailed manifest data. Shows available architectures, OS support, and image metadata. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
+@mcp.tool(description="If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your overall strategy. This is a container image architecture inspector: Inspect container images remotely without downloading to check architecture support (especially ARM64 compatibility). Useful before migrating workloads to ARM-based infrastructure. Set 'image' (e.g. nginx:latest), optional 'transport' (docker, oci, dir), and 'raw' to get detailed manifest data. Shows available architectures, OS support, and image metadata. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
 def skopeo(image: Optional[str] = None, transport: str = "docker", raw: bool = False, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
     log_invocation_reason(
         tool="skopeo",
