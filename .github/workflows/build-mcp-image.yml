@@ -137,6 +137,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      pull-requests: write
     if: ${{ needs.build-arch-images.result == 'success' }}
     steps:
       - name: Block publishing reruns
@@ -153,8 +154,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           # Check out the upstream build's commit (head_sha) as the base; the
-          # bump step commits server.json on top and the git tag is created at
-          # that bump commit. fetch-depth: 0 so version tags are available.
+          # bump step opens a PR from this commit and the git tag is created at
+          # the merged bump commit. fetch-depth: 0 so version tags are available.
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0
 
@@ -204,20 +205,20 @@ jobs:
           echo "${latest} -> ${TAG_VERSION} (${BUMP_TYPE})"
           echo "tag_version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
 
-      # Commit the server.json bump FIRST so the git tag/Release below point at
-      # a commit whose metadata already matches this version. Committed ON TOP
-      # OF the built commit (head_sha), not latest main, so the tag/Release stay
-      # traceable to the exact code in the image. The referenced image
-      # (${IMAGE}:${TAG_VERSION}) is published by the next step, before the tag.
-      - name: Bump server.json on main
+      # Merge the server.json bump FIRST so the git tag/Release below point at a
+      # main commit whose metadata already matches this version. The bump branch
+      # is created from the exact commit that produced the images.
+      - name: Bump server.json through PR
         id: bump
         if: ${{ env.IS_DRY_RUN != 'true' }}
         env:
+          GH_TOKEN: ${{ github.token }}
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
           SERVER_JSON="mcp-local/server.json"
+          BUMP_BRANCH="release/server-json-${TAG_VERSION}-${GITHUB_RUN_ID}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
@@ -249,8 +250,11 @@ jobs:
             exit 1
           fi
 
-          # Commit the bump on top of the exact commit that produced the images.
-          git checkout -B main "${HEAD_SHA}"
+          # Commit the bump on a release branch based on the exact commit that
+          # produced the images, then merge it through a PR so main protection is
+          # respected. If required reviews/checks block the merge, fail before
+          # publishing version aliases or the git tag.
+          git checkout -B "${BUMP_BRANCH}" "${HEAD_SHA}"
           apply_bump_file
           if git diff --quiet -- "${SERVER_JSON}"; then
             echo "${SERVER_JSON} already at ${TAG_VERSION}; nothing to do."
@@ -259,14 +263,25 @@ jobs:
           fi
           git add "${SERVER_JSON}"
           git commit -m "chore: bump server.json to ${TAG_VERSION}"
-          # Non-force push (fast-forward from HEAD_SHA): rejected if main moved
-          # in the race window, so the tag never lands on an unbuilt commit.
-          if git push origin HEAD:main; then
-            echo "Pushed server.json bump to ${TAG_VERSION}."
-            echo "bump_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "::error::Push rejected: origin/main moved during the run. Start a fresh workflow run."; exit 1
+          git push origin "HEAD:refs/heads/${BUMP_BRANCH}"
+
+          PR_URL="$(gh pr create \
+            --base main \
+            --head "${BUMP_BRANCH}" \
+            --title "chore: bump server.json to ${TAG_VERSION}" \
+            --body "Automated release metadata bump for ${IMAGE}:${TAG_VERSION}.")"
+          echo "Created ${PR_URL}"
+
+          gh pr merge "${PR_URL}" \
+            --squash \
+            --delete-branch \
+            --subject "chore: bump server.json to ${TAG_VERSION}" \
+            --body "Automated release metadata bump for ${IMAGE}:${TAG_VERSION}."
+
+          git fetch origin main
+          BUMP_SHA="$(git rev-parse origin/main)"
+          echo "Merged server.json bump to ${BUMP_SHA}."
+          echo "bump_sha=${BUMP_SHA}" >> "$GITHUB_OUTPUT"
 
       # Promote production Docker tags before the git tag (the version cursor) advances. 
       # Self-healing via a FRESH run (reruns are blocked above): if this fails, no git tag was pushed, so a fresh run recomputes the SAME version 
@@ -291,7 +306,7 @@ jobs:
       # together (both at the bump commit) to minimize the window between them.
       - name: Create git tag and GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
           BUMP_SHA: ${{ steps.bump.outputs.bump_sha }}
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
