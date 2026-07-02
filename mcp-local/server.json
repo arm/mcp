@@ -3,7 +3,7 @@
   "name": "io.github.arm/arm-mcp",
   "title": "Arm MCP Server",
   "description": "Official Arm MCP server for code migration, optimization, and Arm architecture guidance",
-  "version": "2.0.0",
+  "version": "2.3.1",
   "repository": {
     "url": "https://github.com/arm/mcp",
     "source": "github"
@@ -12,7 +12,7 @@
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "docker.io/armlimited/arm-mcp:2.0.0",
+      "identifier": "docker.io/armlimited/arm-mcp:2.3.1",
       "runtimeHint": "docker",
       "transport": {
         "type": "stdio"

@@ -229,6 +229,6 @@ Images tagged `latest` and semantic version tags (e.g., `2.3.0`) should be treat
 
 ## License
 
-Copyright © 2025, Arm Limited and Contributors. All rights reserved.
+Copyright © 2026, Arm Limited and Contributors. All rights reserved.
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
