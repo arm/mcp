@@ -1,5 +1,395 @@
 [
   {
+  "question": "Why is running large generative AI models on edge devices so challenging, and what hardware constraints drive the need for inference optimization?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@b07d6c9a607e42ccba03f6da7f81f67e"
+  ]
+  },
+  {
+  "question": "How do CPU and GPU architectures differ when running generative AI inference, and how do those differences affect latency, throughput, and energy efficiency?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@ea1aba1c5d154f918a14eddc9c3eafdb"
+  ]
+  },
+  {
+  "question": "How can I reduce the memory footprint of a large language model so it can run efficiently on an edge device with limited RAM and memory bandwidth?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@14e001df04ba457ba59469e91c5bc376"
+  ]
+  },
+  {
+  "question": "How can I improve generative AI inference throughput on an edge device when compute performance, rather than memory bandwidth, is the main bottleneck?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@19f0d9ab61c643d3a2321313e18ea31f"
+  ]
+  },
+  {
+  "question": "How do the core components of the transformer architecture—such as self-attention, residual connections, layer normalization, feedforward networks, and positional encodings—enable large language models to outperform recurrent neural networks?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@1001a0e4748c4ff69b149dc73f7edf2e"
+  ]
+  },
+  {
+  "question": "How are decoder-only transformer models trained and optimized to become large language models, from tokenization and pre-training through fine-tuning and reinforcement learning from human feedback?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@19f0d9ab61c643d3a2321313e18ea31f"
+  ]
+  },
+  {
+  "question": "How do large language models generate responses efficiently during inference, and what role does KV caching play in reducing latency for long prompts?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@aceb4905f1a048409ca84bb8589b24b1"
+  ]
+  },
+  {
+  "question": "How can I optimize and deploy a large language model on an Arm-based Raspberry Pi by combining Neon SIMD, quantization, and llama.cpp to improve inference performance without significantly affecting output quality?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@64c996e199754717816958a107c5b4a6"
+  ]
+  },
+  {
+  "question": "Why might it make more sense to optimize large language model inference for CPUs instead of GPUs when deploying AI applications to edge devices or at large scale?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@49e5c32c4946446d96d7721925699af0"
+  ]
+  },
+  {
+  "question": "What are the biggest performance bottlenecks when running modern generative AI models on CPUs, and which optimization techniques help overcome limits in compute, memory bandwidth, and latency?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@7d3b15cd74894b1db163b6cc125ed0b0"
+  ]
+  },
+  {
+  "question": "How do computation graphs enable AI inference optimizations such as operator fusion, parallel execution, and graph compilation on CPUs?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@4f1ac49c77af4817a05c5114da3eb90e"
+  ]
+  },
+  {
+  "question": "When should I use graph mode instead of eager execution for AI inference, and how do approaches like static compilation, JIT compilation, and frameworks such as PyTorch and llama.cpp affect CPU performance?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@2b7f5c42e9ae46edb3aa050437b504fa"
+  ]
+  },
+  {
+  "question": "What software stack and libraries should I use to get the best CPU inference performance for generative AI on Arm, and how do PyTorch, KleidiAI, and llama.cpp work together?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@62073294cb824dffa8517c97b62890ab"
+  ]
+  },
+  {
+  "question": "How can I use Arm KleidiAI to accelerate large language model inference on Arm Neoverse processors by combining optimized microkernels with low-bit group-wise quantization to reduce latency and memory usage?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@3de39ce1f349446597f3bb22d4067dc3"
+  ]
+  },
+  {
+  "question": "How can I reduce the memory footprint and inference latency of a large language model on a CPU using quantization and pruning without significantly sacrificing model accuracy?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@a30dbc393d9f45479281092510f81e9b"
+  ]
+  },
+  {
+  "question": "How can I optimize matrix multiplication on Arm CPUs using techniques like loop tiling, loop unrolling, cache-aware memory access, and multi-threading to improve AI inference performance?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@620e60dae7354a6683bb9f6826d92006"
+  ]
+  },
+  {
+  "question": "How can I use Arm SIMD extensions such as NEON, I8MM, SVE, and SME to accelerate matrix multiplication and improve AI inference performance on CPUs?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@67201798c418472bb48a74a05b62fbc5"
+  ]
+  },
+  {
+  "question": "How can I use Arm KleidiAI micro-kernels together with quantization and Arm SIMD extensions to achieve low-latency generative AI inference on CPUs without relying on a GPU?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@93bfe86744914c13b334672df7eb478f"
+  ]
+  },
+  {
+  "question": "How do model quantization and thread count affect prompt processing time, token generation speed, and overall inference performance when comparing Raspberry Pi and AWS Graviton for large language model deployment?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@e4842b3c93b14d1dbb11d6ab51a626cf"
+  ]
+  },
+  {
+  "question": "What's the difference between AI, machine learning, training, and inference, and why is only the inference stage typically deployed on resource-constrained edge devices such as Arm Cortex-M processors?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@d91725e4d39340be9695fa276d42ae04"
+  ]
+  },
+  {
+  "question": "What are the advantages and challenges of running machine learning inference directly on Arm Cortex-M microcontrollers instead of sending data to the cloud?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@b3970ac680ee4f7b9c838034fd16c5c6"
+  ]
+  },
+  {
+  "question": "How do I prepare, split, and use labeled datasets to train and evaluate a supervised machine learning model for classification or regression before deploying it for inference?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@33ce57dcbaac49f49686c76702faeabd"
+  ]
+  },
+  {
+  "question": "How do I extract and select meaningful features from sensor or audio data so a machine learning model can accurately classify activities or recognize speech on an edge device?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@aa17e1fdfff7495e8f711111217f76fd"
+  ]
+  },
+  {
+  "question": "How can I reliably evaluate the accuracy of a supervised machine learning model and avoid overestimating its performance using techniques like stratified train/test splits and cross-validation?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@c9a6267e558f4624b16703de7622a521"
+  ]
+  },
+  {
+  "question": "How can I choose a machine learning model that's accurate enough for deployment on a resource-constrained microcontroller without overfitting or exceeding its memory and compute limits?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@372d65e8db464664a2fc83eaa298360b"
+  ]
+  },
+  {
+  "question": "How do artificial neurons and activation functions work together in a neural network to learn complex patterns from data during machine learning?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@4440762f76114af9bd920d3702bfae41"
+  ]
+  },
+  {
+  "question": "How are multi-layer neural networks trained using forward propagation, backpropagation, and gradient descent to optimize weights and improve prediction accuracy?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@dc338f5160934b888cbfb8be2446e2d4"
+  ]
+  },
+  {
+  "question": "How can I estimate whether a neural network for human activity recognition will fit on a resource-constrained microcontroller by calculating its computational and memory requirements?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@d1369ac9b0064cee9c8afe6265bef9ba"
+  ]
+  },
+  {
+  "question": "How do convolutional neural networks use convolution, pooling, stride, and padding to efficiently process image, audio, or sensor data for edge AI applications?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@042770f70c8e45c6a59b592e31461c96"
+  ]
+  },
+  {
+  "question": "How can I build a keyword spotting system that converts microphone audio into spectrogram or MFCC features for classification with a convolutional neural network?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@ec75d375250c40d4b806c2ad03f6fdff"
+  ]
+  },
+  {
+  "question": "How can I choose a neural network architecture for real-time audio inference on an Arm Cortex-M microcontroller while balancing accuracy against memory usage and computational cost?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@871f883268e24c848e8e014f29500a3c"
+  ]
+  },
+  {
+  "question": "How can I optimize a neural network for deployment on an Arm Cortex-M microcontroller using CMSIS-DSP and CMSIS-NN to improve inference speed, energy efficiency, and memory usage?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@4df67a3f08be42338e3c9ed0812d194e"
+  ]
+  },
+  {
+  "question": "How can I design a convolutional neural network for image classification that learns features directly from raw images while balancing accuracy with computational efficiency for embedded deployment?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@5e3ac498a032482a9ddc5f1f4d3ddec3"
+  ]
+  },
+  {
+  "question": "How can I estimate the computational workload and memory footprint of a convolutional neural network to determine whether it can run on a resource-constrained Arm Cortex-M microcontroller?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@4f763d44edb043a5aa80399a9500e93c"
+  ]
+  },
+  {
+  "question": "How can I optimize a machine learning application for an Arm Cortex-M microcontroller to minimize inference latency and energy consumption while staying within strict memory and compute constraints?",
+  "expected_urls": [
+    "hhttps://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@a1297eceb2c341e0b6b449ee625843d4"
+  ]
+  },
+  {
+  "question": "How can I shrink a neural network so it fits on a resource-constrained microcontroller using techniques such as pruning, knowledge distillation, and quantization without sacrificing too much accuracy?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@e75b4eed00274c4389af635db6e3feca"
+  ]
+  },
+  {
+  "question": "How do I choose or optimize a deep learning model for TinyML when I need to balance inference accuracy against memory usage and computational cost on a microcontroller?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@ca3a0116b39c43debef04085e63da5ce"
+  ]
+  },
+  {
+  "question": "How can I quantize a neural network for deployment on an Arm Cortex-M microcontroller while avoiding overflow and preserving inference accuracy with fixed-point arithmetic?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@236f464fc113419c9eb3873d43f59cc2"
+  ]
+  },
+  {
+  "question": "How can I use Anaconda, Jupyter Notebook, and Python to build and evaluate an activity recognition model from accelerometer data using common machine learning algorithms?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@1b743b1f9962476b8f683ad04aa816a5"
+  ]
+  },
+  {
+  "question": "How can I compare and tune different machine learning algorithms using cross-validation, feature selection, and hyperparameter optimization to find the best model for activity recognition?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@f1488dc7a38a467b9010c9363e180692"
+  ]
+  },
+  {
+  "question": "How can I train a TensorFlow neural network on accelerometer data and deploy it to an STM32 microcontroller using STM32Cube.AI for real-time gesture or letter recognition?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@b753760a45304583842fe82d1cc4f1fb"
+  ]
+  },
+  {
+  "question": "How can I deploy a TensorFlow model with extracted sensor features to an STM32 microcontroller using STM32Cube.AI, and validate and integrate it into a real-time embedded application?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@13366c4547854be883ea5198ed167f91"
+  ]
+  },
+  {
+  "question": "How can I build and deploy a keyword spotting model that converts audio into MFCC features, trains a convolutional neural network, and runs efficiently on an embedded microcontroller?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@160b859cc1b04f40af5a3f2274c9866a"
+  ]
+  },
+  {
+  "question": "How can I train, validate, and deploy a convolutional neural network for image classification on an STM32 microcontroller using TensorFlow, the CIFAR-10 dataset, and STM32Cube.AI?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@5eee196dbadb407cbbc998d96ebed206"
+  ]
+  },
+  {
+  "question": "How can I quantize a TensorFlow model with TensorFlow Lite and verify the improvements in memory usage, inference latency, and energy consumption on an STM32 microcontroller using STM32Cube.AI?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@22b73d7ee4e94d738ae8dcf58697c7c6"
+  ]
+  },
+  {
+  "question": "How can I optimize generative AI inference across cloud and edge CPUs by understanding CPU versus GPU architecture differences, memory and compute bottlenecks, and techniques such as quantization, distillation, and pruning?",
+  "expected_urls": [
+    "https://github.com/arm-education/AI-on-Arm/blob/main/slides/chapter1.pptx"
+  ]
+  },
+  {
+  "question": "How do transformer architecture components, LLM training stages, tokenization, and KV-cache-based prefill and decoding work together to support efficient large language model inference?",
+  "expected_urls": [
+    "https://github.com/arm-education/AI-on-Arm/blob/main/slides/chapter2.pptx"
+  ]
+  },
+  {
+  "question": "How can I optimise generative AI inference on Arm CPUs by choosing the right execution mode and framework stack, including computation graphs, PyTorch backends, KleidiAI micro-kernels, and llama.cpp?",
+  "expected_urls": [
+    "https://github.com/arm-education/AI-on-Arm/blob/main/slides/chapter3.pptx"
+  ]
+  },
+  {
+  "question": "How can I improve CPU inference performance for generative AI models on Arm by combining quantization, pruning, matrix multiplication optimizations, SIMD extensions such as NEON, SVE, I8MM and SME, and KleidiAI micro-kernels?",
+  "expected_urls": [
+    "https://github.com/arm-education/AI-on-Arm/blob/main/slides/chapter4.pptx"
+  ]
+  },
+  {
+  "question": "How can I optimize generative AI inference on Arm by combining Neon SIMD, PyTorch, quantization, and llama.cpp to reduce model size and improve latency on resource-constrained devices like Raspberry Pi?",
+  "expected_urls": [
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@"
+  ]
+  },
+  {
+  "question": "How can I accelerate large language model inference on Arm Neoverse processors by using KleidiAI microkernels, advanced Arm intrinsics, and low-bit quantization instead of standard matrix multiplication libraries?",
+  "expected_urls": [
+    "https://github.com/arm-education/AI-on-Arm/blob/main/lab2.ipynb"
+  ]
+  },
+  {
+  "question": "How do I benchmark and compare large language model inference on Arm edge and server processors to understand throughput bottlenecks, memory limitations, and the trade-offs between Raspberry Pi and Graviton deployments?",
+  "expected_urls": [
+    "https://github.com/arm-education/AI-on-Arm/blob/main/lab3.ipynb"
+  ]
+  },
+  {
+  "question": "How can I build and train a Mixture of Experts model that achieves both high accuracy and balanced expert utilization by improving routing, load balancing, and expert specialization?",
+  "expected_urls": [
+    "https://github.com/arm-education/Advanced-AI-Mixture-of-Experts/tree/main/Part-1-MoE-vs-Dense"
+  ]
+  },
+  {
+  "question": "How can I benchmark Mixture of Experts and dense Transformer models to compare inference speed, scalability, and accuracy under different batch sizes and real-world workloads?",
+  "expected_urls": [
+    "https://github.com/arm-education/Advanced-AI-Mixture-of-Experts/blob/main/Part-3-Sentiment-Detection/Part-3-Sentiment-Detection_AC_Ed.ipynb"
+  ]
+  },
+  {
+  "question": "How can I improve Mixture of Experts routing so that tokens are distributed more evenly across experts without reducing model accuracy?",
+  "expected_urls": [
+    "https://github.com/arm-education/Advanced-AI-Mixture-of-Experts/blob/main/Part-4-Routing-and-Load-Balancing/Part-4-Routing-and-Load-Balancing_AC_Ed.ipynb"
+  ]
+  },
+  {
+  "question": "How can I train a Mixture of Experts model to achieve both high prediction accuracy and balanced expert utilization by alternating between expert specialization and routing optimization?",
+  "expected_urls": [
+    "https://github.com/arm-education/Advanced-AI-Mixture-of-Experts/blob/main/Part-5-Routing-and-Load-Balancing-Improved/Part-5-Routing-and-Load-Balancing-Improved_AC_Ed.ipynb"
+  ]
+  },
+  {
+  "question": "How can I reduce a language model to 4-bit, 2-bit, or even 1-bit precision while minimizing the loss in accuracy using quantization-aware training?",
+  "expected_urls": [
+    "https://github.com/arm-education/Advanced-AI-Hardware-Software-Co-Design/blob/main/lab1.ipynb"
+  ]
+  },
+  {
+  "question": "How can I automatically choose the optimal quantization bit-width for each neural network layer to balance model accuracy, memory footprint, and inference efficiency on edge hardware?",
+  "expected_urls": [
+    "https://github.com/arm-education/Advanced-AI-Hardware-Software-Co-Design/blob/main/lab2.ipynb"
+  ]
+  },
+  {
+  "question": "How can I deploy a quantized Llama model that runs entirely on an Android device using llama.cpp while comparing the performance and memory trade-offs of different quantization formats?",
+  "expected_urls": [
+    "https://github.com/arm-education/Advanced-AI-Hardware-Software-Co-Design/blob/main/lab3.md"
+  ]
+  },
+  {
+  "question": "How can I deploy a PyTorch model on an Arm-based edge device with ExecuTorch to reduce memory usage, improve inference latency, and take advantage of XNNPACK and KleidiAI optimizations?",
+  "expected_urls": [
+    "https://github.com/arm-education/executorch_on_arm_labs/blob/main/Lab_1_Transformer_Inference_ExecuTorch.ipynb"
+  ]
+  },
+  {
+  "question": "How can I deploy a quantized image classification model with ExecuTorch on a Raspberry Pi to reduce memory usage and improve inference performance while using the XNNPACK backend?",
+  "expected_urls": [
+    "https://github.com/arm-education/executorch_on_arm_labs/blob/main/Lab_2_Efficient_Image_Classification_ExecuTorch.ipynb"
+  ]
+  },
+  {
+  "question": "How can I deploy a quantized PyTorch model to an Arm Ethos-U NPU with ExecuTorch, use TOSA and the Vela compiler during lowering, and determine which operations run on the NPU versus the CPU?",
+  "expected_urls": [
+    "https://github.com/arm-education/executorch_on_arm_labs/blob/main/Lab_3_Accelerating_ExecuTorch_Ethos_NPU.ipynb"
+  ]
+  },
+  {
+  "question": "How do I choose the right Arm Neoverse core or cloud instance for a server workload based on performance, power efficiency, scalability, security features, and deployment target?",
+  "expected_urls": [
+    "https://github.com/arm-education/Introduction-to-Cloud-Compute-on-Arm/blob/main/Part%201%20-%20Introduction%20to%20Neoverse%20Cores.md"
+  ]
+  },
+  {
+  "question": "How should I plan the software stack for deploying or porting an application to an Arm Neoverse cloud platform, including firmware, Linux, hypervisors, middleware, cloud-native tooling, platform discovery, and security considerations?",
+  "expected_urls": [
+    "https://github.com/arm-education/Introduction-to-Cloud-Compute-on-Arm/blob/main/Part%202%20-%20The%20Software%20Stack.md"
+  ]
+  },
+  {
+  "question": "How do I plan, migrate, deploy, benchmark, and optimize a cloud application on Arm Neoverse, including choosing components, selecting the right platform, and tuning performance for workloads such as web hosting, video transcoding, or AI model serving?",
+  "expected_urls": [
+    "https://github.com/arm-education/Introduction-to-Cloud-Compute-on-Arm/blob/main/Part%203%20-%20Arm%20Neoverse%20Software%20and%20System%20Design.md"
+  ]
+  },
+  {
     "question": "How should worker_processes, worker_connections, and keepalive settings be tuned for NGINX on Ampere processors?",
     "expected_urls": [
       "https://amperecomputing.com/tuning-guides/nginx-tuning-guide"
