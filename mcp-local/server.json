@@ -44,6 +44,36 @@
               "placeholder": "/path/to/your/project"
             }
           }
+        },
+        {
+          "type": "named",
+          "name": "-v",
+          "description": "Mount an SSH private key for Arm Performix remote target access",
+          "isRequired": false,
+          "value": "{ssh_private_key_path}:/run/keys/ssh-key.pem:ro",
+          "variables": {
+            "ssh_private_key_path": {
+              "description": "Path to the SSH private key used by Arm Performix for remote target access",
+              "format": "filepath",
+              "isRequired": false,
+              "placeholder": "/path/to/your/ssh/private_key"
+            }
+          }
+        },
+        {
+          "type": "named",
+          "name": "-v",
+          "description": "Mount an SSH known_hosts file for Arm Performix remote target access",
+          "isRequired": false,
+          "value": "{ssh_known_hosts_path}:/run/keys/known_hosts:ro",
+          "variables": {
+            "ssh_known_hosts_path": {
+              "description": "Path to the SSH known_hosts file used by Arm Performix for remote target access",
+              "format": "filepath",
+              "isRequired": false,
+              "placeholder": "/path/to/your/ssh/known_hosts"
+            }
+          }
         }
       ]
     }
