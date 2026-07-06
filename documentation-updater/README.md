@@ -47,3 +47,29 @@ Optional Codex prompt generation requires:
 - OpenAI base URL env `OPENAI_API_PROXY_URL`
 
 If those credentials are not configured, or if prompt generation fails, the script still writes the report and omits the generated prompts.
+
+## Updating the upstream modelcontextprotocol registry (that many other registries pull from)
+
+https://modelcontextprotocol.io/registry/quickstart for more info
+
+Edit ../mcp-local/server.json with the new version info
+
+```bash
+mcp-publisher login github
+mcp-publisher publish server.json
+```
+
+Check published metadata with
+
+```bash
+curl -s "https://registry.modelcontextprotocol.io/v0.1/servers?search=arm/arm-mcp" | jq '.'
+```
+
+## Updating the Docker MCP Toolkit registry
+
+https://github.com/docker/mcp-registry.git for more info
+
+In a fork of the repo, edit servers/arm-mcp/server.yaml with new version info.
+
+Create a PR to the upstream repo.
+
