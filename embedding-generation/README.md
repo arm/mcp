@@ -37,10 +37,10 @@ Use clear keywords that users might include in questions. The `URL` is also what
 
 Some sources (for example edX course videos) do not have directly chunkable text
 at their primary `URL`. For these, populate the optional `Transcript Source URL`
-column with a link to a plain-text or markdown transcript (such as a GitHub
-`.../blob/...` file). When `Transcript Source URL` is set, `generate-chunks.py`
-fetches and chunks the transcript instead of the primary `URL`, but keeps the
-primary `URL` as the user-facing link returned by retrieval:
+column with a link to a plain-text, markdown, or Jupyter notebook transcript
+(such as a GitHub `.../blob/...` file). When `Transcript Source URL` is set,
+`generate-chunks.py` fetches and chunks the transcript instead of the primary
+`URL`, but keeps the primary `URL` as the user-facing link returned by retrieval:
 
 ```csv
 Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL
@@ -55,10 +55,11 @@ Leave the column empty for sources that are chunked from their primary `URL`.
 Install dependencies once:
 
 ```sh
-python3 -m venv venv
+python3.10 -m venv venv
 . venv/bin/activate
 pip install -r requirements.txt
 ```
+Note: Python version >= 3.10 should be installed
 
 Run the full local question eval:
 

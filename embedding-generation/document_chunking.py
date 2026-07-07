@@ -497,6 +497,127 @@ def parse_pdf(pdf_bytes: bytes, source_url: str, resolved_url: str, fallback_tit
     )
 
 
+def notebook_source_to_text(source) -> str:
+    if isinstance(source, list):
+        return "".join(str(part) for part in source if part is not None)
+    if isinstance(source, str):
+        return source
+    return ""
+
+
+def notebook_cells(notebook_data: dict) -> List[dict]:
+    cells = notebook_data.get("cells")
+    if isinstance(cells, list):
+        return [cell for cell in cells if isinstance(cell, dict)]
+
+    worksheets = notebook_data.get("worksheets", [])
+    if not isinstance(worksheets, list):
+        return []
+
+    cells = []
+    for worksheet in worksheets:
+        if isinstance(worksheet, dict) and isinstance(worksheet.get("cells"), list):
+            cells.extend(cell for cell in worksheet["cells"] if isinstance(cell, dict))
+    return cells
+
+
+def notebook_output_to_text(output) -> str:
+    if not isinstance(output, dict):
+        return ""
+
+    if output.get("output_type") == "stream":
+        return notebook_source_to_text(output.get("text"))
+
+    if output.get("output_type") == "error":
+        traceback = notebook_source_to_text(output.get("traceback"))
+        if traceback:
+            return traceback
+        error_parts = (output.get("ename", ""), output.get("evalue", ""))
+        return clean_text(" ".join(part for part in error_parts if part))
+
+    data = output.get("data")
+    if isinstance(data, dict):
+        # Keep text-like renderings and intentionally skip image/widget payloads;
+        # those are usually base64 blobs or structured state, not retrieval text.
+        for mime_type in ("text/markdown", "text/plain", "text/html"):
+            if mime_type not in data:
+                continue
+            text = notebook_source_to_text(data.get(mime_type))
+            if mime_type == "text/html":
+                text = BeautifulSoup(text, "html.parser").get_text(" ", strip=True)
+            return text
+
+    return ""
+
+
+def markdown_code_fence(text: str, language: str = "") -> str:
+    fence = "~~~" if "```" in text else "```"
+    return f"{fence}{language}\n{text.rstrip()}\n{fence}"
+
+
+def notebook_to_markdown(notebook_data: dict, fallback_title: str) -> str:
+    metadata = notebook_data.get("metadata", {}) if isinstance(notebook_data, dict) else {}
+    language = ""
+    if isinstance(metadata, dict):
+        kernelspec = metadata.get("kernelspec", {})
+        language_info = metadata.get("language_info", {})
+        if isinstance(kernelspec, dict):
+            language = clean_text(kernelspec.get("language", ""))
+        if not language and isinstance(language_info, dict):
+            language = clean_text(language_info.get("name", ""))
+    language = re.sub(r"[^A-Za-z0-9_+.-]", "", language)
+
+    parts: List[str] = []
+    # Convert notebook cells into markdown so the existing parser can reuse its
+    # heading, code-block, and chunk-sizing behavior instead of indexing raw JSON.
+    for cell in notebook_cells(notebook_data):
+        cell_type = cell.get("cell_type")
+        source_text = notebook_source_to_text(cell.get("source")).strip()
+
+        if cell_type == "markdown":
+            if source_text:
+                parts.append(source_text)
+        elif cell_type == "code":
+            if source_text:
+                parts.append(markdown_code_fence(source_text, language))
+            outputs = cell.get("outputs", [])
+            if not isinstance(outputs, list):
+                outputs = []
+            output_texts = [
+                text
+                for text in (notebook_output_to_text(output).strip() for output in outputs)
+                if text
+            ]
+            if output_texts:
+                parts.append("Output:\n\n" + markdown_code_fence("\n\n".join(output_texts), "text"))
+        elif source_text:
+            parts.append(source_text)
+
+    if not parts:
+        parts.append(fallback_title)
+    return clean_text("\n\n".join(parts))
+
+
+def parse_notebook(notebook_json: str, source_url: str, resolved_url: str, fallback_title: str) -> ParsedDocument:
+    try:
+        notebook_data = json.loads(notebook_json)
+    except json.JSONDecodeError:
+        return parse_markdown(notebook_json, source_url, resolved_url, fallback_title)
+    if not isinstance(notebook_data, dict):
+        return parse_markdown(notebook_json, source_url, resolved_url, fallback_title)
+    if not notebook_cells(notebook_data) and "cells" not in notebook_data and "worksheets" not in notebook_data:
+        return parse_markdown(notebook_json, source_url, resolved_url, fallback_title)
+
+    parsed_document = parse_markdown(
+        notebook_to_markdown(notebook_data, fallback_title),
+        source_url,
+        resolved_url,
+        fallback_title,
+    )
+    parsed_document.content_type = "notebook"
+    return parsed_document
+
+
 def parse_document_content(
     source_url: str,
     resolved_url: str,
@@ -508,6 +629,10 @@ def parse_document_content(
     if "pdf" in content_type or resolved_url.lower().endswith(".pdf"):
         return parse_pdf(response_content, source_url, resolved_url, fallback_title)
     decoded = response_content.decode("utf-8", errors="ignore")
+    # GitHub/raw notebook fetches are often served as generic JSON or text, so
+    # use the resolved path as the primary signal for notebook parsing.
+    if "ipynb" in content_type or urlparse(resolved_url).path.lower().endswith(".ipynb"):
+        return parse_notebook(decoded, source_url, resolved_url, fallback_title)
     if "markdown" in content_type or resolved_url.lower().endswith(".md"):
         return parse_markdown(decoded, source_url, resolved_url, fallback_title)
     if "html" in content_type or "<html" in decoded.lower():

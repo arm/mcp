@@ -128,6 +128,147 @@ class TestChunkClass:
 
 
 class TestDocumentChunkingAnchors:
+    def test_notebook_content_is_parsed_from_markdown_code_and_text_outputs(self):
+        notebook = {
+            "metadata": {
+                "kernelspec": {"language": "python"},
+            },
+            "cells": [
+                {
+                    "cell_type": "markdown",
+                    "source": [
+                        "# Lab 1\n",
+                        "\n",
+                        "## Optimize inference\n",
+                        "Use KleidiAI to optimize inference on Arm processors.\n",
+                    ],
+                },
+                {
+                    "cell_type": "code",
+                    "source": [
+                        "import torch\n",
+                        "print('KleidiAI ready')\n",
+                    ],
+                    "outputs": [
+                        {
+                            "output_type": "stream",
+                            "text": ["KleidiAI ready\n"],
+                        }
+                    ],
+                },
+            ],
+        }
+
+        parsed = parse_document_content(
+            source_url="https://github.com/arm-education/repo/blob/main/lab1.ipynb",
+            resolved_url="https://raw.githubusercontent.com/arm-education/repo/main/lab1.ipynb",
+            response_content=json.dumps(notebook).encode("utf-8"),
+            content_type="application/json",
+            fallback_title="Notebook Lab",
+        )
+
+        chunks = chunk_parsed_document(
+            parsed,
+            doc_type="Educational Resource",
+            keywords=["KleidiAI"],
+            min_tokens=1,
+            max_tokens=500,
+        )
+
+        assert parsed.display_title == "Lab 1"
+        assert parsed.content_type == "notebook"
+        assert len(chunks) == 1
+        assert chunks[0]["content_type"] == "notebook"
+        assert "Use KleidiAI to optimize inference" in chunks[0]["content"]
+        assert "import torch" in chunks[0]["content"]
+        assert "KleidiAI ready" in chunks[0]["content"]
+        assert '"cells"' not in chunks[0]["content"]
+
+    def test_notebook_text_outputs_skip_binary_payloads(self):
+        notebook = {
+            "metadata": {"language_info": {"name": "python"}},
+            "cells": [
+                {
+                    "cell_type": "markdown",
+                    "source": "# Output Lab\n\n## Results\n",
+                },
+                {
+                    "cell_type": "code",
+                    "source": "display(results)\n",
+                    "outputs": [
+                        {
+                            "output_type": "display_data",
+                            "data": {"image/png": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"},
+                        },
+                        {
+                            "output_type": "display_data",
+                            "data": {
+                                "text/markdown": "**Top result**: KleidiAI improves latency.",
+                                "image/png": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB",
+                            },
+                        },
+                        {
+                            "output_type": "display_data",
+                            "data": {"text/html": "<strong>HTML result</strong> on Arm CPUs."},
+                        },
+                    ],
+                },
+            ],
+        }
+
+        parsed = parse_document_content(
+            source_url="https://github.com/arm-education/repo/blob/main/output-lab.ipynb",
+            resolved_url="https://raw.githubusercontent.com/arm-education/repo/main/output-lab.ipynb",
+            response_content=json.dumps(notebook).encode("utf-8"),
+            content_type="application/json",
+            fallback_title="Output Lab",
+        )
+
+        chunks = chunk_parsed_document(
+            parsed,
+            doc_type="Educational Resource",
+            keywords=["KleidiAI"],
+            min_tokens=1,
+            max_tokens=500,
+        )
+
+        assert "**Top result**: KleidiAI improves latency." in chunks[0]["content"]
+        assert "HTML result on Arm CPUs." in chunks[0]["content"]
+        assert "iVBORw0KGgo" not in chunks[0]["content"]
+
+    def test_legacy_notebook_worksheet_cells_are_supported(self):
+        notebook = {
+            "worksheets": [
+                {
+                    "cells": [
+                        {
+                            "cell_type": "markdown",
+                            "source": "# Legacy Lab\n\n## Run inference\nUse Arm CPUs for inference.\n",
+                        }
+                    ]
+                }
+            ]
+        }
+
+        parsed = parse_document_content(
+            source_url="https://github.com/arm-education/repo/blob/main/legacy.ipynb",
+            resolved_url="https://raw.githubusercontent.com/arm-education/repo/main/legacy.ipynb",
+            response_content=json.dumps(notebook).encode("utf-8"),
+            content_type="application/json",
+            fallback_title="Legacy Notebook",
+        )
+
+        chunks = chunk_parsed_document(
+            parsed,
+            doc_type="Educational Resource",
+            keywords=["Arm CPUs"],
+            min_tokens=1,
+            max_tokens=500,
+        )
+
+        assert parsed.display_title == "Legacy Lab"
+        assert "Use Arm CPUs for inference." in chunks[0]["content"]
+
     def test_markdown_heading_anchor_is_used_as_chunk_url_fragment(self):
         parsed = parse_document_content(
             source_url="https://learn.arm.com/example/1-get-started/",
@@ -954,11 +1095,11 @@ class TestArmDocumentationParsing:
 class TestCreateTranscriptChunks:
     """Tests for transcript-backed sources (Transcript Source URL column)."""
 
-    def _transcript_response(self, url, text):
+    def _transcript_response(self, url, text, content_type="text/plain"):
         return SimpleNamespace(
             url=url,
             content=text.encode("utf-8"),
-            headers={"content-type": "text/plain"},
+            headers={"content-type": content_type},
         )
 
     def test_transcript_used_instead_of_primary_url(self, gc, monkeypatch):
@@ -996,6 +1137,59 @@ class TestCreateTranscriptChunks:
         assert all(chunk.url == source_url for chunk in chunks)
         assert all(chunk.doc_type == "Educational Course" for chunk in chunks)
         assert "energy efficiency" in chunks[0].content.lower()
+
+    def test_notebook_transcript_is_used_instead_of_primary_url(self, gc, monkeypatch):
+        """Notebook transcript URLs should be parsed as notebooks, not raw JSON."""
+        source_url = "https://courses.edx.org/courseware/lab/optimizing-generative-ai"
+        transcript_url = "https://github.com/arm-education/repo/blob/main/lab1.ipynb"
+        raw_transcript_url = "https://raw.githubusercontent.com/arm-education/repo/main/lab1.ipynb"
+        notebook = {
+            "metadata": {"kernelspec": {"language": "python"}},
+            "cells": [
+                {
+                    "cell_type": "markdown",
+                    "source": [
+                        "# Optimizing Generative AI Workloads\n",
+                        "\n",
+                        "## Quantize the model\n",
+                        "Use TorchAO and KleidiAI to reduce inference latency on Arm CPUs.\n",
+                    ],
+                },
+                {
+                    "cell_type": "code",
+                    "source": ["quantized_model = quantize(model)\n"],
+                    "outputs": [],
+                },
+            ],
+        }
+        fetched_urls = []
+
+        def fake_fetch(url):
+            fetched_urls.append(url)
+            return self._transcript_response(
+                raw_transcript_url,
+                json.dumps(notebook),
+                content_type="application/json",
+            )
+
+        monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
+
+        chunks = gc.create_chunks_for_source(
+            source_url=source_url,
+            source_name="Lab 1: Optimizing Generative AI Workloads",
+            doc_type="Educational Resource",
+            keywords_value="TorchAO; KleidiAI; Arm CPUs",
+            transcript_url=transcript_url,
+        )
+
+        assert fetched_urls == [raw_transcript_url]
+        assert len(chunks) == 1
+        assert chunks[0].url == source_url
+        assert chunks[0].resolved_url == raw_transcript_url
+        assert chunks[0].content_type == "notebook"
+        assert "Use TorchAO and KleidiAI" in chunks[0].content
+        assert "quantized_model = quantize(model)" in chunks[0].content
+        assert '"cells"' not in chunks[0].content
 
     def test_transcript_fetch_failure_returns_empty(self, gc, monkeypatch, capsys):
         """A failed transcript fetch should return no chunks and log both URLs."""
