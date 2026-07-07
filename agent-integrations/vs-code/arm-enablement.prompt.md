@@ -6,7 +6,7 @@ name: 'arm-enablement'
 description: 'Scan an OSS codebase with Arm MCP and generate a CubeFS-style Arm enablement report as Markdown and PDF'
 argument-hint: '[local workspace or GitHub repo URL] [--apply-fixes optional]'
 agent: 'agent'
-tools: ['search/codebase', 'search/fileSearch', 'search/textSearch', 'search/listDirectory', 'edit/editFiles', 'runCommands', 'read/terminalLastCommand', 'arm-mcp/skopeo', 'arm-mcp/check_image', 'arm-mcp/knowledge_base_search', 'arm-mcp/migrate_ease_scan', 'arm-mcp/mca', 'arm-mcp/apx_recipe_run', 'arm-mcp/sysreport_instructions']
+tools: ['search/codebase', 'search/fileSearch', 'search/textSearch', 'search/listDirectory', 'edit/editFiles', 'execute/runInTerminal', 'execute/getTerminalOutput', 'read/terminalLastCommand', 'arm-mcp/skopeo', 'arm-mcp/check_image', 'arm-mcp/knowledge_base_search', 'arm-mcp/migrate_ease_scan', 'arm-mcp/mca', 'arm-mcp/apx_recipe_run', 'arm-mcp/sysreport_instructions']
 ---
 
 Before starting, verify that the `arm-mcp` MCP server is installed and available. If you don't have access to the arm-mcp tools (skopeo, check_image, knowledge_base_search, migrate_ease_scan, mca, sysreport_instructions), refer to the [MCP Server Installation Guide](https://github.com/arm/mcp/blob/main/agent-integrations/agent-install-instructions.md) to install it on vs-code.
