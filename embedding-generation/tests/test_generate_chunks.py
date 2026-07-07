@@ -21,7 +21,10 @@ generate_chunks module with reset global state between tests.
 import base64
 import csv
 import json
+from io import BytesIO
 from types import SimpleNamespace
+from xml.sax.saxutils import escape
+from zipfile import ZipFile
 
 import pytest
 
@@ -37,6 +40,85 @@ def _arm_api_response(title, html):
             },
         }
     ).encode("utf-8")
+
+
+def _pptx_slide_xml(lines):
+    paragraphs = []
+    for line in lines:
+        if isinstance(line, (list, tuple)):
+            parts = []
+            for index, part in enumerate(line):
+                if index:
+                    parts.append("<a:br/>")
+                parts.append(f"<a:r><a:t>{escape(part)}</a:t></a:r>")
+            paragraphs.append(f"<a:p>{''.join(parts)}</a:p>")
+        else:
+            paragraphs.append(f"<a:p><a:r><a:t>{escape(line)}</a:t></a:r></a:p>")
+    paragraphs = "\n".join(paragraphs)
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" '
+        'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+        "<p:cSld><p:spTree>"
+        f"{paragraphs}"
+        "</p:spTree></p:cSld>"
+        "</p:sld>"
+    )
+
+
+def _pptx_bytes(slides, notes=None, slide_numbers=None):
+    notes = notes or {}
+    slide_numbers = slide_numbers or list(range(1, len(slides) + 1))
+    buffer = BytesIO()
+    with ZipFile(buffer, "w") as archive:
+        slide_ids = []
+        relationships = []
+        for index, slide_number in enumerate(slide_numbers, start=1):
+            slide_ids.append(f'<p:sldId id="{255 + index}" r:id="rId{index}"/>')
+            relationships.append(
+                '<Relationship '
+                f'Id="rId{index}" '
+                'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" '
+                f'Target="slides/slide{slide_number}.xml"/>'
+            )
+        archive.writestr(
+            "ppt/presentation.xml",
+            (
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" '
+                'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+                f'<p:sldIdLst>{"".join(slide_ids)}</p:sldIdLst>'
+                "</p:presentation>"
+            ),
+        )
+        archive.writestr(
+            "ppt/_rels/presentation.xml.rels",
+            (
+                '<?xml version="1.0" encoding="UTF-8"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                f'{"".join(relationships)}'
+                "</Relationships>"
+            ),
+        )
+
+        for index, (slide_number, slide_lines) in enumerate(zip(slide_numbers, slides), start=1):
+            archive.writestr(f"ppt/slides/slide{slide_number}.xml", _pptx_slide_xml(slide_lines))
+            if index not in notes:
+                continue
+            archive.writestr(
+                f"ppt/slides/_rels/slide{slide_number}.xml.rels",
+                (
+                    '<?xml version="1.0" encoding="UTF-8"?>'
+                    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                    '<Relationship Id="rIdNotes" '
+                    'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" '
+                    f'Target="../notesSlides/notesSlide{slide_number}.xml"/>'
+                    "</Relationships>"
+                ),
+            )
+            archive.writestr(f"ppt/notesSlides/notesSlide{slide_number}.xml", _pptx_slide_xml(notes[index]))
+
+    return buffer.getvalue()
 
 
 class TestChunkClass:
@@ -183,6 +265,96 @@ class TestDocumentChunkingAnchors:
         assert "import torch" in chunks[0]["content"]
         assert "KleidiAI ready" in chunks[0]["content"]
         assert '"cells"' not in chunks[0]["content"]
+
+    def test_pptx_content_is_parsed_from_slide_and_notes_text(self):
+        parsed = parse_document_content(
+            source_url="https://github.com/arm-education/AI-on-Arm/blob/main/slides/chapter1.pptx",
+            resolved_url="https://raw.githubusercontent.com/arm-education/AI-on-Arm/main/slides/chapter1.pptx",
+            response_content=_pptx_bytes(
+                [
+                    [
+                        "Challenges facing Cloud and Edge AI inference",
+                        "Recognizing Generative AI trends",
+                    ],
+                    [
+                        "Optimization for CPU inference",
+                        "KleidiAI uses Arm CPU SIMD technologies.",
+                    ],
+                ],
+                notes={2: ["Matrix multiplication kernels are discussed in the speaker notes."]},
+            ),
+            content_type="application/octet-stream",
+            fallback_title="Chapter 1 Slides",
+        )
+
+        chunks = chunk_parsed_document(
+            parsed,
+            doc_type="Educational Resource",
+            keywords=["KleidiAI"],
+            min_tokens=1,
+            max_tokens=500,
+        )
+
+        assert parsed.display_title == "Challenges facing Cloud and Edge AI inference"
+        assert parsed.content_type == "pptx"
+        assert [section.heading_path for section in parsed.sections] == [["Slide 1"], ["Slide 2"]]
+        assert len(chunks) == 2
+        assert chunks[0]["content_type"] == "pptx"
+        assert "Recognizing Generative AI trends" in chunks[0]["content"]
+        assert "KleidiAI uses Arm CPU SIMD" in chunks[1]["content"]
+        assert "Speaker notes" in chunks[1]["content"]
+        assert "Matrix multiplication kernels" in chunks[1]["content"]
+        assert "<a:t>" not in chunks[0]["content"]
+
+    def test_pptx_slide_numbers_follow_presentation_order_not_file_suffixes(self):
+        parsed = parse_document_content(
+            source_url="https://github.com/arm-education/AI-on-Arm/blob/main/slides/chapter1.pptx",
+            resolved_url="https://raw.githubusercontent.com/arm-education/AI-on-Arm/main/slides/chapter1.pptx",
+            response_content=_pptx_bytes(
+                [
+                    ["First displayed slide"],
+                    ["Second displayed slide", ["Line one", "Line two"]],
+                ],
+                slide_numbers=[7, 3],
+            ),
+            content_type="application/octet-stream",
+            fallback_title="Chapter 1 Slides",
+        )
+
+        chunks = chunk_parsed_document(
+            parsed,
+            doc_type="Educational Resource",
+            keywords=[],
+            min_tokens=1,
+            max_tokens=500,
+        )
+
+        assert [section.heading_path for section in parsed.sections] == [["Slide 1"], ["Slide 2"]]
+        assert chunks[0]["heading_path"] == ["Slide 1"]
+        assert chunks[1]["heading_path"] == ["Slide 2"]
+        assert "Line one\nLine two" in chunks[1]["content"]
+
+    def test_invalid_pptx_falls_back_to_title_chunk(self):
+        parsed = parse_document_content(
+            source_url="https://github.com/arm-education/AI-on-Arm/blob/main/slides/broken.pptx",
+            resolved_url="https://raw.githubusercontent.com/arm-education/AI-on-Arm/main/slides/broken.pptx",
+            response_content=b"not a zip file",
+            content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            fallback_title="Broken Slides",
+        )
+
+        chunks = chunk_parsed_document(
+            parsed,
+            doc_type="Educational Resource",
+            keywords=[],
+            min_tokens=1,
+            max_tokens=500,
+        )
+
+        assert parsed.content_type == "pptx"
+        assert parsed.sections[0].blocks[0].text == "Broken Slides"
+        assert chunks[0]["content_type"] == "pptx"
+        assert "Broken Slides" in chunks[0]["content"]
 
     def test_notebook_text_outputs_skip_binary_payloads(self):
         notebook = {
@@ -1102,6 +1274,13 @@ class TestCreateTranscriptChunks:
             headers={"content-type": content_type},
         )
 
+    def _binary_transcript_response(self, url, content, content_type):
+        return SimpleNamespace(
+            url=url,
+            content=content,
+            headers={"content-type": content_type},
+        )
+
     def test_transcript_used_instead_of_primary_url(self, gc, monkeypatch):
         """When a transcript URL is set, content is fetched from the transcript."""
         source_url = "https://courses.edx.org/videos/block-v1:example+type@video+block@abc"
@@ -1190,6 +1369,46 @@ class TestCreateTranscriptChunks:
         assert "Use TorchAO and KleidiAI" in chunks[0].content
         assert "quantized_model = quantize(model)" in chunks[0].content
         assert '"cells"' not in chunks[0].content
+
+    def test_pptx_transcript_is_used_instead_of_primary_url(self, gc, monkeypatch):
+        """PPTX transcript URLs should be parsed as slide text, not raw binary."""
+        source_url = "https://courses.edx.org/courseware/slides/challenges-facing-cloud-ai"
+        transcript_url = "https://github.com/arm-education/AI-on-Arm/blob/main/slides/chapter1.pptx"
+        raw_transcript_url = "https://raw.githubusercontent.com/arm-education/AI-on-Arm/main/slides/chapter1.pptx"
+        fetched_urls = []
+
+        def fake_fetch(url):
+            fetched_urls.append(url)
+            return self._binary_transcript_response(
+                raw_transcript_url,
+                _pptx_bytes(
+                    [
+                        [
+                            "Challenges facing Cloud and Edge AI inference",
+                            "Generative AI inference on Arm CPUs.",
+                        ],
+                    ]
+                ),
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            )
+
+        monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
+
+        chunks = gc.create_chunks_for_source(
+            source_url=source_url,
+            source_name="Challenges facing Cloud and Edge AI inference",
+            doc_type="Educational Resource",
+            keywords_value="Arm CPUs; Generative AI",
+            transcript_url=transcript_url,
+        )
+
+        assert fetched_urls == [raw_transcript_url]
+        assert len(chunks) == 1
+        assert chunks[0].url == source_url
+        assert chunks[0].resolved_url == raw_transcript_url
+        assert chunks[0].content_type == "pptx"
+        assert "Generative AI inference on Arm CPUs" in chunks[0].content
+        assert "<a:t>" not in chunks[0].content
 
     def test_transcript_fetch_failure_returns_empty(self, gc, monkeypatch, capsys):
         """A failed transcript fetch should return no chunks and log both URLs."""

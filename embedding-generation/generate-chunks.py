@@ -887,8 +887,9 @@ def create_transcript_chunks(source_url, transcript_url, source_name, doc_type, 
 
     Some sources (for example edX course videos) have no directly chunkable text
     at their primary URL. When a "Transcript Source URL" is provided in the CSV,
-    we fetch and chunk that transcript instead, but keep the primary ``source_url``
-    as the user-facing link so retrieval still points users at the original content.
+    we fetch and chunk that transcript document instead, but keep the primary
+    ``source_url`` as the user-facing link so retrieval still points users at
+    the original content.
     """
     normalized_source_url = normalize_source_url(source_url)
     fetch_url = source_to_fetch_url(normalize_source_url(transcript_url))
@@ -930,7 +931,7 @@ def create_transcript_chunks(source_url, transcript_url, source_name, doc_type, 
 
 
 def create_chunks_for_source(source_url, source_name, doc_type, keywords_value, transcript_url=""):
-    # When a transcript source is provided, chunk the transcript text instead of
+    # When a transcript source is provided, chunk that document instead of
     # fetching the primary URL (which may be a video player or other non-text page),
     # while keeping the primary URL as the user-facing link for retrieval.
     if transcript_url and transcript_url.strip():
