@@ -2748,7 +2748,7 @@
     ]
   },
   {
-    "question": "What programmer model changes did SME add to Armv9-A for matrix workloads?",
+    "question": "What changes did SME add to Armv9-A?",
     "expected_urls": [
       "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/scalable-matrix-extension-armv9-a-architecture"
     ]
@@ -2766,7 +2766,7 @@
     ]
   },
   {
-    "question": "How do I write an int8 lookup-table GEMV example with SME?",
+    "question": "How can I do int8 matrix-by-vector multiplication with SME?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/lut-gemv-rm-int8--Compressed-8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication?lang=en"
     ]
@@ -2790,7 +2790,7 @@
     ]
   },
   {
-    "question": "How should I structure an optimized int8 SME matrix multiplication kernel?",
+    "question": "How can I optimize int8 matrix-by-matrix multiplication with SME?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/matmul-opt-function-overview?lang=en"
     ]
@@ -2820,7 +2820,7 @@
     ]
   },
   {
-    "question": "Which SME ZA tile instructions should I learn after the basics?",
+    "question": "Which SME ZA tile instructions should I learn?",
     "expected_urls": [
       "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/arm-scalable-matrix-extension-introduction-p2"
     ]
@@ -2904,7 +2904,7 @@
     ]
   },
   {
-    "question": "What should I watch out for when writing int8 right-hand preprocessing for SME?",
+    "question": "Can you give me the details for int8 right-hand preprocessing in SME?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-r-function-details?lang=en"
     ]
@@ -2916,7 +2916,7 @@
     ]
   },
   {
-    "question": "What is CME and why would my code care about it?",
+    "question": "Can you give me an intro to CME?",
     "expected_urls": [
       "https://developer.arm.com/documentation/110636/0100/Introduction-to-CME?lang=en"
     ]
@@ -2928,13 +2928,13 @@
     ]
   },
   {
-    "question": "What should I watch out for when writing int8 left-hand preprocessing for SME?",
+    "question": "Can you give me the details for writing int8 left-hand preprocessing for SME?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-l-function-details?lang=en"
     ]
   },
   {
-    "question": "What should I watch out for when optimizing an int8 lookup-table GEMV kernel?",
+    "question": "Can you give me the details for optimizing an int8 lookup-table GEMV kernel?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/lut-gemv-rm-int8--Compressed-8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/lut-gemv-opt-function-details?lang=en"
     ]
@@ -2982,19 +2982,19 @@
     ]
   },
   {
-    "question": "What should I watch out for when optimizing an FP32 SME matmul kernel?",
+    "question": "Can you give me the details for optimizing an FP32 SME matmul kernel?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/matmul-opt-function-details?lang=en"
     ]
   },
   {
-    "question": "What should I watch out for when writing FP32 left-hand preprocessing for SME?",
+    "question": "Can you give me the details for writing FP32 left-hand preprocessing for SME?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/preprocess-l-function-details?lang=en"
     ]
   },
   {
-    "question": "What should I watch out for when optimizing an int8 GEMV kernel?",
+    "question": "Can you give me the details for optimizing an int8 GEMV kernel?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/gemv-cm-int8--8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/gemv-opt-function-details?lang=en"
     ]
@@ -3018,7 +3018,7 @@
     ]
   },
   {
-    "question": "How do single-CME and multi-CME configurations affect arbitration?",
+    "question": "Can you tell me about CME system configurations?",
     "expected_urls": [
       "https://developer.arm.com/documentation/110636/0100/CME-system-configurations?lang=en"
     ]
@@ -3060,13 +3060,13 @@
     ]
   },
   {
-    "question": "How does the CME Assignment Block choose a CME in a multi-CME system?",
+    "question": "Can you tell me more about multi-CME system?",
     "expected_urls": [
       "https://developer.arm.com/documentation/110636/0100/CME-system-configurations/Multi-CME-systems?lang=en"
     ]
   },
   {
-    "question": "How do priorities, fair-share arbitration, and exclusive arbitration work on a single-CME system?",
+    "question": "Can you tell me about CME system configurations?",
     "expected_urls": [
       "https://developer.arm.com/documentation/110636/0100/CME-system-configurations/Single-CME-systems?lang=en"
     ]
