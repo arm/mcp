@@ -212,7 +212,8 @@
   {
     "question": "What does the Arm Performix Code Hotspots recipe show, and how should I interpret the top hotspots, flame graphs, function tables, CPU usage, and source line attribution?",
     "expected_urls": [
-      "https://developer.arm.com/documentation/110163/latest/About-Arm-Performix/Basic-concepts/Code-Hotspots-recipe/Interpreting-and-using-the-results?lang=en"
+      "https://developer.arm.com/documentation/110163/latest/About-Arm-Performix/Basic-concepts/Code-Hotspots-recipe/Interpreting-and-using-the-results?lang=en",
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cpu_hotspot_performix/"
     ]
   },
   {
@@ -1154,7 +1155,8 @@
   {
     "question": "How do I get started with Arm Performance Studio?",
     "expected_urls": [
-      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/ams/"
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/ams/",
+      "https://learn.arm.com/install-guides/ams/"
     ]
   },
   {
@@ -2162,7 +2164,8 @@
   {
     "question": "How do I tune MySQL?",
     "expected_urls": [
-      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mysql_tune/"
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mysql_tune/",
+      "https://amperecomputing.com/tuning-guides/mysql-tuning-guide"
     ]
   },
   {

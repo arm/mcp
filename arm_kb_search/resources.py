@@ -113,6 +113,7 @@ def search(
     k: int | None = None,
 ) -> list[dict[str, Any]]:
     resolved_k = k or resources.default_k
+    candidate_depth = max(resolved_k * 20, 100)
     search_results = hybrid_search(
         query,
         resources.usearch_index,
@@ -120,6 +121,7 @@ def search(
         resources.embedding_model,
         resources.bm25_index,
         k=deduplication_candidate_count(resolved_k),
+        candidate_depth=candidate_depth,
     )
     deduped = deduplicate_urls(search_results)[:resolved_k]
     formatted = [
