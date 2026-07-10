@@ -882,6 +882,21 @@ def parse_keywords(keywords_value, title=""):
     return keywords
 
 
+def log_no_parsed_sections(parsed_document, source_url, source_name, transcript_url=""):
+    if parsed_document.sections:
+        return False
+
+    context = f"source: {source_url}"
+    if transcript_url:
+        context += f"; transcript: {transcript_url}"
+    print(
+        "[NO CHUNKS] no parseable content for "
+        f"{source_name or parsed_document.display_title} ({context}; "
+        f"resolved: {parsed_document.resolved_url}; content_type: {parsed_document.content_type})"
+    )
+    return True
+
+
 def create_transcript_chunks(source_url, transcript_url, source_name, doc_type, keywords_value):
     """Chunk a transcript document on behalf of a primary source.
 
@@ -909,6 +924,8 @@ def create_transcript_chunks(source_url, transcript_url, source_name, doc_type, 
     # Keep the primary URL as the user-facing link while still using the transcript
     # URL as the base for resolving any relative links inside the transcript content.
     parsed_document.source_url = normalized_source_url
+    if log_no_parsed_sections(parsed_document, normalized_source_url, source_name, transcript_url):
+        return []
 
     chunks = []
     for payload in chunk_parsed_document(parsed_document, doc_type=doc_type or "Transcript", keywords=keywords):
@@ -964,6 +981,8 @@ def create_chunks_for_source(source_url, source_name, doc_type, keywords_value, 
             content_type=source_response.headers.get("content-type", ""),
             fallback_title=source_name,
         )
+        if log_no_parsed_sections(parsed_document, display_url, source_name):
+            continue
         for payload in chunk_parsed_document(parsed_document, doc_type=doc_type or "Documentation", keywords=keywords):
             chunks.append(
                 createChunk(
@@ -1028,6 +1047,8 @@ def create_arm_documentation_chunks(source_url, source_name, doc_type, keywords_
             resolved_url=response.url,
             fallback_title=document_title,
         )
+        if log_no_parsed_sections(parsed_document, display_url, document_title):
+            continue
         for payload in chunk_parsed_document(parsed_document, doc_type=doc_type or "Documentation", keywords=keywords):
             chunks.append(
                 createChunk(

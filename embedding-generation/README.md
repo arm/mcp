@@ -60,7 +60,7 @@ notebook transcript (such as a GitHub `.../blob/...` file). When
 
 ```csv
 Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL
-Educational Course,All rights reserved,Example Video,https://courses.edx.org/videos/...,arm, ai, inference,https://github.com/arm-education/.../M1KV1.txt
+Educational Course,All rights reserved,Example Video,https://courses.edx.org/videos/...,arm, ai; inference,https://github.com/arm-education/.../M1KV1.txt
 ```
 
 Leave the column empty for sources that are chunked from their primary `URL`.

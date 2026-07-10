@@ -657,8 +657,6 @@ def parse_pptx(pptx_bytes: bytes, source_url: str, resolved_url: str, fallback_t
     except BadZipFile:
         sections = []
 
-    if not sections:
-        sections.append(Section([], [Block("paragraph", fallback_title)]))
     return ParsedDocument(
         source_url=source_url,
         resolved_url=resolved_url,

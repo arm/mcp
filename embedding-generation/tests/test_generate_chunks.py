@@ -334,7 +334,7 @@ class TestDocumentChunkingAnchors:
         assert chunks[1]["heading_path"] == ["Slide 2"]
         assert "Line one\nLine two" in chunks[1]["content"]
 
-    def test_invalid_pptx_falls_back_to_title_chunk(self):
+    def test_invalid_pptx_generates_no_chunks(self):
         parsed = parse_document_content(
             source_url="https://github.com/arm-education/AI-on-Arm/blob/main/slides/broken.pptx",
             resolved_url="https://raw.githubusercontent.com/arm-education/AI-on-Arm/main/slides/broken.pptx",
@@ -352,9 +352,8 @@ class TestDocumentChunkingAnchors:
         )
 
         assert parsed.content_type == "pptx"
-        assert parsed.sections[0].blocks[0].text == "Broken Slides"
-        assert chunks[0]["content_type"] == "pptx"
-        assert "Broken Slides" in chunks[0]["content"]
+        assert parsed.sections == []
+        assert chunks == []
 
     def test_notebook_text_outputs_skip_binary_payloads(self):
         notebook = {
@@ -1262,6 +1261,41 @@ class TestArmDocumentationParsing:
         assert "scalable vector extension" in chunks[0].content
         assert chunks[1].url == "https://developer.arm.com/documentation/102376/0100/install"
         assert "target CPU for Cortex-A builds" in chunks[1].content
+
+
+class TestCreateChunksForSource:
+    """Tests for generic source chunking."""
+
+    def test_unparseable_pptx_source_returns_empty_and_logs(self, gc, monkeypatch, capsys):
+        source_url = "https://github.com/arm-education/AI-on-Arm/blob/main/slides/broken.pptx"
+        raw_url = "https://raw.githubusercontent.com/arm-education/AI-on-Arm/main/slides/broken.pptx"
+        fetched_urls = []
+
+        def fake_fetch(url):
+            fetched_urls.append(url)
+            return SimpleNamespace(
+                url=raw_url,
+                content=b"not a zip file",
+                headers={"content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation"},
+            )
+
+        monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
+
+        chunks = gc.create_chunks_for_source(
+            source_url=source_url,
+            source_name="Broken Slides",
+            doc_type="Educational Resource",
+            keywords_value="Arm CPUs",
+        )
+
+        assert fetched_urls == [raw_url]
+        assert chunks == []
+
+        captured = capsys.readouterr()
+        assert "[NO CHUNKS]" in captured.out
+        assert source_url in captured.out
+        assert raw_url in captured.out
+        assert "content_type: pptx" in captured.out
 
 
 class TestCreateTranscriptChunks:
