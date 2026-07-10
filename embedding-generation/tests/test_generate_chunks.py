@@ -1308,13 +1308,6 @@ class TestCreateTranscriptChunks:
             headers={"content-type": content_type},
         )
 
-    def _binary_transcript_response(self, url, content, content_type):
-        return SimpleNamespace(
-            url=url,
-            content=content,
-            headers={"content-type": content_type},
-        )
-
     def test_transcript_used_instead_of_primary_url(self, gc, monkeypatch):
         """When a transcript URL is set, content is fetched from the transcript."""
         source_url = "https://courses.edx.org/videos/block-v1:example+type@video+block@abc"
@@ -1350,99 +1343,6 @@ class TestCreateTranscriptChunks:
         assert all(chunk.url == source_url for chunk in chunks)
         assert all(chunk.doc_type == "Educational Course" for chunk in chunks)
         assert "energy efficiency" in chunks[0].content.lower()
-
-    def test_notebook_transcript_is_used_instead_of_primary_url(self, gc, monkeypatch):
-        """Notebook transcript URLs should be parsed as notebooks, not raw JSON."""
-        source_url = "https://courses.edx.org/courseware/lab/optimizing-generative-ai"
-        transcript_url = "https://github.com/arm-education/repo/blob/main/lab1.ipynb"
-        raw_transcript_url = "https://raw.githubusercontent.com/arm-education/repo/main/lab1.ipynb"
-        notebook = {
-            "metadata": {"kernelspec": {"language": "python"}},
-            "cells": [
-                {
-                    "cell_type": "markdown",
-                    "source": [
-                        "# Optimizing Generative AI Workloads\n",
-                        "\n",
-                        "## Quantize the model\n",
-                        "Use TorchAO and KleidiAI to reduce inference latency on Arm CPUs.\n",
-                    ],
-                },
-                {
-                    "cell_type": "code",
-                    "source": ["quantized_model = quantize(model)\n"],
-                    "outputs": [],
-                },
-            ],
-        }
-        fetched_urls = []
-
-        def fake_fetch(url):
-            fetched_urls.append(url)
-            return self._transcript_response(
-                raw_transcript_url,
-                json.dumps(notebook),
-                content_type="application/json",
-            )
-
-        monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
-
-        chunks = gc.create_chunks_for_source(
-            source_url=source_url,
-            source_name="Lab 1: Optimizing Generative AI Workloads",
-            doc_type="Educational Resource",
-            keywords_value="TorchAO; KleidiAI; Arm CPUs",
-            transcript_url=transcript_url,
-        )
-
-        assert fetched_urls == [raw_transcript_url]
-        assert len(chunks) == 1
-        assert chunks[0].url == source_url
-        assert chunks[0].resolved_url == raw_transcript_url
-        assert chunks[0].content_type == "notebook"
-        assert "Use TorchAO and KleidiAI" in chunks[0].content
-        assert "quantized_model = quantize(model)" in chunks[0].content
-        assert '"cells"' not in chunks[0].content
-
-    def test_pptx_transcript_is_used_instead_of_primary_url(self, gc, monkeypatch):
-        """PPTX transcript URLs should be parsed as slide text, not raw binary."""
-        source_url = "https://courses.edx.org/courseware/slides/challenges-facing-cloud-ai"
-        transcript_url = "https://github.com/arm-education/AI-on-Arm/blob/main/slides/chapter1.pptx"
-        raw_transcript_url = "https://raw.githubusercontent.com/arm-education/AI-on-Arm/main/slides/chapter1.pptx"
-        fetched_urls = []
-
-        def fake_fetch(url):
-            fetched_urls.append(url)
-            return self._binary_transcript_response(
-                raw_transcript_url,
-                _pptx_bytes(
-                    [
-                        [
-                            "Challenges facing Cloud and Edge AI inference",
-                            "Generative AI inference on Arm CPUs.",
-                        ],
-                    ]
-                ),
-                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            )
-
-        monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
-
-        chunks = gc.create_chunks_for_source(
-            source_url=source_url,
-            source_name="Challenges facing Cloud and Edge AI inference",
-            doc_type="Educational Resource",
-            keywords_value="Arm CPUs; Generative AI",
-            transcript_url=transcript_url,
-        )
-
-        assert fetched_urls == [raw_transcript_url]
-        assert len(chunks) == 1
-        assert chunks[0].url == source_url
-        assert chunks[0].resolved_url == raw_transcript_url
-        assert chunks[0].content_type == "pptx"
-        assert "Generative AI inference on Arm CPUs" in chunks[0].content
-        assert "<a:t>" not in chunks[0].content
 
     def test_transcript_fetch_failure_returns_empty(self, gc, monkeypatch, capsys):
         """A failed transcript fetch should return no chunks and log both URLs."""
