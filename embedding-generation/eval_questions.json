@@ -2605,6 +2605,12 @@
     ]
   },
   {
+    "question": "How do SVE, SVE2, and SME extend the Armv9-A architecture for vector and matrix processing?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/Introduction?lang=en"
+    ]
+  },
+  {
     "question": "How does SME context save and restore preserve Streaming SVE mode and ZA storage state?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/SME-Overview/SME-context-save-restore?lang=en"
@@ -2623,7 +2629,7 @@
     ]
   },
   {
-    "question": "How do I compile and run the SME Programmer's Guide example application?",
+    "question": "How can I compile and run an application that uses SME on Arm?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/Toolchains-and-model-support/How-to-run-an-SME-application?lang=en"
     ]
@@ -2756,15 +2762,21 @@
     ]
   },
   {
-    "question": "How does the matmul-fp32 single-precision SME matrix-by-matrix multiplication example work?",
+    "question": "How can I implement FP32 matrix multiplication with SME2?",
     "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication?lang=en"
+      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/Overview-of-the-matmul-fp32-algorithm?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/matmul-opt-code?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/matmul-opt-function-details?lang=en"
     ]
   },
   {
-    "question": "How does the matmul-int8 8-bit to 32-bit SME matrix-by-matrix multiplication example work?",
+    "question": "How can I use SME2 to multiply 8-bit integer matrices and produce 32-bit results?",
     "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication?lang=en"
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/Overview-of-the-matmul-int8-algorithm?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/matmul-opt-function-overview?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/matmul-opt-code?lang=en"
     ]
   },
   {
@@ -2780,21 +2792,10 @@
     ]
   },
   {
-    "question": "What is the matmul-fp32 algorithm for single-precision SME matrix-by-matrix multiplication?",
+    "question": "How can I use SME2 for matrix-vector multiplication with compressed int8 data?",
     "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/Overview-of-the-matmul-fp32-algorithm?lang=en"
-    ]
-  },
-  {
-    "question": "How does an int8 lookup-table GEMV algorithm work with SME?",
-    "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/lut-gemv-rm-int8--Compressed-8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/Overview-of-the-lut-gemv-rm-int8-algorithm?lang=en"
-    ]
-  },
-  {
-    "question": "What does the matmul_opt function do in the int8-to-int32 SME matrix-by-matrix multiplication example?",
-    "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/matmul-opt-function-overview?lang=en"
+      "https://developer.arm.com/documentation/109246/0101/lut-gemv-rm-int8--Compressed-8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/Overview-of-the-lut-gemv-rm-int8-algorithm?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/lut-gemv-rm-int8--Compressed-8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/lut-gemv-opt-code?lang=en"
     ]
   },
   {
@@ -2816,22 +2817,9 @@
     ]
   },
   {
-    "question": "What is the matmul-int8 algorithm for 8-bit to 32-bit SME matrix-by-matrix multiplication?",
-    "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/Overview-of-the-matmul-int8-algorithm?lang=en"
-    ]
-  },
-  {
     "question": "Which SME ZA tile instructions should I learn?",
     "expected_urls": [
       "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/arm-scalable-matrix-extension-introduction-p2"
-    ]
-  },
-  {
-    "question": "What does the SME Programmer's Guide introduction explain about SME and SME2?",
-    "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/Introduction?lang=en",
-      "https://developer.arm.com/documentation/109246/0101/SME-Overview/SME-and-SME2?lang=en"
     ]
   },
   {
@@ -2841,9 +2829,11 @@
     ]
   },
   {
-    "question": "What does the gemv_opt function do in the int8-to-int32 column-major SME matrix-by-vector example?",
+    "question": "How can I optimize column-major 8-bit integer matrix-vector multiplication with SME2?",
     "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/gemv-cm-int8--8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/gemv-opt-function-overview?lang=en"
+      "https://developer.arm.com/documentation/109246/0101/gemv-cm-int8--8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/gemv-opt-function-overview?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/gemv-cm-int8--8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/gemv-opt-code?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/gemv-cm-int8--8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/gemv-opt-function-details?lang=en"
     ]
   },
   {
@@ -2897,26 +2887,13 @@
     ]
   },
   {
-    "question": "What is the matmul_opt code for int8-to-int32 SME matrix-by-matrix multiplication?",
-    "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/matmul-opt-code?lang=en",
-      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication?lang=en"
-    ]
-  },
-  {
-    "question": "What is the matmul_opt code for FP32 SME matrix-by-matrix multiplication?",
-    "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/matmul-opt-code?lang=en"
-    ]
-  },
-  {
     "question": "What are the preprocess_r function details for int8-to-int32 SME matrix-by-matrix multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-r-function-details?lang=en"
     ]
   },
   {
-    "question": "Why are matrices used in real applications?",
+    "question": "How are matrices used in real applications?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109974/0100/Why-are-matrices-used-/Real-world-examples?lang=en"
     ]
@@ -2971,39 +2948,15 @@
     ]
   },
   {
-    "question": "What is the lut_gemv_opt code for compressed int8 lookup-table SME matrix-by-vector multiplication?",
-    "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/lut-gemv-rm-int8--Compressed-8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/lut-gemv-opt-code?lang=en"
-    ]
-  },
-  {
-    "question": "What is the gemv_opt code for int8-to-int32 column-major SME matrix-by-vector multiplication?",
-    "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/gemv-cm-int8--8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/gemv-opt-code?lang=en"
-    ]
-  },
-  {
     "question": "How should I think about ZA storage when writing SME code?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109974/0100/ZA-storage?lang=en"
     ]
   },
   {
-    "question": "What are the matmul_opt function details for FP32 SME matrix-by-matrix multiplication?",
-    "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/matmul-opt-function-details?lang=en"
-    ]
-  },
-  {
     "question": "What are the preprocess_l function details for FP32 SME matrix-by-matrix multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/preprocess-l-function-details?lang=en"
-    ]
-  },
-  {
-    "question": "What are the gemv_opt function details for int8-to-int32 column-major SME matrix-by-vector multiplication?",
-    "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/gemv-cm-int8--8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/gemv-opt-function-details?lang=en"
     ]
   },
   {
