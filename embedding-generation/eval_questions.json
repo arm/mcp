@@ -2592,8 +2592,9 @@
     ]
   },
   {
-    "question": "Why would I use SME for matrix-heavy code?",
+    "question": "What is Arm SME, the Scalable Matrix Extension introduced for matrix processing?",
     "expected_urls": [
+      "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/arm-scalable-matrix-extension-introduction",
       "https://developer.arm.com/documentation/109974/0100/Overview-of-SME?lang=en"
     ]
   },
@@ -2604,7 +2605,7 @@
     ]
   },
   {
-    "question": "What do I need to know about saving and restoring SME state?",
+    "question": "How does SME context save and restore preserve Streaming SVE mode and ZA storage state?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/SME-Overview/SME-context-save-restore?lang=en"
     ]
@@ -2622,7 +2623,7 @@
     ]
   },
   {
-    "question": "How do I build and run a simple SME application?",
+    "question": "How do I compile and run the SME Programmer's Guide example application?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/Toolchains-and-model-support/How-to-run-an-SME-application?lang=en"
     ]
@@ -2694,8 +2695,9 @@
     ]
   },
   {
-    "question": "How do I turn Streaming SVE mode on or off in code?",
+    "question": "How do I control Streaming SVE mode with SMSTART and SMSTOP in SME code?",
     "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/Streaming-SVE-mode?lang=en",
       "https://developer.arm.com/documentation/109246/0101/Toolchains-and-model-support/Calling-conventions/Controlling-the-use-of-streaming-mode?lang=en"
     ]
   },
@@ -2736,7 +2738,7 @@
     ]
   },
   {
-    "question": "How should I structure an optimized FP32 SME matrix multiplication kernel?",
+    "question": "What does the matmul_opt function do in the FP32 SME matrix-by-matrix multiplication example?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/matmul-opt-function-overview?lang=en"
     ]
@@ -2754,13 +2756,13 @@
     ]
   },
   {
-    "question": "How do I write an FP32 matrix multiplication example with SME?",
+    "question": "How does the matmul-fp32 single-precision SME matrix-by-matrix multiplication example work?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication?lang=en"
     ]
   },
   {
-    "question": "How do I write an int8 matrix multiplication example with SME?",
+    "question": "How does the matmul-int8 8-bit to 32-bit SME matrix-by-matrix multiplication example work?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication?lang=en"
     ]
@@ -2778,7 +2780,7 @@
     ]
   },
   {
-    "question": "How does an FP32 matrix multiplication algorithm work with SME?",
+    "question": "What is the matmul-fp32 algorithm for single-precision SME matrix-by-matrix multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/Overview-of-the-matmul-fp32-algorithm?lang=en"
     ]
@@ -2790,7 +2792,7 @@
     ]
   },
   {
-    "question": "How can I optimize int8 matrix-by-matrix multiplication with SME?",
+    "question": "What does the matmul_opt function do in the int8-to-int32 SME matrix-by-matrix multiplication example?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/matmul-opt-function-overview?lang=en"
     ]
@@ -2814,7 +2816,7 @@
     ]
   },
   {
-    "question": "How does the int8 matrix multiplication algorithm work with SME?",
+    "question": "What is the matmul-int8 algorithm for 8-bit to 32-bit SME matrix-by-matrix multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/Overview-of-the-matmul-int8-algorithm?lang=en"
     ]
@@ -2826,9 +2828,10 @@
     ]
   },
   {
-    "question": "Where should I start if I want to learn SME programming?",
+    "question": "What does the SME Programmer's Guide introduction explain about SME and SME2?",
     "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/Introduction?lang=en"
+      "https://developer.arm.com/documentation/109246/0101/Introduction?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/SME-and-SME2?lang=en"
     ]
   },
   {
@@ -2838,7 +2841,7 @@
     ]
   },
   {
-    "question": "How should I optimize an int8 GEMV kernel with SME?",
+    "question": "What does the gemv_opt function do in the int8-to-int32 column-major SME matrix-by-vector example?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/gemv-cm-int8--8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/gemv-opt-function-overview?lang=en"
     ]
@@ -2850,19 +2853,20 @@
     ]
   },
   {
-    "question": "How do I implement left-hand preprocessing for FP32 SME matmul?",
+    "question": "What is the preprocess_l code for FP32 SME matrix-by-matrix multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/preprocess-l-code?lang=en"
     ]
   },
   {
-    "question": "How do I implement right-hand preprocessing for int8 SME matmul?",
+    "question": "What is the preprocess_r code for int8-to-int32 SME matrix-by-matrix multiplication?",
     "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-r-code?lang=en"
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-r-code?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication?lang=en"
     ]
   },
   {
-    "question": "Why does FP32 SME matmul need a left-hand preprocessing step?",
+    "question": "What does the preprocess_l function do for FP32 SME matrix-by-matrix multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/preprocess-l-function-overview?lang=en"
     ]
@@ -2874,13 +2878,14 @@
     ]
   },
   {
-    "question": "How do I implement left-hand preprocessing for int8 SME matmul?",
+    "question": "What is the preprocess_l code for int8-to-int32 SME matrix-by-matrix multiplication?",
     "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-l-code?lang=en"
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-l-code?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication?lang=en"
     ]
   },
   {
-    "question": "How does CME handle address translation and memory access without its own MMU?",
+    "question": "What memory access capabilities does CME provide?",
     "expected_urls": [
       "https://developer.arm.com/documentation/110636/0100/Memory-access?lang=en"
     ]
@@ -2892,19 +2897,20 @@
     ]
   },
   {
-    "question": "Can you show an optimized int8 SME matrix multiplication loop?",
+    "question": "What is the matmul_opt code for int8-to-int32 SME matrix-by-matrix multiplication?",
     "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/matmul-opt-code?lang=en"
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/matmul-opt-code?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication?lang=en"
     ]
   },
   {
-    "question": "Can you show an optimized FP32 SME matrix multiplication loop?",
+    "question": "What is the matmul_opt code for FP32 SME matrix-by-matrix multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/matmul-opt-code?lang=en"
     ]
   },
   {
-    "question": "Can you give me the details for int8 right-hand preprocessing in SME?",
+    "question": "What are the preprocess_r function details for int8-to-int32 SME matrix-by-matrix multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-r-function-details?lang=en"
     ]
@@ -2922,19 +2928,19 @@
     ]
   },
   {
-    "question": "How do different CME system configurations affect my code?",
+    "question": "What are the programming implications of different CME system configurations?",
     "expected_urls": [
       "https://developer.arm.com/documentation/110636/0100/CME-system-configurations/Implications-for-programmers?lang=en"
     ]
   },
   {
-    "question": "Can you give me the details for writing int8 left-hand preprocessing for SME?",
+    "question": "What are the preprocess_l function details for int8-to-int32 SME matrix-by-matrix multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-l-function-details?lang=en"
     ]
   },
   {
-    "question": "Can you give me the details for optimizing an int8 lookup-table GEMV kernel?",
+    "question": "What are the lut_gemv_opt function details for compressed int8 lookup-table SME matrix-by-vector multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/lut-gemv-rm-int8--Compressed-8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/lut-gemv-opt-function-details?lang=en"
     ]
@@ -2946,8 +2952,9 @@
     ]
   },
   {
-    "question": "Should I use PMU events or SPE samples to monitor CME performance?",
+    "question": "How do CME performance monitoring, PMU events, and SPE sampling work?",
     "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/Performance-monitoring/CME-and-the-PMU?lang=en",
       "https://developer.arm.com/documentation/110636/0100/Performance-monitoring?lang=en"
     ]
   },
@@ -2964,13 +2971,13 @@
     ]
   },
   {
-    "question": "Can you show the optimized code for an int8 lookup-table GEMV kernel?",
+    "question": "What is the lut_gemv_opt code for compressed int8 lookup-table SME matrix-by-vector multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/lut-gemv-rm-int8--Compressed-8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/lut-gemv-opt-code?lang=en"
     ]
   },
   {
-    "question": "Can you show the optimized code for an int8 GEMV kernel?",
+    "question": "What is the gemv_opt code for int8-to-int32 column-major SME matrix-by-vector multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/gemv-cm-int8--8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/gemv-opt-code?lang=en"
     ]
@@ -2982,19 +2989,19 @@
     ]
   },
   {
-    "question": "Can you give me the details for optimizing an FP32 SME matmul kernel?",
+    "question": "What are the matmul_opt function details for FP32 SME matrix-by-matrix multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/matmul-opt-function-details?lang=en"
     ]
   },
   {
-    "question": "Can you give me the details for writing FP32 left-hand preprocessing for SME?",
+    "question": "What are the preprocess_l function details for FP32 SME matrix-by-matrix multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/preprocess-l-function-details?lang=en"
     ]
   },
   {
-    "question": "Can you give me the details for optimizing an int8 GEMV kernel?",
+    "question": "What are the gemv_opt function details for int8-to-int32 column-major SME matrix-by-vector multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/gemv-cm-int8--8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/gemv-opt-function-details?lang=en"
     ]
@@ -3006,7 +3013,7 @@
     ]
   },
   {
-    "question": "How can I avoid CPU-CME synchronization overhead in loops?",
+    "question": "What are the programming implications of CME instruction execution and CPU-CME synchronization in loops?",
     "expected_urls": [
       "https://developer.arm.com/documentation/110636/0100/CME-instruction-execution/Implications-for-programmers?lang=en"
     ]
@@ -3018,8 +3025,9 @@
     ]
   },
   {
-    "question": "Can you tell me about CME system configurations?",
+    "question": "How do CME system configurations, including single-CME systems, work?",
     "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/CME-system-configurations/Single-CME-systems?lang=en",
       "https://developer.arm.com/documentation/110636/0100/CME-system-configurations?lang=en"
     ]
   },
@@ -3063,12 +3071,6 @@
     "question": "Can you tell me more about multi-CME system?",
     "expected_urls": [
       "https://developer.arm.com/documentation/110636/0100/CME-system-configurations/Multi-CME-systems?lang=en"
-    ]
-  },
-  {
-    "question": "Can you tell me about CME system configurations?",
-    "expected_urls": [
-      "https://developer.arm.com/documentation/110636/0100/CME-system-configurations/Single-CME-systems?lang=en"
     ]
   }
 ]
