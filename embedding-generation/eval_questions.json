@@ -2607,7 +2607,8 @@
   {
     "question": "How do SVE, SVE2, and SME extend the Armv9-A architecture for vector and matrix processing?",
     "expected_urls": [
-      "https://developer.arm.com/documentation/109246/0101/Introduction?lang=en"
+      "https://developer.arm.com/documentation/109246/0101/Introduction?lang=en",
+      "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/scalable-matrix-extension-armv9-a-architecture"
     ]
   },
   {
@@ -2767,7 +2768,8 @@
       "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication?lang=en",
       "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/Overview-of-the-matmul-fp32-algorithm?lang=en",
       "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/matmul-opt-code?lang=en",
-      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/matmul-opt-function-details?lang=en"
+      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/matmul-opt-function-details?lang=en",
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/"
     ]
   },
   {
@@ -2792,7 +2794,7 @@
     ]
   },
   {
-    "question": "How can I use SME2 for matrix-vector multiplication with compressed int8 data?",
+    "question": "What does the lut_gemv_opt function do for SME2 compressed int8 matrix-vector multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/lut-gemv-rm-int8--Compressed-8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/Overview-of-the-lut-gemv-rm-int8-algorithm?lang=en",
       "https://developer.arm.com/documentation/109246/0101/lut-gemv-rm-int8--Compressed-8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/lut-gemv-opt-code?lang=en"
@@ -2825,11 +2827,12 @@
   {
     "question": "How do SME2 multi-vector and lookup-table features extend SME?",
     "expected_urls": [
-      "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/part4-arm-sme2-introduction"
+      "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/part4-arm-sme2-introduction",
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/overview/"
     ]
   },
   {
-    "question": "How can I optimize column-major 8-bit integer matrix-vector multiplication with SME2?",
+    "question": "What does the gemv_opt function do for SME2 column-major int8 matrix-vector multiplication?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/gemv-cm-int8--8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/gemv-opt-function-overview?lang=en",
       "https://developer.arm.com/documentation/109246/0101/gemv-cm-int8--8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/gemv-opt-code?lang=en",
