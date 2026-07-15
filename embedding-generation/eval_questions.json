@@ -2586,7 +2586,7 @@
     ]
   },
   {
-    "question": "Which phones, Macs, and iPads have native SME2 support?",
+    "question": "devices that support SME and SME2",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/1-get-started/#devices"
     ]
