@@ -915,7 +915,7 @@ def create_transcript_chunks(source_url, transcript_url, source_name, doc_type, 
 
     keywords = parse_keywords(keywords_value, source_name)
     parsed_document = parse_document_content(
-        source_url=response.url,
+        source_url=normalize_source_url(transcript_url),
         resolved_url=response.url,
         response_content=response.content,
         content_type=response.headers.get("content-type", ""),

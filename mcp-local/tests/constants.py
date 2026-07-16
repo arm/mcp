@@ -102,7 +102,7 @@ CHECK_NGINX_REQUEST = {
         }
 
 EXPECTED_CHECK_NGINX_RESPONSE = [
-    "https://amperecomputing.com/tuning-guides/nginx-tuning-guide"
+    "https://learn.arm.com/learning-paths/servers-and-cloud-computing/nginx_tune/?utm_source=arm-mcp#learning-path-step-active"
     ]
 
 CHECK_MIGRATE_EASE_TOOL_REQUEST = {
