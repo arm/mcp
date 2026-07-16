@@ -2585,7 +2585,8 @@
   {
     "question": "nginx performance tweaks",
     "expected_urls": [
-      "https://amperecomputing.com/tuning-guides/nginx-tuning-guide"
+      "https://amperecomputing.com/tuning-guides/nginx-tuning-guide",
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/nginx_tune/"
     ]
   },
   {
