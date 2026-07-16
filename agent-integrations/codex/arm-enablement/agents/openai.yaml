@@ -8,3 +8,5 @@ dependencies:
     - type: "mcp"
       value: "arm-mcp"
       description: "Arm MCP Server for Arm readiness assessment and validation"
+      transport: "stdio"
+      command: "docker"
