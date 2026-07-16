@@ -55,3 +55,20 @@ args = [
 
 Replace `/path/to/your/workspace` with the absolute path to the project you want the MCP server to access.
 If you are enabling Arm Performix, also replace the SSH private key and `known_hosts` paths with your local files.
+
+## Install the Arm Enablement Skill for Codex
+
+After configuring the Arm MCP server, install the skill from a checkout of this repository:
+
+```bash
+mkdir -p "$HOME/.agents/skills"
+cp -R agent-integrations/codex/arm-enablement "$HOME/.agents/skills/"
+```
+
+Start or restart Codex in the project you want to assess. Use `/skills` to confirm that `arm-enablement` is available, then invoke it in chat:
+
+```text
+$arm-enablement Assess this repository for Arm readiness and generate the Markdown and PDF report.
+```
+
+The project opened in Codex must be the same project mounted at `/workspace` in the Arm MCP server configuration.

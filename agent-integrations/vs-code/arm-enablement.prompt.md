@@ -3,7 +3,7 @@
 -->
 ---
 name: 'arm-enablement'
-description: 'Scan an OSS codebase with Arm MCP and generate a CubeFS-style Arm enablement report as Markdown and PDF'
+description: 'Assess an OSS codebase with Arm MCP and generate a professional Arm enablement report as Markdown and PDF'
 argument-hint: '[local workspace or GitHub repo URL] [--apply-fixes optional]'
 agent: 'agent'
 tools: ['search/codebase', 'search/fileSearch', 'search/textSearch', 'search/listDirectory', 'edit/editFiles', 'execute/runInTerminal', 'execute/getTerminalOutput', 'read/terminalLastCommand', 'arm-mcp/skopeo', 'arm-mcp/check_image', 'arm-mcp/knowledge_base_search', 'arm-mcp/migrate_ease_scan', 'arm-mcp/mca', 'arm-mcp/apx_recipe_run', 'arm-mcp/sysreport_instructions']
@@ -11,7 +11,7 @@ tools: ['search/codebase', 'search/fileSearch', 'search/textSearch', 'search/lis
 
 Before starting, verify that the `arm-mcp` MCP server is installed and available. If you don't have access to the arm-mcp tools (skopeo, check_image, knowledge_base_search, migrate_ease_scan, mca, sysreport_instructions), refer to the [MCP Server Installation Guide](https://github.com/arm/mcp/blob/main/agent-integrations/agent-install-instructions.md) to install it on vs-code.
 
-Your goal is to evaluate an open-source codebase for Arm (aarch64) readiness and generate a polished **Arm Enablement Report** in the style of the CubeFS case study, "Arm MCP Server in Action: Enabling multi-arch support for CubeFS." The report must read like a professional external case study for an OSS maintainer, developer-relations team, or CNCF community audience, not like an internal checklist. It must answer: "What is needed to make this project 100% Arm-enabled, and what did the Arm MCP Server discover that ordinary manual review could miss?"
+Your goal is to evaluate an open-source codebase for Arm (aarch64) readiness and generate a polished **Arm Enablement Report**. The report must read like a professional external case study for an OSS maintainer, developer-relations team, or CNCF community audience, not like an internal checklist. It must answer: "What is needed to make this project Arm-ready, and what did the Arm MCP Server discover that ordinary manual review could miss?"
 
 The required local deliverables are:
 
@@ -24,15 +24,17 @@ Input handling:
 
 * If the user runs `/arm-enablement` from an already-cloned OSS project, analyze the current workspace.
 * If the user provides a GitHub repository URL, clone that repository into the current workspace if it is empty, or into a clearly named subdirectory such as `arm-enablement-target/` if the workspace is not empty. Then analyze the cloned repository.
-* If the user provides `--apply-fixes` or explicitly asks to fix the project, apply the minimum source changes needed for Arm enablement after writing the initial report, then update the report with the implemented fixes and re-run the relevant MCP checks.
+* Prefer scanning the local target mounted at MCP `/workspace`. Use `git_repo` only for an initial report-only scan when the current workspace is unrelated to the target and there are no local or uncommitted changes to assess. Never use `git_repo` to validate fixes; mount the changed checkout at `/workspace` and omit `git_repo`.
+* If the user provides `--apply-fixes` or explicitly asks to fix the project, apply the minimum source changes needed for Arm enablement after writing the initial report, then update the report and re-run the relevant MCP checks against the changed `/workspace` checkout. Do not commit unless the user explicitly asks.
 * If the user does not request fixes, stay in report-only mode. Do not modify project source files except for creating `arm-enablement-report.md` and `arm-enablement-report.pdf`.
 
 Steps to follow:
 
-* Detect the project's primary language(s) by inspecting the codebase (`go.mod`, `package.json`, `requirements.txt`, `pom.xml`, `Cargo.toml`, `CMakeLists.txt`, source file extensions). Pick the appropriate `migrate_ease_scan` scanner: `cpp`, `python`, `go`, `js`, or `java`.
-* Run `arm-mcp/migrate_ease_scan` against the workspace with the chosen scanner. If the user supplied a GitHub URL and the workspace is not the target checkout, pass the URL as `git_repo` only for the scanner call, then use the local clone for file inspection. Capture every architecture-sensitive finding (file path, line number, category, suggestion). This is the discovery phase and drives the rest of the report.
+* Detect all primary languages by inspecting manifests (`go.mod`, `package.json`, `requirements.txt`, `pom.xml`, `Cargo.toml`, `CMakeLists.txt`) and source extensions. Supported `migrate_ease_scan` scanners are `cpp`, `python`, `go`, `js`, and `java`; scan each architecture-relevant supported component in a mixed-language repository.
+* If no scanner supports a primary language, do not substitute an unrelated scanner or imply that the scan passed. Record the unsupported-language limitation, inspect architecture-sensitive source/build/container/CI paths manually, and rely on cross-build or native Arm evidence. Scan supported components separately and label unvalidated areas as deferred.
+* Run `arm-mcp/migrate_ease_scan` against the target checkout at `/workspace` with the chosen scanner and `arch=armv8-a` by default. Capture every architecture-sensitive finding (file path, line number, category, suggestion). This is the discovery phase and drives the rest of the report.
 * For each Dockerfile, Compose file, and Kubernetes manifest in the repo, list every container image referenced. For each image, call `arm-mcp/check_image` to confirm `linux/arm64` is published. For images pinned by `@sha256:` digest, also call `arm-mcp/skopeo` with `raw=true` to confirm whether the digest resolves to a multi-arch manifest list or a single-arch manifest. Flag any image that is amd64-only or pinned to a single-arch digest.
-* For each dependency declared in package manifests (Dockerfile `apt-get`/`yum`/`apk` lines, `requirements.txt`, `go.mod`, `package.json`, `pom.xml`), call `arm-mcp/knowledge_base_search` and explicitly ask "Is [package] compatible with Arm architecture?" where [package] is the name of the package. Record the verdict and the recommended version if a change is needed.
+* Review direct runtime/build dependencies and architecture-sensitive packages. Group related dependencies and call `arm-mcp/knowledge_base_search` only where Arm-specific compatibility or version guidance would affect the verdict or remediation plan; do not query every transitive dependency. If no relevant result is returned, record `No Arm-specific KB result`, do not infer incompatibility, and use upstream documentation, published artifacts, or native validation as evidence. Mark the item unverified when no stronger evidence is available.
 * Inspect build entry points (`Makefile`, `build.sh`, `CMakeLists.txt`, `setup.py`, `Dockerfile` build stages, CI workflows) for architecture-switching logic. Manually read shell pipelines and `case`/`switch` blocks that branch on `uname -m`, `$ARCH`, `TARGETARCH`, `GOARCH`, `CPUTYPE`, or similar variables. Subtle shell semantics bugs (subshell variable scope, missing `arm64` cases, hard-coded `amd64` URLs) are common and not catchable by `grep`. Call out anything suspicious as a "Critical Discovery" candidate.
 * If the codebase contains assembly (`.s`, `.S`) or architecture-specific intrinsics (SSE/AVX, NEON), use `arm-mcp/mca` to analyze representative hot paths and use `arm-mcp/knowledge_base_search` to find the Arm equivalent (NEON, SVE, or SVE2 depending on target).
 * OPTIONAL: If the user is on an Arm host or has access to an Arm runner (AWS Graviton, Azure Cobalt, GCP Axion), validate the final state with native builds, `file <binary>` architecture checks, `sysreport_instructions`, and `arm-mcp/apx_recipe_run` for performance/hotspot evidence when relevant. If no Arm host is available, mark validation as deferred.
@@ -41,7 +43,8 @@ Steps to follow:
 Pitfalls to avoid:
 
 * Do not equate `grep -r "amd64"` results with actionable findings. `migrate_ease_scan` filters out false positives in vendored dependencies, test fixtures, and assembly files that already carry arm64 build tags. Trust the scanner over manual grep.
-* Do not assume an image is multi-arch because the upstream tag has Arm64 manifests. A `@sha256:` digest pin in a Dockerfile resolves to a single platform manifest and will fail with `exec format error` on Arm hosts. Always inspect digests with `skopeo`.
+* Do not assume an image is multi-arch because the upstream tag has Arm64 manifests. A `@sha256:` digest can identify either a multi-platform image index or a single-platform manifest. Inspect the exact digest with `skopeo`; flag it only when the resolved manifest lacks the required `linux/arm64` platform.
+* Do not treat a missing knowledge-base result as proof that a dependency is incompatible.
 * Do not confuse a software version with a language wrapper package version. For example, when checking the Python Redis client, check the Python package name "redis" rather than the Redis server version.
 * NEON lane indices must be compile-time constants, not variables.
 * Do not mark a finding as resolved without running `migrate_ease_scan` again to confirm. Re-scan after every batch of fixes.
@@ -87,10 +90,10 @@ First produce a single markdown file named `arm-enablement-report.md` at the rep
   * `Step 4: Build System and Architecture Switching` with plain-English analysis of shell, Makefile, Dockerfile, CI, and release logic. Include short snippets for suspicious logic.
   * `Step 5: Implementation Plan or Implemented Fixes` with a prioritized table. If report-only, describe the exact maintainer PR that should be opened.
   * `Step 6: Validation` with build/test status and `file <binary>` architecture output when available.
-* **The Critical Discovery / The Key Discovery** — If a non-obvious bug exists, tell the CubeFS-style story: the bug, why it survived, user impact, and one-line fix. If no critical bug exists, use `The Key Discovery: What Arm MCP Proved` and describe the risks ruled out plus the strongest remaining parity gap.
+* **The Critical Discovery / The Key Discovery** — If a non-obvious bug exists, explain the bug, why it survived, user impact, and one-line fix. If no critical bug exists, use `The Key Discovery: What Arm MCP Proved` and describe the risks ruled out plus the strongest remaining parity gap.
 * **The Cost of Leaving It Unchecked** — Explain likely project/user/ecosystem cost. Keep this evidence-based; do not invent adoption numbers.
 * **Effort Comparison** — Three-row table: `Manual Investigation`, `AI agent without Arm MCP`, `AI agent with Arm MCP`; include risk and time-to-discovery.
-* **What Did Not Have to Happen** — Two-column table modeled on CubeFS: traditional approach vs Arm MCP-assisted outcome.
+* **What Did Not Have to Happen** — Two-column table comparing the traditional approach with the Arm MCP-assisted outcome.
 * **Audit Trail** — Numbered table of every `arm-mcp` tool invocation: `#`, `Time (UTC)`, `Tool`, `Purpose`. End with total invocation count and total MCP computation time.
 * **Impact** — Three subsections: `For the Project and Open-Source Community`, `For the Arm Ecosystem and OSS Growth`, `For Arm Developer Tooling`.
 * **What's Next: Roadmap to End-to-End Arm Parity** — Two phases. Phase 1: Discovery and Enablement (where MCP drives). Phase 2: Execution and Distribution (where MCP validates CI, published images/artifacts, and regressions).
@@ -106,6 +109,6 @@ PDF export instructions:
 * If both exporters are unavailable, do not invent a PDF. Leave `arm-enablement-report.md` complete and tell the user exactly which command to run after installing `pandoc` or Node.js. The markdown report remains the source of truth.
 * After export, verify that `arm-enablement-report.pdf` exists and is non-empty. If possible, report its file size.
 
-If the user has explicitly asked for changes to be applied, after the report is written: apply the fixes from the Implementation Plan via `edit/editFiles`, commit each fix as a separate change for review-ability, and re-run `migrate_ease_scan` to confirm findings are resolved. If the user asked only for analysis, do not modify any source files; the report alone is the deliverable.
+If the user has explicitly asked for changes to be applied, after the report is written: apply the fixes from the Implementation Plan via `edit/editFiles` and re-run `migrate_ease_scan` against the changed `/workspace` checkout to confirm findings are resolved. Do not commit unless the user explicitly asks. If the user asked only for analysis, do not modify any source files; the report alone is the deliverable.
 
 Provide the final markdown and PDF paths to the user along with a one-line summary of the Arm-readiness verdict.
