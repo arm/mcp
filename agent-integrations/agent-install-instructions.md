@@ -58,7 +58,7 @@ If you are enabling Arm Performix, also replace the SSH private key and `known_h
 
 ## Install the Arm Enablement Skill for Codex
 
-After configuring the Arm MCP server, install the skill from a checkout of this repository:
+The skill does not install or configure the Arm MCP Docker invocation. Complete the manual Arm MCP configuration above first, then install the skill from a checkout of this repository:
 
 ```bash
 mkdir -p "$HOME/.agents/skills"

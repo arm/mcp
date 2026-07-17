@@ -88,13 +88,13 @@ Use these sections in order. Keep every section; when no issue exists, explain w
 7. The Cost of Leaving It Unchecked.
 8. Effort Comparison: compare manual investigation, an AI agent without Arm MCP, and an AI agent with Arm MCP. Label time values as estimates unless measured.
 9. What Did Not Have to Happen: traditional approach versus MCP-assisted outcome.
-10. Audit Trail: one row per MCP invocation and totals without invented timing.
+10. Audit Trail: one row per MCP invocation using three columns: UTC/tool/duration, relevant arguments/purpose, and result summary. Sum only measured durations, label client-observed timing, and never invent unavailable values.
 11. Impact: project/community, Arm ecosystem/OSS growth, and Arm developer tooling.
 12. What's Next: Roadmap to End-to-End Arm Parity, split into discovery/enablement and execution/distribution phases.
 13. Conclusion.
 14. References: repository, commit/PR when applicable, scanner, MCP image/version, cited knowledge resources, and the [Arm MCP Server](https://github.com/arm/mcp).
 
-Use case-study language such as "the hidden reality," "the key discovery," "why this matters," and "what did not have to happen," but prefer evidence over drama. Cite file paths and line numbers. Separate confirmed findings from recommendations and deferred validation. Keep dense evidence tables to three columns or fewer so they remain readable in the PDF.
+Use case-study language such as "the hidden reality," "the key discovery," "why this matters," and "what did not have to happen," but prefer evidence over drama. Cite file paths and line numbers. Separate confirmed findings from recommendations and deferred validation. Keep dense PDF tables to three visual columns or fewer by combining related fields, such as `File / Line / Category`, `Finding`, and `Suggested Fix / Evidence`; preserve every required evidence field rather than dropping it.
 
 ## Export And Verify The PDF
 

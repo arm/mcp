@@ -9,7 +9,7 @@ agent: 'agent'
 tools: ['search/codebase', 'search/fileSearch', 'search/textSearch', 'search/listDirectory', 'edit/editFiles', 'execute/runInTerminal', 'execute/getTerminalOutput', 'read/terminalLastCommand', 'arm-mcp/skopeo', 'arm-mcp/check_image', 'arm-mcp/knowledge_base_search', 'arm-mcp/migrate_ease_scan', 'arm-mcp/mca', 'arm-mcp/apx_recipe_run', 'arm-mcp/sysreport_instructions']
 ---
 
-Before starting, verify that the `arm-mcp` MCP server is installed and available. If you don't have access to the arm-mcp tools (skopeo, check_image, knowledge_base_search, migrate_ease_scan, mca, sysreport_instructions), refer to the [MCP Server Installation Guide](https://github.com/arm/mcp/blob/main/agent-integrations/agent-install-instructions.md) to install it on vs-code.
+Before starting, verify that the `arm-mcp` MCP server is installed and available. If you don't have access to the arm-mcp tools (skopeo, check_image, knowledge_base_search, migrate_ease_scan, mca, apx_recipe_run, sysreport_instructions), refer to the [MCP Server Installation Guide](https://github.com/arm/mcp/blob/main/agent-integrations/agent-install-instructions.md) to install it in VS Code.
 
 Your goal is to evaluate an open-source codebase for Arm (aarch64) readiness and generate a polished **Arm Enablement Report**. The report must read like a professional external case study for an OSS maintainer, developer-relations team, or CNCF community audience, not like an internal checklist. It must answer: "What is needed to make this project Arm-ready, and what did the Arm MCP Server discover that ordinary manual review could miss?"
 
@@ -38,7 +38,7 @@ Steps to follow:
 * Inspect build entry points (`Makefile`, `build.sh`, `CMakeLists.txt`, `setup.py`, `Dockerfile` build stages, CI workflows) for architecture-switching logic. Manually read shell pipelines and `case`/`switch` blocks that branch on `uname -m`, `$ARCH`, `TARGETARCH`, `GOARCH`, `CPUTYPE`, or similar variables. Subtle shell semantics bugs (subshell variable scope, missing `arm64` cases, hard-coded `amd64` URLs) are common and not catchable by `grep`. Call out anything suspicious as a "Critical Discovery" candidate.
 * If the codebase contains assembly (`.s`, `.S`) or architecture-specific intrinsics (SSE/AVX, NEON), use `arm-mcp/mca` to analyze representative hot paths and use `arm-mcp/knowledge_base_search` to find the Arm equivalent (NEON, SVE, or SVE2 depending on target).
 * OPTIONAL: If the user is on an Arm host or has access to an Arm runner (AWS Graviton, Azure Cobalt, GCP Axion), validate the final state with native builds, `file <binary>` architecture checks, `sysreport_instructions`, and `arm-mcp/apx_recipe_run` for performance/hotspot evidence when relevant. If no Arm host is available, mark validation as deferred.
-* Maintain an audit trail: for every `arm-mcp` tool call, record `{timestamp, tool, arguments, reason}`. This drives the "Audit Trail" section of the final report.
+* Maintain an audit trail for every `arm-mcp` tool call: UTC timestamp, tool, relevant arguments, purpose, result summary, and duration when available. If duration is unavailable, state that it was not captured. This drives the "Audit Trail" section of the final report.
 
 Pitfalls to avoid:
 
@@ -84,7 +84,7 @@ First produce a single markdown file named `arm-enablement-report.md` at the rep
 * **The Hidden Reality / Current Reality** — For broken projects, explain what was silently broken and why it was hard to notice. For ready projects, explain what was uncertain before the assessment and what parity gaps remained hidden behind "it builds."
 * **What is the Arm MCP Server?** — Briefly explain MCP and the Arm tools used. Write this as a reader-friendly paragraph, not a tool list dump.
 * **The Assessment: Step by Step** — Use subsections:
-  * `Step 1: Automated Codebase Analysis` with `migrate_ease_scan` results and a concise evidence table (`File`, `Line`, `Category`, `Finding`, `Suggested Fix`). If there are zero findings, say what MCP ruled out.
+  * `Step 1: Automated Codebase Analysis` with `migrate_ease_scan` results and a concise three-column evidence table (`File / Line / Category`, `Finding`, `Suggested Fix / Evidence`). Preserve every required evidence field. If there are zero findings, say what MCP ruled out.
   * `Step 2: Best Practices from Arm's Knowledge Base` with the most useful `knowledge_base_search` guidance and a dependency table.
   * `Step 3: Container Supply Chain Verification` with `check_image`/`skopeo` evidence when applicable; explicitly say when no container surface exists.
   * `Step 4: Build System and Architecture Switching` with plain-English analysis of shell, Makefile, Dockerfile, CI, and release logic. Include short snippets for suspicious logic.
@@ -94,7 +94,7 @@ First produce a single markdown file named `arm-enablement-report.md` at the rep
 * **The Cost of Leaving It Unchecked** — Explain likely project/user/ecosystem cost. Keep this evidence-based; do not invent adoption numbers.
 * **Effort Comparison** — Three-row table: `Manual Investigation`, `AI agent without Arm MCP`, `AI agent with Arm MCP`; include risk and time-to-discovery.
 * **What Did Not Have to Happen** — Two-column table comparing the traditional approach with the Arm MCP-assisted outcome.
-* **Audit Trail** — Numbered table of every `arm-mcp` tool invocation: `#`, `Time (UTC)`, `Tool`, `Purpose`. End with total invocation count and total MCP computation time.
+* **Audit Trail** — Three-column table of every `arm-mcp` tool invocation: `# / Time (UTC) / Tool / Duration`, `Relevant Arguments / Purpose`, and `Result Summary`. End with the total invocation count and the sum of measured client-observed durations only. If a duration is unavailable, label it `Not captured` and exclude it from the total rather than inventing a value.
 * **Impact** — Three subsections: `For the Project and Open-Source Community`, `For the Arm Ecosystem and OSS Growth`, `For Arm Developer Tooling`.
 * **What's Next: Roadmap to End-to-End Arm Parity** — Two phases. Phase 1: Discovery and Enablement (where MCP drives). Phase 2: Execution and Distribution (where MCP validates CI, published images/artifacts, and regressions).
 * **Conclusion** — Short, maintainer-facing, case-study style conclusion.
