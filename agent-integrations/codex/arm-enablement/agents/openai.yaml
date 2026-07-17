@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arm Enablement"
+  short_description: "Assess OSS projects for Arm readiness"
+  default_prompt: "Use $arm-enablement to assess this repository for Arm readiness and generate the Markdown and PDF report."
