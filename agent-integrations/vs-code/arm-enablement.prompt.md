@@ -104,10 +104,10 @@ After the markdown report is complete, export it to a local PDF named `arm-enabl
 
 PDF export instructions:
 
-* First try `pandoc arm-enablement-report.md -o arm-enablement-report.pdf` if `pandoc` is installed.
-* If `pandoc` is not available and Node.js is installed, try `npx --yes md-to-pdf arm-enablement-report.md --output arm-enablement-report.pdf`.
-* If both exporters are unavailable, do not invent a PDF. Leave `arm-enablement-report.md` complete and tell the user exactly which command to run after installing `pandoc` or Node.js. The markdown report remains the source of truth.
-* After export, verify that `arm-enablement-report.pdf` exists and is non-empty. If possible, report its file size.
+* First try `pandoc arm-enablement-report.md -o arm-enablement-report.pdf` if `pandoc` is installed. Treat this as successful only when the command exits with status 0 and creates a non-empty PDF.
+* If `pandoc` is unavailable or its export fails, including because no compatible PDF engine is installed, and Node.js is available, try `npx --yes md-to-pdf arm-enablement-report.md`. The tool writes `arm-enablement-report.pdf` beside the Markdown source by default; do not pass an unsupported `--output` option.
+* If both exporters are unavailable or fail, do not invent a PDF. Leave `arm-enablement-report.md` complete, report the observed export error, and tell the user exactly which command to run after installing `pandoc` with a PDF engine or Node.js. The markdown report remains the source of truth.
+* After export, verify that `arm-enablement-report.pdf` exists and is non-empty, and report its file size. When rendering tools are available, render and inspect at least the title page and one evidence-heavy page for clipping, broken tables, blank pages, repeated numbering, duplicate titles, or unreadable text. Regenerate the PDF if needed.
 
 If the user has explicitly asked for changes to be applied, after the report is written: apply the fixes from the Implementation Plan via `edit/editFiles` and re-run `migrate_ease_scan` against the changed `/workspace` checkout to confirm findings are resolved. Do not commit unless the user explicitly asks. If the user asked only for analysis, do not modify any source files; the report alone is the deliverable.
 
