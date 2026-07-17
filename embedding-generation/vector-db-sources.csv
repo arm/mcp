@@ -1778,7 +1778,7 @@ Workload Brief,,Object Storage MinIO Single Node,https://www.amperecomputing.com
 Workload Brief,,Redis on Azure Workload Brief - updated replacement,https://amperecomputing.com/briefs/redis-on-azure-brief,Ampere; Ampere Altra; Azure Dpsv5; Redis; P99 latency,
 Workload Brief,,Redis on Bare Metal Workload Brief,https://amperecomputing.com/briefs/redis-workload-brief,Ampere; Ampere Altra Max; Redis,
 Workload Brief,,Redis on Google Cloud Workload Brief,https://amperecomputing.com/briefs/redis-on-google-brief,Ampere; Ampere Altra; Tau T2A; Redis,
-Workload Brief,,Spark on OCI Workload Brief,https://amperecomputing.com/briefs/spark-on-OCI-brief,Ampere; Ampere A1; Ampere Altra; OCI; Apache Spark; TeraSort; TPC-DS; YARN,
+Workload Brief,,Spark on OCI Workload Brief,https://amperecomputing.com/briefs/spark-on-oci-brief,Ampere; Ampere A1; Ampere Altra; OCI; Apache Spark; TeraSort; TPC-DS; YARN,
 Workload Brief,,Spark on Google Cloud Brief,https://amperecomputing.com/briefs/spark-on-google-brief,Ampere; Ampere Altra; Google Cloud; Tau T2A; Apache Spark; TeraSort; YARN,
 Workload Brief,,Spark on Azure Brief,https://amperecomputing.com/briefs/spark-on-azure-brief,Ampere; Ampere Altra; Azure; Apache Spark; TeraSort; HiBench,
 Workload Brief,,Spark Workload Brief,https://amperecomputing.com/briefs/spark-workload-brief,Ampere; Ampere Altra; Apache Spark; TeraSort; TPC-DS; Intel Ice Lake,
