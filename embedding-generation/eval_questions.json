@@ -147,7 +147,8 @@
   {
   "question": "How can I choose a machine learning model that's accurate enough for deployment on a resource-constrained microcontroller without overfitting or exceeding its memory and compute limits?",
   "expected_urls": [
-    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@372d65e8db464664a2fc83eaa298360b"
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@372d65e8db464664a2fc83eaa298360b",
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@ca3a0116b39c43debef04085e63da5ce"
   ]
   },
   {
@@ -251,7 +252,8 @@
   {
   "question": "How can I deploy a TensorFlow model with extracted sensor features to an STM32 microcontroller using STM32Cube.AI, and validate and integrate it into a real-time embedded application?",
   "expected_urls": [
-    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@13366c4547854be883ea5198ed167f91"
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@13366c4547854be883ea5198ed167f91",
+    "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/img_nn_stcube/deploy_nn/"
   ]
   },
   {
@@ -263,13 +265,15 @@
   {
   "question": "How can I train, validate, and deploy a convolutional neural network for image classification on an STM32 microcontroller using TensorFlow, the CIFAR-10 dataset, and STM32Cube.AI?",
   "expected_urls": [
-    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@5eee196dbadb407cbbc998d96ebed206"
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@5eee196dbadb407cbbc998d96ebed206",
+    "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/img_nn_stcube"
   ]
   },
   {
   "question": "How can I quantize a TensorFlow model with TensorFlow Lite and verify the improvements in memory usage, inference latency, and energy consumption on an STM32 microcontroller using STM32Cube.AI?",
   "expected_urls": [
-    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@22b73d7ee4e94d738ae8dcf58697c7c6"
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@22b73d7ee4e94d738ae8dcf58697c7c6",
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@a1297eceb2c341e0b6b449ee625843d4"
   ]
   },
   {
