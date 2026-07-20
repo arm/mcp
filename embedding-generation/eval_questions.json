@@ -44,7 +44,8 @@
   {
   "question": "How can I optimize and deploy a large language model on an Arm-based Raspberry Pi by combining Neon SIMD, quantization, and llama.cpp to improve inference performance without significantly affecting output quality?",
   "expected_urls": [
-    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@64c996e199754717816958a107c5b4a6"
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@64c996e199754717816958a107c5b4a6",
+    "https://learn.arm.com/learning-paths/servers-and-cloud-computing/llama-cpu/llama-chatbot/#run-the-pre-quantized-llama-31-8b-llm-model-weights-on-your-arm-based-server"
   ]
   },
   {
@@ -200,7 +201,8 @@
   {
   "question": "How can I estimate the computational workload and memory footprint of a convolutional neural network to determine whether it can run on a resource-constrained Arm Cortex-M microcontroller?",
   "expected_urls": [
-    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@4f763d44edb043a5aa80399a9500e93c"
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@4f763d44edb043a5aa80399a9500e93c",
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@a1297eceb2c341e0b6b449ee625843d4"
   ]
   },
   {
@@ -224,7 +226,8 @@
   {
   "question": "How can I quantize a neural network for deployment on an Arm Cortex-M microcontroller while avoiding overflow and preserving inference accuracy with fixed-point arithmetic?",
   "expected_urls": [
-    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@236f464fc113419c9eb3873d43f59cc2"
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@236f464fc113419c9eb3873d43f59cc2",
+    "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/quantize-neural-upscaling-models/1-introduction/#quantization-with-executorch-and-the-arm-backend"
   ]
   },
   {
@@ -298,13 +301,14 @@
   {
   "question": "How can I optimize generative AI inference on Arm by combining Neon SIMD, PyTorch, quantization, and llama.cpp to reduce model size and improve latency on resource-constrained devices like Raspberry Pi?",
   "expected_urls": [
-    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@"
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@64c996e199754717816958a107c5b4a6"
   ]
   },
   {
   "question": "How can I accelerate large language model inference on Arm Neoverse processors by using KleidiAI microkernels, advanced Arm intrinsics, and low-bit quantization instead of standard matrix multiplication libraries?",
   "expected_urls": [
-    "https://github.com/arm-education/AI-on-Arm/blob/main/lab2.ipynb"
+    "https://github.com/arm-education/AI-on-Arm/blob/main/lab2.ipynb",
+    "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/performance_llama_cpp_sme2/introduction/#how-sme2-and-kleidiai-accelerate-llm-inference-in-llamacpp"
   ]
   },
   {
@@ -340,7 +344,8 @@
   {
   "question": "How can I reduce a language model to 4-bit, 2-bit, or even 1-bit precision while minimizing the loss in accuracy using quantization-aware training?",
   "expected_urls": [
-    "https://github.com/arm-education/Advanced-AI-Hardware-Software-Co-Design/blob/main/lab1.ipynb"
+    "https://github.com/arm-education/Advanced-AI-Hardware-Software-Co-Design/blob/main/lab1.ipynb",
+    "https://learn.arm.com/learning-paths/servers-and-cloud-computing/llama-cpu/llama-chatbot/#quantization-format"
   ]
   },
   {
