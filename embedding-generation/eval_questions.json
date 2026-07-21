@@ -272,8 +272,7 @@
   {
   "question": "How can I quantize a TensorFlow model with TensorFlow Lite and verify the improvements in memory usage, inference latency, and energy consumption on an STM32 microcontroller using STM32Cube.AI?",
   "expected_urls": [
-    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@22b73d7ee4e94d738ae8dcf58697c7c6",
-    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@a1297eceb2c341e0b6b449ee625843d4"
+    "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@22b73d7ee4e94d738ae8dcf58697c7c6"
   ]
   },
   {
