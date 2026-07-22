@@ -1,5 +1,7 @@
 torch==2.10.0
-usearch
+usearch==2.26.0
+# USearch leaves NumKong unconstrained, so pin it explicitly for reproducible wheel installs.
+numkong==7.7.0
 pyyaml
 requests
 mcp

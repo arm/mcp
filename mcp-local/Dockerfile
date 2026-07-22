@@ -82,14 +82,10 @@ ENV VIRTUAL_ENV=/app/.venv \
 RUN python3 -m venv "$VIRTUAL_ENV" && pip install --upgrade pip
 
 COPY mcp-local/requirements.txt .
-# Install dependencies using CPU-only PyTorch wheels for supported Linux targets.
-RUN if [ "$TARGETPLATFORM" = "linux/amd64" ] || [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
-        PIP_INDEX_URL=https://download.pytorch.org/whl/cpu \
-        PIP_EXTRA_INDEX_URL=https://pypi.org/simple \
-        pip install --no-cache-dir -r requirements.txt; \
-    else \
-        pip install --no-cache-dir -r requirements.txt; \
-    fi
+# Install dependencies using CPU-only PyTorch wheels.
+RUN PIP_INDEX_URL=https://download.pytorch.org/whl/cpu \
+    PIP_EXTRA_INDEX_URL=https://pypi.org/simple \
+    pip install --only-binary=:all: --no-cache-dir -r requirements.txt
 
 RUN mkdir -p "$HF_HOME" "$SENTENCE_TRANSFORMERS_HOME" && \
     python -c "from sentence_transformers import SentenceTransformer; import os; SentenceTransformer(os.environ['SENTENCE_TRANSFORMER_MODEL'], cache_folder=os.environ['SENTENCE_TRANSFORMERS_HOME'])"
