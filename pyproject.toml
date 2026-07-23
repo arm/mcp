@@ -6,7 +6,8 @@ dependencies = [
   "numpy",
   "rank-bm25",
   "sentence-transformers>=5.4",
-  "usearch",
+  "usearch==2.26.0",
+  "numkong==7.7.0",
 ]
 
 [build-system]
