@@ -21,11 +21,15 @@ generate_chunks module with reset global state between tests.
 import base64
 import csv
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 from document_chunking import chunk_parsed_document, learn_learning_path_step_urls, parse_document_content
+
+FIXTURE_DIR = Path(__file__).parent
+SAMPLE_PPTX_FIXTURE = "sample_course_slides.pptx"
 
 
 def _arm_api_response(title, html):
@@ -37,6 +41,10 @@ def _arm_api_response(title, html):
             },
         }
     ).encode("utf-8")
+
+
+def _fixture_bytes(name):
+    return (FIXTURE_DIR / name).read_bytes()
 
 
 class TestChunkClass:
@@ -128,6 +136,175 @@ class TestChunkClass:
 
 
 class TestDocumentChunkingAnchors:
+    def test_notebook_content_is_parsed_from_markdown_code_and_text_outputs(self):
+        notebook = {
+            "metadata": {
+                "kernelspec": {"language": "python"},
+            },
+            "cells": [
+                {
+                    "cell_type": "markdown",
+                    "source": [
+                        "# Lab 1\n",
+                        "\n",
+                        "## Optimize inference\n",
+                        "Use KleidiAI to optimize inference on Arm processors.\n",
+                    ],
+                },
+                {
+                    "cell_type": "code",
+                    "source": [
+                        "import torch\n",
+                        "print('KleidiAI ready')\n",
+                    ],
+                    "outputs": [
+                        {
+                            "output_type": "stream",
+                            "text": ["KleidiAI ready\n"],
+                        }
+                    ],
+                },
+            ],
+        }
+
+        parsed = parse_document_content(
+            source_url="https://github.com/arm-education/repo/blob/main/lab1.ipynb",
+            resolved_url="https://raw.githubusercontent.com/arm-education/repo/main/lab1.ipynb",
+            response_content=json.dumps(notebook).encode("utf-8"),
+            content_type="application/json",
+            fallback_title="Notebook Lab",
+        )
+
+        chunks = chunk_parsed_document(
+            parsed,
+            doc_type="Educational Resource",
+            keywords=["KleidiAI"],
+            min_tokens=1,
+            max_tokens=500,
+        )
+
+        assert parsed.display_title == "Lab 1"
+        assert parsed.content_type == "notebook"
+        assert len(chunks) == 1
+        assert chunks[0]["content_type"] == "notebook"
+        assert "Use KleidiAI to optimize inference" in chunks[0]["content"]
+        assert "import torch" in chunks[0]["content"]
+        assert "KleidiAI ready" in chunks[0]["content"]
+        assert '"cells"' not in chunks[0]["content"]
+
+    def test_pptx_content_is_parsed_from_slide_and_notes_text(self):
+        parsed = parse_document_content(
+            source_url="https://github.com/arm-education/AI-on-Arm/blob/main/slides/chapter1.pptx",
+            resolved_url="https://raw.githubusercontent.com/arm-education/AI-on-Arm/main/slides/chapter1.pptx",
+            response_content=_fixture_bytes(SAMPLE_PPTX_FIXTURE),
+            content_type="application/octet-stream",
+            fallback_title="Chapter 1 Slides",
+        )
+
+        chunks = chunk_parsed_document(
+            parsed,
+            doc_type="Educational Resource",
+            keywords=["KleidiAI"],
+            min_tokens=1,
+            max_tokens=500,
+        )
+
+        assert parsed.display_title == "Challenges facing Cloud and Edge AI inference"
+        assert parsed.content_type == "pptx"
+        assert [section.heading_path for section in parsed.sections] == [["Slide 1"], ["Slide 2"]]
+        assert len(chunks) == 2
+        assert chunks[0]["content_type"] == "pptx"
+        assert "Recognizing Generative AI trends" in chunks[0]["content"]
+        assert "Speaker notes" in chunks[0]["content"]
+        assert "Matrix multiplication kernels" in chunks[0]["content"]
+        assert "KleidiAI uses Arm CPU SIMD" in chunks[1]["content"]
+        assert "<a:t>" not in chunks[0]["content"]
+
+    def test_notebook_text_outputs_skip_binary_payloads(self):
+        notebook = {
+            "metadata": {"language_info": {"name": "python"}},
+            "cells": [
+                {
+                    "cell_type": "markdown",
+                    "source": "# Output Lab\n\n## Results\n",
+                },
+                {
+                    "cell_type": "code",
+                    "source": "display(results)\n",
+                    "outputs": [
+                        {
+                            "output_type": "display_data",
+                            "data": {"image/png": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"},
+                        },
+                        {
+                            "output_type": "display_data",
+                            "data": {
+                                "text/markdown": "**Top result**: KleidiAI improves latency.",
+                                "image/png": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB",
+                            },
+                        },
+                        {
+                            "output_type": "display_data",
+                            "data": {"text/html": "<strong>HTML result</strong> on Arm CPUs."},
+                        },
+                    ],
+                },
+            ],
+        }
+
+        parsed = parse_document_content(
+            source_url="https://github.com/arm-education/repo/blob/main/output-lab.ipynb",
+            resolved_url="https://raw.githubusercontent.com/arm-education/repo/main/output-lab.ipynb",
+            response_content=json.dumps(notebook).encode("utf-8"),
+            content_type="application/json",
+            fallback_title="Output Lab",
+        )
+
+        chunks = chunk_parsed_document(
+            parsed,
+            doc_type="Educational Resource",
+            keywords=["KleidiAI"],
+            min_tokens=1,
+            max_tokens=500,
+        )
+
+        assert "**Top result**: KleidiAI improves latency." in chunks[0]["content"]
+        assert "HTML result on Arm CPUs." in chunks[0]["content"]
+        assert "iVBORw0KGgo" not in chunks[0]["content"]
+
+    def test_legacy_notebook_worksheet_cells_are_supported(self):
+        notebook = {
+            "worksheets": [
+                {
+                    "cells": [
+                        {
+                            "cell_type": "markdown",
+                            "source": "# Legacy Lab\n\n## Run inference\nUse Arm CPUs for inference.\n",
+                        }
+                    ]
+                }
+            ]
+        }
+
+        parsed = parse_document_content(
+            source_url="https://github.com/arm-education/repo/blob/main/legacy.ipynb",
+            resolved_url="https://raw.githubusercontent.com/arm-education/repo/main/legacy.ipynb",
+            response_content=json.dumps(notebook).encode("utf-8"),
+            content_type="application/json",
+            fallback_title="Legacy Notebook",
+        )
+
+        chunks = chunk_parsed_document(
+            parsed,
+            doc_type="Educational Resource",
+            keywords=["Arm CPUs"],
+            min_tokens=1,
+            max_tokens=500,
+        )
+
+        assert parsed.display_title == "Legacy Lab"
+        assert "Use Arm CPUs for inference." in chunks[0]["content"]
+
     def test_markdown_heading_anchor_is_used_as_chunk_url_fragment(self):
         parsed = parse_document_content(
             source_url="https://learn.arm.com/example/1-get-started/",
@@ -422,9 +599,59 @@ class TestSourceTracking:
             reader = csv.reader(f)
             rows = list(reader)
         
-        assert rows[0] == ['Site Name', 'License Type', 'Display Name', 'URL', 'Keywords']
-        assert rows[1] == ['Site 1', 'MIT', 'Display 1', 'https://example.com/1', 'key1; key2']
-        assert rows[2] == ['Site 2', 'Apache', 'Display 2', 'https://example.com/2', 'key3']
+        assert rows[0] == ['Site Name', 'License Type', 'Display Name', 'URL', 'Keywords', 'Transcript Source URL']
+        assert rows[1] == ['Site 1', 'MIT', 'Display 1', 'https://example.com/1', 'key1; key2', '']
+        assert rows[2] == ['Site 2', 'Apache', 'Display 2', 'https://example.com/2', 'key3', '']
+
+    def test_save_sources_csv_preserves_transcript_url(self, gc, tmp_path):
+        """Transcript Source URL must be written back to the CSV."""
+        gc.all_sources = [
+            {
+                'site_name': 'Educational Course',
+                'license_type': 'All rights reserved',
+                'display_name': 'Example Video',
+                'url': 'https://courses.edx.org/videos/example',
+                'keywords': 'arm; ai',
+                'transcript_source_url': 'https://github.com/arm-education/repo/blob/main/M1KV1.txt'
+            }
+        ]
+
+        csv_file = tmp_path / "output.csv"
+        gc.save_sources_csv(str(csv_file))
+
+        with open(csv_file, 'r') as f:
+            rows = list(csv.reader(f))
+
+        assert rows[0][-1] == 'Transcript Source URL'
+        assert rows[1] == [
+            'Educational Course',
+            'All rights reserved',
+            'Example Video',
+            'https://courses.edx.org/videos/example',
+            'arm; ai',
+            'https://github.com/arm-education/repo/blob/main/M1KV1.txt',
+        ]
+
+    def test_load_existing_sources_preserves_transcript_url(self, gc, tmp_path):
+        """Loading a CSV with a transcript column should retain it through a save round-trip."""
+        csv_file = tmp_path / "sources.csv"
+        csv_file.write_text(
+            "Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL\n"
+            "Educational Course,All rights reserved,Example Video,https://courses.edx.org/videos/example,arm; ai,"
+            "https://github.com/arm-education/repo/blob/main/M1KV1.txt\n"
+        )
+
+        gc.load_existing_sources(str(csv_file))
+
+        assert gc.all_sources[0]['transcript_source_url'] == (
+            "https://github.com/arm-education/repo/blob/main/M1KV1.txt"
+        )
+
+        gc.save_sources_csv(str(csv_file))
+
+        with open(csv_file, 'r') as f:
+            rows = list(csv.reader(f))
+        assert rows[1][-1] == "https://github.com/arm-education/repo/blob/main/M1KV1.txt"
 
     def test_load_and_save_roundtrip(self, gc, tmp_path):
         """Test that loading and saving preserves data."""
@@ -633,6 +860,37 @@ class TestReadInCSV:
         assert csv_dict['focus'] == ['key1', 'key2']
         assert csv_dict['site_names'] == ['Site1', 'Site2']
         assert csv_dict['license_types'] == ['MIT', 'Apache']
+
+    def test_read_csv_transcript_urls(self, gc, tmp_path):
+        """Test that the optional Transcript Source URL column is read."""
+        csv_file = tmp_path / "transcript.csv"
+        csv_file.write_text(
+            "Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL\n"
+            "Educational Course,All rights reserved,Video1,https://courses.edx.org/v/1,key1,"
+            "https://github.com/arm-education/repo/blob/main/M1KV1.txt\n"
+            "Site2,Apache,Display2,https://example.com/2,key2,\n"
+        )
+
+        csv_dict, length = gc.readInCSV(str(csv_file))
+
+        assert length == 2
+        assert csv_dict['transcript_urls'] == [
+            "https://github.com/arm-education/repo/blob/main/M1KV1.txt",
+            "",
+        ]
+
+    def test_read_csv_transcript_missing_column(self, gc, tmp_path):
+        """A CSV without the transcript column should yield empty transcript URLs."""
+        csv_file = tmp_path / "no_transcript.csv"
+        csv_file.write_text(
+            "Site Name,License Type,Display Name,URL,Keywords\n"
+            "Site1,MIT,Display1,https://example.com/1,key1\n"
+        )
+
+        csv_dict, length = gc.readInCSV(str(csv_file))
+
+        assert length == 1
+        assert csv_dict['transcript_urls'] == [""]
 
     def test_read_csv_empty(self, gc, tmp_path):
         """Test reading an empty CSV (header only)."""
@@ -868,6 +1126,134 @@ class TestArmDocumentationParsing:
         assert "scalable vector extension" in chunks[0].content
         assert chunks[1].url == "https://developer.arm.com/documentation/102376/0100/install"
         assert "target CPU for Cortex-A builds" in chunks[1].content
+
+
+class TestCreateChunksForSource:
+    """Tests for generic source chunking."""
+
+    def test_unparseable_pptx_source_returns_empty_and_logs(self, gc, monkeypatch, capsys):
+        source_url = "https://github.com/arm-education/AI-on-Arm/blob/main/slides/broken.pptx"
+        raw_url = "https://raw.githubusercontent.com/arm-education/AI-on-Arm/main/slides/broken.pptx"
+        fetched_urls = []
+
+        def fake_fetch(url):
+            fetched_urls.append(url)
+            return SimpleNamespace(
+                url=raw_url,
+                content=b"not a zip file",
+                headers={"content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation"},
+            )
+
+        monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
+
+        chunks = gc.create_chunks_for_source(
+            source_url=source_url,
+            source_name="Broken Slides",
+            doc_type="Educational Resource",
+            keywords_value="Arm CPUs",
+        )
+
+        assert fetched_urls == [raw_url]
+        assert chunks == []
+
+        captured = capsys.readouterr()
+        assert "[NO CHUNKS]" in captured.out
+        assert source_url in captured.out
+        assert raw_url in captured.out
+        assert "content_type: pptx" in captured.out
+
+
+class TestCreateTranscriptChunks:
+    """Tests for transcript-backed sources (Transcript Source URL column)."""
+
+    def _transcript_response(self, url, text, content_type="text/plain"):
+        return SimpleNamespace(
+            url=url,
+            content=text.encode("utf-8"),
+            headers={"content-type": content_type},
+        )
+
+    def test_transcript_used_instead_of_primary_url(self, gc, monkeypatch):
+        """When a transcript URL is set, content is fetched from the transcript."""
+        source_url = "https://courses.edx.org/videos/block-v1:example+type@video+block@abc"
+        transcript_url = "https://github.com/arm-education/repo/blob/main/M1KV1.txt"
+        raw_transcript_url = (
+            "https://raw.githubusercontent.com/arm-education/repo/main/M1KV1.txt"
+        )
+        transcript_text = (
+            "Arm processors deliver strong energy efficiency for AI inference workloads. "
+            * 60
+        )
+
+        fetched_urls = []
+
+        def fake_fetch(url):
+            fetched_urls.append(url)
+            return self._transcript_response(raw_transcript_url, transcript_text)
+
+        monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
+
+        chunks = gc.create_chunks_for_source(
+            source_url=source_url,
+            source_name="Energy efficiency for AI inference",
+            doc_type="Educational Course",
+            keywords_value="arm; ai; inference",
+            transcript_url=transcript_url,
+        )
+
+        # The GitHub blob URL must be resolved to a raw fetch URL.
+        assert fetched_urls == [raw_transcript_url]
+        assert len(chunks) >= 1
+        # User-facing link stays the primary source URL, not the transcript.
+        assert all(chunk.url == source_url for chunk in chunks)
+        assert all(chunk.doc_type == "Educational Course" for chunk in chunks)
+        assert "energy efficiency" in chunks[0].content.lower()
+
+    def test_transcript_fetch_failure_returns_empty(self, gc, monkeypatch, capsys):
+        """A failed transcript fetch should return no chunks and log both URLs."""
+        monkeypatch.setattr(gc, "fetch_with_logging", lambda url: None)
+
+        chunks = gc.create_chunks_for_source(
+            source_url="https://courses.edx.org/videos/example",
+            source_name="Example",
+            doc_type="Educational Course",
+            keywords_value="arm",
+            transcript_url="https://github.com/arm-education/repo/blob/main/missing.txt",
+        )
+
+        assert chunks == []
+
+        captured = capsys.readouterr()
+        assert "TRANSCRIPT FETCH FAILED" in captured.out
+        # Both the primary source URL and the transcript URL aid batch troubleshooting.
+        assert "https://courses.edx.org/videos/example" in captured.out
+        assert "https://github.com/arm-education/repo/blob/main/missing.txt" in captured.out
+        # The resolved raw fetch URL should also be logged.
+        assert "raw.githubusercontent.com/arm-education/repo/main/missing.txt" in captured.out
+
+    def test_blank_transcript_falls_back_to_primary_url(self, gc, monkeypatch):
+        """A blank transcript URL should not trigger transcript chunking."""
+        captured = {}
+
+        # create_chunks_for_source dispatches to the generic path via fetch; here we
+        # short-circuit by patching fetch to confirm the transcript branch is skipped.
+        def fake_fetch(url):
+            captured["fetched"] = url
+            return None
+
+        monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
+
+        chunks = gc.create_chunks_for_source(
+            source_url="https://learn.arm.com/learning-paths/example/",
+            source_name="Example",
+            doc_type="Learning Paths",
+            keywords_value="arm",
+            transcript_url="   ",
+        )
+
+        # Transcript branch skipped -> generic path attempted a fetch of the primary URL.
+        assert "fetched" in captured
+        assert chunks == []
 
 
 class TestCreateRetrySession:

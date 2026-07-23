@@ -7,9 +7,12 @@ from io import BytesIO
 import base64
 import json
 import math
+import posixpath
 import re
 from typing import Dict, Iterable, List, Optional
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
+from xml.etree import ElementTree
+from zipfile import BadZipFile, ZipFile
 
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
@@ -22,8 +25,17 @@ MARKDOWN_HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.*)$")
 MARKDOWN_HEADING_ANCHOR_PATTERN = re.compile(r"^(.*?)\s*\{#([A-Za-z0-9_-]+)\}\s*$")
 MARKDOWN_FENCE_PATTERN = re.compile(r"^(```|~~~)")
 MARKDOWN_LINK_PATTERN = re.compile(r'(?<!!)\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)')
+PPTX_SLIDE_PATH_PATTERN = re.compile(r"^ppt/slides/slide(\d+)\.xml$")
+PPTX_PLACEHOLDER_LINE_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"^click to add (title|subtitle|text|notes)$",
+    )
+]
 HTML_HEADING_TAGS = {f"h{level}" for level in range(1, 7)}
 HTML_BLOCK_TAGS = HTML_HEADING_TAGS | {"p", "li", "pre", "code", "table"}
+DRAWINGML_NS = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+OFFICE_RELATIONSHIP_NS = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 BOILERPLATE_LINE_PATTERNS = [
     re.compile(pattern, re.IGNORECASE)
     for pattern in (
@@ -497,6 +509,284 @@ def parse_pdf(pdf_bytes: bytes, source_url: str, resolved_url: str, fallback_tit
     )
 
 
+def is_pptx_placeholder_line(line: str) -> bool:
+    line = clean_text(line)
+    return any(pattern.match(line) for pattern in PPTX_PLACEHOLDER_LINE_PATTERNS)
+
+
+def pptx_slide_sort_key(slide_name: str) -> int:
+    match = PPTX_SLIDE_PATH_PATTERN.match(slide_name)
+    return int(match.group(1)) if match else 0
+
+
+def pptx_part_path(base_part: str, target: str) -> str:
+    if target.startswith("/"):
+        return posixpath.normpath(target.lstrip("/"))
+    return posixpath.normpath(posixpath.join(posixpath.dirname(base_part), target))
+
+
+def pptx_relationships(relationship_xml: bytes) -> List[dict]:
+    try:
+        root = ElementTree.fromstring(relationship_xml)
+    except ElementTree.ParseError:
+        return []
+
+    relationships = []
+    for relationship in root:
+        if not relationship.tag.endswith("Relationship"):
+            continue
+        relationships.append(
+            {
+                "id": relationship.attrib.get("Id", ""),
+                "type": relationship.attrib.get("Type", ""),
+                "target": relationship.attrib.get("Target", ""),
+            }
+        )
+    return relationships
+
+
+def pptx_slide_names(archive: ZipFile) -> List[str]:
+    slide_names = {name for name in archive.namelist() if PPTX_SLIDE_PATH_PATTERN.match(name)}
+    if not slide_names:
+        return []
+
+    try:
+        presentation = ElementTree.fromstring(archive.read("ppt/presentation.xml"))
+        relationship_by_id = {
+            relationship["id"]: relationship
+            for relationship in pptx_relationships(archive.read("ppt/_rels/presentation.xml.rels"))
+        }
+    except (KeyError, ElementTree.ParseError):
+        return sorted(slide_names, key=pptx_slide_sort_key)
+
+    ordered_slide_names = []
+    for slide_id in presentation.iter():
+        relationship_id = slide_id.attrib.get(f"{OFFICE_RELATIONSHIP_NS}id")
+        relationship = relationship_by_id.get(relationship_id)
+        if not relationship:
+            continue
+        # The slide filename suffix can have gaps or differ from presentation
+        # order after edits, so prefer the explicit order from presentation.xml.
+        slide_name = pptx_part_path("ppt/presentation.xml", relationship["target"])
+        if slide_name in slide_names and slide_name not in ordered_slide_names:
+            ordered_slide_names.append(slide_name)
+
+    remaining_slide_names = sorted(slide_names.difference(ordered_slide_names), key=pptx_slide_sort_key)
+    return ordered_slide_names + remaining_slide_names
+
+
+def pptx_paragraph_text(paragraph) -> str:
+    parts: List[str] = []
+    for node in paragraph.iter():
+        if node.tag == f"{DRAWINGML_NS}t":
+            parts.append(node.text or "")
+        elif node.tag == f"{DRAWINGML_NS}br":
+            parts.append("\n")
+        elif node.tag == f"{DRAWINGML_NS}tab":
+            parts.append("\t")
+    return clean_text("".join(parts))
+
+
+def pptx_text_lines(xml_bytes: bytes) -> List[str]:
+    try:
+        root = ElementTree.fromstring(xml_bytes)
+    except ElementTree.ParseError:
+        return []
+
+    lines: List[str] = []
+    for paragraph in root.iter(f"{DRAWINGML_NS}p"):
+        text = pptx_paragraph_text(paragraph)
+        if text and not is_boilerplate_line(text) and not is_pptx_placeholder_line(text):
+            lines.append(text)
+    return lines
+
+
+def pptx_notes_path_for_slide(archive: ZipFile, slide_name: str) -> str:
+    relationship_path = posixpath.join(
+        posixpath.dirname(slide_name),
+        "_rels",
+        posixpath.basename(slide_name) + ".rels",
+    )
+    try:
+        relationships = pptx_relationships(archive.read(relationship_path))
+    except KeyError:
+        return ""
+
+    for relationship in relationships:
+        if relationship["type"].endswith("/notesSlide") and relationship["target"]:
+            return pptx_part_path(slide_name, relationship["target"])
+    return ""
+
+
+def pptx_slide_blocks(archive: ZipFile, slide_name: str) -> List[Block]:
+    try:
+        slide_lines = pptx_text_lines(archive.read(slide_name))
+    except KeyError:
+        return []
+
+    blocks = [Block("paragraph", line) for line in slide_lines]
+
+    notes_path = pptx_notes_path_for_slide(archive, slide_name)
+    if notes_path:
+        try:
+            notes_lines = pptx_text_lines(archive.read(notes_path))
+        except KeyError:
+            notes_lines = []
+        if notes_lines:
+            blocks.append(Block("paragraph", "Speaker notes:\n" + "\n".join(notes_lines)))
+
+    return blocks
+
+
+def parse_pptx(pptx_bytes: bytes, source_url: str, resolved_url: str, fallback_title: str) -> ParsedDocument:
+    sections: List[Section] = []
+    document_title = fallback_title
+    try:
+        with ZipFile(BytesIO(pptx_bytes)) as archive:
+            # PPTX content is stored as zipped XML. Read slide and notes text runs
+            # directly so images, themes, layouts, and other binary parts are ignored.
+            for slide_number, slide_name in enumerate(pptx_slide_names(archive), start=1):
+                blocks = pptx_slide_blocks(archive, slide_name)
+                if not blocks:
+                    continue
+                if document_title == fallback_title:
+                    first_line = next((block.text for block in blocks if block.text), "")
+                    if first_line and len(first_line.split()) <= 12:
+                        document_title = first_line
+                sections.append(Section([f"Slide {slide_number}"], blocks))
+    except BadZipFile:
+        sections = []
+
+    return ParsedDocument(
+        source_url=source_url,
+        resolved_url=resolved_url,
+        display_title=document_title,
+        content_type="pptx",
+        sections=sections,
+    )
+
+
+def notebook_source_to_text(source) -> str:
+    if isinstance(source, list):
+        return "".join(str(part) for part in source if part is not None)
+    if isinstance(source, str):
+        return source
+    return ""
+
+
+def notebook_cells(notebook_data: dict) -> List[dict]:
+    cells = notebook_data.get("cells")
+    if isinstance(cells, list):
+        return [cell for cell in cells if isinstance(cell, dict)]
+
+    worksheets = notebook_data.get("worksheets", [])
+    if not isinstance(worksheets, list):
+        return []
+
+    cells = []
+    for worksheet in worksheets:
+        if isinstance(worksheet, dict) and isinstance(worksheet.get("cells"), list):
+            cells.extend(cell for cell in worksheet["cells"] if isinstance(cell, dict))
+    return cells
+
+
+def notebook_output_to_text(output) -> str:
+    if not isinstance(output, dict):
+        return ""
+
+    if output.get("output_type") == "stream":
+        return notebook_source_to_text(output.get("text"))
+
+    if output.get("output_type") == "error":
+        traceback = notebook_source_to_text(output.get("traceback"))
+        if traceback:
+            return traceback
+        error_parts = (output.get("ename", ""), output.get("evalue", ""))
+        return clean_text(" ".join(part for part in error_parts if part))
+
+    data = output.get("data")
+    if isinstance(data, dict):
+        # Keep text-like renderings and intentionally skip image/widget payloads;
+        # those are usually base64 blobs or structured state, not retrieval text.
+        for mime_type in ("text/markdown", "text/plain", "text/html"):
+            if mime_type not in data:
+                continue
+            text = notebook_source_to_text(data.get(mime_type))
+            if mime_type == "text/html":
+                text = BeautifulSoup(text, "html.parser").get_text(" ", strip=True)
+            return text
+
+    return ""
+
+
+def markdown_code_fence(text: str, language: str = "") -> str:
+    fence = "~~~" if "```" in text else "```"
+    return f"{fence}{language}\n{text.rstrip()}\n{fence}"
+
+
+def notebook_to_markdown(notebook_data: dict, fallback_title: str) -> str:
+    metadata = notebook_data.get("metadata", {}) if isinstance(notebook_data, dict) else {}
+    language = ""
+    if isinstance(metadata, dict):
+        kernelspec = metadata.get("kernelspec", {})
+        language_info = metadata.get("language_info", {})
+        if isinstance(kernelspec, dict):
+            language = clean_text(kernelspec.get("language", ""))
+        if not language and isinstance(language_info, dict):
+            language = clean_text(language_info.get("name", ""))
+    language = re.sub(r"[^A-Za-z0-9_+.-]", "", language)
+
+    parts: List[str] = []
+    # Convert notebook cells into markdown so the existing parser can reuse its
+    # heading, code-block, and chunk-sizing behavior instead of indexing raw JSON.
+    for cell in notebook_cells(notebook_data):
+        cell_type = cell.get("cell_type")
+        source_text = notebook_source_to_text(cell.get("source")).strip()
+
+        if cell_type == "markdown":
+            if source_text:
+                parts.append(source_text)
+        elif cell_type == "code":
+            if source_text:
+                parts.append(markdown_code_fence(source_text, language))
+            outputs = cell.get("outputs", [])
+            if not isinstance(outputs, list):
+                outputs = []
+            output_texts = [
+                text
+                for text in (notebook_output_to_text(output).strip() for output in outputs)
+                if text
+            ]
+            if output_texts:
+                parts.append("Output:\n\n" + markdown_code_fence("\n\n".join(output_texts), "text"))
+        elif source_text:
+            parts.append(source_text)
+
+    if not parts:
+        parts.append(fallback_title)
+    return clean_text("\n\n".join(parts))
+
+
+def parse_notebook(notebook_json: str, source_url: str, resolved_url: str, fallback_title: str) -> ParsedDocument:
+    try:
+        notebook_data = json.loads(notebook_json)
+    except json.JSONDecodeError:
+        return parse_markdown(notebook_json, source_url, resolved_url, fallback_title)
+    if not isinstance(notebook_data, dict):
+        return parse_markdown(notebook_json, source_url, resolved_url, fallback_title)
+    if not notebook_cells(notebook_data) and "cells" not in notebook_data and "worksheets" not in notebook_data:
+        return parse_markdown(notebook_json, source_url, resolved_url, fallback_title)
+
+    parsed_document = parse_markdown(
+        notebook_to_markdown(notebook_data, fallback_title),
+        source_url,
+        resolved_url,
+        fallback_title,
+    )
+    parsed_document.content_type = "notebook"
+    return parsed_document
+
+
 def parse_document_content(
     source_url: str,
     resolved_url: str,
@@ -507,7 +797,15 @@ def parse_document_content(
     content_type = (content_type or "").lower()
     if "pdf" in content_type or resolved_url.lower().endswith(".pdf"):
         return parse_pdf(response_content, source_url, resolved_url, fallback_title)
+    # Raw GitHub-hosted PPTX files may be served as generic binary content; use
+    # the resolved path before attempting to decode the file as UTF-8 text.
+    if "presentationml" in content_type or urlparse(resolved_url).path.lower().endswith(".pptx"):
+        return parse_pptx(response_content, source_url, resolved_url, fallback_title)
     decoded = response_content.decode("utf-8", errors="ignore")
+    # GitHub/raw notebook fetches are often served as generic JSON or text, so
+    # use the resolved path as the primary signal for notebook parsing.
+    if "ipynb" in content_type or urlparse(resolved_url).path.lower().endswith(".ipynb"):
+        return parse_notebook(decoded, source_url, resolved_url, fallback_title)
     if "markdown" in content_type or resolved_url.lower().endswith(".md"):
         return parse_markdown(decoded, source_url, resolved_url, fallback_title)
     if "html" in content_type or "<html" in decoded.lower():

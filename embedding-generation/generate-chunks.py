@@ -148,13 +148,14 @@ def load_existing_sources(csv_file):
                     'license_type': row.get('License Type', ''),
                     'display_name': row.get('Display Name', ''),
                     'url': url,
-                    'keywords': row.get('Keywords', '')
+                    'keywords': row.get('Keywords', ''),
+                    'transcript_source_url': (row.get('Transcript Source URL', '') or '').strip()
                 })
     
     print(f"Loaded {len(all_sources)} existing sources from '{csv_file}'")
 
 
-def register_source(site_name, license_type, display_name, url, keywords):
+def register_source(site_name, license_type, display_name, url, keywords, transcript_source_url=''):
     """
     Register a new source URL. If the URL already exists, skip it.
     Returns True if the source was added, False if it was a duplicate.
@@ -173,7 +174,8 @@ def register_source(site_name, license_type, display_name, url, keywords):
         'license_type': license_type,
         'display_name': display_name,
         'url': url,
-        'keywords': keywords if isinstance(keywords, str) else '; '.join(keywords)
+        'keywords': keywords if isinstance(keywords, str) else '; '.join(keywords),
+        'transcript_source_url': (transcript_source_url or '').strip()
     }
 
     # Keep discovered sources grouped with their existing site section instead of
@@ -198,14 +200,15 @@ def save_sources_csv(csv_file):
     """
     with open(csv_file, 'w', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
-        writer.writerow(['Site Name', 'License Type', 'Display Name', 'URL', 'Keywords'])
+        writer.writerow(['Site Name', 'License Type', 'Display Name', 'URL', 'Keywords', 'Transcript Source URL'])
         for source in all_sources:
             writer.writerow([
                 source['site_name'],
                 source['license_type'],
                 source['display_name'],
                 source['url'],
-                source['keywords']
+                source['keywords'],
+                source.get('transcript_source_url', '')
             ])
     
     print(f"Saved {len(all_sources)} sources to '{csv_file}'")
@@ -728,6 +731,7 @@ def readInCSV(csv_file):
         'source_names': [],
         'site_names': [],
         'license_types': [],
+        'transcript_urls': [],
     }
     
     if not os.path.exists(csv_file):
@@ -741,6 +745,7 @@ def readInCSV(csv_file):
             csv_dict['source_names'].append(row.get('Display Name', ''))
             csv_dict['site_names'].append(row.get('Site Name', ''))
             csv_dict['license_types'].append(row.get('License Type', ''))
+            csv_dict['transcript_urls'].append((row.get('Transcript Source URL', '') or '').strip())
     
     return csv_dict, len(csv_dict['urls'])
 
@@ -877,7 +882,77 @@ def parse_keywords(keywords_value, title=""):
     return keywords
 
 
-def create_chunks_for_source(source_url, source_name, doc_type, keywords_value):
+def log_no_parsed_sections(parsed_document, source_url, source_name, transcript_url=""):
+    if parsed_document.sections:
+        return False
+
+    context = f"source: {source_url}"
+    if transcript_url:
+        context += f"; transcript: {transcript_url}"
+    print(
+        "[NO CHUNKS] no parseable content for "
+        f"{source_name or parsed_document.display_title} ({context}; "
+        f"resolved: {parsed_document.resolved_url}; content_type: {parsed_document.content_type})"
+    )
+    return True
+
+
+def create_transcript_chunks(source_url, transcript_url, source_name, doc_type, keywords_value):
+    """Chunk a transcript document on behalf of a primary source.
+
+    Some sources (for example edX course videos) have no directly chunkable text
+    at their primary URL. When a "Transcript Source URL" is provided in the CSV,
+    we fetch and chunk that transcript document instead, but keep the primary
+    ``source_url`` as the user-facing link so retrieval still points users at
+    the original content.
+    """
+    normalized_source_url = normalize_source_url(source_url)
+    fetch_url = source_to_fetch_url(normalize_source_url(transcript_url))
+    response = fetch_with_logging(fetch_url)
+    if response is None:
+        print(f"[TRANSCRIPT FETCH FAILED] for {normalized_source_url} (transcript: {transcript_url}): {fetch_url}")
+        return []
+
+    keywords = parse_keywords(keywords_value, source_name)
+    parsed_document = parse_document_content(
+        source_url=normalize_source_url(transcript_url),
+        resolved_url=response.url,
+        response_content=response.content,
+        content_type=response.headers.get("content-type", ""),
+        fallback_title=source_name,
+    )
+    # Keep the primary URL as the user-facing link while still using the transcript
+    # URL as the base for resolving any relative links inside the transcript content.
+    parsed_document.source_url = normalized_source_url
+    if log_no_parsed_sections(parsed_document, normalized_source_url, source_name, transcript_url):
+        return []
+
+    chunks = []
+    for payload in chunk_parsed_document(parsed_document, doc_type=doc_type or "Transcript", keywords=keywords):
+        chunks.append(
+            createChunk(
+                text_snippet=payload["content"],
+                WEBSITE_url=normalized_source_url,
+                keywords=keywords,
+                title=payload["title"] or source_name,
+                heading=payload["heading"],
+                heading_path=payload["heading_path"],
+                doc_type=payload["doc_type"],
+                product=payload["product"],
+                version=payload["version"],
+                resolved_url=response.url,
+                content_type=payload["content_type"],
+            )
+        )
+    return chunks
+
+
+def create_chunks_for_source(source_url, source_name, doc_type, keywords_value, transcript_url=""):
+    # When a transcript source is provided, chunk that document instead of
+    # fetching the primary URL (which may be a video player or other non-text page),
+    # while keeping the primary URL as the user-facing link for retrieval.
+    if transcript_url and transcript_url.strip():
+        return create_transcript_chunks(source_url, transcript_url, source_name, doc_type, keywords_value)
     if doc_type == "Ecosystem Dashboard":
         return create_ecosystem_dashboard_chunk(source_url, source_name, keywords_value)
     if is_arm_developer_documentation_url(source_url):
@@ -887,7 +962,7 @@ def create_chunks_for_source(source_url, source_name, doc_type, keywords_value):
     fetch_url = source_to_fetch_url(normalized_source_url)
     response = fetch_with_logging(fetch_url)
     if response is None:
-        print('not valid, ', fetch_url)
+        print(f"Fetch failed for {normalized_source_url}: {fetch_url}")
         return []
 
     sources_to_parse = [(normalized_source_url, response)]
@@ -906,6 +981,8 @@ def create_chunks_for_source(source_url, source_name, doc_type, keywords_value):
             content_type=source_response.headers.get("content-type", ""),
             fallback_title=source_name,
         )
+        if log_no_parsed_sections(parsed_document, display_url, source_name):
+            continue
         for payload in chunk_parsed_document(parsed_document, doc_type=doc_type or "Documentation", keywords=keywords):
             chunks.append(
                 createChunk(
@@ -970,6 +1047,8 @@ def create_arm_documentation_chunks(source_url, source_name, doc_type, keywords_
             resolved_url=response.url,
             fallback_title=document_title,
         )
+        if log_no_parsed_sections(parsed_document, display_url, document_title):
+            continue
         for payload in chunk_parsed_document(parsed_document, doc_type=doc_type or "Documentation", keywords=keywords):
             chunks.append(
                 createChunk(
@@ -1104,8 +1183,9 @@ def main():
         source_name = csv_dict['source_names'][i]
         doc_type = csv_dict['site_names'][i]
         keywords_value = csv_dict['focus'][i]
+        transcript_url = csv_dict['transcript_urls'][i]
 
-        for chunk in create_chunks_for_source(url, source_name, doc_type, keywords_value):
+        for chunk in create_chunks_for_source(url, source_name, doc_type, keywords_value, transcript_url):
             chunkSaveAndTrack(url, chunk)
 
     # Save updated sources CSV with all discovered sources

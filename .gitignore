@@ -31,3 +31,10 @@ documentation-updater/reports/
 # OS
 .DS_Store
 Thumbs.db
+
+# intrinsic chunks
+embedding-generation/intrinsic_chunks/*.yaml
+embedding-generation/*.txt
+embedding-generation/metadata.json
+embedding-generation/usearch_index.bin
+
