@@ -2594,5 +2594,441 @@
     "expected_urls": [
       "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/1-get-started/#devices"
     ]
+  },
+  {
+    "question": "What is Arm SME, the Scalable Matrix Extension introduced for matrix processing?",
+    "expected_urls": [
+      "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/arm-scalable-matrix-extension-introduction",
+      "https://developer.arm.com/documentation/109974/0100/Overview-of-SME?lang=en"
+    ]
+  },
+  {
+    "question": "Can you explain the difference between SME and SME2?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/SME-and-SME2?lang=en"
+    ]
+  },
+  {
+    "question": "How do SVE, SVE2, and SME extend the Armv9-A architecture for vector and matrix processing?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/Introduction?lang=en",
+      "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/scalable-matrix-extension-armv9-a-architecture"
+    ]
+  },
+  {
+    "question": "How does SME context save and restore preserve Streaming SVE mode and ZA storage state?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/SME-context-save-restore?lang=en"
+    ]
+  },
+  {
+    "question": "How does ZA storage work in SME?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/SME-ZA-storage?lang=en"
+    ]
+  },
+  {
+    "question": "How do I check if SME or SME2 is supported?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/SME-and-SME2/If-SME-and-SME2-are-supported?lang=en"
+    ]
+  },
+  {
+    "question": "How can I compile and run an application that uses SME on Arm?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/Toolchains-and-model-support/How-to-run-an-SME-application?lang=en"
+    ]
+  },
+  {
+    "question": "Can you give me a quick explanation of SME and SME2?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109974/0100/What-is-SME-SME2-?lang=en"
+    ]
+  },
+  {
+    "question": "How does SME2 multi-vector predication work?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/SME-and-SME2/SME2-multi-vector-predication?lang=en"
+    ]
+  },
+  {
+    "question": "How can I use SME multi-vector loads to load multiple Z registers more efficiently?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/Memory-access/Use-multi-vector-SME-loads-for-better-efficiency?lang=en"
+    ]
+  },
+  {
+    "question": "How do SME2 lookup table instructions work?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/SME-and-SME2/SME2-lookup-table?lang=en"
+    ]
+  },
+  {
+    "question": "How do SME2 multi-vector operands work?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/SME2-multi-vector-operands?lang=en"
+    ]
+  },
+  {
+    "question": "What is Streaming SVE mode and when would I use it?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/Streaming-SVE-mode?lang=en"
+    ]
+  },
+  {
+    "question": "Which compiler options, feature identifiers, or ACLE pragmas do I need for SME code?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/Toolchains-and-model-support/Compiler-support/Compiler-options-and-pragmas?lang=en"
+    ]
+  },
+  {
+    "question": "How do ZA tiles map to array vectors?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/SME-ZA-storage/ZA-array-vector-access-and-ZA-tile-mapping?lang=en"
+    ]
+  },
+  {
+    "question": "Which Arm Compiler and Clang versions support SME and SME2 applications?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/Toolchains-and-model-support/Compiler-support?lang=en"
+    ]
+  },
+  {
+    "question": "What is the preprocess_r function for int8-to-int32 matrix multiplication?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-r-function-overview?lang=en"
+    ]
+  },
+  {
+    "question": "What tools can I use to debug SME code?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/Toolchains-and-model-support/Debug-tools?lang=en"
+    ]
+  },
+  {
+    "question": "How do I control Streaming SVE mode with SMSTART and SMSTOP in SME code?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/Streaming-SVE-mode?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/Toolchains-and-model-support/Calling-conventions/Controlling-the-use-of-streaming-mode?lang=en"
+    ]
+  },
+  {
+    "question": "How should I handle Streaming SVE mode across function boundaries?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/Toolchains-and-model-support/Calling-conventions/Controlling-the-use-of-streaming-mode/Managing-streaming-mode-across-function-boundaries?lang=en"
+    ]
+  },
+  {
+    "question": "Can you show me a minimal SME assembly example?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109974/0100/Basic-SME-example/Assembly-code?lang=en"
+    ]
+  },
+  {
+    "question": "What is the preprocess_l function for int8-to-int32 matrix multiplication?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-l-function-overview?lang=en"
+    ]
+  },
+  {
+    "question": "What is the preprocess_l function for FP32 matrix multiplication?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/preprocess-l-function-overview?lang=en"
+    ]
+  },
+  {
+    "question": "What calling conventions do I need to follow when writing SME code?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/Toolchains-and-model-support/Calling-conventions?lang=en"
+    ]
+  },
+  {
+    "question": "What is the lut_gemv_opt function?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/lut-gemv-rm-int8--Compressed-8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/lut-gemv-opt-function-overview?lang=en"
+    ]
+  },
+  {
+    "question": "How do I control ZA storage use across function calls?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/Toolchains-and-model-support/Calling-conventions/Controlling-the-use-of-ZA-storage?lang=en"
+    ]
+  },
+  {
+    "question": "What does the matmul_opt function do in the FP32 SME matrix-by-matrix multiplication example?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/matmul-opt-function-overview?lang=en"
+    ]
+  },
+  {
+    "question": "How is Streaming SVE used in SME code?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109974/0100/Streaming-SVE?lang=en"
+    ]
+  },
+  {
+    "question": "What changes did SME add to Armv9-A?",
+    "expected_urls": [
+      "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/scalable-matrix-extension-armv9-a-architecture"
+    ]
+  },
+  {
+    "question": "How can I implement FP32 matrix multiplication with SME2?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/Overview-of-the-matmul-fp32-algorithm?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/matmul-opt-code?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/matmul-opt-function-details?lang=en",
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/"
+    ]
+  },
+  {
+    "question": "How can I use SME2 to multiply 8-bit integer matrices and produce 32-bit results?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/Overview-of-the-matmul-int8-algorithm?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/matmul-opt-function-overview?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/matmul-opt-code?lang=en"
+    ]
+  },
+  {
+    "question": "How can I do int8 matrix-by-vector multiplication with SME?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/lut-gemv-rm-int8--Compressed-8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication?lang=en"
+    ]
+  },
+  {
+    "question": "How does an int8 matrix-vector multiply algorithm work with SME?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/gemv-cm-int8--8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/Overview-of-the-gemv-cm-int8-algorithm?lang=en"
+    ]
+  },
+  {
+    "question": "What does the lut_gemv_opt function do for SME2 compressed int8 matrix-vector multiplication?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/lut-gemv-rm-int8--Compressed-8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/Overview-of-the-lut-gemv-rm-int8-algorithm?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/lut-gemv-rm-int8--Compressed-8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/lut-gemv-opt-code?lang=en"
+    ]
+  },
+  {
+    "question": "Can you give me a beginner-friendly introduction to Arm SME?",
+    "expected_urls": [
+      "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/arm-scalable-matrix-extension-introduction"
+    ]
+  },
+  {
+    "question": "What should my code do before entering or leaving Streaming SVE mode?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/Toolchains-and-model-support/Calling-conventions/Preparation-for-entering-and-exiting-streaming-mode?lang=en"
+    ]
+  },
+  {
+    "question": "Which SME load and store instructions should I use?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109974/0100/Introduction-to-SME-instructions/Load-and-Store?lang=en"
+    ]
+  },
+  {
+    "question": "Which SME ZA tile instructions should I learn?",
+    "expected_urls": [
+      "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/arm-scalable-matrix-extension-introduction-p2"
+    ]
+  },
+  {
+    "question": "How do SME2 multi-vector and lookup-table features extend SME?",
+    "expected_urls": [
+      "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/part4-arm-sme2-introduction",
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/overview/"
+    ]
+  },
+  {
+    "question": "What does the gemv_opt function do for SME2 column-major int8 matrix-vector multiplication?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/gemv-cm-int8--8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/gemv-opt-function-overview?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/gemv-cm-int8--8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/gemv-opt-code?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/gemv-cm-int8--8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/gemv-opt-function-details?lang=en"
+    ]
+  },
+  {
+    "question": "How would I port matrix multiplication from Neon or SVE to SME?",
+    "expected_urls": [
+      "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/matrix-matrix-multiplication-neon-sve-and-sme-compared"
+    ]
+  },
+  {
+    "question": "What is the preprocess_l code for FP32 SME matrix-by-matrix multiplication?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/preprocess-l-code?lang=en"
+    ]
+  },
+  {
+    "question": "What is the preprocess_r code for int8-to-int32 SME matrix-by-matrix multiplication?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-r-code?lang=en"
+    ]
+  },
+  {
+    "question": "How do Streaming SVE mode and ZA storage fit together in SME?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/Introduction/The-Scalable-Matrix-Extensions/Streaming-SVE-mode-and-ZA-storage?lang=en"
+    ]
+  },
+  {
+    "question": "What is the preprocess_l code for int8-to-int32 SME matrix-by-matrix multiplication?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-l-code?lang=en"
+    ]
+  },
+  {
+    "question": "What memory access capabilities does CME provide?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/Memory-access?lang=en"
+    ]
+  },
+  {
+    "question": "How do Z registers relate to ZA storage in SME?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109974/0100/ZA-storage/Z-registers?lang=en"
+    ]
+  },
+  {
+    "question": "What are the preprocess_r function details for int8-to-int32 SME matrix-by-matrix multiplication?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-r-function-details?lang=en"
+    ]
+  },
+  {
+    "question": "How are matrices used in real applications?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109974/0100/Why-are-matrices-used-/Real-world-examples?lang=en"
+    ]
+  },
+  {
+    "question": "Can you give me an intro to CME?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/Introduction-to-CME?lang=en"
+    ]
+  },
+  {
+    "question": "What are the programming implications of different CME system configurations?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/CME-system-configurations/Implications-for-programmers?lang=en"
+    ]
+  },
+  {
+    "question": "What are the preprocess_l function details for int8-to-int32 SME matrix-by-matrix multiplication?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-l-function-details?lang=en"
+    ]
+  },
+  {
+    "question": "What are the lut_gemv_opt function details for compressed int8 lookup-table SME matrix-by-vector multiplication?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/lut-gemv-rm-int8--Compressed-8-bit-integer-to-32-bit-integer-matrix-by-vector-multiplication/lut-gemv-opt-function-details?lang=en"
+    ]
+  },
+  {
+    "question": "How can I avoid memory access conflicts between CPU instructions and SME instructions on the CME?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/Memory-access/Avoid-access-conflicts-in-1KB-regions?lang=en"
+    ]
+  },
+  {
+    "question": "How do CME performance monitoring, PMU events, and SPE sampling work?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/Performance-monitoring/CME-and-the-PMU?lang=en",
+      "https://developer.arm.com/documentation/110636/0100/Performance-monitoring?lang=en"
+    ]
+  },
+  {
+    "question": "Which CME pipeline components matter when I am optimizing SME code?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/Introduction-to-CME/CME-components?lang=en"
+    ]
+  },
+  {
+    "question": "Which CME activity can I track with PMU events?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/Performance-monitoring/CME-and-the-PMU?lang=en"
+    ]
+  },
+  {
+    "question": "How should I think about ZA storage when writing SME code?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109974/0100/ZA-storage?lang=en"
+    ]
+  },
+  {
+    "question": "What are the preprocess_l function details for FP32 SME matrix-by-matrix multiplication?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/matmul-fp32--Single-precision-matrix-by-matrix-multiplication/preprocess-l-function-details?lang=en"
+    ]
+  },
+  {
+    "question": "Can I use SPE to understand CME performance?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/Performance-monitoring/CME-and-the-SPE?lang=en"
+    ]
+  },
+  {
+    "question": "What are the programming implications of CME instruction execution and CPU-CME synchronization in loops?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/CME-instruction-execution/Implications-for-programmers?lang=en"
+    ]
+  },
+  {
+    "question": "Why does an operating system use Fast Context Switching Instructions with CME?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/CME-system-configurations/Fast-Context-Switching-Instructions?lang=en"
+    ]
+  },
+  {
+    "question": "How do CME system configurations, including single-CME systems, work?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/CME-system-configurations/Single-CME-systems?lang=en",
+      "https://developer.arm.com/documentation/110636/0100/CME-system-configurations?lang=en"
+    ]
+  },
+  {
+    "question": "Can you show me a CME loop that avoids synchronization back to the CPU?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/CME-instruction-execution/Example-1--efficient-loop?lang=en"
+    ]
+  },
+  {
+    "question": "How does predication work in SME?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109974/0100/Predication?lang=en"
+    ]
+  },
+  {
+    "question": "Why do predicate or flag updates make a CME loop inefficient?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/CME-instruction-execution/Example-2--inefficient-loop?lang=en"
+    ]
+  },
+  {
+    "question": "How do I avoid Matrix Multiply Unit stalls from reusing the same ZA tile?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/Matrix-Multiply-Unit/Implications-for-programmers?lang=en"
+    ]
+  },
+  {
+    "question": "Which SME outer-product operations use the CME Matrix Multiply Unit?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/Matrix-Multiply-Unit?lang=en"
+    ]
+  },
+  {
+    "question": "Which instructions run on the CPU versus the CME, and when is synchronization required?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/CME-instruction-execution?lang=en"
+    ]
+  },
+  {
+    "question": "Can you tell me more about multi-CME system?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/CME-system-configurations/Multi-CME-systems?lang=en"
+    ]
   }
 ]
