@@ -3260,7 +3260,7 @@
     ]
   },
   {
-    "question": "What is the preprocess_r code for int8-to-int32 SME matrix-by-matrix multiplication?",
+    "question": "Where can I find the int8 preprocess_r code?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-r-code?lang=en"
     ]
@@ -3272,7 +3272,7 @@
     ]
   },
   {
-    "question": "What is the preprocess_l code for int8-to-int32 SME matrix-by-matrix multiplication?",
+    "question": "Where can I find the int8 preprocess_l code?",
     "expected_urls": [
       "https://developer.arm.com/documentation/109246/0101/matmul-int8--8-bit-integer-to-32-bit-integer-matrix-by-matrix-multiplication/preprocess-l-code?lang=en"
     ]
