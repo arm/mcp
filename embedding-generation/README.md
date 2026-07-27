@@ -22,10 +22,6 @@ The Dockerfile:
 5. Runs `local_vectorstore_creation.py` with the acquired model and networking disabled.
 6. Copies only `metadata.json` and `usearch_index.bin` into the final image.
 
-The Dockerfile retains the existing `requirements.txt` installation for compatibility
-with the current workflow. Moving the image build to `uv.lock`, separating acquisition
-from generation, and publishing the model with the embeddings are follow-up work.
-
 ## Add Documents
 
 Add one row to `vector-db-sources.csv` for each document:
@@ -102,7 +98,7 @@ SKIP_DISCOVERY=1 uv run ./run-question-eval.sh
 Run lint and tests with:
 
 ```sh
-uv run ruff check . ../arm_kb_search/resources.py
+uv run ruff check .
 uv run pytest
 ```
 

@@ -5,13 +5,11 @@ on:
     branches: [main, secure-build]
     paths:
       - 'embedding-generation/**'
-      - 'arm_kb_search/resources.py'
       - '.github/workflows/embedding-unit-tests.yml'
   pull_request:
     branches: [main, secure-build]
     paths:
       - 'embedding-generation/**'
-      - 'arm_kb_search/resources.py'
       - '.github/workflows/embedding-unit-tests.yml'
 
 jobs:
@@ -37,7 +35,7 @@ jobs:
           pip install pytest ruff
 
       - name: Run lint
-        run: ruff check . ../arm_kb_search/resources.py
+        run: ruff check .
 
       - name: Run unit tests
         run: python -m pytest tests/ -v --tb=short
