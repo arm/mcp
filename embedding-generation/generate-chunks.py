@@ -519,7 +519,7 @@ def createIntrinsicsDatabaseChunks():
             intrinsic_content += (
                 "\n2. Add the now included .h header file containing the intrinsic:\n"
             )
-            if {intrinsic["SIMD_ISA"]} == "Neon":
+            if intrinsic["SIMD_ISA"] == "Neon":
                 intrinsic_content += "`#include <arm_neon.h>`"
             else:
                 intrinsic_content += "`#include <arm_sve.h>`"
@@ -861,12 +861,6 @@ def fetch_with_logging(url):
             csv_writer = csv.writer(csvfile)
             csv_writer.writerow([url, str(err)])
         return None
-    except Exception as err:
-        print(f"Other error occurred: {err}")
-        with open("info/errors.csv", "a", newline="") as csvfile:
-            csv_writer = csv.writer(csvfile)
-            csv_writer.writerow([url, str(err)])
-        return False
 
 
 def obtainMarkdownContentFromGitHubMDFile(gh_url):
