@@ -45,7 +45,9 @@ from document_chunking import (
 
 
 # Create a session with retry logic for resilient HTTP requests
-def create_retry_session(retries=5, backoff_factor=1, status_forcelist=(500, 502, 503, 504)):
+def create_retry_session(
+    retries=5, backoff_factor=1, status_forcelist=(500, 502, 503, 504)
+):
     """Create a requests session with automatic retry on failures."""
     session = requests.Session()
     retry = Retry(
@@ -54,20 +56,23 @@ def create_retry_session(retries=5, backoff_factor=1, status_forcelist=(500, 502
         connect=retries,
         backoff_factor=backoff_factor,
         status_forcelist=status_forcelist,
-        allowed_methods=["HEAD", "GET", "OPTIONS"]
+        allowed_methods=["HEAD", "GET", "OPTIONS"],
     )
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("http://", adapter)
     session.mount("https://", adapter)
     return session
 
+
 # Global session for all HTTP requests
 http_session = create_retry_session()
 
 
-def ensure_intrinsic_chunks_from_s3(local_folder='intrinsic_chunks',
-                                    s3_bucket='arm-github-copilot-extension',
-                                    s3_prefix='embedding_data/intrinsic_chunks/'):
+def ensure_intrinsic_chunks_from_s3(
+    local_folder="intrinsic_chunks",
+    s3_bucket="arm-github-copilot-extension",
+    s3_prefix="embedding_data/intrinsic_chunks/",
+):
     """
     Ensure the local 'intrinsic_chunks' folder exists and is populated with files from S3.
     If the folder does not exist, create it and download all files from the S3 prefix.
@@ -75,13 +80,13 @@ def ensure_intrinsic_chunks_from_s3(local_folder='intrinsic_chunks',
     if not os.path.exists(local_folder):
         os.makedirs(local_folder, exist_ok=True)
         print(f"Created local folder: {local_folder}")
-        s3 = boto3.client('s3')
+        s3 = boto3.client("s3")
         try:
-            paginator = s3.get_paginator('list_objects_v2')
+            paginator = s3.get_paginator("list_objects_v2")
             for page in paginator.paginate(Bucket=s3_bucket, Prefix=s3_prefix):
-                for obj in page.get('Contents', []):
-                    key = obj['Key']
-                    if key.endswith('/'):
+                for obj in page.get("Contents", []):
+                    key = obj["Key"]
+                    if key.endswith("/"):
                         continue  # skip folders
                     filename = os.path.basename(key)
                     local_path = os.path.join(local_folder, filename)
@@ -96,14 +101,15 @@ def ensure_intrinsic_chunks_from_s3(local_folder='intrinsic_chunks',
     else:
         print(f"Folder '{local_folder}' already exists. Skipping S3 download.")
 
-'''
+
+"""
 To fix:
 1. Prevent multiple learning paths from being used (compare URLs to existing chunks OR delete overlaps)
 2. Learning Path titles must come from index page...send through function along with Graviton.
-'''
+"""
 
-yaml_dir = os.getenv('YAML_OUTPUT_DIR', 'yaml_data')
-details_file = os.getenv('CHUNK_DETAILS_FILE', 'info/chunk_details.csv')
+yaml_dir = os.getenv("YAML_OUTPUT_DIR", "yaml_data")
+details_file = os.getenv("CHUNK_DETAILS_FILE", "info/chunk_details.csv")
 
 chunk_index = 1
 
@@ -122,7 +128,9 @@ known_source_urls = set()
 all_sources = []
 
 # Increase the file size limit, which defaults to '131,072'
-csv.field_size_limit(10**9) #1,000,000,000 (1 billion), smaller than 64-bit space but avoids 'python overflowerror'
+csv.field_size_limit(
+    10**9
+)  # 1,000,000,000 (1 billion), smaller than 64-bit space but avoids 'python overflowerror'
 
 
 def load_existing_sources(csv_file):
@@ -133,57 +141,63 @@ def load_existing_sources(csv_file):
     global known_source_urls, all_sources
     known_source_urls = set()
     all_sources = []
-    
+
     if not os.path.exists(csv_file):
         print(f"Sources file '{csv_file}' does not exist. Starting fresh.")
         return
-    
-    with open(csv_file, 'r', newline='', encoding='utf-8') as file:
+
+    with open(csv_file, "r", newline="", encoding="utf-8") as file:
         reader = csv.DictReader(file)
         for row in reader:
-            url = row.get('URL', '').strip()
+            url = row.get("URL", "").strip()
             if url:
                 known_source_urls.add(url)
-                all_sources.append({
-                    'site_name': row.get('Site Name', ''),
-                    'license_type': row.get('License Type', ''),
-                    'display_name': row.get('Display Name', ''),
-                    'url': url,
-                    'keywords': row.get('Keywords', ''),
-                    'transcript_source_url': (row.get('Transcript Source URL', '') or '').strip()
-                })
-    
+                all_sources.append(
+                    {
+                        "site_name": row.get("Site Name", ""),
+                        "license_type": row.get("License Type", ""),
+                        "display_name": row.get("Display Name", ""),
+                        "url": url,
+                        "keywords": row.get("Keywords", ""),
+                        "transcript_source_url": (
+                            row.get("Transcript Source URL", "") or ""
+                        ).strip(),
+                    }
+                )
+
     print(f"Loaded {len(all_sources)} existing sources from '{csv_file}'")
 
 
-def register_source(site_name, license_type, display_name, url, keywords, transcript_source_url=''):
+def register_source(
+    site_name, license_type, display_name, url, keywords, transcript_source_url=""
+):
     """
     Register a new source URL. If the URL already exists, skip it.
     Returns True if the source was added, False if it was a duplicate.
     """
     global known_source_urls, all_sources
-    
+
     # Normalize URL for comparison
     url = url.strip()
-    
+
     if url in known_source_urls:
         return False
-    
+
     known_source_urls.add(url)
     source_entry = {
-        'site_name': site_name,
-        'license_type': license_type,
-        'display_name': display_name,
-        'url': url,
-        'keywords': keywords if isinstance(keywords, str) else '; '.join(keywords),
-        'transcript_source_url': (transcript_source_url or '').strip()
+        "site_name": site_name,
+        "license_type": license_type,
+        "display_name": display_name,
+        "url": url,
+        "keywords": keywords if isinstance(keywords, str) else "; ".join(keywords),
+        "transcript_source_url": (transcript_source_url or "").strip(),
     }
 
     # Keep discovered sources grouped with their existing site section instead of
     # appending them to the very end of the CSV and fragmenting that block.
     insert_at = None
     for index, existing_source in enumerate(all_sources):
-        if existing_source.get('site_name') == site_name:
+        if existing_source.get("site_name") == site_name:
             insert_at = index + 1
 
     if insert_at is None:
@@ -199,20 +213,32 @@ def save_sources_csv(csv_file):
     """
     Write all sources (existing + new) to vector-db-sources.csv.
     """
-    with open(csv_file, 'w', newline='', encoding='utf-8') as file:
+    with open(csv_file, "w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
-        writer.writerow(['Site Name', 'License Type', 'Display Name', 'URL', 'Keywords', 'Transcript Source URL'])
+        writer.writerow(
+            [
+                "Site Name",
+                "License Type",
+                "Display Name",
+                "URL",
+                "Keywords",
+                "Transcript Source URL",
+            ]
+        )
         for source in all_sources:
-            writer.writerow([
-                source['site_name'],
-                source['license_type'],
-                source['display_name'],
-                source['url'],
-                source['keywords'],
-                source.get('transcript_source_url', '')
-            ])
-    
+            writer.writerow(
+                [
+                    source["site_name"],
+                    source["license_type"],
+                    source["display_name"],
+                    source["url"],
+                    source["keywords"],
+                    source.get("transcript_source_url", ""),
+                ]
+            )
+
     print(f"Saved {len(all_sources)} sources to '{csv_file}'")
+
 
 class Chunk:
     def __init__(
@@ -247,27 +273,28 @@ class Chunk:
 
     def formatKeywords(self, keywords):
         """Format keywords list into a lowercase, comma-separated string."""
-        return ', '.join(k.strip() for k in keywords).lower()
+        return ", ".join(k.strip() for k in keywords).lower()
 
     # Used to dump into a yaml file without difficulty
     def toDict(self):
         return {
-            'title': self.title,
-            'url': self.url,
-            'uuid': self.uuid,
-            'keywords': self.keywords,
-            'content': self.content,
-            'heading': self.heading,
-            'heading_path': self.heading_path,
-            'doc_type': self.doc_type,
-            'product': self.product,
-            'version': self.version,
-            'resolved_url': self.resolved_url,
-            'content_type': self.content_type,
+            "title": self.title,
+            "url": self.url,
+            "uuid": self.uuid,
+            "keywords": self.keywords,
+            "content": self.content,
+            "heading": self.heading,
+            "heading_path": self.heading_path,
+            "doc_type": self.doc_type,
+            "product": self.product,
+            "version": self.version,
+            "resolved_url": self.resolved_url,
+            "content_type": self.content_type,
         }
 
     def __repr__(self):
         return f"Chunk(title={self.title}, url={self.url}, uuid={self.uuid}, heading={self.heading})"
+
 
 def build_ecosystem_dashboard_entries():
     """Load and cache package-level snippets from the ecosystem dashboard."""
@@ -276,30 +303,32 @@ def build_ecosystem_dashboard_entries():
         return ecosystem_dashboard_entries
 
     def create_text_snippet(main_row):
-        package_name = main_row.get('data-title')
-        download_link = main_row.find('a', class_='download-icon-a')
-        download_url = download_link.get('href') if download_link else None
+        package_name = main_row.get("data-title")
+        download_link = main_row.find("a", class_="download-icon-a")
+        download_url = download_link.get("href") if download_link else None
 
-        next_row = main_row.find_next_sibling('tr')
-        works_on_arm_div = next_row.find('div', class_='description') if next_row else None
+        next_row = main_row.find_next_sibling("tr")
+        works_on_arm_div = (
+            next_row.find("div", class_="description") if next_row else None
+        )
         arm_support_statement = ""
         if works_on_arm_div:
             arm_support_statement = works_on_arm_div.get_text(" ", strip=True)
 
         quick_start_section = None
         if works_on_arm_div and works_on_arm_div.parent:
-            next_section = works_on_arm_div.parent.find_next_sibling('section')
+            next_section = works_on_arm_div.parent.find_next_sibling("section")
             if next_section:
-                quick_start_section = next_section.find('div', class_='description')
+                quick_start_section = next_section.find("div", class_="description")
 
         quick_start_lines = []
         if quick_start_section:
-            for li in quick_start_section.find_all('li'):
-                link = li.find('a')
+            for li in quick_start_section.find_all("li"):
+                link = li.find("a")
                 if not link:
                     continue
                 link_text = link.get_text(" ", strip=True)
-                link_href = link.get('href')
+                link_href = link.get("href")
                 if link_text and link_href:
                     quick_start_lines.append(f"- [{link_text}]({link_href})")
 
@@ -318,19 +347,21 @@ def build_ecosystem_dashboard_entries():
     url = "https://www.arm.com/developer-hub/ecosystem-dashboard/"
     response = http_session.get(url, timeout=60)
     response.raise_for_status()
-    soup = BeautifulSoup(response.text, 'html.parser')
-    rows = soup.find_all('tr', class_=['main-sw-row'])
+    soup = BeautifulSoup(response.text, "html.parser")
+    rows = soup.find_all("tr", class_=["main-sw-row"])
     entries = {}
     for row in rows:
-        package_name = row.get('data-title')
-        package_slug = row.get('data-title-urlized')
+        package_name = row.get("data-title")
+        package_slug = row.get("data-title-urlized")
         if not package_name or not package_slug:
             continue
 
         keywords = [package_name]
-        for c in row.get('class', []):
-            if 'tag-' in c:
-                keywords.append(c.replace('tag-license-','').replace('tag-category-',''))
+        for c in row.get("class", []):
+            if "tag-" in c:
+                keywords.append(
+                    c.replace("tag-license-", "").replace("tag-category-", "")
+                )
 
         package_url = f"{url}?package={package_slug}"
         entries[package_slug] = {
@@ -373,8 +404,12 @@ def create_ecosystem_dashboard_chunk(source_url, source_name, keywords_value):
             heading=entry["package_name"],
             heading_path=[entry["package_name"]],
             doc_type="Ecosystem Dashboard",
-            product=derive_product(entry["display_name"], source_url, "Ecosystem Dashboard", keywords),
-            version=derive_version(entry["display_name"], entry["resolved_url"], entry["content"]),
+            product=derive_product(
+                entry["display_name"], source_url, "Ecosystem Dashboard", keywords
+            ),
+            version=derive_version(
+                entry["display_name"], entry["resolved_url"], entry["content"]
+            ),
             resolved_url=entry["resolved_url"],
             content_type="html",
         )
@@ -384,11 +419,11 @@ def create_ecosystem_dashboard_chunk(source_url, source_name, keywords_value):
 def createEcosystemDashboardChunks(emit_chunks=True):
     for entry in build_ecosystem_dashboard_entries().values():
         register_source(
-            site_name='Ecosystem Dashboard',
-            license_type='Arm Proprietary',
+            site_name="Ecosystem Dashboard",
+            license_type="Arm Proprietary",
             display_name=entry["display_name"],
             url=entry["url"],
-            keywords=entry["keywords"]
+            keywords=entry["keywords"],
         )
         if not emit_chunks:
             continue
@@ -402,8 +437,15 @@ def createEcosystemDashboardChunks(emit_chunks=True):
             heading=entry["package_name"],
             heading_path=[entry["package_name"]],
             doc_type="Ecosystem Dashboard",
-            product=derive_product(entry["display_name"], entry["url"], "Ecosystem Dashboard", entry["keywords"]),
-            version=derive_version(entry["display_name"], entry["resolved_url"], entry["content"]),
+            product=derive_product(
+                entry["display_name"],
+                entry["url"],
+                "Ecosystem Dashboard",
+                entry["keywords"],
+            ),
+            version=derive_version(
+                entry["display_name"], entry["resolved_url"], entry["content"]
+            ),
             resolved_url=entry["resolved_url"],
             content_type="html",
         )
@@ -416,45 +458,44 @@ def createEcosystemDashboardChunks(emit_chunks=True):
 def createIntrinsicsDatabaseChunks():
     def htmlToMarkdown(html_string):
         # Step 0: Remove '<h4>Operation</h4>' as it isn't needed
-        html_string = re.sub(r'^<h4>Operation</h4>', '', html_string)
+        html_string = re.sub(r"^<h4>Operation</h4>", "", html_string)
 
         # Step 1: Replace <pre> tags with backticks for code block
-        html_string = re.sub(r'<pre>(.*?)</pre>', r'`\1`', html_string, flags=re.DOTALL)
-        
+        html_string = re.sub(r"<pre>(.*?)</pre>", r"`\1`", html_string, flags=re.DOTALL)
+
         # Step 2: Add newline after headers (like <h1>, <h2>, <h3>, etc.)
-        html_string = re.sub(r'<h[1-6]>(.*?)</h[1-6]>', r'\1\n', html_string)
-        
+        html_string = re.sub(r"<h[1-6]>(.*?)</h[1-6]>", r"\1\n", html_string)
+
         # Step 3: Remove all other HTML tags
-        html_string = re.sub(r'<.*?>', '', html_string)
-        
+        html_string = re.sub(r"<.*?>", "", html_string)
+
         return html_string
-
-
 
     # What devs care about:
     #    What is this?              Description
     #    Signature (code)           int8x8_t vadd_s8 (int8x8_t a, int8x8_t b);      Inputs and outputs
     #    How to use it?             Add header file & compiler flag
-    #    Sudocode of how it works   'Operation' ID to then operation.json           
-    #    URL to get more info       https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=vadd_s8   
-
+    #    Sudocode of how it works   'Operation' ID to then operation.json
+    #    URL to get more info       https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=vadd_s8
 
     # Read in .json files
-    intrinsics_directory_path = os.getenv('INTRINSICS_DATAPATH')
-    with open(intrinsics_directory_path+'/intrinsics.json', 'r') as file:
+    intrinsics_directory_path = os.getenv("INTRINSICS_DATAPATH")
+    with open(intrinsics_directory_path + "/intrinsics.json", "r") as file:
         intrinsics = json.load(file)
-    with open(intrinsics_directory_path+'/operations.json', 'r') as file:
+    with open(intrinsics_directory_path + "/operations.json", "r") as file:
         operations = json.load(file)
 
     for intrinsic in intrinsics:
         intrinsic_content = f"The `{intrinsic['name']}` intrinsic is part of the {intrinsic['SIMD_ISA']} instruction set architecture."
 
         # Only include aarch64 intrinsics
-        if 'A64' in intrinsic['Architectures']:
-            description = intrinsic['description']
+        if "A64" in intrinsic["Architectures"]:
+            description = intrinsic["description"]
             # Exclude descriptions that don't exist or are simply 'Add' or 'Vector move'
-            if (len(description.split(' ')) > 5):
-                intrinsic_content += f" Here is a brief intrinsic description: {description}\n\n"
+            if len(description.split(" ")) > 5:
+                intrinsic_content += (
+                    f" Here is a brief intrinsic description: {description}\n\n"
+                )
 
             # Define signature:
             signature = f"{intrinsic['return_type']['value']} {intrinsic['name']} ({', '.join(intrinsic['arguments'])});"
@@ -463,50 +504,71 @@ def createIntrinsicsDatabaseChunks():
             # Tell how to use:
             intrinsic_content += f"To use this {intrinsic['SIMD_ISA']} intrinsic, add the following to your C/C++ project:\n"
             intrinsic_content += "1. Add compiler flags to ensure architecture-specific optimizations are present (for both GCC and ArmClang):\n"
-            if (intrinsic['SIMD_ISA'] == 'Neon'):
-                intrinsic_content += '`-march=armv8-a+simd`'
-            elif (intrinsic['SIMD_ISA'] == 'sve'):
-                intrinsic_content += '`-march=armv8-a+sve`'
-            elif (intrinsic['SIMD_ISA'] == 'sve2'):
-                intrinsic_content += '`-march=armv8-a+sve2`'
+            if intrinsic["SIMD_ISA"] == "Neon":
+                intrinsic_content += "`-march=armv8-a+simd`"
+            elif intrinsic["SIMD_ISA"] == "sve":
+                intrinsic_content += "`-march=armv8-a+sve`"
+            elif intrinsic["SIMD_ISA"] == "sve2":
+                intrinsic_content += "`-march=armv8-a+sve2`"
             else:
-                print('Intrinsic processing issue. resolve and run script again. Intrinsic SIMD_ISA: ',intrinsic['SIMD_ISA'])
+                print(
+                    "Intrinsic processing issue. resolve and run script again. Intrinsic SIMD_ISA: ",
+                    intrinsic["SIMD_ISA"],
+                )
                 sys.exit(0)
-            intrinsic_content += '\n2. Add the now included .h header file containing the intrinsic:\n'
-            if ({intrinsic['SIMD_ISA']} == 'Neon'):
-                intrinsic_content += '`#include <arm_neon.h>`'
+            intrinsic_content += (
+                "\n2. Add the now included .h header file containing the intrinsic:\n"
+            )
+            if {intrinsic["SIMD_ISA"]} == "Neon":
+                intrinsic_content += "`#include <arm_neon.h>`"
             else:
-                intrinsic_content += '`#include <arm_sve.h>`'
+                intrinsic_content += "`#include <arm_sve.h>`"
             intrinsic_content += "\nYou can enable more specific microarchitectural optimizations (such as instruction scheduling, vectorization, and cache usage patterns) using the -mcpu flag and specifying the CPU in your machine.\n\n"
 
             # Sudocode if present
-            if 'Operation' in intrinsic:
-                op_id = intrinsic['Operation']
-                operation_text = next((item["item"]["content"] for item in operations if item["item"]["id"] == op_id), None)
+            if "Operation" in intrinsic:
+                op_id = intrinsic["Operation"]
+                operation_text = next(
+                    (
+                        item["item"]["content"]
+                        for item in operations
+                        if item["item"]["id"] == op_id
+                    ),
+                    None,
+                )
                 if operation_text:
-                    intrinsic_content += f'This is the sudocode for how the {intrinsic["name"]} intrinsic operates:\n'
+                    intrinsic_content += f"This is the sudocode for how the {intrinsic['name']} intrinsic operates:\n"
                     intrinsic_content += htmlToMarkdown(operation_text)
                 else:
-                    print('Operation matching issue. Resolve and run script again. Operation ID: ',op_id)
+                    print(
+                        "Operation matching issue. Resolve and run script again. Operation ID: ",
+                        op_id,
+                    )
                     sys.exit(0)
 
-
-            keywords = [intrinsic['name'], intrinsic['SIMD_ISA'], intrinsic['instruction_group'].replace('|',', '), 'Intrinsic', 'SSE', 'AVX', 'Streaming SIMD Extension']
+            keywords = [
+                intrinsic["name"],
+                intrinsic["SIMD_ISA"],
+                intrinsic["instruction_group"].replace("|", ", "),
+                "Intrinsic",
+                "SSE",
+                "AVX",
+                "Streaming SIMD Extension",
+            ]
 
             url = "https://developer.arm.com/architectures/instruction-sets/intrinsics/"
-            
-            
+
             chunk = Chunk(
-                title        = f"Arm Intrinsics - {intrinsic['name']}",
-                url          = f"{url}#q={intrinsic['name']}",
-                uuid         = str(uuid.uuid4()),
-                keywords     = keywords,
-                content      = intrinsic_content
+                title=f"Arm Intrinsics - {intrinsic['name']}",
+                url=f"{url}#q={intrinsic['name']}",
+                uuid=str(uuid.uuid4()),
+                keywords=keywords,
+                content=intrinsic_content,
             )
 
-            chunkSaveAndTrack(url,chunk) 
-    
-    '''
+            chunkSaveAndTrack(url, chunk)
+
+    """
     content:
         <description> if more than 5 words...otherwise leave out.
     SIGNATURE
@@ -528,7 +590,7 @@ def createIntrinsicsDatabaseChunks():
     SUDOCODE
         This is the sudocode for how the <name> intrinsic operates.
         <sudocode>
-    '''
+    """
 
 
 def processLearningPath(url, type, emit_chunks=True):
@@ -538,9 +600,9 @@ def processLearningPath(url, type, emit_chunks=True):
     def chunkizeLearningPath(relative_url, title, keywords):
         if not emit_chunks:
             return
-        if relative_url.endswith('/'):
+        if relative_url.endswith("/"):
             relative_url = relative_url[:-1]
-        MARKDOWN_url = github_raw_link + relative_url + '.md'
+        MARKDOWN_url = github_raw_link + relative_url + ".md"
         WEBSITE_url = site_link + relative_url
 
         response = fetch_with_logging(MARKDOWN_url)
@@ -574,181 +636,184 @@ def processLearningPath(url, type, emit_chunks=True):
                 resolved_url=payload["resolved_url"],
                 content_type=payload["content_type"],
             )
-            chunkSaveAndTrack(WEBSITE_url,chunk)
+            chunkSaveAndTrack(WEBSITE_url, chunk)
 
-
-    if type == 'Learning Path':
+    if type == "Learning Path":
         # Prevent duplicate logging of cross-platform learningpaths via a local list. Check if URL is already in list. If so, move past URL. If not, add it and continue processing.
-        if 'cross-platform' in url:
+        if "cross-platform" in url:
             if url in cross_platform_lps_dont_duplicate:
-                print('NOT PROCESSING ',url,' already in list')
+                print("NOT PROCESSING ", url, " already in list")
                 # Don't process URL
                 return
             else:
-                print('Cross platform URL being added to list: ',url)
+                print("Cross platform URL being added to list: ", url)
                 cross_platform_lps_dont_duplicate.append(url)
 
-
-
         response = http_session.get(url, timeout=60)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
+        soup = BeautifulSoup(response.text, "html.parser")
+
         # Get learning path title and keywords once for registration
-        lp_title_elem = soup.find(id='learning-path-title')
+        lp_title_elem = soup.find(id="learning-path-title")
         if lp_title_elem:
             lp_title = lp_title_elem.get_text()
-            ads_tags = soup.findAll('ads-tag')
+            ads_tags = soup.findAll("ads-tag")
             lp_keywords = []
             for tag in ads_tags:
                 keyword = tag.get_text().strip()
                 if keyword not in lp_keywords:
                     lp_keywords.append(keyword)
-            
+
             # Register this learning path as a source
             register_source(
-                site_name='Learning Paths',
-                license_type='CC4.0',
-                display_name=f'Learning Path - {lp_title}',
+                site_name="Learning Paths",
+                license_type="CC4.0",
+                display_name=f"Learning Path - {lp_title}",
                 url=url,
-                keywords=lp_keywords
+                keywords=lp_keywords,
             )
-        
-        for link in soup.find_all(class_='inner-learning-path-navbar-element'):
-            #Ignore mobile links
-            if 'content-individual-a-mobile' not in link.get('class', []): 
-                href = link.get('href')
+
+        for link in soup.find_all(class_="inner-learning-path-navbar-element"):
+            # Ignore mobile links
+            if "content-individual-a-mobile" not in link.get("class", []):
+                href = link.get("href")
 
                 # Ignore the index file
-                if '0-weight' in link.get('class', []): # Ignore index
+                if "0-weight" in link.get("class", []):  # Ignore index
                     continue
-                #Ignore links that start with _   (index, demo, next_steps, review)
-                if href.split('/')[-1].startswith('_'):
+                # Ignore links that start with _   (index, demo, next_steps, review)
+                if href.split("/")[-1].startswith("_"):
                     continue
 
                 # Obtain title of learning path
-                title = 'Arm Learning Path - '+soup.find(id='learning-path-title').get_text()
+                title = (
+                    "Arm Learning Path - "
+                    + soup.find(id="learning-path-title").get_text()
+                )
 
                 # Obtain keywords of learning path
-                ads_tags = soup.findAll('ads-tag')
+                ads_tags = soup.findAll("ads-tag")
                 keywords = []
                 for tag in ads_tags:
                     keyword = tag.get_text().strip()
                     if keyword not in keywords:
                         keywords.append(keyword)
 
+                chunkizeLearningPath(href, title, keywords)
 
-                chunkizeLearningPath(href,title,keywords)
-    
-    
     elif type == "Install Guide":
-        igs_response = http_session.get(site_link+url, timeout=60)
-        igs_soup = BeautifulSoup(igs_response.text, 'html.parser')
+        igs_response = http_session.get(site_link + url, timeout=60)
+        igs_soup = BeautifulSoup(igs_response.text, "html.parser")
         for ig_card in igs_soup.find_all(class_="tool-card"):
-            ig_rel_url = ig_card.get('link')
+            ig_rel_url = ig_card.get("link")
             ig_url = site_link + ig_rel_url
 
-            
-            
             ig_response = http_session.get(ig_url, timeout=60)
-            ig_soup = BeautifulSoup(ig_response.text, 'html.parser')
-            
+            ig_soup = BeautifulSoup(ig_response.text, "html.parser")
+
             # obtain title of Install Guide
-            ig_title_elem = ig_soup.find(id='install-guide-title')
+            ig_title_elem = ig_soup.find(id="install-guide-title")
             if not ig_title_elem:
                 continue
             ig_title = ig_title_elem.get_text()
-            title = 'Install Guide - '+ ig_title
-            
+            title = "Install Guide - " + ig_title
 
             # Obtain keywords of learning path
-            keywords = [ig_title, 'install','build', 'download']
-            
+            keywords = [ig_title, "install", "build", "download"]
+
             # Register this install guide as a source
             register_source(
-                site_name='Install Guides',
-                license_type='CC4.0',
+                site_name="Install Guides",
+                license_type="CC4.0",
                 display_name=title,
                 url=ig_url,
-                keywords=keywords
+                keywords=keywords,
             )
-            
+
             # Processing to check for multi-install
-            multi_install_guides = ig_soup.find_all(class_='multi-install-card')
-            if multi_install_guides:    
+            multi_install_guides = ig_soup.find_all(class_="multi-install-card")
+            if multi_install_guides:
                 for guide in multi_install_guides:
                     # Extend keywords
-                    keywords.append(guide.find(class_='multi-tool-selection-title').get_text(strip=True))
+                    keywords.append(
+                        guide.find(class_="multi-tool-selection-title").get_text(
+                            strip=True
+                        )
+                    )
 
                 for guide in multi_install_guides:
-                    sub_ig_rel_url = guide.get('link')
+                    sub_ig_rel_url = guide.get("link")
 
-                    chunkizeLearningPath(sub_ig_rel_url,title, keywords)
+                    chunkizeLearningPath(sub_ig_rel_url, title, keywords)
             # If not multi-install (most cases)
             else:
-                chunkizeLearningPath(ig_rel_url,title, keywords)
+                chunkizeLearningPath(ig_rel_url, title, keywords)
 
 
 def createLearningPathChunks(emit_chunks=True):
     # Find all categories to iterate over
     learn_url = "https://learn.arm.com/"
     response = http_session.get(learn_url, timeout=60)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
+    soup = BeautifulSoup(response.text, "html.parser")
+
     # Process Install Guides separately (directly from /install-guides page)
     processLearningPath("/install-guides", "Install Guide", emit_chunks=emit_chunks)
-    
+
     # Find category links - main-topic-card elements are now wrapped in <a> tags
     # Look for <a> tags that contain main-topic-card divs
-    for a_tag in soup.find_all('a', href=True):
-        card = a_tag.find(class_='main-topic-card')
+    for a_tag in soup.find_all("a", href=True):
+        card = a_tag.find(class_="main-topic-card")
         if card:
-            cat_rel_path = a_tag.get('href')
-            if cat_rel_path is None or cat_rel_path.startswith('http'):
+            cat_rel_path = a_tag.get("href")
+            if cat_rel_path is None or cat_rel_path.startswith("http"):
                 continue
             # Skip non-learning-path links (like /tag/ml/ or install guides button)
-            if not cat_rel_path.startswith('/learning-paths/'):
+            if not cat_rel_path.startswith("/learning-paths/"):
                 continue
-            
-            cat_response = http_session.get(learn_url.rstrip('/') + cat_rel_path, timeout=60)
-            cat_soup = BeautifulSoup(cat_response.text, 'html.parser')
+
+            cat_response = http_session.get(
+                learn_url.rstrip("/") + cat_rel_path, timeout=60
+            )
+            cat_soup = BeautifulSoup(cat_response.text, "html.parser")
             for lp_card in cat_soup.find_all(class_="path-card"):
-                lp_link = lp_card.get('link')
+                lp_link = lp_card.get("link")
                 if lp_link is None:
                     continue
-                lp_url = learn_url.rstrip('/') + lp_link
+                lp_url = learn_url.rstrip("/") + lp_link
                 # Chunking step
                 processLearningPath(lp_url, "Learning Path", emit_chunks=emit_chunks)
 
 
 def readInCSV(csv_file):
     """Read sources CSV file and return dict of lists for processing.
-    
+
     Uses csv.DictReader to properly handle quoted fields containing commas.
     Returns empty results if the file doesn't exist.
     """
     csv_dict = {
-        'urls': [],
-        'focus': [],
-        'source_names': [],
-        'site_names': [],
-        'license_types': [],
-        'transcript_urls': [],
+        "urls": [],
+        "focus": [],
+        "source_names": [],
+        "site_names": [],
+        "license_types": [],
+        "transcript_urls": [],
     }
-    
+
     if not os.path.exists(csv_file):
         return csv_dict, 0
-    
-    with open(csv_file, 'r', newline='', encoding='utf-8') as file:
+
+    with open(csv_file, "r", newline="", encoding="utf-8") as file:
         reader = csv.DictReader(file)
         for row in reader:
-            csv_dict['urls'].append(normalize_source_url(row.get('URL', '')))
-            csv_dict['focus'].append(row.get('Keywords', ''))
-            csv_dict['source_names'].append(row.get('Display Name', ''))
-            csv_dict['site_names'].append(row.get('Site Name', ''))
-            csv_dict['license_types'].append(row.get('License Type', ''))
-            csv_dict['transcript_urls'].append((row.get('Transcript Source URL', '') or '').strip())
-    
-    return csv_dict, len(csv_dict['urls'])
+            csv_dict["urls"].append(normalize_source_url(row.get("URL", "")))
+            csv_dict["focus"].append(row.get("Keywords", ""))
+            csv_dict["source_names"].append(row.get("Display Name", ""))
+            csv_dict["site_names"].append(row.get("Site Name", ""))
+            csv_dict["license_types"].append(row.get("License Type", ""))
+            csv_dict["transcript_urls"].append(
+                (row.get("Transcript Source URL", "") or "").strip()
+            )
+
+    return csv_dict, len(csv_dict["urls"])
 
 
 def getMarkdownGitHubURLsFromPage(url):
@@ -760,8 +825,8 @@ def getMarkdownGitHubURLsFromPage(url):
         SITE_urls.append(normalize_source_url(url))
         GH_urls.append(fetch_url)
     else:
-        print('url doesnt match expected format. Check function and try again.')
-        print('URL: ',url)
+        print("url doesnt match expected format. Check function and try again.")
+        print("URL: ", url)
 
     return GH_urls, SITE_urls
 
@@ -773,9 +838,9 @@ def URLIsValidCheck(url):
         return True
     except requests.exceptions.HTTPError as http_err:
         print(f"HTTP error occurred: {http_err}")
-        with open('info/errors.csv', 'a', newline='') as csvfile:
+        with open("info/errors.csv", "a", newline="") as csvfile:
             csv_writer = csv.writer(csvfile)
-            csv_writer.writerow([url,str(http_err)])
+            csv_writer.writerow([url, str(http_err)])
         return False
 
 
@@ -786,21 +851,21 @@ def fetch_with_logging(url):
         return response
     except requests.exceptions.HTTPError as http_err:
         print(f"HTTP error occurred: {http_err}")
-        with open('info/errors.csv', 'a', newline='') as csvfile:
+        with open("info/errors.csv", "a", newline="") as csvfile:
             csv_writer = csv.writer(csvfile)
             csv_writer.writerow([url, str(http_err)])
         return None
     except Exception as err:
         print(f"Other error occurred: {err}")
-        with open('info/errors.csv', 'a', newline='') as csvfile:
+        with open("info/errors.csv", "a", newline="") as csvfile:
             csv_writer = csv.writer(csvfile)
             csv_writer.writerow([url, str(err)])
         return None
     except Exception as err:
         print(f"Other error occurred: {err}")
-        with open('info/errors.csv', 'a', newline='') as csvfile:
+        with open("info/errors.csv", "a", newline="") as csvfile:
             csv_writer = csv.writer(csvfile)
-            csv_writer.writerow([url,str(err)])
+            csv_writer.writerow([url, str(err)])
         return False
 
 
@@ -812,7 +877,9 @@ def obtainMarkdownContentFromGitHubMDFile(gh_url):
     return md_content
 
 
-def obtainTextSnippets__Markdown(content, min_words=300, max_words=500, min_final_words=200):
+def obtainTextSnippets__Markdown(
+    content, min_words=300, max_words=500, min_final_words=200
+):
     """Backward-compatible wrapper that now uses structured chunking."""
     if not content or not content.strip():
         return []
@@ -848,18 +915,18 @@ def createChunk(
     content_type="",
 ):
     chunk = Chunk(
-        title        = title,
-        url          = WEBSITE_url,
-        uuid         = str(uuid.uuid4()),
-        keywords     = keywords,
-        content      = text_snippet,
-        heading      = heading,
-        heading_path = heading_path or [],
-        doc_type     = doc_type,
-        product      = product,
-        version      = version,
-        resolved_url = resolved_url,
-        content_type = content_type,
+        title=title,
+        url=WEBSITE_url,
+        uuid=str(uuid.uuid4()),
+        keywords=keywords,
+        content=text_snippet,
+        heading=heading,
+        heading_path=heading_path or [],
+        doc_type=doc_type,
+        product=product,
+        version=version,
+        resolved_url=resolved_url,
+        content_type=content_type,
     )
 
     return chunk
@@ -867,17 +934,21 @@ def createChunk(
 
 def printChunks(chunks):
     for chunk_dict in chunks:
-        print('='*100)
-        print("Title:", chunk_dict['title'])
-        print("Keywords:", chunk_dict['keywords'])
-        print("URL:", chunk_dict['url'])
-        print("Unique ID:", chunk_dict['uuid'])
-        print("Content:", chunk_dict['content'])
-        print('='*100)
+        print("=" * 100)
+        print("Title:", chunk_dict["title"])
+        print("Keywords:", chunk_dict["keywords"])
+        print("URL:", chunk_dict["url"])
+        print("Unique ID:", chunk_dict["uuid"])
+        print("Content:", chunk_dict["content"])
+        print("=" * 100)
 
 
 def parse_keywords(keywords_value, title=""):
-    keywords = [keyword.strip() for keyword in re.split(r"[;,]", keywords_value or "") if keyword.strip()]
+    keywords = [
+        keyword.strip()
+        for keyword in re.split(r"[;,]", keywords_value or "")
+        if keyword.strip()
+    ]
     if title and title not in keywords:
         keywords.append(title)
     return keywords
@@ -898,7 +969,9 @@ def log_no_parsed_sections(parsed_document, source_url, source_name, transcript_
     return True
 
 
-def create_transcript_chunks(source_url, transcript_url, source_name, doc_type, keywords_value):
+def create_transcript_chunks(
+    source_url, transcript_url, source_name, doc_type, keywords_value
+):
     """Chunk a transcript document on behalf of a primary source.
 
     Some sources (for example edX course videos) have no directly chunkable text
@@ -911,7 +984,9 @@ def create_transcript_chunks(source_url, transcript_url, source_name, doc_type, 
     fetch_url = source_to_fetch_url(normalize_source_url(transcript_url))
     response = fetch_with_logging(fetch_url)
     if response is None:
-        print(f"[TRANSCRIPT FETCH FAILED] for {normalized_source_url} (transcript: {transcript_url}): {fetch_url}")
+        print(
+            f"[TRANSCRIPT FETCH FAILED] for {normalized_source_url} (transcript: {transcript_url}): {fetch_url}"
+        )
         return []
 
     keywords = parse_keywords(keywords_value, source_name)
@@ -925,11 +1000,15 @@ def create_transcript_chunks(source_url, transcript_url, source_name, doc_type, 
     # Keep the primary URL as the user-facing link while still using the transcript
     # URL as the base for resolving any relative links inside the transcript content.
     parsed_document.source_url = normalized_source_url
-    if log_no_parsed_sections(parsed_document, normalized_source_url, source_name, transcript_url):
+    if log_no_parsed_sections(
+        parsed_document, normalized_source_url, source_name, transcript_url
+    ):
         return []
 
     chunks = []
-    for payload in chunk_parsed_document(parsed_document, doc_type=doc_type or "Transcript", keywords=keywords):
+    for payload in chunk_parsed_document(
+        parsed_document, doc_type=doc_type or "Transcript", keywords=keywords
+    ):
         chunks.append(
             createChunk(
                 text_snippet=payload["content"],
@@ -948,16 +1027,22 @@ def create_transcript_chunks(source_url, transcript_url, source_name, doc_type, 
     return chunks
 
 
-def create_chunks_for_source(source_url, source_name, doc_type, keywords_value, transcript_url=""):
+def create_chunks_for_source(
+    source_url, source_name, doc_type, keywords_value, transcript_url=""
+):
     # When a transcript source is provided, chunk that document instead of
     # fetching the primary URL (which may be a video player or other non-text page),
     # while keeping the primary URL as the user-facing link for retrieval.
     if transcript_url and transcript_url.strip():
-        return create_transcript_chunks(source_url, transcript_url, source_name, doc_type, keywords_value)
+        return create_transcript_chunks(
+            source_url, transcript_url, source_name, doc_type, keywords_value
+        )
     if doc_type == "Ecosystem Dashboard":
         return create_ecosystem_dashboard_chunk(source_url, source_name, keywords_value)
     if is_arm_developer_documentation_url(source_url):
-        return create_arm_documentation_chunks(source_url, source_name, doc_type, keywords_value)
+        return create_arm_documentation_chunks(
+            source_url, source_name, doc_type, keywords_value
+        )
 
     normalized_source_url = normalize_source_url(source_url)
     fetch_url = source_to_fetch_url(normalized_source_url)
@@ -967,7 +1052,9 @@ def create_chunks_for_source(source_url, source_name, doc_type, keywords_value, 
         return []
 
     sources_to_parse = [(normalized_source_url, response)]
-    for step_url in learn_learning_path_step_urls(normalized_source_url, response.content):
+    for step_url in learn_learning_path_step_urls(
+        normalized_source_url, response.content
+    ):
         step_response = fetch_with_logging(source_to_fetch_url(step_url))
         if step_response is not None:
             sources_to_parse.append((step_url, step_response))
@@ -984,7 +1071,9 @@ def create_chunks_for_source(source_url, source_name, doc_type, keywords_value, 
         )
         if log_no_parsed_sections(parsed_document, display_url, source_name):
             continue
-        for payload in chunk_parsed_document(parsed_document, doc_type=doc_type or "Documentation", keywords=keywords):
+        for payload in chunk_parsed_document(
+            parsed_document, doc_type=doc_type or "Documentation", keywords=keywords
+        ):
             chunks.append(
                 createChunk(
                     text_snippet=payload["content"],
@@ -1050,7 +1139,9 @@ def create_arm_documentation_chunks(source_url, source_name, doc_type, keywords_
         )
         if log_no_parsed_sections(parsed_document, display_url, document_title):
             continue
-        for payload in chunk_parsed_document(parsed_document, doc_type=doc_type or "Documentation", keywords=keywords):
+        for payload in chunk_parsed_document(
+            parsed_document, doc_type=doc_type or "Documentation", keywords=keywords
+        ):
             chunks.append(
                 createChunk(
                     text_snippet=payload["content"],
@@ -1069,58 +1160,58 @@ def create_arm_documentation_chunks(source_url, source_name, doc_type, keywords_
     return chunks
 
 
-def chunkSaveAndTrack(url,chunk):
+def chunkSaveAndTrack(url, chunk):
 
-    def addNewRow(current_date,chunk_words,chunk_id):
-        return [url,current_date,chunk_words,'1',chunk_id]
-    
-    def addToExistingRow(row,chunk_words,chunk_id):
-        url = row[0] # same URL
-        date = row[1] # same date
-        words = str(int(row[2]) + chunk_words) # update words
-        chunks = row[3] = str(int(row[3]) + 1) # update number of chunks
-        ids = row[4]+ f", {chunk_id}" # update chunk IDs
-        return [url,date,words,chunks,ids]
+    def addNewRow(current_date, chunk_words, chunk_id):
+        return [url, current_date, chunk_words, "1", chunk_id]
 
+    def addToExistingRow(row, chunk_words, chunk_id):
+        url = row[0]  # same URL
+        date = row[1]  # same date
+        words = str(int(row[2]) + chunk_words)  # update words
+        chunks = row[3] = str(int(row[3]) + 1)  # update number of chunks
+        ids = row[4] + f", {chunk_id}"  # update chunk IDs
+        return [url, date, words, chunks, ids]
 
     def recordChunk():
-        current_date = datetime.date.today().strftime('%Y-%m-%d')
-        chunk_words  = len(chunk.content.split())    
-        chunk_id     = f'chunk_{chunk.uuid}'
+        current_date = datetime.date.today().strftime("%Y-%m-%d")
+        chunk_words = len(chunk.content.split())
+        chunk_id = f"chunk_{chunk.uuid}"
 
         new_rows = []
 
-        with open(details_file, mode='r', newline='', encoding='utf-8') as file:
+        with open(details_file, mode="r", newline="", encoding="utf-8") as file:
             csv_reader = csv.reader(file)
             try:
-                headers = next(csv_reader)  
-                new_rows.append(headers) # keep in memory
+                headers = next(csv_reader)
+                new_rows.append(headers)  # keep in memory
             except StopIteration:
                 pass
 
             url_found = False  # Track if the URL is found in any row
-            
+
             # Loop through all the rows after the header
             for row in csv_reader:
                 if row[0] == url:
-                    new_rows.append(addToExistingRow(row, chunk_words, chunk_id))  # Modify and append the row
+                    new_rows.append(
+                        addToExistingRow(row, chunk_words, chunk_id)
+                    )  # Modify and append the row
                     url_found = True  # Mark that the URL was found
                 else:
                     new_rows.append(row)  # Append the row without modification
-            
+
             # If the URL was not found, append a new row
             if not url_found:
                 new_rows.append(addNewRow(current_date, chunk_words, chunk_id))
 
-
         # Overwrite csv with new info
-        with open(details_file, mode='w', newline='') as file:
-            csv_writer = csv.writer(file, delimiter=',')
-            csv_writer.writerows(new_rows) 
+        with open(details_file, mode="w", newline="") as file:
+            csv_writer = csv.writer(file, delimiter=",")
+            csv_writer.writerows(new_rows)
 
     # Save chunk
     file_name = f"{yaml_dir}/chunk_{chunk.uuid}.yaml"
-    with open(file_name, 'w') as file:
+    with open(file_name, "w") as file:
         yaml.dump(chunk.toDict(), file, default_flow_style=False, sort_keys=False)
 
     # Record chunk
@@ -1137,14 +1228,14 @@ def main():
     # Argparse inputs
     parser = argparse.ArgumentParser(
         description="Generate text chunks from Arm documentation sources for vector database ingestion. "
-                    "Discovers learning paths, install guides, and ecosystem dashboard entries, "
-                    "then updates the sources CSV with any new entries found."
+        "Discovers learning paths, install guides, and ecosystem dashboard entries, "
+        "then updates the sources CSV with any new entries found."
     )
     parser.add_argument(
         "sources_file",
         help="Path to vector-db-sources.csv. This file is read for existing sources "
-             "(to avoid duplicates) and WILL BE OVERWRITTEN with the combined list "
-             "of existing + newly discovered sources."
+        "(to avoid duplicates) and WILL BE OVERWRITTEN with the combined list "
+        "of existing + newly discovered sources.",
     )
     args = parser.parse_args()
     sources_file = args.sources_file
@@ -1153,16 +1244,18 @@ def main():
     load_existing_sources(sources_file)
 
     # 0) Initialize files
-    os.makedirs(yaml_dir, exist_ok=True) # create if doesn't exist
+    os.makedirs(yaml_dir, exist_ok=True)  # create if doesn't exist
     details_dir = os.path.dirname(details_file)
     if details_dir:
         os.makedirs(details_dir, exist_ok=True)
     for filename in os.listdir(yaml_dir):
-        if filename.startswith('chunk_') and filename.endswith('.yaml'):
+        if filename.startswith("chunk_") and filename.endswith(".yaml"):
             os.remove(os.path.join(yaml_dir, filename))
-    with open(details_file, mode='w', newline='') as file:
-        writer = csv.writer(file)        
-        writer.writerow(['URL','Date', 'Number of Words', 'Number of Chunks','Chunk IDs'])
+    with open(details_file, mode="w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(
+            ["URL", "Date", "Number of Words", "Number of Chunks", "Chunk IDs"]
+        )
 
     # 0) Obtain full database information:
     # a) Learning Paths & Install Guides
@@ -1173,20 +1266,22 @@ def main():
         createEcosystemDashboardChunks(emit_chunks=False)
 
     # c) Intrinsics
-    #createIntrinsicsDatabaseChunks()
+    # createIntrinsicsDatabaseChunks()
 
     # 1) Get URLs and details from CSV
     csv_dict, csv_length = readInCSV(sources_file)
 
-    print(f'Starting to loop over CSV file {sources_file} ......')
+    print(f"Starting to loop over CSV file {sources_file} ......")
     for i in range(csv_length):
-        url = csv_dict['urls'][i]
-        source_name = csv_dict['source_names'][i]
-        doc_type = csv_dict['site_names'][i]
-        keywords_value = csv_dict['focus'][i]
-        transcript_url = csv_dict['transcript_urls'][i]
+        url = csv_dict["urls"][i]
+        source_name = csv_dict["source_names"][i]
+        doc_type = csv_dict["site_names"][i]
+        keywords_value = csv_dict["focus"][i]
+        transcript_url = csv_dict["transcript_urls"][i]
 
-        for chunk in create_chunks_for_source(url, source_name, doc_type, keywords_value, transcript_url):
+        for chunk in create_chunks_for_source(
+            url, source_name, doc_type, keywords_value, transcript_url
+        ):
             chunkSaveAndTrack(url, chunk)
 
     # Save updated sources CSV with all discovered sources

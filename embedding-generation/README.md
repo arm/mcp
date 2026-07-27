@@ -77,7 +77,8 @@ Install dependencies once:
 ```sh
 uv sync --frozen
 ```
-Note: Python version >= 3.10 should be installed
+
+Python 3.13 is required.
 
 Run the full local question eval:
 
@@ -101,7 +102,7 @@ SKIP_DISCOVERY=1 uv run ./run-question-eval.sh
 Run lint and tests with:
 
 ```sh
-uv run ruff check . ../arm_kb_search
+uv run ruff check . ../arm_kb_search/resources.py
 uv run pytest
 ```
 

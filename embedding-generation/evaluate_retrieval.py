@@ -21,7 +21,9 @@ from arm_kb_search.evaluation import (  # noqa: E402
 )
 
 
-def evaluate(index_path: Path, metadata_path: Path, eval_path: Path, model_path: Path, top_k: int) -> int:
+def evaluate(
+    index_path: Path, metadata_path: Path, eval_path: Path, model_path: Path, top_k: int
+) -> int:
     if not metadata_path.exists() or metadata_path.stat().st_size == 0:
         print(f"Metadata not found or empty: {metadata_path}")
         return 1
@@ -42,7 +44,9 @@ def evaluate(index_path: Path, metadata_path: Path, eval_path: Path, model_path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Evaluate retrieval over the generated local knowledge base.")
+    parser = argparse.ArgumentParser(
+        description="Evaluate retrieval over the generated local knowledge base."
+    )
     parser.add_argument("--index-path", default="usearch_index.bin")
     parser.add_argument("--metadata-path", default="metadata.json")
     parser.add_argument("--eval-path", default="eval_questions.json")

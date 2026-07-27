@@ -52,12 +52,12 @@ def load_local_yaml_files() -> list[dict]:
         elif os.path.normpath(file_path).startswith(os.path.normpath(yaml_dir)):
             chunk_uuid = f"yaml_data_{os.path.basename(file_path).replace('.yaml', '')}"
         else:
-            chunk_uuid = file_path.replace('chunk_', '').replace('.yaml', '')
+            chunk_uuid = file_path.replace("chunk_", "").replace(".yaml", "")
 
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path, "r") as f:
                 yaml_content = yaml.safe_load(f)
-                yaml_content['chunk_uuid'] = chunk_uuid
+                yaml_content["chunk_uuid"] = chunk_uuid
                 yaml_contents.append(yaml_content)
         except Exception as e:
             print(f"Error loading {file_path}: {e}")
@@ -80,29 +80,31 @@ def create_embeddings(contents: list[str], model_path: str) -> np.ndarray:
     return embeddings
 
 
-def create_usearch_index(embeddings: np.ndarray, metadata: list[dict]) -> tuple[Index, list[dict]]:
+def create_usearch_index(
+    embeddings: np.ndarray, metadata: list[dict]
+) -> tuple[Index, list[dict]]:
     """Create a USearch index with the given embeddings and metadata."""
     print("Creating USearch index")
     print(f"Embeddings shape: {embeddings.shape}")
-    
+
     dimension = embeddings.shape[1]
     num_vectors = embeddings.shape[0]
-    
+
     # Create USearch index
     index = Index(
         ndim=dimension,
-        metric='l2sq',
-        dtype='f32',
+        metric="l2sq",
+        dtype="f32",
         connectivity=16,
         expansion_add=128,
-        expansion_search=64
+        expansion_search=64,
     )
-    
+
     # Add vectors to the index
     print(f"Adding {num_vectors} vectors to the index")
     for i, embedding in enumerate(embeddings):
         index.add(i, embedding)
-    
+
     print(f"Added {len(index)} vectors to the index")
     return index, metadata
 
@@ -133,38 +135,40 @@ def main():
     for i, yaml_content in enumerate(yaml_contents, 1):
         if i <= 10 or i % 1000 == 0 or i == len(yaml_contents):
             print(f"Processing YAML content {i}/{len(yaml_contents)}")
-        contents.append(yaml_content['content'])
-        heading_path = yaml_content.get('heading_path', []) or []
+        contents.append(yaml_content["content"])
+        heading_path = yaml_content.get("heading_path", []) or []
         search_text = " ".join(
             str(value)
             for value in [
-                yaml_content.get('title', ''),
+                yaml_content.get("title", ""),
                 " ".join(heading_path),
-                yaml_content.get('heading', ''),
-                yaml_content.get('doc_type', ''),
-                yaml_content.get('product', ''),
-                yaml_content.get('version', ''),
-                yaml_content.get('keywords', ''),
-                yaml_content.get('content', ''),
+                yaml_content.get("heading", ""),
+                yaml_content.get("doc_type", ""),
+                yaml_content.get("product", ""),
+                yaml_content.get("version", ""),
+                yaml_content.get("keywords", ""),
+                yaml_content.get("content", ""),
             ]
             if value
         )
-        metadata.append({
-            'uuid': yaml_content['uuid'],
-            'url': yaml_content['url'],
-            'resolved_url': yaml_content.get('resolved_url', yaml_content['url']),
-            'original_text': yaml_content['content'],
-            'title': yaml_content['title'],
-            'keywords': yaml_content['keywords'],
-            'chunk_uuid': yaml_content['chunk_uuid'],
-            'heading': yaml_content.get('heading', ''),
-            'heading_path': heading_path,
-            'doc_type': yaml_content.get('doc_type', ''),
-            'product': yaml_content.get('product', ''),
-            'version': yaml_content.get('version', ''),
-            'content_type': yaml_content.get('content_type', ''),
-            'search_text': search_text,
-        })
+        metadata.append(
+            {
+                "uuid": yaml_content["uuid"],
+                "url": yaml_content["url"],
+                "resolved_url": yaml_content.get("resolved_url", yaml_content["url"]),
+                "original_text": yaml_content["content"],
+                "title": yaml_content["title"],
+                "keywords": yaml_content["keywords"],
+                "chunk_uuid": yaml_content["chunk_uuid"],
+                "heading": yaml_content.get("heading", ""),
+                "heading_path": heading_path,
+                "doc_type": yaml_content.get("doc_type", ""),
+                "product": yaml_content.get("product", ""),
+                "version": yaml_content.get("version", ""),
+                "content_type": yaml_content.get("content_type", ""),
+                "search_text": search_text,
+            }
+        )
 
     # Create embeddings
     embeddings = create_embeddings(contents, args.model_path)
@@ -179,20 +183,21 @@ def main():
     index, metadata = create_usearch_index(embeddings, metadata)
 
     # Save the USearch index
-    index_filename = os.getenv('USEARCH_INDEX_FILENAME', 'usearch_index.bin')
+    index_filename = os.getenv("USEARCH_INDEX_FILENAME", "usearch_index.bin")
     print(f"Saving USearch index to {index_filename}")
     index.save(index_filename)
 
     # Save metadata
-    metadata_filename = os.getenv('METADATA_FILENAME', 'metadata.json')
+    metadata_filename = os.getenv("METADATA_FILENAME", "metadata.json")
     print(f"Saving metadata to {metadata_filename}")
-    with open(metadata_filename, 'w') as f:
+    with open(metadata_filename, "w") as f:
         json.dump(metadata, f, indent=2)
 
     print("USearch index and metadata have been created and saved.")
     print(f"Total documents processed: {len(contents)}")
     print(f"USearch index saved to: {os.path.abspath(index_filename)}")
     print(f"Metadata saved to: {os.path.abspath(metadata_filename)}")
+
 
 if __name__ == "__main__":
     main()
