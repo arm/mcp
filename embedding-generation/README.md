@@ -31,8 +31,8 @@ from generation, and publishing the model with the embeddings are follow-up work
 Add one row to `vector-db-sources.csv` for each document:
 
 ```csv
-Site Name,License Type,Display Name,URL,Keywords
-Example Docs,CC4.0,Example Arm Guide,https://example.com/arm-guide,arm; migration; linux
+Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL
+Example Docs,CC4.0,Example Arm Guide,https://example.com/arm-guide,arm; migration; linux,
 ```
 
 Use clear keywords that users might include in questions. The `URL` is also what retrieval eval uses for expected matches.
@@ -52,6 +52,24 @@ python discover-developer-arm-com-sources.py vector-db-sources.csv
 
 Review the printed `[NEW SOURCE]` lines, add a question with the new URL in `expected_urls` to `eval_questions.json` for each one, then commit the updated CSV. The weekly build chunks the new rows automatically — `generate-chunks.py` already handles developer.arm.com documentation and community blog URLs found in the CSV.
 
+### Transcript-backed sources
+
+Some sources (for example edX course videos) do not have directly chunkable text
+at their primary `URL`. For these, populate the optional `Transcript Source URL`
+column with a link to a plain-text, markdown, PowerPoint (`.pptx`), or Jupyter
+notebook transcript (such as a GitHub `.../blob/...` file). When
+`Transcript Source URL` is set,
+`generate-chunks.py` fetches and chunks the transcript instead of the primary
+`URL`, but keeps the primary `URL` as the user-facing link returned by retrieval:
+
+```csv
+Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL
+Educational Course,All rights reserved,Example Video,https://courses.edx.org/videos/...arm, ai; inference,https://github.com/arm-education/.../M1KV1.txt
+```
+
+Leave the column empty for sources that are chunked from their primary `URL`.
+
+
 ## Test Locally
 
 Install dependencies once:
@@ -59,6 +77,7 @@ Install dependencies once:
 ```sh
 uv sync --frozen
 ```
+Note: Python version >= 3.10 should be installed
 
 Run the full local question eval:
 
