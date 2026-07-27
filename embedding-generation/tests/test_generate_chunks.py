@@ -23,9 +23,11 @@ import csv
 import json
 from types import SimpleNamespace
 
-import pytest
-
-from document_chunking import chunk_parsed_document, learn_learning_path_step_urls, parse_document_content
+from document_chunking import (
+    chunk_parsed_document,
+    learn_learning_path_step_urls,
+    parse_document_content,
+)
 
 
 def _arm_api_response(title, html):

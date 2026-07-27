@@ -13,21 +13,22 @@
 # limitations under the License.
 
 import argparse
+import csv
+import datetime
 import json
 import os
 import re
+import sys
 import uuid
-import yaml
-import csv
-import datetime
+from urllib.parse import parse_qs, urlparse
 
 import boto3
-from botocore.exceptions import NoCredentialsError, ClientError
-from bs4 import BeautifulSoup
 import requests
+import yaml
+from botocore.exceptions import ClientError, NoCredentialsError
+from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from urllib.parse import parse_qs, urlparse
 
 from document_chunking import (
     arm_service_url_to_developer_url,
@@ -458,21 +459,21 @@ def createIntrinsicsDatabaseChunks():
 
             # Tell how to use:
             intrinsic_content += f"To use this {intrinsic['SIMD_ISA']} intrinsic, add the following to your C/C++ project:\n"
-            intrinsic_content += f"1. Add compiler flags to ensure architecture-specific optimizations are present (for both GCC and ArmClang):\n"
+            intrinsic_content += "1. Add compiler flags to ensure architecture-specific optimizations are present (for both GCC and ArmClang):\n"
             if (intrinsic['SIMD_ISA'] == 'Neon'):
-                intrinsic_content += f'`-march=armv8-a+simd`'
+                intrinsic_content += '`-march=armv8-a+simd`'
             elif (intrinsic['SIMD_ISA'] == 'sve'):
-                intrinsic_content += f'`-march=armv8-a+sve`'
+                intrinsic_content += '`-march=armv8-a+sve`'
             elif (intrinsic['SIMD_ISA'] == 'sve2'):
-                intrinsic_content += f'`-march=armv8-a+sve2`'
+                intrinsic_content += '`-march=armv8-a+sve2`'
             else:
                 print('Intrinsic processing issue. resolve and run script again. Intrinsic SIMD_ISA: ',intrinsic['SIMD_ISA'])
                 sys.exit(0)
-            intrinsic_content += f'\n2. Add the now included .h header file containing the intrinsic:\n'
+            intrinsic_content += '\n2. Add the now included .h header file containing the intrinsic:\n'
             if ({intrinsic['SIMD_ISA']} == 'Neon'):
-                intrinsic_content += f'`#include <arm_neon.h>`'
+                intrinsic_content += '`#include <arm_neon.h>`'
             else:
-                intrinsic_content += f'`#include <arm_sve.h>`'
+                intrinsic_content += '`#include <arm_sve.h>`'
             intrinsic_content += "\nYou can enable more specific microarchitectural optimizations (such as instruction scheduling, vectorization, and cache usage patterns) using the -mcpu flag and specifying the CPU in your machine.\n\n"
 
             # Sudocode if present
@@ -1110,7 +1111,7 @@ def main():
 
     # Save updated sources CSV with all discovered sources
     save_sources_csv(sources_file)
-    print(f"\n=== Source tracking complete ===")
+    print("\n=== Source tracking complete ===")
     print(f"Total sources in {sources_file}: {len(all_sources)}")
 
 

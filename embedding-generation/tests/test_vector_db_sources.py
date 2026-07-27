@@ -18,7 +18,6 @@ import csv
 from pathlib import Path
 from urllib.parse import urlparse
 
-
 SOURCES_FILE = Path(__file__).resolve().parents[1] / "vector-db-sources.csv"
 EXPECTED_COLUMNS = [
     "Site Name",

@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from io import BytesIO
 import base64
 import json
 import math
 import re
-from typing import Dict, Iterable, List, Optional
+from collections.abc import Iterable
+from dataclasses import dataclass
+from io import BytesIO
+from typing import Optional
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
-
 
 TOKEN_PATTERN = re.compile(r"\w+|[^\w\s]", re.UNICODE)
 WORD_PATTERN = re.compile(r"\S+")
@@ -58,13 +58,13 @@ class Link:
 class Block:
     kind: str
     text: str
-    links: List[Link] | None = None
+    links: list[Link] | None = None
 
 
 @dataclass
 class Section:
-    heading_path: List[str]
-    blocks: List[Block]
+    heading_path: list[str]
+    blocks: list[Block]
     url_fragment: Optional[str] = None
 
 
@@ -74,7 +74,7 @@ class ParsedDocument:
     resolved_url: str
     display_title: str
     content_type: str
-    sections: List[Section]
+    sections: list[Section]
 
 
 def normalize_source_url(url: str) -> str:
@@ -95,7 +95,7 @@ def is_learn_learning_path_url(url: str) -> bool:
     )
 
 
-def learn_learning_path_step_urls(source_url: str, html: str | bytes) -> List[str]:
+def learn_learning_path_step_urls(source_url: str, html: str | bytes) -> list[str]:
     source_url = normalize_source_url(source_url)
     if not is_learn_learning_path_url(source_url):
         return []
@@ -103,7 +103,7 @@ def learn_learning_path_step_urls(source_url: str, html: str | bytes) -> List[st
     source = urlparse(source_url)
     source_path = source.path.rstrip("/") + "/"
     soup = BeautifulSoup(html, "html.parser")
-    step_urls: List[str] = []
+    step_urls: list[str] = []
     seen: set[str] = set()
 
     for link in soup.find_all("a", href=True):
@@ -185,7 +185,7 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
-def tokenize_link_text(text: str) -> List[str]:
+def tokenize_link_text(text: str) -> list[str]:
     return [token.lower() for token in re.findall(r"[a-z0-9][a-z0-9_\-+.]*", text or "", re.IGNORECASE)]
 
 
@@ -196,8 +196,8 @@ def resolve_link_url(base_url: str, href: str) -> str:
     return urljoin(base_url, href)
 
 
-def extract_markdown_links(text: str, base_url: str) -> List[Link]:
-    links: List[Link] = []
+def extract_markdown_links(text: str, base_url: str) -> list[Link]:
+    links: list[Link] = []
     for match in MARKDOWN_LINK_PATTERN.finditer(text or ""):
         link_text = clean_text(match.group(1))
         link_url = resolve_link_url(base_url, match.group(2))
@@ -206,8 +206,8 @@ def extract_markdown_links(text: str, base_url: str) -> List[Link]:
     return links
 
 
-def extract_html_links(tag, base_url: str) -> List[Link]:
-    links: List[Link] = []
+def extract_html_links(tag, base_url: str) -> list[Link]:
+    links: list[Link] = []
     for link in tag.find_all("a", href=True):
         link_text = clean_text(link.get_text(" ", strip=True))
         link_url = resolve_link_url(base_url, link.get("href", ""))
@@ -216,7 +216,7 @@ def extract_html_links(tag, base_url: str) -> List[Link]:
     return links
 
 
-def link_text_with_urls(text: str, links: List[Link]) -> str:
+def link_text_with_urls(text: str, links: list[Link]) -> str:
     if not links:
         return text
     link_evidence = " ".join(f"{link.text} {link.url}" for link in links)
@@ -254,7 +254,7 @@ def strip_frontmatter(markdown: str) -> str:
     return markdown
 
 
-def normalize_heading_path(title: str, heading_path: List[str]) -> List[str]:
+def normalize_heading_path(title: str, heading_path: list[str]) -> list[str]:
     normalized = [clean_text(part) for part in heading_path if clean_text(part)]
     if normalized and clean_text(normalized[0]).lower() == clean_text(title).lower():
         normalized = normalized[1:]
@@ -271,12 +271,12 @@ def url_with_fragment(url: str, fragment: str | None) -> str:
 def parse_markdown(markdown: str, source_url: str, resolved_url: str, fallback_title: str) -> ParsedDocument:
     markdown = strip_frontmatter(markdown)
     lines = markdown.splitlines()
-    heading_stack: List[str] = []
-    heading_anchor_stack: List[Optional[str]] = []
-    sections: List[Section] = []
-    current_blocks: List[Block] = []
-    current_paragraph: List[str] = []
-    current_code: List[str] = []
+    heading_stack: list[str] = []
+    heading_anchor_stack: list[Optional[str]] = []
+    sections: list[Section] = []
+    current_blocks: list[Block] = []
+    current_paragraph: list[str] = []
+    current_code: list[str] = []
     in_code_block = False
     document_title = fallback_title
 
@@ -392,10 +392,10 @@ def parse_html(html: str, source_url: str, resolved_url: str, fallback_title: st
     elif soup.title:
         title = clean_text(soup.title.get_text(" ", strip=True)) or title
 
-    heading_stack: List[str] = []
-    heading_anchor_stack: List[Optional[str]] = []
-    sections: List[Section] = []
-    current_blocks: List[Block] = []
+    heading_stack: list[str] = []
+    heading_anchor_stack: list[Optional[str]] = []
+    sections: list[Section] = []
+    current_blocks: list[Block] = []
     first_h1_seen = False
 
     def flush_section() -> None:
@@ -465,7 +465,7 @@ def looks_like_heading(paragraph: str) -> bool:
 
 def parse_pdf(pdf_bytes: bytes, source_url: str, resolved_url: str, fallback_title: str) -> ParsedDocument:
     reader = PdfReader(BytesIO(pdf_bytes))
-    sections: List[Section] = []
+    sections: list[Section] = []
     document_title = fallback_title
     for page_number, page in enumerate(reader.pages, start=1):
         raw_text = clean_text(page.extract_text() or "")
@@ -473,7 +473,7 @@ def parse_pdf(pdf_bytes: bytes, source_url: str, resolved_url: str, fallback_tit
             continue
         paragraphs = [clean_text(chunk) for chunk in re.split(r"\n\s*\n", raw_text) if clean_text(chunk)]
         heading_path = [f"Page {page_number}"]
-        blocks: List[Block] = []
+        blocks: list[Block] = []
         for paragraph in paragraphs:
             if page_number == 1 and document_title == fallback_title and len(paragraph.split()) <= 12:
                 document_title = paragraph
@@ -538,8 +538,8 @@ def parse_arm_documentation_api_json(
     return parse_html(html, source_url, resolved_url, title)
 
 
-def merge_code_context(blocks: List[Block]) -> List[str]:
-    merged: List[str] = []
+def merge_code_context(blocks: list[Block]) -> list[str]:
+    merged: list[str] = []
     i = 0
     while i < len(blocks):
         block = blocks[i]
@@ -563,7 +563,7 @@ def merge_code_context(blocks: List[Block]) -> List[str]:
     return [clean_text(item) for item in merged if clean_text(item)]
 
 
-def split_text_recursively(text: str, max_tokens: int) -> List[str]:
+def split_text_recursively(text: str, max_tokens: int) -> list[str]:
     text = clean_text(text)
     if not text:
         return []
@@ -571,7 +571,7 @@ def split_text_recursively(text: str, max_tokens: int) -> List[str]:
         return [text]
     parts = [clean_text(part) for part in re.split(r"\n\s*\n", text) if clean_text(part)]
     if len(parts) > 1:
-        flattened: List[str] = []
+        flattened: list[str] = []
         for part in parts:
             flattened.extend(split_text_recursively(part, max_tokens))
         return flattened
@@ -595,17 +595,17 @@ def overlap_tail(text: str, overlap_tokens: int) -> str:
 
 
 def chunk_section_units(
-    units: List[str],
+    units: list[str],
     min_tokens: int,
     max_tokens: int,
     overlap_tokens: int,
-) -> List[str]:
-    normalized_units: List[str] = []
+) -> list[str]:
+    normalized_units: list[str] = []
     for unit in units:
         normalized_units.extend(split_text_recursively(unit, max_tokens))
 
-    chunks: List[str] = []
-    current_units: List[str] = []
+    chunks: list[str] = []
+    current_units: list[str] = []
     current_tokens = 0
     for unit in normalized_units:
         unit_tokens = estimate_tokens(unit)
@@ -628,7 +628,7 @@ def chunk_section_units(
 
 
 
-def build_chunk_text(title: str, heading_path: List[str], body: str) -> str:
+def build_chunk_text(title: str, heading_path: list[str], body: str) -> str:
     normalized_heading_path = normalize_heading_path(title, heading_path)
     heading_label = " > ".join(normalized_heading_path) if normalized_heading_path else title
     return clean_text(f"Document Title: {title}\nHeading Path: {heading_label}\n\n{body}")
@@ -659,12 +659,12 @@ def derive_product(title: str, source_url: str, doc_type: str, keywords: Iterabl
 def chunk_parsed_document(
     parsed_document: ParsedDocument,
     doc_type: str,
-    keywords: List[str],
+    keywords: list[str],
     min_tokens: int = 300,
     max_tokens: int = 600,
     overlap_tokens: int = 50,
-) -> List[Dict[str, str]]:
-    chunks: List[Dict[str, str]] = []
+) -> list[dict[str, str]]:
+    chunks: list[dict[str, str]] = []
     product = derive_product(parsed_document.display_title, parsed_document.source_url, doc_type, keywords)
     version = derive_version(parsed_document.display_title, parsed_document.resolved_url)
     for section in parsed_document.sections:

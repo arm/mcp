@@ -12,23 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import yaml
-import numpy as np
-import math
-from typing import List, Dict, Tuple
+import argparse
+import datetime
+import glob
 import json
 import os
-import glob
-import datetime
+
+import numpy as np
+import yaml
 from sentence_transformers import SentenceTransformer
 from usearch.index import Index
 
 
-def sentence_transformer_cache_folder():
-    return os.getenv("SENTENCE_TRANSFORMERS_HOME") or None
-
-
-def load_local_yaml_files() -> List[Dict]:
+def load_local_yaml_files() -> list[dict]:
     """Load locally stored YAML files and return their contents as a list of dictionaries."""
     print("Loading local YAML files")
     yaml_contents = []
@@ -71,20 +67,20 @@ def load_local_yaml_files() -> List[Dict]:
     return yaml_contents
 
 
-def create_embeddings(contents: List[str], model_name: str = 'all-MiniLM-L6-v2') -> np.ndarray:
+def create_embeddings(contents: list[str], model_path: str) -> np.ndarray:
     """Create embeddings for the given contents using SentenceTransformers."""
-    print(f"Creating embeddings using model: {model_name}")
+    print(f"Creating embeddings using local model: {model_path}")
     model = SentenceTransformer(
-        model_name,
-        cache_folder=sentence_transformer_cache_folder(),
+        model_path,
         local_files_only=True,
+        trust_remote_code=False,
     )
     embeddings = model.encode(contents, show_progress_bar=True, convert_to_numpy=True)
     print(f"Created embeddings with shape: {embeddings.shape}")
     return embeddings
 
 
-def create_usearch_index(embeddings: np.ndarray, metadata: List[Dict]) -> Tuple[Index, List[Dict]]:
+def create_usearch_index(embeddings: np.ndarray, metadata: list[dict]) -> tuple[Index, list[dict]]:
     """Create a USearch index with the given embeddings and metadata."""
     print("Creating USearch index")
     print(f"Embeddings shape: {embeddings.shape}")
@@ -111,7 +107,20 @@ def create_usearch_index(embeddings: np.ndarray, metadata: List[Dict]) -> Tuple[
     return index, metadata
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Create the USearch datastore from local chunks and a local embedding model."
+    )
+    parser.add_argument(
+        "--model-path",
+        required=True,
+        help="Path to the embedding model created by acquire-model.py.",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     print("Starting the USearch datastore creation process")
 
     # Load local YAML files
@@ -158,7 +167,7 @@ def main():
         })
 
     # Create embeddings
-    embeddings = create_embeddings(contents)
+    embeddings = create_embeddings(contents, args.model_path)
 
     print("Saving embeddings to file")
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

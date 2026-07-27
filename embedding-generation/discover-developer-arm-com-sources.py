@@ -23,7 +23,7 @@ import csv
 import json
 import re
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any
 from urllib.parse import quote
 
 import requests
@@ -38,7 +38,7 @@ PAGE_SIZE = 48
 class CapturedSearchRequest:
     """A real Coveo search request captured from the browser, replayable with new queries."""
     url: str
-    headers: Dict[str, str]
+    headers: dict[str, str]
     post_data: str
 
 
@@ -84,7 +84,7 @@ async def capture_search_request(page_url: str) -> CapturedSearchRequest:
     )
 
 
-def replay_search(captured: CapturedSearchRequest, query: str, first_result: int) -> Dict[str, Any]:
+def replay_search(captured: CapturedSearchRequest, query: str, first_result: int) -> dict[str, Any]:
     """Replay the captured search request with a new query and result offset."""
     drop = {"host", "content-length", "accept-encoding", "connection", "origin", "referer", "cookie"}
     headers = {k: v for k, v in captured.headers.items() if k.lower() not in drop}
@@ -105,7 +105,7 @@ def replay_search(captured: CapturedSearchRequest, query: str, first_result: int
 def search_developer_arm_com(searchterm: str, search_url: str) -> list:
     """Run a developer.arm.com search and return all result items."""
 
-    def extract_result(item: Dict[str, Any]) -> Dict[str, Any]:
+    def extract_result(item: dict[str, Any]) -> dict[str, Any]:
         raw = item.get("raw", {})
         return {
             "title": item.get("title") or raw.get("title"),
@@ -131,7 +131,7 @@ def search_developer_arm_com(searchterm: str, search_url: str) -> list:
     return results
 
 
-def item_is_relevant(item: Dict[str, Any]) -> bool:
+def item_is_relevant(item: dict[str, Any]) -> bool:
     """Editorial filter: keep only the SME-related pages we want in the vector DB."""
     if not item.get("url"):
         return False
@@ -176,7 +176,7 @@ def item_is_relevant(item: Dict[str, Any]) -> bool:
             return False
 
 
-def item_keywords(item: Dict[str, Any], searchterm: str) -> list:
+def item_keywords(item: dict[str, Any], searchterm: str) -> list:
     """Build a deduplicated keyword list from the search term and result metadata."""
     keywords = [searchterm]
     for key_list in item["keywords"] or []:
