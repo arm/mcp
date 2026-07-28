@@ -948,11 +948,17 @@ def derive_product(title: str, source_url: str, doc_type: str, keywords: Iterabl
     parsed_source_url = urlparse(normalize_source_url(source_url))
     hostname = (parsed_source_url.hostname or "").lower()
     is_ampere_host = hostname == "amperecomputing.com" or hostname.endswith(".amperecomputing.com")
+    is_arm_host = (
+        hostname == "learn.arm.com"
+        or hostname.endswith(".learn.arm.com")
+        or hostname == "developer.arm.com"
+        or hostname.endswith(".developer.arm.com")
+    )
     if "graviton" in haystack:
         return "AWS Graviton"
     if "ampere" in haystack or is_ampere_host:
         return "Ampere"
-    if "learn.arm.com" in source_url or "developer.arm.com" in source_url or "/arm-" in source_url or " arm " in f" {haystack} ":
+    if is_arm_host or "/arm-" in source_url or " arm " in f" {haystack} ":
         return "Arm"
     return clean_text(doc_type) or "Documentation"
 
