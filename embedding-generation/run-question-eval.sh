@@ -9,7 +9,7 @@ eval_file="eval_questions.json"
 top_k="5"
 python_bin="${PYTHON:-python3}"
 embedding_base_image="${EMBEDDING_BASE_IMAGE:-armlimited/arm-mcp:mcp-embedding-base}"
-embedding_model="all-MiniLM-L6-v2"
+embedding_model_dir="${EMBEDDING_MODEL_DIR:-$script_dir/.cache/embedding-model}"
 refresh_intrinsic_chunks=0
 skip_intrinsic_copy=0
 
@@ -31,6 +31,8 @@ Environment:
   PYTHON                         Python executable (default: python3)
   EMBEDDING_BASE_IMAGE           Image with /embedding-data/intrinsic_chunks
                                  (default: armlimited/arm-mcp:mcp-embedding-base)
+  EMBEDDING_MODEL_DIR            Directory for the acquired embedding model
+                                 (default: .cache/embedding-model)
 USAGE
 }
 
@@ -110,11 +112,19 @@ fi
 echo "Generating chunks from $sources_file"
 "$python_bin" generate-chunks.py "$sources_file"
 
-echo "Ensuring embedding model is cached locally"
-"$python_bin" -c "from sentence_transformers import SentenceTransformer; import os; SentenceTransformer('$embedding_model', cache_folder=os.getenv('SENTENCE_TRANSFORMERS_HOME') or None)"
+echo "Acquiring locked embedding model in $embedding_model_dir"
+"$python_bin" acquire-model.py \
+  --lock embedding-model.lock.json \
+  --output "$embedding_model_dir"
 
 echo "Creating local vector store"
-"$python_bin" local_vectorstore_creation.py
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+  "$python_bin" local_vectorstore_creation.py \
+    --model-path "$embedding_model_dir"
 
 echo "Evaluating retrieval questions from $eval_file"
-"$python_bin" evaluate_retrieval.py --eval-path "$eval_file" --model-name "$embedding_model" --top-k "$top_k"
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+  "$python_bin" evaluate_retrieval.py \
+    --eval-path "$eval_file" \
+    --model-path "$embedding_model_dir" \
+    --top-k "$top_k"

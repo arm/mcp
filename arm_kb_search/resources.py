@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 import os
+from dataclasses import dataclass
 from typing import Any
 
 from rank_bm25 import BM25Okapi
@@ -23,7 +23,12 @@ from usearch.index import Index
 from .config import K_RESULTS
 from .loaders import load_metadata, load_usearch_index
 from .response import add_disclaimer_to_arm_results, add_utm_source_to_results
-from .search import build_bm25_index, deduplicate_urls, deduplication_candidate_count, hybrid_search
+from .search import (
+    build_bm25_index,
+    deduplicate_urls,
+    deduplication_candidate_count,
+    hybrid_search,
+)
 
 
 @dataclass
@@ -48,30 +53,30 @@ def embedding_dimension(embedding_model: SentenceTransformer) -> int:
 
 
 def load_embedding_model(
-    model_name: str,
+    model_name_or_path: str,
     cache_folder: str | None = None,
-    local_files_only_first: bool = True,
+    allow_download: bool = True,
 ) -> SentenceTransformer:
     resolved_cache_folder = cache_folder if cache_folder is not None else sentence_transformer_cache_folder()
-    if not local_files_only_first:
-        return SentenceTransformer(
-            model_name,
-            cache_folder=resolved_cache_folder,
-            local_files_only=False,
-        )
-
     try:
         return SentenceTransformer(
-            model_name,
+            model_name_or_path,
             cache_folder=resolved_cache_folder,
             local_files_only=True,
+            trust_remote_code=False,
         )
     except Exception as exc:
-        print(f"Local cache miss for embedding model '{model_name}', retrying with network access: {exc}")
+        if not allow_download:
+            raise
+        print(
+            f"Local cache miss for embedding model '{model_name_or_path}', "
+            f"retrying with network access: {exc}"
+        )
         return SentenceTransformer(
-            model_name,
+            model_name_or_path,
             cache_folder=resolved_cache_folder,
             local_files_only=False,
+            trust_remote_code=False,
         )
 
 
@@ -80,16 +85,17 @@ def load_search_resources(
     usearch_index_path: str,
     model_name: str = "all-MiniLM-L6-v2",
     cache_folder: str | None = None,
-    local_files_only_first: bool = True,
     default_k: int = K_RESULTS,
     include_disclaimers: bool = True,
     utm_source: str | None = None,
+    model_path: str | None = None,
 ) -> SearchResources:
+    """Load search resources, treating an explicit model path as local-only."""
     metadata = load_metadata(metadata_path)
     embedding_model = load_embedding_model(
-        model_name,
+        model_path if model_path is not None else model_name,
         cache_folder=cache_folder,
-        local_files_only_first=local_files_only_first,
+        allow_download=model_path is None,
     )
     usearch_index = load_usearch_index(
         usearch_index_path,
