@@ -170,16 +170,28 @@ def source_to_fetch_url(url: str) -> str:
             "https://raw.githubusercontent.com/ArmDeveloperEcosystem/"
             "arm-learning-paths/refs/heads/main/content/migration/_index.md"
         )
-    if "/github.com/aws/aws-graviton-getting-started/" in url:
-        specific_content = url.split("/main/", 1)[1]
-        return (
-            "https://raw.githubusercontent.com/aws/aws-graviton-getting-started/"
-            f"refs/heads/main/{specific_content}"
-        )
-    if url.startswith("https://github.com/") and "/blob/" in url:
-        owner_repo, path = url.split("/blob/", 1)
-        branch, relative_path = path.split("/", 1)
-        return owner_repo.replace("https://github.com/", "https://raw.githubusercontent.com/") + f"/{branch}/{relative_path}"
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or "").lower()
+    path_parts = [part for part in parsed.path.split("/") if part]
+
+    if parsed.scheme == "https" and hostname == "github.com" and len(path_parts) >= 2:
+        owner, repo = path_parts[0], path_parts[1]
+
+        # Support historical non-blob links for this specific repository where
+        # paths include a /main/... segment.
+        if owner == "aws" and repo == "aws-graviton-getting-started" and "main" in path_parts:
+            main_index = path_parts.index("main")
+            if main_index + 1 < len(path_parts):
+                specific_content = "/".join(path_parts[main_index + 1:])
+                return (
+                    "https://raw.githubusercontent.com/aws/aws-graviton-getting-started/"
+                    f"refs/heads/main/{specific_content}"
+                )
+
+        if len(path_parts) >= 5 and path_parts[2] == "blob":
+            branch = path_parts[3]
+            relative_path = "/".join(path_parts[4:])
+            return f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{relative_path}"
     return url
 
 

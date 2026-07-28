@@ -685,7 +685,7 @@ class TestSourceTracking:
         
         assert len(gc.all_sources) == 2
         assert "https://example.com/test" in gc.known_source_urls
-        assert "https://new.example.com" in gc.known_source_urls
+        assert gc.known_source_urls == {"https://example.com/test", "https://new.example.com"}
 
 
 class TestGetMarkdownGitHubURLsFromPage:
