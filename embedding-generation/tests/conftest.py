@@ -33,8 +33,7 @@ if _PARENT_DIR not in sys.path:
 def _load_generate_chunks():
     """Load generate-chunks.py module (hyphen in filename requires importlib)."""
     spec = importlib.util.spec_from_file_location(
-        "generate_chunks",
-        os.path.join(_PARENT_DIR, "generate-chunks.py")
+        "generate_chunks", os.path.join(_PARENT_DIR, "generate-chunks.py")
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

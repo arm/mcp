@@ -17,9 +17,9 @@ The Dockerfile:
 
 1. Starts from `armlimited/arm-mcp:mcp-embedding-base` to copy cached intrinsic chunks.
 2. Installs the Python dependencies in a build stage.
-3. Downloads the sentence-transformer model into the build cache.
+3. Acquires the sentence-transformer revision recorded in `embedding-model.lock.json`.
 4. Runs `generate-chunks.py vector-db-sources.csv`.
-5. Runs `local_vectorstore_creation.py`.
+5. Runs `local_vectorstore_creation.py` with the acquired model and networking disabled.
 6. Copies only `metadata.json` and `usearch_index.bin` into the final image.
 
 ## Add Documents
@@ -71,26 +71,35 @@ Leave the column empty for sources that are chunked from their primary `URL`.
 Install dependencies once:
 
 ```sh
-python3.10 -m venv venv
-. venv/bin/activate
-pip install -r requirements.txt
+uv sync --frozen
 ```
-Note: Python version >= 3.10 should be installed
+
+Python 3.13 is required.
 
 Run the full local question eval:
 
 ```sh
-./run-question-eval.sh
+uv run ./run-question-eval.sh
 ```
 
-That command copies intrinsic chunks from the embedding base image if needed, regenerates chunks, caches the embedding model if needed, rebuilds the local USearch index, and runs `evaluate_retrieval.py`.
+That command copies intrinsic chunks from the embedding base image if needed,
+regenerates chunks, acquires the revision in `embedding-model.lock.json`, rebuilds
+the local USearch index from that local model, and runs `evaluate_retrieval.py`
+without model network access.
 
 Useful options:
 
 ```sh
-./run-question-eval.sh --refresh-intrinsic-chunks
-./run-question-eval.sh --eval eval_questions.json --top-k 5
-SKIP_DISCOVERY=1 ./run-question-eval.sh
+uv run ./run-question-eval.sh --refresh-intrinsic-chunks
+uv run ./run-question-eval.sh --eval eval_questions.json --top-k 5
+SKIP_DISCOVERY=1 uv run ./run-question-eval.sh
+```
+
+Run lint and tests with:
+
+```sh
+uv run ruff check .
+uv run pytest
 ```
 
 To check a new document, add or update a question in `eval_questions.json` with the document URL in `expected_urls`, then run the wrapper. Review `Hit@1`, `Hit@3`, `Hit@5`, `MRR`, and any printed misses before committing the CSV change.

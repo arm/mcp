@@ -2,12 +2,12 @@ name: Embedding Generation Unit Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, secure-build]
     paths:
       - 'embedding-generation/**'
       - '.github/workflows/embedding-unit-tests.yml'
   pull_request:
-    branches: [main]
+    branches: [main, secure-build]
     paths:
       - 'embedding-generation/**'
       - '.github/workflows/embedding-unit-tests.yml'
@@ -35,7 +35,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest
+          pip install pytest ruff
+
+      - name: Run lint
+        run: ruff check .
 
       - name: Run unit tests
         run: python -m pytest tests/ -v --tb=short
