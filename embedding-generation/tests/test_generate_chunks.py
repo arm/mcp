@@ -23,6 +23,7 @@ import csv
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlparse
 
 from document_chunking import (
     chunk_parsed_document,
@@ -748,7 +749,7 @@ class TestSourceTracking:
 
         assert len(gc.all_sources) == 2
         assert "https://example.com/test" in gc.known_source_urls
-        assert "https://new.example.com" in gc.known_source_urls
+        assert gc.known_source_urls == {"https://example.com/test", "https://new.example.com"}
 
 
 class TestGetMarkdownGitHubURLsFromPage:
@@ -762,7 +763,8 @@ class TestGetMarkdownGitHubURLsFromPage:
 
         assert len(gh_urls) == 1
         assert len(site_urls) == 1
-        assert "raw.githubusercontent.com" in gh_urls[0]
+        parsed = urlparse(gh_urls[0])
+        assert parsed.hostname == "raw.githubusercontent.com"
         assert "migration/_index.md" in gh_urls[0]
         assert site_urls[0] == "https://learn.arm.com/migration"
 

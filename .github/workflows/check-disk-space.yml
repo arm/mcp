@@ -3,6 +3,8 @@ name: Check Runner Disk Space
 on:
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   check-disk-space:
     strategy:

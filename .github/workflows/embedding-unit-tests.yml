@@ -12,6 +12,9 @@ on:
       - 'embedding-generation/**'
       - '.github/workflows/embedding-unit-tests.yml'
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

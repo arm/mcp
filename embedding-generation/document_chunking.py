@@ -192,21 +192,28 @@ def source_to_fetch_url(url: str) -> str:
             "https://raw.githubusercontent.com/ArmDeveloperEcosystem/"
             "arm-learning-paths/refs/heads/main/content/migration/_index.md"
         )
-    if "/github.com/aws/aws-graviton-getting-started/" in url:
-        specific_content = url.split("/main/", 1)[1]
-        return (
-            "https://raw.githubusercontent.com/aws/aws-graviton-getting-started/"
-            f"refs/heads/main/{specific_content}"
-        )
-    if url.startswith("https://github.com/") and "/blob/" in url:
-        owner_repo, path = url.split("/blob/", 1)
-        branch, relative_path = path.split("/", 1)
-        return (
-            owner_repo.replace(
-                "https://github.com/", "https://raw.githubusercontent.com/"
-            )
-            + f"/{branch}/{relative_path}"
-        )
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or "").lower()
+    path_parts = [part for part in parsed.path.split("/") if part]
+
+    if parsed.scheme == "https" and hostname == "github.com" and len(path_parts) >= 2:
+        owner, repo = path_parts[0], path_parts[1]
+
+        # Support historical non-blob links for this specific repository where
+        # paths include a /main/... segment.
+        if owner == "aws" and repo == "aws-graviton-getting-started" and "main" in path_parts:
+            main_index = path_parts.index("main")
+            if main_index + 1 < len(path_parts):
+                specific_content = "/".join(path_parts[main_index + 1:])
+                return (
+                    "https://raw.githubusercontent.com/aws/aws-graviton-getting-started/"
+                    f"refs/heads/main/{specific_content}"
+                )
+
+        if len(path_parts) >= 5 and path_parts[2] == "blob":
+            branch = path_parts[3]
+            relative_path = "/".join(path_parts[4:])
+            return f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{relative_path}"
     return url
 
 
@@ -1077,16 +1084,20 @@ def derive_product(
     title: str, source_url: str, doc_type: str, keywords: Iterable[str]
 ) -> str:
     haystack = " ".join([title, source_url, doc_type, *keywords]).lower()
+    parsed_source_url = urlparse(normalize_source_url(source_url))
+    hostname = (parsed_source_url.hostname or "").lower()
+    is_ampere_host = hostname == "amperecomputing.com" or hostname.endswith(".amperecomputing.com")
+    is_arm_host = (
+        hostname == "learn.arm.com"
+        or hostname.endswith(".learn.arm.com")
+        or hostname == "developer.arm.com"
+        or hostname.endswith(".developer.arm.com")
+    )
     if "graviton" in haystack:
         return "AWS Graviton"
-    if "ampere" in haystack or "amperecomputing.com" in source_url:
+    if "ampere" in haystack or is_ampere_host:
         return "Ampere"
-    if (
-        "learn.arm.com" in source_url
-        or "developer.arm.com" in source_url
-        or "/arm-" in source_url
-        or " arm " in f" {haystack} "
-    ):
+    if is_arm_host or "/arm-" in source_url or " arm " in f" {haystack} ":
         return "Arm"
     return clean_text(doc_type) or "Documentation"
 
