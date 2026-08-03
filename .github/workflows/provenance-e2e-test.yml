@@ -161,6 +161,7 @@ jobs:
     environment: secure-build-test
     permissions:
       contents: read
+      attestations: read 
 
     steps:
       - name: Log in to Docker Hub
@@ -179,7 +180,6 @@ jobs:
           gh attestation verify \
             "oci://${TEST_IMAGE}@${DIGEST}" \
             --repo arm/mcp \
-            --signer-repo arm/mcp \
             --signer-workflow \
               arm/mcp/.github/workflows/provenance-e2e-test.yml \
             --source-ref refs/heads/provenance-e2e-test \
