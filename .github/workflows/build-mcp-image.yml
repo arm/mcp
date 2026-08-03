@@ -24,6 +24,8 @@ on:
 # only), so that one main+dry check stays inline.
 env:
   IMAGE: armlimited/arm-mcp
+  IMAGE_FQDN: docker.io/armlimited/arm-mcp
+  PROVENANCE_VERIFICATION_URL: https://github.com/arm/mcp/blob/main/docs/provenance-verification.md
   IS_MAIN: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}
   IS_DRY_RUN: ${{ github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true' }}
 
@@ -138,6 +140,10 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    outputs:
+      bump_sha: ${{ steps.bump.outputs.bump_sha }}
+      final_image_digest: ${{ steps.final_image_digest.outputs.digest }}
+      tag_version: ${{ steps.version.outputs.tag_version }}
     if: ${{ needs.build-arch-images.result == 'success' }}
     steps:
       - name: Block publishing reruns
@@ -301,15 +307,102 @@ jobs:
             "${IMAGE}:${DATE_TAG}"
           echo "Aliased ${DATE_TAG} as latest and ${TAG_VERSION}."
 
-      # FINAL irreversible step: the git tag is the version cursor, so create it last. Every earlier step (bump, Docker aliases) is idempotent and
-      # leaves no tag on failure, so a FRESH run (reruns are blocked above) recomputes the SAME version and self-heals. Tag and Release are created
-      # together (both at the bump commit) to minimize the window between them.
+      # Integration contract for the parallel final-digest work: add a step
+      # before this one that resolves the immutable digest of IMAGE:TAG_VERSION,
+      # then replace this temporary fail-closed step while preserving its
+      # `final_image_digest` id and `digest` output contract.
+      - name: Await final image digest integration
+        id: final_image_digest
+        if: ${{ env.IS_DRY_RUN != 'true' }}
+        run: |
+          echo "::error::The parallel final-image digest resolver has not been integrated."
+          exit 1
+
+  attest-image:
+    name: Attest production image provenance
+    needs: [build-arch-images, merge-manifests]
+    if: >-
+      ${{
+        needs.merge-manifests.result == 'success'
+        && (
+          (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')
+          || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main')
+        )
+        && !(github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true')
+      }}
+    runs-on: ubuntu-24.04
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      # Required by actions/attest for the linked-artifact storage record.
+      # Docker Hub publication itself uses the scoped registry credentials
+      # below, so GitHub Packages write access is intentionally not granted.
+      artifact-metadata: write
+    outputs:
+      attestation_url: ${{ steps.attest.outputs['attestation-url'] }}
+    steps:
+      - name: Validate final multi-arch image digest
+        env:
+          FINAL_IMAGE_DIGEST: ${{ needs.merge-manifests.outputs.final_image_digest }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "${FINAL_IMAGE_DIGEST}" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "::error::Final multi-arch image digest is missing or invalid."
+            exit 1
+          fi
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Generate and publish provenance attestation
+        id: attest
+        uses: actions/attest@v4
+        with:
+          subject-name: ${{ env.IMAGE_FQDN }}
+          subject-digest: ${{ needs.merge-manifests.outputs.final_image_digest }}
+          push-to-registry: true
+
+  create-release:
+    name: Create Git tag and GitHub Release
+    needs: [build-arch-images, merge-manifests, attest-image]
+    # Dry runs intentionally skip attestation but still validate release logic.
+    # Publishing runs may proceed only after the attestation job succeeds.
+    if: >-
+      ${{
+        always()
+        && needs.merge-manifests.result == 'success'
+        && (
+          (github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true')
+          || needs.attest-image.result == 'success'
+        )
+      }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+
+      # FINAL irreversible step: the git tag is the version cursor, so create
+      # it only after provenance publication succeeds. Every earlier release
+      # step is retryable by starting a fresh workflow run.
       - name: Create git tag and GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
-          BUMP_SHA: ${{ steps.bump.outputs.bump_sha }}
+          TAG_VERSION: ${{ needs.merge-manifests.outputs.tag_version }}
+          BUMP_SHA: ${{ needs.merge-manifests.outputs.bump_sha }}
           BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
+          FINAL_IMAGE_DIGEST: ${{ needs.merge-manifests.outputs.final_image_digest }}
+          SOURCE_COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ATTESTATION_URL: ${{ needs.attest-image.outputs.attestation_url }}
         run: |
           set -euo pipefail
           GIT_TAG="v${TAG_VERSION}"
@@ -336,8 +429,15 @@ jobs:
             echo "Created and pushed ${GIT_TAG} at ${BUMP_SHA}."
           fi
 
-          # Publish the Release on that tag with generated notes + image line.
+          # Publish the Release on that tag with generated notes and the exact
+          # image/provenance identity needed for independent verification.
           gh release create "${GIT_TAG}" --title "${GIT_TAG}" --generate-notes
           NOTES="$(gh release view "${GIT_TAG}" --json body --jq '.body')"
-          printf 'Docker image: `%s:%s` (built %s)\n\n%s\n' "${IMAGE}" "${TAG_VERSION}" "${BUILD_DATE}" "${NOTES}" | gh release edit "${GIT_TAG}" --notes-file -
+          {
+            printf 'Docker image: `%s:%s` (built %s)\n' "${IMAGE_FQDN}" "${TAG_VERSION}" "${BUILD_DATE}"
+            printf 'Immutable digest: `%s`\n' "${FINAL_IMAGE_DIGEST}"
+            printf 'Source commit: [`%s`](https://github.com/%s/commit/%s)\n' "${SOURCE_COMMIT}" "${GITHUB_REPOSITORY}" "${SOURCE_COMMIT}"
+            printf 'Provenance: [attestation](%s) · [verification instructions](%s)\n\n' "${ATTESTATION_URL}" "${PROVENANCE_VERIFICATION_URL}"
+            printf '%s\n' "${NOTES}"
+          } | gh release edit "${GIT_TAG}" --notes-file -
           echo "Published GitHub Release ${GIT_TAG}."
