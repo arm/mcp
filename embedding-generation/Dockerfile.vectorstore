@@ -39,6 +39,9 @@ RUN --network=none \
 FROM scratch AS vectorstore
 
 COPY --from=generation \
+    /embedding-data/embedding-model/ \
+    /embedding-data/embedding-model/
+COPY --from=generation \
     /output/metadata.json \
     /embedding-data/metadata.json
 COPY --from=generation \

@@ -4,6 +4,7 @@ This directory builds the vector database artifacts used by the MCP server:
 
 - `metadata.json`
 - `usearch_index.bin`
+- `embedding-model/`
 
 ## Build the Toolchain Image
 
@@ -25,8 +26,9 @@ The toolchain image:
 content acquisition, then publishes only the acquired chunk snapshot from a
 scratch stage. `Dockerfile.vectorstore` uses the same toolchain and that
 immutable chunk snapshot to build `metadata.json` and `usearch_index.bin`
-without network access. Its scratch output keeps the paths consumed by
-`mcp-local/Dockerfile` and is published privately as
+without network access. The scratch output also includes the exact local model
+used to generate the index, keeping the model, metadata, and index together as
+one immutable artifact. It is published privately as
 `ghcr.io/arm/mcp-embedding-vectorstore`.
 
 ## Add Documents
