@@ -12,18 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Keep the embedding pipeline build context explicit.
-**
-!.dockerignore
-!Dockerfile.toolchain
-!Dockerfile.acquire
-!Dockerfile.vectorstore
-!.python-version
-!pyproject.toml
-!uv.lock
-!embedding-model.lock.json
-!acquire-model.py
-!document_chunking.py
-!generate-chunks.py
-!local_vectorstore_creation.py
-!vector-db-sources.csv
+import pytest
+
+from local_vectorstore_creation import load_local_yaml_files
+
+
+def test_load_local_yaml_files_requires_intrinsic_chunks(tmp_path, monkeypatch):
+    intrinsic_dir = tmp_path / "intrinsic_chunks"
+    intrinsic_dir.mkdir()
+    monkeypatch.setenv("INTRINSIC_CHUNKS_DIR", str(intrinsic_dir))
+    monkeypatch.setenv("YAML_DATA_DIR", str(tmp_path / "yaml_data"))
+
+    with pytest.raises(FileNotFoundError, match="No intrinsic chunk YAML files found"):
+        load_local_yaml_files()

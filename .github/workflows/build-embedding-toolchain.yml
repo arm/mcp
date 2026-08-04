@@ -1,19 +1,18 @@
-name: Build Embedding Generator Image
+name: Build Embedding Toolchain Image
 
 on:
   workflow_dispatch:
-    
-  # Temporary: workflow_dispatch is unavailable until this workflow exists on
-  # the default branch. Remove this trigger after publishing the PR's image.
+  # Temporary: remove after the package-creation test succeeds.
   push:
-    branches: [stestol-571-offline-generator]
+    branches:
+      - stestol-571-offline-generator
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/mcp-embedding-generator
   PACKAGE_NAME: mcp-embedding-generator
 
 jobs:
-  build-generator:
+  build-toolchain:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     permissions:
@@ -23,19 +22,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Verify GHCR package is private
+      - name: Verify existing GHCR package is private
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          visibility="$(gh api \
-            "/orgs/${{ github.repository_owner }}/packages/container/${PACKAGE_NAME}" \
-            --jq .visibility)"
-
-          if [ "${visibility}" != "private" ]; then
-            echo "::error::Refusing to publish because ${IMAGE} is ${visibility}, not private."
-            exit 1
-          fi
+        run: bash .github/scripts/verify-ghcr-package-private.sh "${PACKAGE_NAME}" --allow-missing
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
@@ -47,19 +37,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Build and push generator image
+      - name: Build and push toolchain image
         id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: embedding-generation
-          file: embedding-generation/Dockerfile.generator
+          file: embedding-generation/Dockerfile.toolchain
           platforms: linux/arm64
           push: true
           tags: ${{ env.IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.title=Arm MCP embedding generator
+            org.opencontainers.image.title=Arm MCP embedding toolchain
+
+      - name: Verify published GHCR package is private
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/verify-ghcr-package-private.sh "${PACKAGE_NAME}"
 
       - name: Record published digest
         env:
@@ -67,7 +62,7 @@ jobs:
           TAG: ${{ env.IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           {
-            echo "### Embedding generator image"
+            echo "### Embedding toolchain image"
             echo ""
             echo "- Tag: \`${TAG}\`"
             echo "- Immutable reference: \`${IMAGE}@${DIGEST}\`"

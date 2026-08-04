@@ -1,41 +1,191 @@
-name: Build Embeddings Image
+name: Build Offline Embedding Pipeline
 
+# workflow_dispatch can run only after this workflow exists on the default
+# branch. To exercise it from this PR, temporarily add a branch-scoped push
+# trigger in a test commit and remove that trigger before merging.
 on:
-  schedule:
-    - cron: "0 9 * * 0"
   workflow_dispatch:
 
+env:
+  CHUNK_IMAGE: ghcr.io/${{ github.repository_owner }}/mcp-embedding-chunks
+  CHUNK_PACKAGE_NAME: mcp-embedding-chunks
+  VECTORSTORE_IMAGE: ghcr.io/${{ github.repository_owner }}/mcp-embedding-vectorstore
+  VECTORSTORE_PACKAGE_NAME: mcp-embedding-vectorstore
+
 jobs:
-  build-embeddings:
+  acquire-and-publish-chunks:
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
     permissions:
       contents: read
       packages: write
+    outputs:
+      chunk-artifact-digest: ${{ steps.publish.outputs.digest }}
+      generator-image: ${{ steps.inputs.outputs.generator_image }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Set build date (UTC)
-        run: echo "BUILD_DATE=$(date -u +%Y-%m-%d)" >> "$GITHUB_ENV"
+      - name: Load immutable pipeline inputs
+        id: inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          inputs_file="embedding-generation/pipeline-inputs.lock.json"
+
+          if ! jq -e '
+            type == "object" and
+            (keys | sort) == ["generator_image", "intrinsic_chunks_image"]
+          ' "${inputs_file}" > /dev/null; then
+            echo "::error::${inputs_file} must contain only the two expected image inputs."
+            exit 1
+          fi
+
+          generator_image="$(jq -er '.generator_image | select(type == "string")' "${inputs_file}")"
+          intrinsic_chunks_image="$(jq -er '.intrinsic_chunks_image | select(type == "string")' "${inputs_file}")"
+          digest_pattern='^[A-Za-z0-9./:_-]+@sha256:[0-9a-f]{64}$'
+
+          if [[ ! "${generator_image}" =~ ${digest_pattern} ]]; then
+            echo "::error::generator_image is not an immutable sha256 reference."
+            exit 1
+          fi
+          if [[ ! "${intrinsic_chunks_image}" =~ ${digest_pattern} ]]; then
+            echo "::error::intrinsic_chunks_image is not an immutable sha256 reference."
+            exit 1
+          fi
+
+          {
+            printf 'generator_image=%s\n' "${generator_image}"
+            printf 'intrinsic_chunks_image=%s\n' "${intrinsic_chunks_image}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Verify existing chunk package is private
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/verify-ghcr-package-private.sh "${CHUNK_PACKAGE_NAME}" --allow-missing
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push embeddings image
-        uses: docker/build-push-action@v7
+      - name: Acquire and publish chunk artifact
+        id: publish
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: embedding-generation
-          file: embedding-generation/Dockerfile
+          file: embedding-generation/Dockerfile.acquire
+          target: chunks
           platforms: linux/arm64
+          pull: true
+          no-cache: true
           push: true
-          tags: |
-            armlimited/arm-mcp:embeddings-${{ env.BUILD_DATE }}
-            armlimited/arm-mcp:embeddings-latest
-          build-args: |
-            EMBEDDING_BASE_IMAGE=armlimited/arm-mcp:mcp-embedding-base
+          build-contexts: |
+            toolchain=docker-image://${{ steps.inputs.outputs.generator_image }}
+            intrinsic-chunks=docker-image://${{ steps.inputs.outputs.intrinsic_chunks_image }}
+          tags: ${{ env.CHUNK_IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.title=Arm MCP immutable embedding chunks
+
+      - name: Verify published chunk package is private
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/verify-ghcr-package-private.sh "${CHUNK_PACKAGE_NAME}"
+
+      - name: Record published chunk digest
+        env:
+          DIGEST: ${{ steps.publish.outputs.digest }}
+          TAG: ${{ env.CHUNK_IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Build did not return a valid chunk artifact digest."
+            exit 1
+          fi
+
+          {
+            echo "### Immutable embedding chunk artifact"
+            echo ""
+            echo "- Tag: \`${TAG}\`"
+            echo "- Digest: \`${DIGEST}\`"
+            echo "- Pipeline input: \`${CHUNK_IMAGE}@${DIGEST}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  generate-and-publish-vectorstore:
+    needs: acquire-and-publish-chunks
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      embeddings-image-digest: ${{ steps.publish.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Verify existing vectorstore package is private
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/verify-ghcr-package-private.sh "${VECTORSTORE_PACKAGE_NAME}" --allow-missing
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Generate and publish vectorstore image
+        id: publish
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: embedding-generation
+          file: embedding-generation/Dockerfile.vectorstore
+          target: vectorstore
+          platforms: linux/arm64
+          pull: true
+          network: none
+          push: true
+          build-contexts: |
+            toolchain=docker-image://${{ needs.acquire-and-publish-chunks.outputs.generator-image }}
+            chunks=docker-image://${{ env.CHUNK_IMAGE }}@${{ needs.acquire-and-publish-chunks.outputs.chunk-artifact-digest }}
+          tags: ${{ env.VECTORSTORE_IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.title=Arm MCP embeddings
+
+      - name: Verify published vectorstore package is private
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/verify-ghcr-package-private.sh "${VECTORSTORE_PACKAGE_NAME}"
+
+      - name: Record published embeddings digest
+        env:
+          DIGEST: ${{ steps.publish.outputs.digest }}
+          TAG: ${{ env.VECTORSTORE_IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Build did not return a valid embeddings image digest."
+            exit 1
+          fi
+
+          {
+            echo "### Immutable embeddings image"
+            echo ""
+            echo "- Tag: \`${TAG}\`"
+            echo "- Digest: \`${DIGEST}\`"
+            echo "- MCP build input: \`${VECTORSTORE_IMAGE}@${DIGEST}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
