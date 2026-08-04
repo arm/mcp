@@ -2,31 +2,18 @@ name: Build Embedding Generator Image
 
 on:
   workflow_dispatch:
-  pull_request:
-    branches: [secure-build]
-    paths:
-      - "embedding-generation/Dockerfile.generator"
-      - "embedding-generation/.dockerignore"
-      - "embedding-generation/.python-version"
-      - "embedding-generation/pyproject.toml"
-      - "embedding-generation/uv.lock"
-      - "embedding-generation/embedding-model.lock.json"
-      - "embedding-generation/acquire-model.py"
-      - "embedding-generation/document_chunking.py"
-      - "embedding-generation/generate-chunks.py"
-      - "embedding-generation/local_vectorstore_creation.py"
-      - ".github/workflows/build-embedding-generator.yml"
+    
+  # Temporary: workflow_dispatch is unavailable until this workflow exists on
+  # the default branch. Remove this trigger after publishing the PR's image.
+  push:
+    branches: [stestol-571-offline-generator]
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/mcp-embedding-generator
   PACKAGE_NAME: mcp-embedding-generator
-  SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   build-generator:
-    # A pull request from the same repository may publish a private candidate
-    # image. Never give a fork pull request a path to the package write token.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     permissions:
@@ -35,10 +22,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          # For pull_request, build the reviewed branch commit rather than the
-          # temporary merge commit synthesized by GitHub.
-          ref: ${{ env.SOURCE_SHA }}
+
+      - name: Verify GHCR package is private
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          visibility="$(gh api \
+            "/orgs/${{ github.repository_owner }}/packages/container/${PACKAGE_NAME}" \
+            --jq .visibility)"
+
+          if [ "${visibility}" != "private" ]; then
+            echo "::error::Refusing to publish because ${IMAGE} is ${visibility}, not private."
+            exit 1
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
@@ -58,32 +55,16 @@ jobs:
           file: embedding-generation/Dockerfile.generator
           platforms: linux/arm64
           push: true
-          tags: ${{ env.IMAGE }}:git-${{ env.SOURCE_SHA }}-run-${{ github.run_id }}-${{ github.run_attempt }}
+          tags: ${{ env.IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
           labels: |
-            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.title=Arm MCP embedding generator
-
-      # The first push creates the package and GitHub defaults new container
-      # packages to private. Assert that policy after every publication.
-      - name: Verify published package is private
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          visibility="$(gh api \
-            "/orgs/${{ github.repository_owner }}/packages/container/${PACKAGE_NAME}" \
-            --jq .visibility)"
-
-          if [ "${visibility}" != "private" ]; then
-            echo "::error::Published package ${IMAGE} is ${visibility}, not private."
-            exit 1
-          fi
 
       - name: Record published digest
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
-          TAG: ${{ env.IMAGE }}:git-${{ env.SOURCE_SHA }}-run-${{ github.run_id }}-${{ github.run_attempt }}
+          TAG: ${{ env.IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           {
             echo "### Embedding generator image"
