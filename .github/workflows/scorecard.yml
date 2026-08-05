@@ -12,7 +12,7 @@ on:
   schedule:
     - cron: '38 17 * * 0'
   push:
-    branches: [ "main", "secure-build" ]
+    branches: [ "main", "secure-build", "stesol-576-ossf-scorecard" ]
 
 # Declare default permissions as read only.
 permissions: read-all
