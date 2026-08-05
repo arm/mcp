@@ -1,8 +1,5 @@
 name: Build Offline Embedding Pipeline
 
-# workflow_dispatch can run only after this workflow exists on the default
-# branch. To exercise it from this PR, temporarily add a branch-scoped push
-# trigger in a test commit and remove that trigger before merging.
 on:
   workflow_dispatch:
 

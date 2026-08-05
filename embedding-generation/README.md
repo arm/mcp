@@ -1,10 +1,13 @@
 # Embedding Generation
 
-This directory builds the vector database artifacts used by the MCP server:
+This directory produces and packages the vector-store assets used by the MCP server:
 
-- `metadata.json`
-- `usearch_index.bin`
-- `embedding-model/`
+- Generated `metadata.json`
+- Generated `usearch_index.bin`
+- A pinned, locally saved Sentence Transformers model in `embedding-model/`
+
+These assets are published together in the final vector-store image and used as
+inputs to the MCP image build.
 
 ## Build the Toolchain Image
 
