@@ -1,0 +1,24 @@
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    # A root entry scans workflows under .github/workflows.
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "uv"
+    directory: "/embedding-generation"
+    schedule:
+      interval: "weekly"
+
+  # Root project (used for arm-kb-search) is PEP 621
+  # but doesn't currently have a uv lockfile.
+  # Move mcp-local to a separate uv entry after its lockfile migration.
+  - package-ecosystem: "pip"
+    directories:
+      - "/"
+      - "/mcp-local"
+      - "/mcp-local/tests"
+    schedule:
+      interval: "weekly"
