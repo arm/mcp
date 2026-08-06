@@ -23,10 +23,13 @@ import csv
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlparse
 
-import pytest
-
-from document_chunking import chunk_parsed_document, learn_learning_path_step_urls, parse_document_content
+from document_chunking import (
+    chunk_parsed_document,
+    learn_learning_path_step_urls,
+    parse_document_content,
+)
 
 FIXTURE_DIR = Path(__file__).parent
 SAMPLE_PPTX_FIXTURE = "sample_course_slides.pptx"
@@ -57,9 +60,9 @@ class TestChunkClass:
             url="https://example.com",
             uuid="test-uuid-123",
             keywords=["python", "testing"],
-            content="This is test content."
+            content="This is test content.",
         )
-        
+
         assert chunk.title == "Test Title"
         assert chunk.url == "https://example.com"
         assert chunk.uuid == "test-uuid-123"
@@ -72,9 +75,9 @@ class TestChunkClass:
             url="https://example.com",
             uuid="uuid",
             keywords=["Python", "TESTING", "Arm"],
-            content="content"
+            content="content",
         )
-        
+
         assert chunk.keywords == "python, testing, arm"
 
     def test_chunk_keywords_with_spaces(self, gc):
@@ -84,9 +87,9 @@ class TestChunkClass:
             url="https://example.com",
             uuid="uuid",
             keywords=["  python  ", "testing  "],
-            content="content"
+            content="content",
         )
-        
+
         # Each keyword should be stripped individually before joining
         assert chunk.keywords == "python, testing"
 
@@ -106,9 +109,9 @@ class TestChunkClass:
             resolved_url="https://example.com/resolved",
             content_type="markdown",
         )
-        
+
         result = chunk.toDict()
-        
+
         assert result["title"] == "Test Title"
         assert result["url"] == "https://example.com"
         assert result["uuid"] == "test-uuid"
@@ -129,9 +132,9 @@ class TestChunkClass:
             url="https://example.com",
             uuid="uuid",
             keywords=[],
-            content="content"
+            content="content",
         )
-        
+
         assert chunk.keywords == ""
 
 
@@ -211,7 +214,10 @@ class TestDocumentChunkingAnchors:
 
         assert parsed.display_title == "Challenges facing Cloud and Edge AI inference"
         assert parsed.content_type == "pptx"
-        assert [section.heading_path for section in parsed.sections] == [["Slide 1"], ["Slide 2"]]
+        assert [section.heading_path for section in parsed.sections] == [
+            ["Slide 1"],
+            ["Slide 2"],
+        ]
         assert len(chunks) == 2
         assert chunks[0]["content_type"] == "pptx"
         assert "Recognizing Generative AI trends" in chunks[0]["content"]
@@ -245,7 +251,9 @@ class TestDocumentChunkingAnchors:
                         },
                         {
                             "output_type": "display_data",
-                            "data": {"text/html": "<strong>HTML result</strong> on Arm CPUs."},
+                            "data": {
+                                "text/html": "<strong>HTML result</strong> on Arm CPUs."
+                            },
                         },
                     ],
                 },
@@ -321,9 +329,13 @@ class TestDocumentChunkingAnchors:
             fallback_title="Example",
         )
 
-        chunks = chunk_parsed_document(parsed, doc_type="Learning Path", keywords=["SME2"], min_tokens=1)
+        chunks = chunk_parsed_document(
+            parsed, doc_type="Learning Path", keywords=["SME2"], min_tokens=1
+        )
 
-        assert chunks[0]["url"] == "https://learn.arm.com/example/1-get-started/#devices"
+        assert (
+            chunks[0]["url"] == "https://learn.arm.com/example/1-get-started/#devices"
+        )
         assert chunks[0]["heading_path"] == ["Devices with native SME2 support"]
 
     def test_html_heading_id_is_used_as_chunk_url_fragment(self):
@@ -339,11 +351,14 @@ class TestDocumentChunkingAnchors:
             fallback_title="Example",
         )
 
-        chunks = chunk_parsed_document(parsed, doc_type="Learning Path", keywords=["SME2"], min_tokens=1)
+        chunks = chunk_parsed_document(
+            parsed, doc_type="Learning Path", keywords=["SME2"], min_tokens=1
+        )
 
-        assert chunks[0]["url"] == "https://learn.arm.com/example/1-get-started/#devices"
+        assert (
+            chunks[0]["url"] == "https://learn.arm.com/example/1-get-started/#devices"
+        )
         assert chunks[0]["heading_path"] == ["Devices with native SME2 support"]
-
 
     def test_learn_learning_path_step_urls_discovers_same_path_steps(self):
         html = (
@@ -357,7 +372,9 @@ class TestDocumentChunkingAnchors:
         assert learn_learning_path_step_urls(
             "https://learn.arm.com/learning-paths/cross-platform/example/",
             html,
-        ) == ["https://learn.arm.com/learning-paths/cross-platform/example/1-get-started/"]
+        ) == [
+            "https://learn.arm.com/learning-paths/cross-platform/example/1-get-started/"
+        ]
 
     def test_html_table_under_heading_is_returned_as_anchor_chunk(self):
         parsed = parse_document_content(
@@ -379,12 +396,23 @@ class TestDocumentChunkingAnchors:
             fallback_title="Example",
         )
 
-        chunks = chunk_parsed_document(parsed, doc_type="Learning Path", keywords=["SME2"], min_tokens=1)
-        devices_chunks = [chunk for chunk in chunks if chunk["url"] == "https://learn.arm.com/example/1-get-started/#devices"]
+        chunks = chunk_parsed_document(
+            parsed, doc_type="Learning Path", keywords=["SME2"], min_tokens=1
+        )
+        devices_chunks = [
+            chunk
+            for chunk in chunks
+            if chunk["url"] == "https://learn.arm.com/example/1-get-started/#devices"
+        ]
 
         assert devices_chunks
-        assert "Vivo X300 | 2025 | MediaTek Dimensity 9500" in devices_chunks[0]["content"]
-        assert "OPPO Find X9 | 2025 | MediaTek Dimensity 9500" in devices_chunks[0]["content"]
+        assert (
+            "Vivo X300 | 2025 | MediaTek Dimensity 9500" in devices_chunks[0]["content"]
+        )
+        assert (
+            "OPPO Find X9 | 2025 | MediaTek Dimensity 9500"
+            in devices_chunks[0]["content"]
+        )
         assert "MacBook Air (2025) | 2025 | M4" in devices_chunks[0]["content"]
 
     def test_markdown_links_stay_on_source_chunk_as_link_evidence(self):
@@ -401,12 +429,19 @@ class TestDocumentChunkingAnchors:
             fallback_title="Example",
         )
 
-        chunks = chunk_parsed_document(parsed, doc_type="Learning Path", keywords=["SME2"], min_tokens=1)
+        chunks = chunk_parsed_document(
+            parsed, doc_type="Learning Path", keywords=["SME2"], min_tokens=1
+        )
 
-        assert not any(chunk["content_type"].endswith(":linked-reference") for chunk in chunks)
+        assert not any(
+            chunk["content_type"].endswith(":linked-reference") for chunk in chunks
+        )
         assert chunks[0]["url"] == "https://learn.arm.com/example/"
         assert "devices with SME2 support" in chunks[0]["content"]
-        assert "https://learn.arm.com/example/1-get-started/#devices" in chunks[0]["content"]
+        assert (
+            "https://learn.arm.com/example/1-get-started/#devices"
+            in chunks[0]["content"]
+        )
 
     def test_html_links_stay_on_source_chunk_as_link_evidence(self):
         parsed = parse_document_content(
@@ -421,17 +456,24 @@ class TestDocumentChunkingAnchors:
             fallback_title="Example",
         )
 
-        chunks = chunk_parsed_document(parsed, doc_type="Learning Path", keywords=["SME2"], min_tokens=1)
+        chunks = chunk_parsed_document(
+            parsed, doc_type="Learning Path", keywords=["SME2"], min_tokens=1
+        )
 
-        assert not any(chunk["content_type"].endswith(":linked-reference") for chunk in chunks)
+        assert not any(
+            chunk["content_type"].endswith(":linked-reference") for chunk in chunks
+        )
         assert chunks[0]["url"] == "https://learn.arm.com/example/"
         assert "devices with SME2 support" in chunks[0]["content"]
-        assert "https://learn.arm.com/example/1-get-started/#devices" in chunks[0]["content"]
+        assert (
+            "https://learn.arm.com/example/1-get-started/#devices"
+            in chunks[0]["content"]
+        )
 
 
 class TestSourceTracking:
     """Tests for source tracking functions.
-    
+
     Note: The gc fixture (from conftest.py) automatically resets
     known_source_urls and all_sources before and after each test.
     """
@@ -443,14 +485,14 @@ class TestSourceTracking:
             license_type="MIT",
             display_name="Test Display",
             url="https://example.com/test",
-            keywords=["test", "example"]
+            keywords=["test", "example"],
         )
-        
+
         assert result is True
         assert "https://example.com/test" in gc.known_source_urls
         assert len(gc.all_sources) == 1
-        assert gc.all_sources[0]['url'] == "https://example.com/test"
-        assert gc.all_sources[0]['keywords'] == "test; example"
+        assert gc.all_sources[0]["url"] == "https://example.com/test"
+        assert gc.all_sources[0]["keywords"] == "test; example"
 
     def test_register_source_duplicate(self, gc):
         """Test that duplicate URLs are rejected."""
@@ -459,17 +501,17 @@ class TestSourceTracking:
             license_type="MIT",
             display_name="Test Display",
             url="https://example.com/test",
-            keywords="test"
+            keywords="test",
         )
-        
+
         result = gc.register_source(
             site_name="Test Site 2",
             license_type="Apache",
             display_name="Different Display",
             url="https://example.com/test",
-            keywords="different"
+            keywords="different",
         )
-        
+
         assert result is False
         assert len(gc.all_sources) == 1
 
@@ -477,51 +519,51 @@ class TestSourceTracking:
         """Test that new sources stay grouped with existing sources from the same site."""
         gc.all_sources = [
             {
-                'site_name': 'Google Cloud',
-                'license_type': 'CC4.0',
-                'display_name': 'Google 1',
-                'url': 'https://example.com/google-1',
-                'keywords': 'g1'
+                "site_name": "Google Cloud",
+                "license_type": "CC4.0",
+                "display_name": "Google 1",
+                "url": "https://example.com/google-1",
+                "keywords": "g1",
             },
             {
-                'site_name': 'Ecosystem Dashboard',
-                'license_type': 'Arm Proprietary',
-                'display_name': 'Dashboard 1',
-                'url': 'https://example.com/dashboard-1',
-                'keywords': 'd1'
+                "site_name": "Ecosystem Dashboard",
+                "license_type": "Arm Proprietary",
+                "display_name": "Dashboard 1",
+                "url": "https://example.com/dashboard-1",
+                "keywords": "d1",
             },
             {
-                'site_name': 'Ecosystem Dashboard',
-                'license_type': 'Arm Proprietary',
-                'display_name': 'Dashboard 2',
-                'url': 'https://example.com/dashboard-2',
-                'keywords': 'd2'
+                "site_name": "Ecosystem Dashboard",
+                "license_type": "Arm Proprietary",
+                "display_name": "Dashboard 2",
+                "url": "https://example.com/dashboard-2",
+                "keywords": "d2",
             },
             {
-                'site_name': 'AWS Graviton',
-                'license_type': 'Apache-2.0',
-                'display_name': 'Graviton 1',
-                'url': 'https://example.com/graviton-1',
-                'keywords': 'a1'
+                "site_name": "AWS Graviton",
+                "license_type": "Apache-2.0",
+                "display_name": "Graviton 1",
+                "url": "https://example.com/graviton-1",
+                "keywords": "a1",
             },
         ]
-        gc.known_source_urls = {source['url'] for source in gc.all_sources}
+        gc.known_source_urls = {source["url"] for source in gc.all_sources}
 
         result = gc.register_source(
             site_name="Ecosystem Dashboard",
             license_type="Arm Proprietary",
             display_name="Dashboard 3",
             url="https://example.com/dashboard-3",
-            keywords=["d3"]
+            keywords=["d3"],
         )
 
         assert result is True
-        assert [source['display_name'] for source in gc.all_sources] == [
-            'Google 1',
-            'Dashboard 1',
-            'Dashboard 2',
-            'Dashboard 3',
-            'Graviton 1',
+        assert [source["display_name"] for source in gc.all_sources] == [
+            "Google 1",
+            "Dashboard 1",
+            "Dashboard 2",
+            "Dashboard 3",
+            "Graviton 1",
         ]
 
     def test_register_source_url_normalization(self, gc):
@@ -531,9 +573,9 @@ class TestSourceTracking:
             license_type="MIT",
             display_name="Test",
             url="  https://example.com/test  ",
-            keywords="test"
+            keywords="test",
         )
-        
+
         assert "https://example.com/test" in gc.known_source_urls
 
     def test_register_source_string_keywords(self, gc):
@@ -543,15 +585,15 @@ class TestSourceTracking:
             license_type="MIT",
             display_name="Test",
             url="https://example.com",
-            keywords="already; formatted; string"
+            keywords="already; formatted; string",
         )
-        
-        assert gc.all_sources[0]['keywords'] == "already; formatted; string"
+
+        assert gc.all_sources[0]["keywords"] == "already; formatted; string"
 
     def test_load_existing_sources_file_not_exists(self, gc, tmp_path):
         """Test loading from non-existent file."""
         gc.load_existing_sources(str(tmp_path / "nonexistent.csv"))
-        
+
         assert len(gc.all_sources) == 0
         assert len(gc.known_source_urls) == 0
 
@@ -563,73 +605,94 @@ class TestSourceTracking:
             "Test Site,MIT,Test Display,https://example.com/1,key1; key2\n"
             "Another Site,Apache,Another Display,https://example.com/2,key3\n"
         )
-        
+
         gc.load_existing_sources(str(csv_file))
-        
+
         assert len(gc.all_sources) == 2
         assert "https://example.com/1" in gc.known_source_urls
         assert "https://example.com/2" in gc.known_source_urls
-        assert gc.all_sources[0]['site_name'] == "Test Site"
-        assert gc.all_sources[1]['display_name'] == "Another Display"
+        assert gc.all_sources[0]["site_name"] == "Test Site"
+        assert gc.all_sources[1]["display_name"] == "Another Display"
 
     def test_save_sources_csv(self, gc, tmp_path):
         """Test saving sources to CSV file."""
         gc.all_sources = [
             {
-                'site_name': 'Site 1',
-                'license_type': 'MIT',
-                'display_name': 'Display 1',
-                'url': 'https://example.com/1',
-                'keywords': 'key1; key2'
+                "site_name": "Site 1",
+                "license_type": "MIT",
+                "display_name": "Display 1",
+                "url": "https://example.com/1",
+                "keywords": "key1; key2",
             },
             {
-                'site_name': 'Site 2',
-                'license_type': 'Apache',
-                'display_name': 'Display 2',
-                'url': 'https://example.com/2',
-                'keywords': 'key3'
-            }
+                "site_name": "Site 2",
+                "license_type": "Apache",
+                "display_name": "Display 2",
+                "url": "https://example.com/2",
+                "keywords": "key3",
+            },
         ]
-        
+
         csv_file = tmp_path / "output.csv"
         gc.save_sources_csv(str(csv_file))
-        
+
         # Read and verify
-        with open(csv_file, 'r') as f:
+        with open(csv_file, "r") as f:
             reader = csv.reader(f)
             rows = list(reader)
-        
-        assert rows[0] == ['Site Name', 'License Type', 'Display Name', 'URL', 'Keywords', 'Transcript Source URL']
-        assert rows[1] == ['Site 1', 'MIT', 'Display 1', 'https://example.com/1', 'key1; key2', '']
-        assert rows[2] == ['Site 2', 'Apache', 'Display 2', 'https://example.com/2', 'key3', '']
+
+        assert rows[0] == [
+            "Site Name",
+            "License Type",
+            "Display Name",
+            "URL",
+            "Keywords",
+            "Transcript Source URL",
+        ]
+        assert rows[1] == [
+            "Site 1",
+            "MIT",
+            "Display 1",
+            "https://example.com/1",
+            "key1; key2",
+            "",
+        ]
+        assert rows[2] == [
+            "Site 2",
+            "Apache",
+            "Display 2",
+            "https://example.com/2",
+            "key3",
+            "",
+        ]
 
     def test_save_sources_csv_preserves_transcript_url(self, gc, tmp_path):
         """Transcript Source URL must be written back to the CSV."""
         gc.all_sources = [
             {
-                'site_name': 'Educational Course',
-                'license_type': 'All rights reserved',
-                'display_name': 'Example Video',
-                'url': 'https://courses.edx.org/videos/example',
-                'keywords': 'arm; ai',
-                'transcript_source_url': 'https://github.com/arm-education/repo/blob/main/M1KV1.txt'
+                "site_name": "Educational Course",
+                "license_type": "All rights reserved",
+                "display_name": "Example Video",
+                "url": "https://courses.edx.org/videos/example",
+                "keywords": "arm; ai",
+                "transcript_source_url": "https://github.com/arm-education/repo/blob/main/M1KV1.txt",
             }
         ]
 
         csv_file = tmp_path / "output.csv"
         gc.save_sources_csv(str(csv_file))
 
-        with open(csv_file, 'r') as f:
+        with open(csv_file, "r") as f:
             rows = list(csv.reader(f))
 
-        assert rows[0][-1] == 'Transcript Source URL'
+        assert rows[0][-1] == "Transcript Source URL"
         assert rows[1] == [
-            'Educational Course',
-            'All rights reserved',
-            'Example Video',
-            'https://courses.edx.org/videos/example',
-            'arm; ai',
-            'https://github.com/arm-education/repo/blob/main/M1KV1.txt',
+            "Educational Course",
+            "All rights reserved",
+            "Example Video",
+            "https://courses.edx.org/videos/example",
+            "arm; ai",
+            "https://github.com/arm-education/repo/blob/main/M1KV1.txt",
         ]
 
     def test_load_existing_sources_preserves_transcript_url(self, gc, tmp_path):
@@ -643,15 +706,17 @@ class TestSourceTracking:
 
         gc.load_existing_sources(str(csv_file))
 
-        assert gc.all_sources[0]['transcript_source_url'] == (
+        assert gc.all_sources[0]["transcript_source_url"] == (
             "https://github.com/arm-education/repo/blob/main/M1KV1.txt"
         )
 
         gc.save_sources_csv(str(csv_file))
 
-        with open(csv_file, 'r') as f:
+        with open(csv_file, "r") as f:
             rows = list(csv.reader(f))
-        assert rows[1][-1] == "https://github.com/arm-education/repo/blob/main/M1KV1.txt"
+        assert (
+            rows[1][-1] == "https://github.com/arm-education/repo/blob/main/M1KV1.txt"
+        )
 
     def test_load_and_save_roundtrip(self, gc, tmp_path):
         """Test that loading and saving preserves data."""
@@ -661,30 +726,30 @@ class TestSourceTracking:
             "Test Site,MIT,Test Display,https://example.com/test,keyword1; keyword2\n"
         )
         csv_file.write_text(original_content)
-        
+
         # Load
         gc.load_existing_sources(str(csv_file))
-        
+
         # Add a new source
         gc.register_source(
             site_name="New Site",
             license_type="Apache",
             display_name="New Display",
             url="https://new.example.com",
-            keywords=["new", "keywords"]
+            keywords=["new", "keywords"],
         )
-        
+
         # Save
         gc.save_sources_csv(str(csv_file))
-        
+
         # Verify
         gc.known_source_urls = set()
         gc.all_sources = []
         gc.load_existing_sources(str(csv_file))
-        
+
         assert len(gc.all_sources) == 2
         assert "https://example.com/test" in gc.known_source_urls
-        assert "https://new.example.com" in gc.known_source_urls
+        assert gc.known_source_urls == {"https://example.com/test", "https://new.example.com"}
 
 
 class TestGetMarkdownGitHubURLsFromPage:
@@ -692,11 +757,14 @@ class TestGetMarkdownGitHubURLsFromPage:
 
     def test_migration_url(self, gc):
         """Test handling of migration page URL."""
-        gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage("https://learn.arm.com/migration")
-        
+        gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage(
+            "https://learn.arm.com/migration"
+        )
+
         assert len(gh_urls) == 1
         assert len(site_urls) == 1
-        assert "raw.githubusercontent.com" in gh_urls[0]
+        parsed = urlparse(gh_urls[0])
+        assert parsed.hostname == "raw.githubusercontent.com"
         assert "migration/_index.md" in gh_urls[0]
         assert site_urls[0] == "https://learn.arm.com/migration"
 
@@ -704,27 +772,31 @@ class TestGetMarkdownGitHubURLsFromPage:
         """Test handling of Graviton getting started URL."""
         url = "https://github.com/aws/aws-graviton-getting-started/blob/main/README.md"
         gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage(url)
-        
+
         assert len(gh_urls) == 1
         assert len(site_urls) == 1
-        assert "raw.githubusercontent.com/aws/aws-graviton-getting-started" in gh_urls[0]
+        assert (
+            "raw.githubusercontent.com/aws/aws-graviton-getting-started" in gh_urls[0]
+        )
         assert "README.md" in gh_urls[0]
 
     def test_graviton_nested_url(self, gc):
         """Test handling of nested Graviton URL."""
         url = "https://github.com/aws/aws-graviton-getting-started/blob/main/machinelearning/pytorch.md"
         gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage(url)
-        
+
         assert len(gh_urls) == 1
         assert "machinelearning/pytorch.md" in gh_urls[0]
 
     def test_unknown_url_returns_empty(self, gc, capsys):
         """Test that unknown URLs return empty lists and print warning."""
-        gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage("https://unknown.com/page")
-        
+        gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage(
+            "https://unknown.com/page"
+        )
+
         assert gh_urls == []
         assert site_urls == []
-        
+
         captured = capsys.readouterr()
         assert "doesnt match expected format" in captured.out
 
@@ -735,45 +807,59 @@ class TestObtainTextSnippetsMarkdown:
     def test_single_short_content(self, gc):
         """Test content shorter than min_words stays as one chunk."""
         content = "This is a short piece of content with only a few words."
-        
+
         chunks = gc.obtainTextSnippets__Markdown(content, min_words=10, max_words=50)
-        
+
         assert len(chunks) == 1
 
     def test_split_by_h2(self, gc):
         """Test that content is split by h2 headings."""
-        content = """
+        content = (
+            """
 ## Section One
-""" + "word " * 350 + """
+"""
+            + "word " * 350
+            + """
 
 ## Section Two
-""" + "word " * 350
-        
+"""
+            + "word " * 350
+        )
+
         chunks = gc.obtainTextSnippets__Markdown(content, min_words=300, max_words=500)
-        
+
         assert len(chunks) >= 2
 
     def test_split_by_h3_when_h2_too_large(self, gc):
         """Test that large h2 sections are split by h3."""
-        content = """
+        content = (
+            """
 ## Large Section
-""" + "word " * 200 + """
+"""
+            + "word " * 200
+            + """
 ### Subsection One
-""" + "word " * 350 + """
+"""
+            + "word " * 350
+            + """
 ### Subsection Two
-""" + "word " * 350
-        
+"""
+            + "word " * 350
+        )
+
         chunks = gc.obtainTextSnippets__Markdown(content, min_words=300, max_words=500)
-        
+
         # Should have multiple chunks due to h3 splitting
         assert len(chunks) >= 2
 
     def test_small_final_chunk_merged(self, gc):
         """Test that small final chunks are merged with previous."""
         content = "word " * 400 + "\n\n" + "short ending"
-        
-        chunks = gc.obtainTextSnippets__Markdown(content, min_words=300, max_words=500, min_final_words=50)
-        
+
+        chunks = gc.obtainTextSnippets__Markdown(
+            content, min_words=300, max_words=500, min_final_words=50
+        )
+
         # The small ending should be merged
         assert len(chunks) == 1
         assert "short ending" in chunks[0]
@@ -781,34 +867,46 @@ class TestObtainTextSnippetsMarkdown:
     def test_empty_content(self, gc):
         """Test handling of empty content."""
         chunks = gc.obtainTextSnippets__Markdown("")
-        
-        assert chunks == [] or chunks == ['']
+
+        assert chunks == [] or chunks == [""]
 
     def test_respects_max_words(self, gc):
         """Test that chunks don't significantly exceed max_words when headers are present."""
         # Create content with h2 headers to enable splitting
-        content = """
+        content = (
+            """
 ## Section One
-""" + "word " * 400 + """
+"""
+            + "word " * 400
+            + """
 
 ## Section Two
-""" + "word " * 400 + """
+"""
+            + "word " * 400
+            + """
 
 ## Section Three
-""" + "word " * 400
-        
-        chunks = gc.obtainTextSnippets__Markdown(content, min_words=100, max_words=200, min_final_words=50)
-        
+"""
+            + "word " * 400
+        )
+
+        chunks = gc.obtainTextSnippets__Markdown(
+            content, min_words=100, max_words=200, min_final_words=50
+        )
+
         # With headers, content should be split into multiple chunks
         assert len(chunks) >= 2
 
     def test_prepends_document_title_and_heading_path(self, gc):
         """Structured chunks should carry the document title and heading path prefix."""
-        content = """
+        content = (
+            """
 # Deployment Guide
 
 ## Install
-""" + "word " * 350
+"""
+            + "word " * 350
+        )
 
         chunks = gc.obtainTextSnippets__Markdown(content, min_words=150, max_words=400)
 
@@ -851,15 +949,15 @@ class TestReadInCSV:
             "Site1,MIT,Display1,https://example.com/1,key1\n"
             "Site2,Apache,Display2,https://example.com/2,key2\n"
         )
-        
+
         csv_dict, length = gc.readInCSV(str(csv_file))
-        
+
         assert length == 2
-        assert csv_dict['urls'] == ['https://example.com/1', 'https://example.com/2']
-        assert csv_dict['source_names'] == ['Display1', 'Display2']
-        assert csv_dict['focus'] == ['key1', 'key2']
-        assert csv_dict['site_names'] == ['Site1', 'Site2']
-        assert csv_dict['license_types'] == ['MIT', 'Apache']
+        assert csv_dict["urls"] == ["https://example.com/1", "https://example.com/2"]
+        assert csv_dict["source_names"] == ["Display1", "Display2"]
+        assert csv_dict["focus"] == ["key1", "key2"]
+        assert csv_dict["site_names"] == ["Site1", "Site2"]
+        assert csv_dict["license_types"] == ["MIT", "Apache"]
 
     def test_read_csv_transcript_urls(self, gc, tmp_path):
         """Test that the optional Transcript Source URL column is read."""
@@ -874,7 +972,7 @@ class TestReadInCSV:
         csv_dict, length = gc.readInCSV(str(csv_file))
 
         assert length == 2
-        assert csv_dict['transcript_urls'] == [
+        assert csv_dict["transcript_urls"] == [
             "https://github.com/arm-education/repo/blob/main/M1KV1.txt",
             "",
         ]
@@ -890,44 +988,46 @@ class TestReadInCSV:
         csv_dict, length = gc.readInCSV(str(csv_file))
 
         assert length == 1
-        assert csv_dict['transcript_urls'] == [""]
+        assert csv_dict["transcript_urls"] == [""]
 
     def test_read_csv_empty(self, gc, tmp_path):
         """Test reading an empty CSV (header only)."""
         csv_file = tmp_path / "empty.csv"
         csv_file.write_text("Site Name,License Type,Display Name,URL,Keywords\n")
-        
+
         csv_dict, length = gc.readInCSV(str(csv_file))
-        
+
         assert length == 0
-        assert csv_dict['urls'] == []
+        assert csv_dict["urls"] == []
 
     def test_read_csv_quoted_commas(self, gc, tmp_path):
         """Test that quoted fields containing commas are handled correctly."""
         csv_file = tmp_path / "quoted.csv"
         # Display name contains a comma inside quotes
         csv_file.write_text(
-            'Site Name,License Type,Display Name,URL,Keywords\n'
+            "Site Name,License Type,Display Name,URL,Keywords\n"
             'Learning Paths,CC4.0,"Learning Path - Managed, self-hosted runners",https://example.com/runners,"github; actions, runners"\n'
         )
-        
+
         csv_dict, length = gc.readInCSV(str(csv_file))
-        
+
         assert length == 1
-        assert csv_dict['source_names'] == ['Learning Path - Managed, self-hosted runners']
-        assert csv_dict['urls'] == ['https://example.com/runners']
-        assert csv_dict['focus'] == ['github; actions, runners']
+        assert csv_dict["source_names"] == [
+            "Learning Path - Managed, self-hosted runners"
+        ]
+        assert csv_dict["urls"] == ["https://example.com/runners"]
+        assert csv_dict["focus"] == ["github; actions, runners"]
 
     def test_read_csv_file_not_exists(self, gc, tmp_path):
         """Test that missing file returns empty results (not FileNotFoundError)."""
         csv_file = tmp_path / "nonexistent.csv"
-        
+
         csv_dict, length = gc.readInCSV(str(csv_file))
-        
+
         assert length == 0
-        assert csv_dict['urls'] == []
-        assert csv_dict['source_names'] == []
-        assert csv_dict['focus'] == []
+        assert csv_dict["urls"] == []
+        assert csv_dict["source_names"] == []
+        assert csv_dict["focus"] == []
 
 
 class TestCreateChunk:
@@ -939,9 +1039,9 @@ class TestCreateChunk:
             text_snippet="Test content",
             WEBSITE_url="https://example.com",
             keywords=["key1", "key2"],
-            title="Test Title"
+            title="Test Title",
         )
-        
+
         assert chunk.title == "Test Title"
         assert chunk.url == "https://example.com"
         assert chunk.content == "Test content"
@@ -953,7 +1053,7 @@ class TestCreateChunk:
         """Test that each chunk gets a unique UUID."""
         chunk1 = gc.createChunk("content", "url", ["key"], "title")
         chunk2 = gc.createChunk("content", "url", ["key"], "title")
-        
+
         assert chunk1.uuid != chunk2.uuid
 
 
@@ -972,8 +1072,12 @@ class TestArmDocumentationParsing:
         assert not gc.is_arm_developer_documentation_url(
             "https://documentation-service.arm.com/documentation/102376/0100"
         )
-        assert not gc.is_arm_developer_documentation_url("https://developer.arm.com/tools-and-software")
-        assert not gc.is_arm_developer_documentation_url("https://learn.arm.com/migration")
+        assert not gc.is_arm_developer_documentation_url(
+            "https://developer.arm.com/tools-and-software"
+        )
+        assert not gc.is_arm_developer_documentation_url(
+            "https://learn.arm.com/migration"
+        )
 
     def test_parse_arm_documentation_api_json_decodes_html_topic(self, gc):
         """API JSON content should be base64-decoded and parsed as structured HTML."""
@@ -1003,11 +1107,20 @@ class TestArmDocumentationParsing:
 
         assert parsed.display_title == "Arm API Reference"
         assert parsed.content_type == "html"
-        assert parsed.source_url == "https://developer.arm.com/documentation/102376/0100/install"
-        assert parsed.resolved_url == "https://documentation-service.arm.com/documentation/102376/0100/install"
+        assert (
+            parsed.source_url
+            == "https://developer.arm.com/documentation/102376/0100/install"
+        )
+        assert (
+            parsed.resolved_url
+            == "https://documentation-service.arm.com/documentation/102376/0100/install"
+        )
         assert len(parsed.sections) == 1
         assert parsed.sections[0].heading_path == ["Arm API Reference", "Install"]
-        assert parsed.sections[0].blocks[0].text == "Install the package and configure the target platform."
+        assert (
+            parsed.sections[0].blocks[0].text
+            == "Install the package and configure the target platform."
+        )
         assert parsed.sections[0].blocks[1].kind == "code"
         assert "make build" in parsed.sections[0].blocks[1].text
 
@@ -1024,12 +1137,18 @@ class TestArmDocumentationParsing:
         assert parsed.content_type == "html"
         assert parsed.sections == []
 
-    def test_create_arm_documentation_chunks_fetches_topics_and_maps_metadata(self, gc, monkeypatch):
+    def test_create_arm_documentation_chunks_fetches_topics_and_maps_metadata(
+        self, gc, monkeypatch
+    ):
         """Arm docs should fetch API topic links and emit developer-facing chunks."""
         source_url = "https://developer.arm.com/documentation/102376/0100"
-        root_fetch_url = "https://documentation-service.arm.com/documentation/102376/0100"
+        root_fetch_url = (
+            "https://documentation-service.arm.com/documentation/102376/0100"
+        )
         overview_fetch_url = "https://documentation-service.arm.com/documentation/102376/0100/overview?rev=abc"
-        install_fetch_url = "https://documentation-service.arm.com/documentation/102376/0100/install"
+        install_fetch_url = (
+            "https://documentation-service.arm.com/documentation/102376/0100/install"
+        )
         responses = {
             root_fetch_url: SimpleNamespace(
                 url=root_fetch_url,
@@ -1118,21 +1237,34 @@ class TestArmDocumentationParsing:
         assert all(chunk.product == "Arm" for chunk in chunks)
         assert all(chunk.version == "0100" for chunk in chunks)
         assert all(chunk.content_type == "html" for chunk in chunks)
-        assert chunks[0].url == "https://developer.arm.com/documentation/102376/0100/overview"
+        assert (
+            chunks[0].url
+            == "https://developer.arm.com/documentation/102376/0100/overview"
+        )
         assert chunks[0].resolved_url == overview_fetch_url
-        assert chunks[0].keywords == "architecture, compiler, arm reference manual, sve, cortex-a"
+        assert (
+            chunks[0].keywords
+            == "architecture, compiler, arm reference manual, sve, cortex-a"
+        )
         assert "Document Title: Arm Reference Manual" in chunks[0].content
         assert "Heading Path: Overview" in chunks[0].content
         assert "scalable vector extension" in chunks[0].content
-        assert chunks[1].url == "https://developer.arm.com/documentation/102376/0100/install"
+        assert (
+            chunks[1].url
+            == "https://developer.arm.com/documentation/102376/0100/install"
+        )
         assert "target CPU for Cortex-A builds" in chunks[1].content
 
 
 class TestCreateChunksForSource:
     """Tests for generic source chunking."""
 
-    def test_unparseable_pptx_source_returns_empty_and_logs(self, gc, monkeypatch, capsys):
-        source_url = "https://github.com/arm-education/AI-on-Arm/blob/main/slides/broken.pptx"
+    def test_unparseable_pptx_source_returns_empty_and_logs(
+        self, gc, monkeypatch, capsys
+    ):
+        source_url = (
+            "https://github.com/arm-education/AI-on-Arm/blob/main/slides/broken.pptx"
+        )
         raw_url = "https://raw.githubusercontent.com/arm-education/AI-on-Arm/main/slides/broken.pptx"
         fetched_urls = []
 
@@ -1141,7 +1273,9 @@ class TestCreateChunksForSource:
             return SimpleNamespace(
                 url=raw_url,
                 content=b"not a zip file",
-                headers={"content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation"},
+                headers={
+                    "content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                },
             )
 
         monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
@@ -1175,7 +1309,9 @@ class TestCreateTranscriptChunks:
 
     def test_transcript_used_instead_of_primary_url(self, gc, monkeypatch):
         """When a transcript URL is set, content is fetched from the transcript."""
-        source_url = "https://courses.edx.org/videos/block-v1:example+type@video+block@abc"
+        source_url = (
+            "https://courses.edx.org/videos/block-v1:example+type@video+block@abc"
+        )
         transcript_url = "https://github.com/arm-education/repo/blob/main/M1KV1.txt"
         raw_transcript_url = (
             "https://raw.githubusercontent.com/arm-education/repo/main/M1KV1.txt"
@@ -1227,9 +1363,15 @@ class TestCreateTranscriptChunks:
         assert "TRANSCRIPT FETCH FAILED" in captured.out
         # Both the primary source URL and the transcript URL aid batch troubleshooting.
         assert "https://courses.edx.org/videos/example" in captured.out
-        assert "https://github.com/arm-education/repo/blob/main/missing.txt" in captured.out
+        assert (
+            "https://github.com/arm-education/repo/blob/main/missing.txt"
+            in captured.out
+        )
         # The resolved raw fetch URL should also be logged.
-        assert "raw.githubusercontent.com/arm-education/repo/main/missing.txt" in captured.out
+        assert (
+            "raw.githubusercontent.com/arm-education/repo/main/missing.txt"
+            in captured.out
+        )
 
     def test_blank_transcript_falls_back_to_primary_url(self, gc, monkeypatch):
         """A blank transcript URL should not trigger transcript chunking."""
@@ -1262,18 +1404,16 @@ class TestCreateRetrySession:
     def test_creates_session(self, gc):
         """Test that a session is created."""
         session = gc.create_retry_session()
-        
+
         assert session is not None
         # Check that adapters are mounted
-        assert 'http://' in session.adapters
-        assert 'https://' in session.adapters
+        assert "http://" in session.adapters
+        assert "https://" in session.adapters
 
     def test_custom_retry_settings(self, gc):
         """Test session with custom retry settings."""
         session = gc.create_retry_session(
-            retries=3,
-            backoff_factor=2,
-            status_forcelist=(500, 503)
+            retries=3, backoff_factor=2, status_forcelist=(500, 503)
         )
-        
+
         assert session is not None

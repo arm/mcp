@@ -23,7 +23,7 @@ import csv
 import json
 import re
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any
 from urllib.parse import quote
 
 import requests
@@ -37,8 +37,9 @@ PAGE_SIZE = 48
 @dataclass
 class CapturedSearchRequest:
     """A real Coveo search request captured from the browser, replayable with new queries."""
+
     url: str
-    headers: Dict[str, str]
+    headers: dict[str, str]
     post_data: str
 
 
@@ -68,7 +69,9 @@ async def capture_search_request(page_url: str) -> CapturedSearchRequest:
         browser = await p.chromium.launch(headless=True)
         page = await browser.new_page()
         try:
-            async with page.expect_response(is_search_response, timeout=30_000) as response_info:
+            async with page.expect_response(
+                is_search_response, timeout=30_000
+            ) as response_info:
                 await page.goto(page_url, wait_until="domcontentloaded")
             response = await response_info.value
             data = await response.json()
@@ -84,9 +87,19 @@ async def capture_search_request(page_url: str) -> CapturedSearchRequest:
     )
 
 
-def replay_search(captured: CapturedSearchRequest, query: str, first_result: int) -> Dict[str, Any]:
+def replay_search(
+    captured: CapturedSearchRequest, query: str, first_result: int
+) -> dict[str, Any]:
     """Replay the captured search request with a new query and result offset."""
-    drop = {"host", "content-length", "accept-encoding", "connection", "origin", "referer", "cookie"}
+    drop = {
+        "host",
+        "content-length",
+        "accept-encoding",
+        "connection",
+        "origin",
+        "referer",
+        "cookie",
+    }
     headers = {k: v for k, v in captured.headers.items() if k.lower() not in drop}
     headers.setdefault("accept", "application/json, text/plain, */*")
     headers.setdefault("content-type", "application/json")
@@ -105,7 +118,7 @@ def replay_search(captured: CapturedSearchRequest, query: str, first_result: int
 def search_developer_arm_com(searchterm: str, search_url: str) -> list:
     """Run a developer.arm.com search and return all result items."""
 
-    def extract_result(item: Dict[str, Any]) -> Dict[str, Any]:
+    def extract_result(item: dict[str, Any]) -> dict[str, Any]:
         raw = item.get("raw", {})
         return {
             "title": item.get("title") or raw.get("title"),
@@ -131,7 +144,7 @@ def search_developer_arm_com(searchterm: str, search_url: str) -> list:
     return results
 
 
-def item_is_relevant(item: Dict[str, Any]) -> bool:
+def item_is_relevant(item: dict[str, Any]) -> bool:
     """Editorial filter: keep only the SME-related pages we want in the vector DB."""
     if not item.get("url"):
         return False
@@ -169,14 +182,20 @@ def item_is_relevant(item: Dict[str, Any]) -> bool:
         case "Blog Post":
             title = item.get("title") or ""
             author = item.get("author") or ""
-            if author in {"Zenon_Xiu", "KhalidS"} and title.startswith("Part") and "SME" in title:
+            if (
+                author in {"Zenon_Xiu", "KhalidS"}
+                and title.startswith("Part")
+                and "SME" in title
+            ):
                 return True
-            return author == "mweidmann" and title.startswith("Introducing the Scalable Matrix Extension")
+            return author == "mweidmann" and title.startswith(
+                "Introducing the Scalable Matrix Extension"
+            )
         case _:
             return False
 
 
-def item_keywords(item: Dict[str, Any], searchterm: str) -> list:
+def item_keywords(item: dict[str, Any], searchterm: str) -> list:
     """Build a deduplicated keyword list from the search term and result metadata."""
     keywords = [searchterm]
     for key_list in item["keywords"] or []:
@@ -189,7 +208,7 @@ def item_keywords(item: Dict[str, Any], searchterm: str) -> list:
 def main():
     parser = argparse.ArgumentParser(
         description="Discover relevant developer.arm.com pages and append any new "
-                    "URLs to the sources CSV. Existing rows are preserved unchanged."
+        "URLs to the sources CSV. Existing rows are preserved unchanged."
     )
     parser.add_argument("sources_file", help="Path to vector-db-sources.csv.")
     args = parser.parse_args()
@@ -199,7 +218,9 @@ def main():
         rows = list(csv.reader(file))
     header, existing_rows = rows[0], rows[1:]
     url_column = header.index("URL")
-    known_urls = {row[url_column].strip() for row in existing_rows if len(row) > url_column}
+    known_urls = {
+        row[url_column].strip() for row in existing_rows if len(row) > url_column
+    }
 
     search_base = "https://developer.arm.com/search#numberOfResults=48&f-navigationhierarchiescontenttype="
     search_url = search_base + ",".join(quote(x) for x in CONTENT_TYPES) + "&q="
@@ -232,10 +253,14 @@ def main():
             writer = csv.writer(file)
             writer.writerows(rows + new_rows)
 
-    print(f"\nAdded {len(new_rows)} new sources to {args.sources_file} "
-          f"({len(existing_rows) + len(new_rows)} total).")
+    print(
+        f"\nAdded {len(new_rows)} new sources to {args.sources_file} "
+        f"({len(existing_rows) + len(new_rows)} total)."
+    )
     if new_rows:
-        print("Next: add questions with expected URLs for the new sources to eval_questions.json.")
+        print(
+            "Next: add questions with expected URLs for the new sources to eval_questions.json."
+        )
 
 
 if __name__ == "__main__":

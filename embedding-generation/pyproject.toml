@@ -1,0 +1,56 @@
+[project]
+name = "arm-embedding-generator"
+version = "0.1.0"
+description = "Content acquisition and vector-store generation for the Arm MCP knowledge base"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    # Content acquisition and chunk generation
+    "beautifulsoup4",
+    "pypdf",
+    "requests",
+
+    # Model retrieval during the controlled image build
+    "huggingface-hub",
+
+    # Shared data handling and vector generation
+    "numpy",
+    "pyyaml",
+    "sentence-transformers>=5.4",
+    "torch",
+    "usearch",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+
+    # Used by retrieval evaluation, not by the generator image.
+    "rank-bm25",
+]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP006", "UP035"]
+
+[tool.uv]
+package = false
+
+# Ensure uv confirms that native wheels exist for the platforms we care about.
+required-environments = [
+    "sys_platform == 'linux' and platform_machine == 'aarch64'",
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+# Force Linux builds to use CPU-only PyTorch.
+[tool.uv.sources]
+torch = { index = "pytorch-cpu", marker = "sys_platform == 'linux'" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pypi"
+url = "https://pypi.org/simple"
+default = true

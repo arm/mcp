@@ -2,15 +2,18 @@ name: Embedding Generation Unit Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, secure-build]
     paths:
       - 'embedding-generation/**'
       - '.github/workflows/embedding-unit-tests.yml'
   pull_request:
-    branches: [main]
+    branches: [main, secure-build]
     paths:
       - 'embedding-generation/**'
       - '.github/workflows/embedding-unit-tests.yml'
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -21,18 +24,25 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: '3.11'
+          python-version: '3.13'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: '0.9.2'
+          enable-cache: true
+          cache-dependency-glob: embedding-generation/uv.lock
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest
+        run: uv sync --locked
+
+      - name: Run lint
+        run: uv run --locked ruff check .
 
       - name: Run unit tests
-        run: python -m pytest tests/ -v --tb=short
+        run: uv run --locked python -m pytest tests/ -v --tb=short

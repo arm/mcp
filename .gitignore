@@ -11,6 +11,13 @@ env/
 embedding-generation/venv/
 embedding-generation/yaml_data
 embedding-generation/info
+embedding-generation/.cache/
+embedding-generation/intrinsic_chunks/
+embedding-generation/local-data/
+embedding-generation/reports/
+embedding-generation/metadata.json
+embedding-generation/usearch_index.bin
+embedding-generation/embeddings_*.txt
 
 # Python
 __pycache__/

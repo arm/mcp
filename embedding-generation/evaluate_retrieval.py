@@ -14,10 +14,16 @@ from arm_kb_search import (  # noqa: E402
     load_search_resources,
     search,
 )
-from arm_kb_search.evaluation import evaluate_retrieval, load_eval_rows, print_evaluation  # noqa: E402
+from arm_kb_search.evaluation import (  # noqa: E402
+    evaluate_retrieval,
+    load_eval_rows,
+    print_evaluation,
+)
 
 
-def evaluate(index_path: Path, metadata_path: Path, eval_path: Path, model_name: str, top_k: int) -> int:
+def evaluate(
+    index_path: Path, metadata_path: Path, eval_path: Path, model_path: Path, top_k: int
+) -> int:
     if not metadata_path.exists() or metadata_path.stat().st_size == 0:
         print(f"Metadata not found or empty: {metadata_path}")
         return 1
@@ -25,7 +31,7 @@ def evaluate(index_path: Path, metadata_path: Path, eval_path: Path, model_name:
     resources = load_search_resources(
         metadata_path=str(metadata_path),
         usearch_index_path=str(index_path),
-        model_name=model_name,
+        model_path=str(model_path),
     )
     eval_rows = load_eval_rows(eval_path)
 
@@ -38,11 +44,13 @@ def evaluate(index_path: Path, metadata_path: Path, eval_path: Path, model_name:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Evaluate retrieval over the generated local knowledge base.")
+    parser = argparse.ArgumentParser(
+        description="Evaluate retrieval over the generated local knowledge base."
+    )
     parser.add_argument("--index-path", default="usearch_index.bin")
     parser.add_argument("--metadata-path", default="metadata.json")
     parser.add_argument("--eval-path", default="eval_questions.json")
-    parser.add_argument("--model-name", default="all-MiniLM-L6-v2")
+    parser.add_argument("--model-path", required=True)
     parser.add_argument("--top-k", type=int, default=5)
     args = parser.parse_args()
 
@@ -50,7 +58,7 @@ def main() -> int:
         index_path=Path(args.index_path),
         metadata_path=Path(args.metadata_path),
         eval_path=Path(args.eval_path),
-        model_name=args.model_name,
+        model_path=Path(args.model_path),
         top_k=args.top_k,
     )
 
