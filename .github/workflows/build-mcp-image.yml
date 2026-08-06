@@ -2,7 +2,7 @@ name: Build MCP Image
 
 on:
   workflow_run:
-    workflows: ["Build Embeddings Image"]
+    workflows: ["Build Offline Embedding Pipeline"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -61,6 +61,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
+      packages: read
     outputs:
       build_date: ${{ steps.build_date.outputs.build_date }}
       date_tag: ${{ steps.build_date.outputs.date_tag }}
@@ -111,6 +112,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      - name: Log in to GHCR for locked embedding inputs
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Stage and verify locked build inputs
+        run: python3 mcp-local/scripts/stage-build-inputs.py --arch ${{ matrix.tag }}
+
       - name: Log in to Docker Hub
         # Only publishing runs push, so only they log in. Non-dry implies main
         # (the top-level guard rejects non-main non-dry runs).
@@ -129,8 +140,6 @@ jobs:
           # Push only on publishing runs (non-dry implies main per the guard).
           push: ${{ env.IS_DRY_RUN != 'true' }}
           tags: ${{ env.IMAGE }}:${{ env.DATE_TAG }}-${{ matrix.tag }}
-          build-args: |
-            EMBEDDINGS_IMAGE=${{ env.IMAGE }}:embeddings-latest
 
   merge-manifests:
     needs: build-arch-images

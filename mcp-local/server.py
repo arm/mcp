@@ -16,7 +16,14 @@ from fastmcp import FastMCP
 import os
 from typing import List, Dict, Any, Optional
 import arm_kb_search
-from utils.config import METADATA_PATH, USEARCH_INDEX_PATH, MODEL_NAME, SUPPORTED_SCANNERS, DEFAULT_ARCH
+from utils.config import (
+    DEFAULT_ARCH,
+    METADATA_PATH,
+    MODEL_NAME,
+    MODEL_PATH,
+    SUPPORTED_SCANNERS,
+    USEARCH_INDEX_PATH,
+)
 from utils.docker_utils import check_docker_image_architectures
 from utils.apx import (
     prepare_target,
@@ -40,6 +47,7 @@ SEARCH_RESOURCES = arm_kb_search.load_search_resources(
     metadata_path=METADATA_PATH,
     usearch_index_path=USEARCH_INDEX_PATH,
     model_name=MODEL_NAME,
+    model_path=MODEL_PATH,
     utm_source="arm-mcp",
 )
 

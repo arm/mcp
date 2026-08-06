@@ -1,0 +1,16 @@
+**
+
+!.dockerignore
+!mcp-local/
+!mcp-local/Dockerfile
+!mcp-local/requirements.lock
+!mcp-local/server.py
+!mcp-local/build-inputs/
+!mcp-local/build-inputs/**
+mcp-local/build-inputs/embedding-model/
+!mcp-local/sql/
+!mcp-local/sql/**
+!mcp-local/utils/
+!mcp-local/utils/**
+!arm_kb_search/
+!arm_kb_search/**

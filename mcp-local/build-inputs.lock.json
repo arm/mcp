@@ -1,0 +1,314 @@
+{
+  "schema_version": 1,
+  "generated_with": {
+    "uv": "0.10.2",
+    "python": "3.12"
+  },
+  "container_images": {
+    "ubuntu": {
+      "reference": "ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "manifests": {
+        "amd64": "ubuntu:24.04@sha256:52df9b1ee71626e0088f7d400d5c6b5f7bb916f8f0c82b474289a4ece6cf3faf",
+        "arm64": "ubuntu:24.04@sha256:7f622ca8766bccb22f04242ecb6f19f770b2f08827dc4b8c707de5e78a6da7ab"
+      },
+      "verification": "OCI manifest-list digest"
+    },
+    "embeddings": {
+      "reference": "ghcr.io/arm/mcp-embedding-vectorstore@sha256:724a53a6a8b29893c196c406a6ba9a41a1ec3b122b7aa2ceb587a67991519f88",
+      "architectures": [
+        "arm64"
+      ],
+      "contents": [
+        "/embedding-data/embedding-model/",
+        "/embedding-data/metadata.json",
+        "/embedding-data/usearch_index.bin"
+      ],
+      "source_revision": "9ab10ce8bb0af3031007f9c89c9e7b0777a5718c",
+      "model": {
+        "model_id": "sentence-transformers/all-MiniLM-L6-v2",
+        "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
+      },
+      "verification": "private GHCR OCI image-index digest"
+    }
+  },
+  "python": {
+    "lock": "mcp-local/uv.lock",
+    "install_requirements": "mcp-local/requirements.lock",
+    "install_requirements_sha256": "6d560ce3e52942a5c4b4d3c21e73970986e1950fd14c9e13f8a85e1454f18121",
+    "architectures": [
+      "amd64",
+      "arm64"
+    ],
+    "verification": "uv lock plus pip --require-hashes from a local wheelhouse"
+  },
+  "os_packages": {
+    "snapshot": "20260805T000000Z",
+    "roles": {
+      "builder": [
+        "ca-certificates",
+        "python3",
+        "python3-venv",
+        "tar"
+      ],
+      "runtime": [
+        "ca-certificates",
+        "git",
+        "libmagic1",
+        "llvm-18",
+        "python3",
+        "skopeo"
+      ]
+    },
+    "bundles": {
+      "amd64": {
+        "builder": {
+          "artifacts": {
+            "ca-certificates_20260601~24.04.1_all.deb": "6bac2a01979e210d9eac1d4d56747ec709ea60654744d66705dc3c36e7629e50",
+            "libexpat1_2.6.1-2ubuntu0.4_amd64.deb": "126a5612e652bdc2edee19ae8fe4308db72b5b3b0a5581bf885b44a093baf3e5",
+            "libpython3-stdlib_3.12.3-0ubuntu2.1_amd64.deb": "57ebb378c59d2f9ef479bee0abc933c560878cc10e2c3af8e05d6fdb2ed63da4",
+            "libpython3.12-minimal_3.12.3-1ubuntu0.15_amd64.deb": "5d16abf75f5a517c7e68dfbe888ddb40aa95d3b4445b1c223ec5ea23d2b01051",
+            "libpython3.12-stdlib_3.12.3-1ubuntu0.15_amd64.deb": "47c3b48809d392570e827cb3cdeacdf750af39fc36619c83337e28cbffea791c",
+            "libreadline8t64_8.2-4build1_amd64.deb": "563977a16df03b611f5239cc1e9a0426e86479fcc616b5c9e200ea32063119e5",
+            "libsqlite3-0_3.45.1-1ubuntu2.7_amd64.deb": "488511119cad001a00f7e00e597112cf743ccfbd3f7a03c82d66237e1bfd82c8",
+            "libssl3t64_3.0.13-0ubuntu3.12_amd64.deb": "6a963adb1106fca567d24d4a1e5da0bad25de79ac2564cd1ba846e677e1c951b",
+            "media-types_10.1.0_all.deb": "31bfb7eec55ab6d34a50ba995150e1498d4cb897714085d8025e330d3b529747",
+            "netbase_6.4_all.deb": "8cdbc9c3dca01e660759bf9d840f72e45ac72faf5d19ca1faecacaf6a60c1a87",
+            "openssl_3.0.13-0ubuntu3.12_amd64.deb": "321b30ad5a1c3783cb3d73ae439f824f6d3874d76a93a62f4a984959b490aa7b",
+            "python3-minimal_3.12.3-0ubuntu2.1_amd64.deb": "9ba5dd55cdcf6121c147dc5cb87403169b5933e3a56da0de57774f2ce819cf06",
+            "python3-pip-whl_24.0+dfsg-1ubuntu1.3_all.deb": "4b7c50db8f261b208c1d9cde8db148c1f682cc516957b986ada5088cfcee1359",
+            "python3-setuptools-whl_68.1.2-2ubuntu1.2_all.deb": "edfa94cc1f6a33af99cfaf6ebfe35dbcd9c4bdd8555b90c0d8e78479faf5c8f0",
+            "python3-venv_3.12.3-0ubuntu2.1_amd64.deb": "16d50387b7656796b79e2c059d06774dfe9fe3f42808d8d50b332ceb780f508a",
+            "python3.12-minimal_3.12.3-1ubuntu0.15_amd64.deb": "487383dc2a895e0a767d820e0e55f2ab7d6ebe4dccd3d2c0b81f00ee11bb1152",
+            "python3.12-venv_3.12.3-1ubuntu0.15_amd64.deb": "9fdfbf0405d0d66af5d4e6b803420eb4c5b369af59ff7428ca892e4eb9f5bdad",
+            "python3.12_3.12.3-1ubuntu0.15_amd64.deb": "d02d1769ca198be054f74fab22dc46299b4994c9c00bfdd6352938402e5eed1f",
+            "python3_3.12.3-0ubuntu2.1_amd64.deb": "e691b9cc40841c41bbdc50bd794c876cb1b1801306ea27b06e9a1458180df1e9",
+            "readline-common_8.2-4build1_all.deb": "879bfd7f8a9bc4c0f7cdc777cdd8bc6de5f8c4a2ac80c060322a1b22f13504bb",
+            "tar_1.35+dfsg-3ubuntu0.4_amd64.deb": "fdf41a87936824e50c8ac11b0b22d1395aeb0754feef2dae5575b5d5a93793ec",
+            "tzdata_2026c-0ubuntu0.24.04.1_all.deb": "ef12c9ef81905b5ac558504b2f8c20da9be5f28861020b3fb5e8b15fb3fae2f6"
+          }
+        },
+        "runtime": {
+          "artifacts": {
+            "adduser_3.137ubuntu1_all.deb": "542aff2395eb912a56833e11a78076342779689d8fede7adcf08d1d6b0d0cd8b",
+            "ca-certificates_20260601~24.04.1_all.deb": "6bac2a01979e210d9eac1d4d56747ec709ea60654744d66705dc3c36e7629e50",
+            "containernetworking-plugins_1.1.1+ds1-3ubuntu0.24.04.3_amd64.deb": "0ffc31ebfa430615d2e35ad7cea6b3717faa8fdbc02debd773625cad83fcdd65",
+            "dirmngr_2.4.4-2ubuntu17.4_amd64.deb": "4155be4f35ffc177ddf0282a635ebdbfd555ebb0dd3b6d8e7fd736e1fcedec0b",
+            "git-man_1%3a2.43.0-1ubuntu7.3_all.deb": "5701f931ed2cd30644700b0fc1cda7c2214f93a63ef84c0c80e43ce40d2cf1d2",
+            "git_1%3a2.43.0-1ubuntu7.3_amd64.deb": "099bb129f543adc4c14203334b0fa0a909f8bf038c4d56bc9cc7c774ebf78f87",
+            "gnupg-utils_2.4.4-2ubuntu17.4_amd64.deb": "a66520564376ebbe108603f0eaa3170962d53b201a4185b4f6ab1dfd1b34d655",
+            "gnupg_2.4.4-2ubuntu17.4_all.deb": "24fa610ce3b7512d58def5bf6699c05b09fbd235b9432245c000036d70eebc97",
+            "golang-github-containers-common_0.57.4+ds1-2ubuntu0.2_all.deb": "dae82b120f8a1b429c0a63a2ccd2ff3c91563f97e2188b1fbaf78ba76f7fb89c",
+            "golang-github-containers-image_5.29.2-2_all.deb": "2059cd3836a417d2e770b810c507b9d29aa4e32759650138c6c8704c24749772",
+            "gpg-agent_2.4.4-2ubuntu17.4_amd64.deb": "98a70e750ed790020a5c7066406c0e8d15646e262185ecd9c2f484dc95e9c860",
+            "gpg_2.4.4-2ubuntu17.4_amd64.deb": "4c625bdbe37c734e744ceba2f2db18b197683de6d00b42e197b977b9a3caa215",
+            "gpgconf_2.4.4-2ubuntu17.4_amd64.deb": "7f7cc936ad298e70f6f406ff7e9d9c54ea4f8f9a850fe71b6257a79d97b67724",
+            "gpgsm_2.4.4-2ubuntu17.4_amd64.deb": "47cdea6a8d2c35aea4ceb62e54e981b92309bd68fe517650637f68a634a2970f",
+            "iptables_1.8.10-3ubuntu2_amd64.deb": "d341e8ffc42ca035f5aa0fd9a798c8d2b2edb019225dc11f4dac16edf9c57840",
+            "keyboxd_2.4.4-2ubuntu17.4_amd64.deb": "c97eb18b05c7a1d4f30efefc1d9896f06cf2632d62ade8bf750288fd48ad53bf",
+            "libbrotli1_1.1.0-2build2_amd64.deb": "74492419b8fda803774b8c9acef6afc5d2f9ff31782635aae212906adae7b277",
+            "libbsd0_0.12.1-1build1.1_amd64.deb": "f3857b0863ac5cfd4263e9bf6cfb1d4be88d5321e4070d5bc2b62b0949e6c86f",
+            "libcurl3t64-gnutls_8.5.0-2ubuntu10.11_amd64.deb": "cab375675d3bbb5ac9feb191842ce1236e3233fe7a50ddfe8959826cb913f61d",
+            "libcurl4t64_8.5.0-2ubuntu10.11_amd64.deb": "91d3520fc68d1af309ea6bd47b12b04b1b45bcb5bdee9533639c7b534fa1f744",
+            "libdevmapper1.02.1_2%3a1.02.185-3ubuntu3.2_amd64.deb": "0d43a02b9030a50edbc49c9580f88f01eef2b043baad1c6200672c39643c0efe",
+            "libedit2_3.1-20230828-1build1_amd64.deb": "3afbc8ddf835049dd4d88275b9d13680e4c4cdd59e191cbd63424152cc08e00e",
+            "liberror-perl_0.17029-2_all.deb": "1907af6bf33dd8684447c09f216c675d2b8559fadd8ddace29fbf83c6fb2a636",
+            "libexpat1_2.6.1-2ubuntu0.4_amd64.deb": "126a5612e652bdc2edee19ae8fe4308db72b5b3b0a5581bf885b44a093baf3e5",
+            "libgdbm-compat4t64_1.23-5.1build1_amd64.deb": "fb8564afd7b7d74d55207070ba50339478e22d29a39ec740dc482f069ac7ee65",
+            "libgdbm6t64_1.23-5.1build1_amd64.deb": "18d6d74a5c038b458d95ba0c0909e0f086cd50bb9a0fee32697902724fc5645e",
+            "libgpgme11t64_1.18.0-4.1ubuntu4_amd64.deb": "b3640068e8af3becf16faec886ff139880736ed23a7fc605c1f0cece405a5606",
+            "libgssapi-krb5-2_1.20.1-6ubuntu2.7_amd64.deb": "212ea4cb04b63b89b3f1f9f819925d608a0d09e1d0bd6fedadcc8c80dff9c64b",
+            "libicu74_74.2-1ubuntu3.1_amd64.deb": "c9a70989678660eed9a1e904c74fa043da8bec8e2036856fc16e31ced79b04f8",
+            "libip4tc2_1.8.10-3ubuntu2_amd64.deb": "eb381f8ff0469534df3f1b146c3eb8baa6e36f8cfcdf2e3e039398322930d0a4",
+            "libip6tc2_1.8.10-3ubuntu2_amd64.deb": "b98b88eb6aa14a902ea1aebc3b12ddd140572545ae1fc6428cb0868c31671d05",
+            "libk5crypto3_1.20.1-6ubuntu2.7_amd64.deb": "8933dbb595dcb9ba9cf513a3a379e6237c6d9f2cf3e4c0444294174b064a073f",
+            "libkeyutils1_1.6.3-3build1_amd64.deb": "0679f198b0128179e46cdf956fb2022c23c758664c00bc8efa0382d509683a8a",
+            "libkrb5-3_1.20.1-6ubuntu2.7_amd64.deb": "06462b3c2544c8c1600f86660cab6e7f4aafa0498251ebb5cf0f33e723ba06a6",
+            "libkrb5support0_1.20.1-6ubuntu2.7_amd64.deb": "b9670d799c9a81bd608915ba0c0a240d0be400d0e3fb52533d27c1f96dad619e",
+            "libksba8_1.6.6-1build1_amd64.deb": "7b0e1f2c2c5ee7b3ed1c1558c6338c6cdd77d27280020abc3e1f3159cf564106",
+            "libldap2_2.6.10+dfsg-0ubuntu0.24.04.1_amd64.deb": "7f3f8e565401256f21d5aa562c9f92dbb63537b73aaea6283e4db5264f1598f4",
+            "libllvm18_1%3a18.1.3-1ubuntu1_amd64.deb": "af6197096ce3b89aab86de59f01c1b5feb008b2ae1514a03906c0664edb8b0b1",
+            "libmagic-mgc_1%3a5.45-3build1_amd64.deb": "f0ed0e314a63ae1b7e5403d7e43a26c6e0c0ee69e9a305babcf9c6775607377a",
+            "libmagic1t64_1%3a5.45-3build1_amd64.deb": "fc2319f342c437e044ccf854e0c95bd472a7eb0b9363e1f76ad1524ab04df68e",
+            "libmnl0_1.0.5-2build1_amd64.deb": "5170658bf0eaf54a8c7d53061ca6b47a6cf33a83543a75fa521de7046cb7197a",
+            "libnetfilter-conntrack3_1.0.9-6build1_amd64.deb": "6d32a4c4618eb7d6c0d989591d28637a9acdfa86dfe22e42e9ac9cc25d882a97",
+            "libnfnetlink0_1.0.2-2build1_amd64.deb": "f557a287af2ca00df5dbf632c6b77d77479139ffb51c83e3de9766eb609b5d63",
+            "libnftnl11_1.2.6-2build1_amd64.deb": "e5bde5c9cbb95082700011f0b7ef2c0a41900b0a9fd7434f6e90448e2a7b4e50",
+            "libnghttp2-14_1.59.0-1ubuntu0.4_amd64.deb": "73adcbb9df32cd7c9d46b1c7598bbbbcf249be705d62d966694cfc9976a15dfe",
+            "libperl5.38t64_5.38.2-3.2ubuntu0.3_amd64.deb": "34a46ac768011622bf432873b5c9f53cfe333449602721bc12caadc0e7d1adce",
+            "libpfm4_4.13.0+git32-g0d4ed0e-1_amd64.deb": "037cdd0aad754b70df1df39aae34a9f857daa78fdfa132673b476c256e33ad52",
+            "libpsl5t64_0.21.2-1.1build1_amd64.deb": "a6c85d1303ae90b6a3209d73c4f047f82c27cdc963c48adfd95dd7abca64f039",
+            "libpython3-stdlib_3.12.3-0ubuntu2.1_amd64.deb": "57ebb378c59d2f9ef479bee0abc933c560878cc10e2c3af8e05d6fdb2ed63da4",
+            "libpython3.12-minimal_3.12.3-1ubuntu0.15_amd64.deb": "5d16abf75f5a517c7e68dfbe888ddb40aa95d3b4445b1c223ec5ea23d2b01051",
+            "libpython3.12-stdlib_3.12.3-1ubuntu0.15_amd64.deb": "47c3b48809d392570e827cb3cdeacdf750af39fc36619c83337e28cbffea791c",
+            "libreadline8t64_8.2-4build1_amd64.deb": "563977a16df03b611f5239cc1e9a0426e86479fcc616b5c9e200ea32063119e5",
+            "librtmp1_2.4+20151223.gitfa8646d.1-2build7_amd64.deb": "967a39dbc14236d1580ede01d80fd78444668572e716734e1ac66c175052594e",
+            "libsasl2-2_2.1.28+dfsg1-5ubuntu3.1_amd64.deb": "eda097f98dcb3a08b9ce157d6191d140e4885c1cba47b683c94b8ca45e88f458",
+            "libsasl2-modules-db_2.1.28+dfsg1-5ubuntu3.1_amd64.deb": "1f13548b1774cd9c70c50b8c3267204a101334a4d2f979338896ba5a4c6f81b8",
+            "libsqlite3-0_3.45.1-1ubuntu2.7_amd64.deb": "488511119cad001a00f7e00e597112cf743ccfbd3f7a03c82d66237e1bfd82c8",
+            "libssh-4_0.10.6-2ubuntu0.4_amd64.deb": "c8dcd54390e09aba855ec0565d22396dabe52896c47856cf040b9e1ad37d9ff9",
+            "libssl3t64_3.0.13-0ubuntu3.12_amd64.deb": "6a963adb1106fca567d24d4a1e5da0bad25de79ac2564cd1ba846e677e1c951b",
+            "libxml2_2.9.14+dfsg-1.3ubuntu3.8_amd64.deb": "bfd07c01d6e5ab3e327f3ca5819409b1914bbfb3f1a016d53e4dabd5f96143bb",
+            "libxtables12_1.8.10-3ubuntu2_amd64.deb": "c94063499d1b0b336f39607107efb7de95d52a5d4e7e6a9368a5f7308f05b714",
+            "llvm-18-linker-tools_1%3a18.1.3-1ubuntu1_amd64.deb": "50f0bcfa784e42f8bf0eac31aeb6a20798fb6174cc31efe021f12ae71af91b23",
+            "llvm-18-runtime_1%3a18.1.3-1ubuntu1_amd64.deb": "1ad04ff658929491f8bf30fcf6454e07b1815a2b04164f1894156e92c91ef895",
+            "llvm-18_1%3a18.1.3-1ubuntu1_amd64.deb": "139cb82e16e75fcdd4a56562804ff9bfb482b65d0929580d621d28088075a27e",
+            "media-types_10.1.0_all.deb": "31bfb7eec55ab6d34a50ba995150e1498d4cb897714085d8025e330d3b529747",
+            "netbase_6.4_all.deb": "8cdbc9c3dca01e660759bf9d840f72e45ac72faf5d19ca1faecacaf6a60c1a87",
+            "openssl_3.0.13-0ubuntu3.12_amd64.deb": "321b30ad5a1c3783cb3d73ae439f824f6d3874d76a93a62f4a984959b490aa7b",
+            "perl-base_5.38.2-3.2ubuntu0.3_amd64.deb": "d6032f2e6e065dfa8785ec913bb2faf9019fff51965ae6f15d7a7aadf8f5ab3f",
+            "perl-modules-5.38_5.38.2-3.2ubuntu0.3_all.deb": "c552fd5fae100049d0a59b681e7896887ec72656dd774deacbdd498189d7432d",
+            "perl_5.38.2-3.2ubuntu0.3_amd64.deb": "d1c28b1b9b1389a5689d19cc20fb2470d087db2538327371e1c8c7515ef0a041",
+            "pinentry-curses_1.2.1-3ubuntu5_amd64.deb": "d3df9109d1e8e4ca05630f3a6fb7d2231f71d97fc4205d0681e1c421cc77ce41",
+            "python3-minimal_3.12.3-0ubuntu2.1_amd64.deb": "9ba5dd55cdcf6121c147dc5cb87403169b5933e3a56da0de57774f2ce819cf06",
+            "python3.12-minimal_3.12.3-1ubuntu0.15_amd64.deb": "487383dc2a895e0a767d820e0e55f2ab7d6ebe4dccd3d2c0b81f00ee11bb1152",
+            "python3.12_3.12.3-1ubuntu0.15_amd64.deb": "d02d1769ca198be054f74fab22dc46299b4994c9c00bfdd6352938402e5eed1f",
+            "python3_3.12.3-0ubuntu2.1_amd64.deb": "e691b9cc40841c41bbdc50bd794c876cb1b1801306ea27b06e9a1458180df1e9",
+            "readline-common_8.2-4build1_all.deb": "879bfd7f8a9bc4c0f7cdc777cdd8bc6de5f8c4a2ac80c060322a1b22f13504bb",
+            "skopeo_1.13.3+ds1-2ubuntu0.24.04.3_amd64.deb": "d908a86538f6d4bc49ea9c7423e5fb279a5c8cfc1f9bc7bd505f8bfe25d29be3",
+            "tzdata_2026c-0ubuntu0.24.04.1_all.deb": "ef12c9ef81905b5ac558504b2f8c20da9be5f28861020b3fb5e8b15fb3fae2f6"
+          }
+        }
+      },
+      "arm64": {
+        "builder": {
+          "artifacts": {
+            "ca-certificates_20260601~24.04.1_all.deb": "6bac2a01979e210d9eac1d4d56747ec709ea60654744d66705dc3c36e7629e50",
+            "libexpat1_2.6.1-2ubuntu0.4_arm64.deb": "284f48567ba2abe026e12ae351f5f4c3a489ce723f725eacfa51bf715aa94609",
+            "libpython3-stdlib_3.12.3-0ubuntu2.1_arm64.deb": "b6bd0a5e6fa11f2bae6da48707abe6b8245412cbf34e376cb3b9af0968b7122a",
+            "libpython3.12-minimal_3.12.3-1ubuntu0.15_arm64.deb": "c3d690d6889b446784a12a70e0153eb4af92c81f671e19a1a2c737c02d80b3b2",
+            "libpython3.12-stdlib_3.12.3-1ubuntu0.15_arm64.deb": "a2c3316658b19dd61f2bed066e7add387034ee59be124ce008fd1a8323c796f5",
+            "libreadline8t64_8.2-4build1_arm64.deb": "7f46b2f3ca588cd2f05d2cfb6844017309760b4201105cdfda4b339f9e6c69da",
+            "libsqlite3-0_3.45.1-1ubuntu2.7_arm64.deb": "2633907e89b37ae88fb1b18736b0a7a14feb614382c6297fca91cea4182fbbad",
+            "libssl3t64_3.0.13-0ubuntu3.12_arm64.deb": "ddc4806326140bd9553858a2b0f69caec0f3499d56d1238a2028e3a96f36ae78",
+            "media-types_10.1.0_all.deb": "31bfb7eec55ab6d34a50ba995150e1498d4cb897714085d8025e330d3b529747",
+            "netbase_6.4_all.deb": "8cdbc9c3dca01e660759bf9d840f72e45ac72faf5d19ca1faecacaf6a60c1a87",
+            "openssl_3.0.13-0ubuntu3.12_arm64.deb": "777b636c291fd2a5f269b21c110bf226d2cfde43b2c0d1f3d35ff41c775ef847",
+            "python3-minimal_3.12.3-0ubuntu2.1_arm64.deb": "883f362e7ea23d3de5483c0b5c31774f75897cc46d34840371b5fe7a0cc3a83c",
+            "python3-pip-whl_24.0+dfsg-1ubuntu1.3_all.deb": "4b7c50db8f261b208c1d9cde8db148c1f682cc516957b986ada5088cfcee1359",
+            "python3-setuptools-whl_68.1.2-2ubuntu1.2_all.deb": "edfa94cc1f6a33af99cfaf6ebfe35dbcd9c4bdd8555b90c0d8e78479faf5c8f0",
+            "python3-venv_3.12.3-0ubuntu2.1_arm64.deb": "bc65fb7e4dc802383e21852f00fe1d69745faa5a17b7fbb5dd3b97c0ba738965",
+            "python3.12-minimal_3.12.3-1ubuntu0.15_arm64.deb": "c87c3f969e496c1650361eacbde51564c2aa83e8ea7083a5ced10382e09f0279",
+            "python3.12-venv_3.12.3-1ubuntu0.15_arm64.deb": "5f17305c39e1da84aba767cab230fa5fb3a50d8e645233e1c05759715b418080",
+            "python3.12_3.12.3-1ubuntu0.15_arm64.deb": "933e2aed68f2d80c0c86ec957ee45128a0c0d9fc8fe373facd5bcd308458502f",
+            "python3_3.12.3-0ubuntu2.1_arm64.deb": "ea792b91e0fc9e249b96b960d14e04a8b7107029988546e8dd3511b74a693a6c",
+            "readline-common_8.2-4build1_all.deb": "879bfd7f8a9bc4c0f7cdc777cdd8bc6de5f8c4a2ac80c060322a1b22f13504bb",
+            "tar_1.35+dfsg-3ubuntu0.4_arm64.deb": "3302932e6125f1be306a9be67cf58a81f94911d92a99c9eeb0aff59c2c457fd7",
+            "tzdata_2026c-0ubuntu0.24.04.1_all.deb": "ef12c9ef81905b5ac558504b2f8c20da9be5f28861020b3fb5e8b15fb3fae2f6"
+          }
+        },
+        "runtime": {
+          "artifacts": {
+            "adduser_3.137ubuntu1_all.deb": "542aff2395eb912a56833e11a78076342779689d8fede7adcf08d1d6b0d0cd8b",
+            "ca-certificates_20260601~24.04.1_all.deb": "6bac2a01979e210d9eac1d4d56747ec709ea60654744d66705dc3c36e7629e50",
+            "containernetworking-plugins_1.1.1+ds1-3ubuntu0.24.04.3_arm64.deb": "64b5742006cc70621583262a6ce5b1d3e5085f2dff306cb360e08f6a7fe45880",
+            "dirmngr_2.4.4-2ubuntu17.4_arm64.deb": "5c134b77fee89a119fc736e2fa82ce52f25d35fb1ab0b1fc17565b22fdda3c13",
+            "git-man_1%3a2.43.0-1ubuntu7.3_all.deb": "5701f931ed2cd30644700b0fc1cda7c2214f93a63ef84c0c80e43ce40d2cf1d2",
+            "git_1%3a2.43.0-1ubuntu7.3_arm64.deb": "db7f9a9a06a5dd6d6d5bd4bc3b14a2a0f0aaf0cc48f6e096e7ba3f4db63503ee",
+            "gnupg-utils_2.4.4-2ubuntu17.4_arm64.deb": "41ee94bf8248c6582887e89fe2cd4690d5e8ad421ecec4344805b27ec8ff1608",
+            "gnupg_2.4.4-2ubuntu17.4_all.deb": "24fa610ce3b7512d58def5bf6699c05b09fbd235b9432245c000036d70eebc97",
+            "golang-github-containers-common_0.57.4+ds1-2ubuntu0.2_all.deb": "dae82b120f8a1b429c0a63a2ccd2ff3c91563f97e2188b1fbaf78ba76f7fb89c",
+            "golang-github-containers-image_5.29.2-2_all.deb": "2059cd3836a417d2e770b810c507b9d29aa4e32759650138c6c8704c24749772",
+            "gpg-agent_2.4.4-2ubuntu17.4_arm64.deb": "e4444cea33fec9b85f2350be1715951629d908565ac06701b8b4104e782ccac5",
+            "gpg_2.4.4-2ubuntu17.4_arm64.deb": "f7e3018e3d40295444f7fbdd5e05a18c400eb8cbbfba02fa36bd4c7ff176a479",
+            "gpgconf_2.4.4-2ubuntu17.4_arm64.deb": "4bc75f5e28aafbdd244953191c3c6297330580fe1e834c5b856774705a433b1b",
+            "gpgsm_2.4.4-2ubuntu17.4_arm64.deb": "106fe00a525535055841a3dbcc98a7d5eda5ce06ddfb9295662b553cedd31b8a",
+            "iptables_1.8.10-3ubuntu2_arm64.deb": "cbaacdb34f19a9b29f569205cdbf1e5851f63fde60777c5cf539a2b46c0c2fc7",
+            "keyboxd_2.4.4-2ubuntu17.4_arm64.deb": "80f0717e95aa68068be6fdb3cc029620b6dedbb970d184d4809de7a51319bbd0",
+            "libbrotli1_1.1.0-2build2_arm64.deb": "cabf3462d908e72f2e594f19ae87c581c4614f099947e38fbd865bf8eae27014",
+            "libbsd0_0.12.1-1build1.1_arm64.deb": "cdf9ff601244e64482584d9d9b98aa54a573c081ab5956227c737307196c1ce3",
+            "libcurl3t64-gnutls_8.5.0-2ubuntu10.11_arm64.deb": "27435ea85c1ac4859388805e81adf0a2b1fb8800bad98936e243e9f493158459",
+            "libcurl4t64_8.5.0-2ubuntu10.11_arm64.deb": "1b2cb3f25245ba065de0d41019d8e349e8cd13a89288f17d8cd8eb5083de4964",
+            "libdevmapper1.02.1_2%3a1.02.185-3ubuntu3.2_arm64.deb": "fb2c1c7f78fac39eb3191cfd30093d57a8ce2ae6b0942972f117706877f17d92",
+            "libedit2_3.1-20230828-1build1_arm64.deb": "cf642fec16d86517e0e715520c3a7cdaee650e7ae8a4993f82d0e1e7a5883efb",
+            "liberror-perl_0.17029-2_all.deb": "1907af6bf33dd8684447c09f216c675d2b8559fadd8ddace29fbf83c6fb2a636",
+            "libexpat1_2.6.1-2ubuntu0.4_arm64.deb": "284f48567ba2abe026e12ae351f5f4c3a489ce723f725eacfa51bf715aa94609",
+            "libgdbm-compat4t64_1.23-5.1build1_arm64.deb": "e5788a4d0477e0b5bf5cad8950cbd591698828836818c180c20da6f86d68bd37",
+            "libgdbm6t64_1.23-5.1build1_arm64.deb": "acc12af7e644ac336024c5d24028b20814fadd272588be30fb792982217e2dd4",
+            "libgpgme11t64_1.18.0-4.1ubuntu4_arm64.deb": "676b6c03691c340b3671afb51dd19d0bcdb8353e4074a5cd0161ec3401fa5e34",
+            "libgssapi-krb5-2_1.20.1-6ubuntu2.7_arm64.deb": "5cc2c7125942d8452c9bd4bf6ba9697bbf83538a097612272b8cdc32a29b5a59",
+            "libicu74_74.2-1ubuntu3.1_arm64.deb": "48f93acf50dcf237a8d58ce366730a28438ce52d3f06d7a2a88b51261dd791f7",
+            "libip4tc2_1.8.10-3ubuntu2_arm64.deb": "e692da5dffee228ed346474a6e9e21511acbb7329bc304b4ae6dbbc25b2831a2",
+            "libip6tc2_1.8.10-3ubuntu2_arm64.deb": "4438956b281410ee6d58ce59d1f9588e30f4abf7167e110fdb4f26a99fa5dee7",
+            "libk5crypto3_1.20.1-6ubuntu2.7_arm64.deb": "3cd713a866900412d078776643168454dc74a6027f01feaac140cbeedc815143",
+            "libkeyutils1_1.6.3-3build1_arm64.deb": "d141e94ed3b32ea6540f2e927a83b3d42cd4378256a1aad60cda583ffdbd78af",
+            "libkrb5-3_1.20.1-6ubuntu2.7_arm64.deb": "8612f19010004b5c0a67727a91a0f5ac4d597ae96ff259ba39e886b77e26091c",
+            "libkrb5support0_1.20.1-6ubuntu2.7_arm64.deb": "e82de87da10937d7966d978893b5754476a6b99a840d4e471d2d7bfdaac91189",
+            "libksba8_1.6.6-1build1_arm64.deb": "ae00b9b797f8cf005468d6e34b2c1d0f0b9bffb9c9532a6074403b2963ba1dc1",
+            "libldap2_2.6.10+dfsg-0ubuntu0.24.04.1_arm64.deb": "60893ca2782c2e52dc3b7b192be0169228beb91f7c87e93abaeca5871c5f16ee",
+            "libllvm18_1%3a18.1.3-1ubuntu1_arm64.deb": "9fdecc60d0528466bfbbc141aefd2788ab3bc5459a9ff9c9261fe067a3af3b5c",
+            "libmagic-mgc_1%3a5.45-3build1_arm64.deb": "63fc29c62e07d0880e46f6b9453e39e97fa80d133c0688206e6e00b84726ab94",
+            "libmagic1t64_1%3a5.45-3build1_arm64.deb": "cf7bba0fb21b38ea2454362d211b83a26da2528e36d90c72390fd5eb43168019",
+            "libmnl0_1.0.5-2build1_arm64.deb": "9442f15a4bbc6148e527045adaf85c86ae3ffe159176d6a5f3b471b49150e470",
+            "libnetfilter-conntrack3_1.0.9-6build1_arm64.deb": "7b152f919dbd3ffd9ca3ac95d96fdac0cdd139656eb284a0abbc46fce6063301",
+            "libnfnetlink0_1.0.2-2build1_arm64.deb": "c7c64d90793ce4d7df262aad50d99eb45ca848fa9421f1bccb22665c350bdb2f",
+            "libnftnl11_1.2.6-2build1_arm64.deb": "678792e1aa102892b594e0ee13ee93b763011674bddba800a3974a68a83c6ed1",
+            "libnghttp2-14_1.59.0-1ubuntu0.4_arm64.deb": "ec812e0b82dfb315b140020f4c8434191a89cf42c49dbb82605d0892b6783b59",
+            "libperl5.38t64_5.38.2-3.2ubuntu0.3_arm64.deb": "63fdf27196b4e7e7dad3e6837eaf1099a7499c96800a009318028622e665be95",
+            "libpfm4_4.13.0+git32-g0d4ed0e-1_arm64.deb": "f6dfbd34de06ce453932a6669977ea70c0c33d48f8fe92e946becddbb7098da0",
+            "libpsl5t64_0.21.2-1.1build1_arm64.deb": "886d485c74567b855bcd19b6f353a769a08b58c111b2d8275a908a469c15d4bf",
+            "libpython3-stdlib_3.12.3-0ubuntu2.1_arm64.deb": "b6bd0a5e6fa11f2bae6da48707abe6b8245412cbf34e376cb3b9af0968b7122a",
+            "libpython3.12-minimal_3.12.3-1ubuntu0.15_arm64.deb": "c3d690d6889b446784a12a70e0153eb4af92c81f671e19a1a2c737c02d80b3b2",
+            "libpython3.12-stdlib_3.12.3-1ubuntu0.15_arm64.deb": "a2c3316658b19dd61f2bed066e7add387034ee59be124ce008fd1a8323c796f5",
+            "libreadline8t64_8.2-4build1_arm64.deb": "7f46b2f3ca588cd2f05d2cfb6844017309760b4201105cdfda4b339f9e6c69da",
+            "librtmp1_2.4+20151223.gitfa8646d.1-2build7_arm64.deb": "fb771b2743120d9d44ee9989fd485205680976f7bf89f2f1ac5df50238ea1db7",
+            "libsasl2-2_2.1.28+dfsg1-5ubuntu3.1_arm64.deb": "05da24adf2b95285ce7eaf9a2ea902fbf4f756a796c8adbfd221d746035df44b",
+            "libsasl2-modules-db_2.1.28+dfsg1-5ubuntu3.1_arm64.deb": "ee8237dfd0d26df4d5fbfd3a9b132ae9f34f05b4508176b8bd1839f12739d94c",
+            "libsqlite3-0_3.45.1-1ubuntu2.7_arm64.deb": "2633907e89b37ae88fb1b18736b0a7a14feb614382c6297fca91cea4182fbbad",
+            "libssh-4_0.10.6-2ubuntu0.4_arm64.deb": "483b3a94e5c5b29eaa200208a0206bed2e0af5979ccdfc1971bdd641866413e0",
+            "libssl3t64_3.0.13-0ubuntu3.12_arm64.deb": "ddc4806326140bd9553858a2b0f69caec0f3499d56d1238a2028e3a96f36ae78",
+            "libxml2_2.9.14+dfsg-1.3ubuntu3.8_arm64.deb": "f833e07c5dffb9f7a26084522ef58854c4297982439a2affc94e20dbb495c696",
+            "libxtables12_1.8.10-3ubuntu2_arm64.deb": "72cd6add0f8eaaa45f44dd5c0903df083ab3847091d0633b4e46e8f80443718a",
+            "llvm-18-linker-tools_1%3a18.1.3-1ubuntu1_arm64.deb": "f043611a4de0370d5c1abff56b7666ed2db2f5e7be0380f71ae00753ddcba48d",
+            "llvm-18-runtime_1%3a18.1.3-1ubuntu1_arm64.deb": "b2c829cec030a9bab4fd27b92303eb8491140ad91edf62d55d5b1f8f3d6ef100",
+            "llvm-18_1%3a18.1.3-1ubuntu1_arm64.deb": "1d9c87ff9fe17d0ee00703ec0f339ab687e2807b3508b51cf517e05281de104d",
+            "media-types_10.1.0_all.deb": "31bfb7eec55ab6d34a50ba995150e1498d4cb897714085d8025e330d3b529747",
+            "netbase_6.4_all.deb": "8cdbc9c3dca01e660759bf9d840f72e45ac72faf5d19ca1faecacaf6a60c1a87",
+            "openssl_3.0.13-0ubuntu3.12_arm64.deb": "777b636c291fd2a5f269b21c110bf226d2cfde43b2c0d1f3d35ff41c775ef847",
+            "perl-base_5.38.2-3.2ubuntu0.3_arm64.deb": "63e7bfb3c18e3bf020e468de6970e25565b246a17edb78cb07ede3eb8bc6b3bf",
+            "perl-modules-5.38_5.38.2-3.2ubuntu0.3_all.deb": "c552fd5fae100049d0a59b681e7896887ec72656dd774deacbdd498189d7432d",
+            "perl_5.38.2-3.2ubuntu0.3_arm64.deb": "35c1a4bcad460f9fe08949363cc3135554e6feb97ea641123ceed48665bfcbcc",
+            "pinentry-curses_1.2.1-3ubuntu5_arm64.deb": "545f390f1e30ab7fa0d0a13f4b9d5268ba81afc5288760474791a30e05b6ad1d",
+            "python3-minimal_3.12.3-0ubuntu2.1_arm64.deb": "883f362e7ea23d3de5483c0b5c31774f75897cc46d34840371b5fe7a0cc3a83c",
+            "python3.12-minimal_3.12.3-1ubuntu0.15_arm64.deb": "c87c3f969e496c1650361eacbde51564c2aa83e8ea7083a5ced10382e09f0279",
+            "python3.12_3.12.3-1ubuntu0.15_arm64.deb": "933e2aed68f2d80c0c86ec957ee45128a0c0d9fc8fe373facd5bcd308458502f",
+            "python3_3.12.3-0ubuntu2.1_arm64.deb": "ea792b91e0fc9e249b96b960d14e04a8b7107029988546e8dd3511b74a693a6c",
+            "readline-common_8.2-4build1_all.deb": "879bfd7f8a9bc4c0f7cdc777cdd8bc6de5f8c4a2ac80c060322a1b22f13504bb",
+            "skopeo_1.13.3+ds1-2ubuntu0.24.04.3_arm64.deb": "4373fe244d71ab543f0c98e1b0119b2201f555da9b5ce92de5689247d04bccf2",
+            "tzdata_2026c-0ubuntu0.24.04.1_all.deb": "ef12c9ef81905b5ac558504b2f8c20da9be5f28861020b3fb5e8b15fb3fae2f6"
+          }
+        }
+      }
+    },
+    "source": "Ubuntu snapshot service",
+    "verification": "signed snapshot metadata plus checked-in SHA256 for every downloaded deb"
+  },
+  "migrate_ease": {
+    "repository": "https://github.com/JoeStech/migrate-ease",
+    "revision": "a4e67b107e706c6b45be8b41145777df28d86c24",
+    "url": "https://github.com/JoeStech/migrate-ease/archive/a4e67b107e706c6b45be8b41145777df28d86c24.tar.gz",
+    "sha256": "0f561ba824b7c1cd091d44211ae9128221e1e01a35d5eb1eae773a9eacd74417",
+    "architectures": [
+      "amd64",
+      "arm64"
+    ],
+    "verification": "source archive SHA256"
+  },
+  "performix": {
+    "version": "1.0.0",
+    "artifacts": {
+      "amd64": {
+        "url": "https://artifacts.tools.arm.com/arm-performix/cli/1.0.0/ArmPerformix-cli-1.0.0-linux-x64.tar.gz",
+        "sha256": "83edba4708daf6633b4d5a85270d14ee2913c9bfc1de523ab9280b0d9ac5461e"
+      },
+      "arm64": {
+        "url": "https://artifacts.tools.arm.com/arm-performix/cli/1.0.0/ArmPerformix-cli-1.0.0-linux-arm64.tar.gz",
+        "sha256": "b5206eb9e78d176928a853f480daea67f7b7c8c176608767f4cd476cfdedb1ad"
+      }
+    },
+    "verification": "vendor artifact SHA256"
+  }
+}
