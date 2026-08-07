@@ -15,6 +15,7 @@ on:
   pull_request:
     # The branches below must be a subset of the branches above
     branches: [ "main", "secure-build", "stesol-576-ossf-scorecard" ]
+  workflow_dispatch:
 
 # Declare default permissions as read only.
 permissions: read-all
