@@ -2,6 +2,9 @@ name: Build MCP Input Bundle
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - "mcp-inputs-*"
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/mcp-build-inputs
