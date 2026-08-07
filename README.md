@@ -1,3 +1,5 @@
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/arm/mcp/badge)](https://scorecard.dev/viewer/?uri=github.com/arm/mcp)
+
 # Arm MCP Server
 
 An [MCP](https://modelcontextprotocol.io/) server providing AI assistants with tools and knowledge for Arm architecture development, migration, and optimization.
