@@ -214,6 +214,25 @@ their contents before sharing them.
 - Check if following 2 docker containers have started - **mcp server** & **testcontainer**
 - All tests should pass without any errors. Warnings can be ignored.
 
+## Refreshing MCP Build Inputs
+
+Python wheels, Ubuntu packages, Performix, and migrate-ease are captured in a
+private, multi-architecture GHCR artifact before the MCP release consumes
+them. Refreshing that artifact is a deliberate two-step process:
+
+1. Run the manually triggered **Build MCP Input Bundle** workflow. It resolves
+   only the versions and hashes in `mcp-local/build-inputs.lock.json` and the uv
+   locks, builds native amd64 and arm64 scratch images, and publishes a private
+   `ghcr.io/arm/mcp-build-inputs` image index.
+2. Copy the immutable `ghcr.io/arm/mcp-build-inputs@sha256:...` reference from
+   the workflow summary into `mcp-local/build-inputs.lock.json` in a reviewed
+   follow-up change. For the initial publication, that follow-up also switches
+   the Dockerfile and release workflows from acquisition to the GHCR artifact.
+   Release builds must consume the digest, never the workflow tag.
+
+The workflow tag contains the source commit, workflow run ID, and attempt for
+traceability. It is only a discovery aid; the digest is the build input.
+
 ## Troubleshooting
 
 ### Accessing the Container Shell

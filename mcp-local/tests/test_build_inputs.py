@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import re
+import tomllib
 
 
 REPOSITORY = Path(__file__).resolve().parents[2]
@@ -10,7 +11,12 @@ MODEL_LOCK = json.loads(
     (REPOSITORY / "embedding-generation/embedding-model.lock.json").read_text()
 )
 DOCKERFILE = (MCP_LOCAL / "Dockerfile").read_text()
+INPUT_DOCKERFILE = (MCP_LOCAL / "Dockerfile.inputs").read_text()
+INPUT_DOCKERIGNORE = (MCP_LOCAL / ".dockerignore").read_text()
 SERVER = (MCP_LOCAL / "server.py").read_text()
+INPUT_WORKFLOW = (
+    REPOSITORY / ".github/workflows/build-mcp-inputs.yml"
+).read_text()
 
 
 def test_docker_base_images_match_manifest() -> None:
@@ -64,6 +70,8 @@ def test_direct_python_requirements_are_exactly_pinned() -> None:
     dependencies = [line for line in requirements if line and not line.startswith("#")]
     assert dependencies
     assert all("==" in dependency for dependency in dependencies)
+    pyproject = tomllib.loads((MCP_LOCAL / "pyproject.toml").read_text())
+    assert set(dependencies) == set(pyproject["project"]["dependencies"])
 
 
 def test_dockerfile_consumes_only_staged_third_party_inputs() -> None:
@@ -98,3 +106,45 @@ def test_model_index_and_metadata_come_from_one_immutable_image() -> None:
 def test_mcp_runtime_treats_packaged_model_as_local_only() -> None:
     assert "SENTENCE_TRANSFORMER_MODEL_PATH=/app/embedding-model" in DOCKERFILE
     assert "model_path=MODEL_PATH" in SERVER
+
+
+def test_input_artifact_has_one_platform_neutral_layout() -> None:
+    assert "FROM scratch AS inputs" in INPUT_DOCKERFILE
+    assert "ARG TARGETARCH" in INPUT_DOCKERFILE
+    assert "build-inputs/${TARGETARCH}/wheels/" in INPUT_DOCKERFILE
+    assert "build-inputs/${TARGETARCH}/debs/" in INPUT_DOCKERFILE
+    assert "build-inputs/${TARGETARCH}/performix.tar.gz" in INPUT_DOCKERFILE
+    assert "build-inputs/migrate-ease.tar.gz" in INPUT_DOCKERFILE
+    assert "/mcp-build-inputs/metadata/" in INPUT_DOCKERFILE
+    for source in (
+        "build-inputs/**",
+        "build-inputs.lock.json",
+        "requirements.lock",
+        "requirements.txt",
+        "pyproject.toml",
+        "uv.lock",
+    ):
+        assert f"!{source}" in INPUT_DOCKERIGNORE
+
+
+def test_input_publication_is_manual_private_and_multi_architecture() -> None:
+    assert "workflow_dispatch:" in INPUT_WORKFLOW
+    assert "push:" not in INPUT_WORKFLOW.split("jobs:", maxsplit=1)[0]
+    assert "packages: write" in INPUT_WORKFLOW
+    assert "verify-ghcr-package-private.sh" in INPUT_WORKFLOW
+    assert "ubuntu-24.04-arm" in INPUT_WORKFLOW
+    assert "linux/amd64" in INPUT_WORKFLOW
+    assert "linux/arm64" in INPUT_WORKFLOW
+    assert "docker buildx imagetools create" in INPUT_WORKFLOW
+    assert "stage-build-inputs.py --arch ${{ matrix.arch }}" in INPUT_WORKFLOW
+    assert 'echo "- MCP build input: \\`${IMAGE}@${digest}\\`"' in INPUT_WORKFLOW
+
+
+def test_input_publication_uses_pinned_build_actions() -> None:
+    action_lines = [
+        line.strip()
+        for line in INPUT_WORKFLOW.splitlines()
+        if line.strip().startswith("uses:")
+    ]
+    assert action_lines
+    assert all(re.fullmatch(r"uses: [^@]+@[0-9a-f]{40}(?: # .+)?", line) for line in action_lines)

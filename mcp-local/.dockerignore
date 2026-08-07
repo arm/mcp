@@ -1,0 +1,11 @@
+**
+
+!.dockerignore
+!Dockerfile.inputs
+!build-inputs/
+!build-inputs/**
+!build-inputs.lock.json
+!requirements.lock
+!requirements.txt
+!pyproject.toml
+!uv.lock

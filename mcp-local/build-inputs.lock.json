@@ -2,7 +2,8 @@
   "schema_version": 1,
   "generated_with": {
     "uv": "0.10.2",
-    "python": "3.12"
+    "python": "3.12",
+    "pip": "25.1.1"
   },
   "container_images": {
     "ubuntu": {
