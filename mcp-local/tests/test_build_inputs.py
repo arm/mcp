@@ -131,8 +131,9 @@ def test_input_publication_is_manual_private_and_multi_architecture() -> None:
     assert "workflow_dispatch:" in INPUT_WORKFLOW
     workflow_triggers = INPUT_WORKFLOW.split("jobs:", maxsplit=1)[0]
     assert "push:" in workflow_triggers
-    assert '      - "mcp-inputs-*"' in workflow_triggers
-    assert "branches:" not in workflow_triggers
+    assert "branches:" in workflow_triggers
+    assert "      - 570-pin-build-inputs" in workflow_triggers
+    assert "tags:" not in workflow_triggers
     assert "packages: write" in INPUT_WORKFLOW
     assert "verify-ghcr-package-private.sh" in INPUT_WORKFLOW
     assert "ubuntu-24.04-arm" in INPUT_WORKFLOW
