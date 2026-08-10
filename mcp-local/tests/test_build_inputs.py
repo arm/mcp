@@ -13,9 +13,14 @@ MODEL_LOCK = json.loads(
 DOCKERFILE = (MCP_LOCAL / "Dockerfile").read_text()
 INPUT_DOCKERFILE = (MCP_LOCAL / "Dockerfile.inputs").read_text()
 INPUT_DOCKERIGNORE = (MCP_LOCAL / ".dockerignore").read_text()
+ROOT_DOCKERIGNORE = (REPOSITORY / ".dockerignore").read_text()
 SERVER = (MCP_LOCAL / "server.py").read_text()
 INPUT_WORKFLOW = (
     REPOSITORY / ".github/workflows/build-mcp-inputs.yml"
+).read_text()
+IMAGE_WORKFLOW = (REPOSITORY / ".github/workflows/build-mcp-image.yml").read_text()
+INTEGRATION_WORKFLOW = (
+    REPOSITORY / ".github/workflows/integration-tests.yml"
 ).read_text()
 
 
@@ -30,6 +35,9 @@ def test_docker_base_images_match_manifest() -> None:
 
 def test_all_architecture_specific_inputs_cover_release_architectures() -> None:
     expected = {"amd64", "arm64"}
+    build_inputs = LOCK["container_images"]["mcp_build_inputs"]
+    assert set(build_inputs["architectures"]) == expected
+    assert set(build_inputs["manifests"]) == expected
     assert set(LOCK["python"]["architectures"]) == expected
     assert set(LOCK["performix"]["artifacts"]) == expected
     assert set(LOCK["migrate_ease"]["architectures"]) == expected
@@ -82,12 +90,23 @@ def test_dockerfile_consumes_only_staged_third_party_inputs() -> None:
     assert "apt-get update" not in DOCKERFILE
     assert "--network=none apt-get install" in DOCKERFILE
     assert "--no-download" in DOCKERFILE
-    assert "build-inputs/${TARGETARCH}/performix.tar.gz" in DOCKERFILE
-    assert "build-inputs/${TARGETARCH}/debs/builder/" in DOCKERFILE
-    assert "build-inputs/${TARGETARCH}/debs/runtime/" in DOCKERFILE
-    assert "build-inputs/migrate-ease.tar.gz" in DOCKERFILE
+    assert "FROM ${MCP_BUILD_INPUTS_IMAGE} AS mcp-inputs" in DOCKERFILE
+    assert "--from=mcp-inputs /mcp-build-inputs/wheels/" in DOCKERFILE
+    assert "--from=mcp-inputs /mcp-build-inputs/debs/builder/" in DOCKERFILE
+    assert "--from=mcp-inputs /mcp-build-inputs/debs/runtime/" in DOCKERFILE
+    assert "--from=mcp-inputs /mcp-build-inputs/performix.tar.gz" in DOCKERFILE
+    assert "--from=mcp-inputs /mcp-build-inputs/migrate-ease.tar.gz" in DOCKERFILE
+    assert "mcp-local/build-inputs/" not in DOCKERFILE
+    assert "!mcp-local/build-inputs/" not in ROOT_DOCKERIGNORE
     assert "--from=embeddings /embedding-data/embedding-model/" in DOCKERFILE
-    assert "build-inputs/embedding-model/" not in DOCKERFILE
+
+
+def test_final_builds_do_not_acquire_inputs_live() -> None:
+    for workflow in (IMAGE_WORKFLOW, INTEGRATION_WORKFLOW):
+        assert "stage-build-inputs.py" not in workflow
+        assert "packages: read" in workflow
+        assert "Log in to GHCR for locked build inputs" in workflow
+    assert "python -m pip install --upgrade pip" not in INTEGRATION_WORKFLOW
 
 
 def test_model_index_and_metadata_come_from_one_immutable_image() -> None:
@@ -101,6 +120,20 @@ def test_model_index_and_metadata_come_from_one_immutable_image() -> None:
         "/embedding-data/usearch_index.bin",
     }
     assert embeddings["model"] == MODEL_LOCK
+
+
+def test_build_input_bundle_is_immutable_and_auditable() -> None:
+    build_inputs = LOCK["container_images"]["mcp_build_inputs"]
+    assert build_inputs["reference"].startswith(
+        "ghcr.io/arm/mcp-build-inputs@sha256:"
+    )
+    assert build_inputs["reference"] in DOCKERFILE
+    assert re.fullmatch(r"[0-9a-f]{40}", build_inputs["source_revision"])
+    assert build_inputs["workflow_run"].isdigit()
+    assert all(
+        reference.startswith("ghcr.io/arm/mcp-build-inputs@sha256:")
+        for reference in build_inputs["manifests"].values()
+    )
 
 
 def test_mcp_runtime_treats_packaged_model_as_local_only() -> None:
@@ -130,9 +163,7 @@ def test_input_artifact_has_one_platform_neutral_layout() -> None:
 def test_input_publication_is_manual_private_and_multi_architecture() -> None:
     assert "workflow_dispatch:" in INPUT_WORKFLOW
     workflow_triggers = INPUT_WORKFLOW.split("jobs:", maxsplit=1)[0]
-    assert "push:" in workflow_triggers
-    assert "branches:" in workflow_triggers
-    assert "      - 570-pin-build-inputs" in workflow_triggers
+    assert "push:" not in workflow_triggers
     assert "tags:" not in workflow_triggers
     assert "packages: write" in INPUT_WORKFLOW
     assert "verify-ghcr-package-private.sh" in INPUT_WORKFLOW

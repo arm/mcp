@@ -34,6 +34,27 @@
         "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
       },
       "verification": "private GHCR OCI image-index digest"
+    },
+    "mcp_build_inputs": {
+      "reference": "ghcr.io/arm/mcp-build-inputs@sha256:d38c64ad12493ddacfe7a99e49f47e6cfcf1f9d2acf1696c797645d3099758a3",
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "manifests": {
+        "amd64": "ghcr.io/arm/mcp-build-inputs@sha256:1ed42f63142046d20a26bc99ec1a6d2195cb049711a5a36e85b350177af1392a",
+        "arm64": "ghcr.io/arm/mcp-build-inputs@sha256:eae03c0148f6db8833183a0323c3df7b2614c29e5d9aa24b854dec07cc2e1491"
+      },
+      "contents": [
+        "/mcp-build-inputs/wheels/",
+        "/mcp-build-inputs/debs/",
+        "/mcp-build-inputs/performix.tar.gz",
+        "/mcp-build-inputs/migrate-ease.tar.gz",
+        "/mcp-build-inputs/metadata/"
+      ],
+      "source_revision": "386329f3bbf42d76d4f6f8cede9d7273064c3065",
+      "workflow_run": "31226100313",
+      "verification": "private multi-architecture GHCR OCI image-index digest"
     }
   },
   "python": {

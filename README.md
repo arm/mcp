@@ -214,24 +214,103 @@ their contents before sharing them.
 - Check if following 2 docker containers have started - **mcp server** & **testcontainer**
 - All tests should pass without any errors. Warnings can be ignored.
 
-## Refreshing MCP Build Inputs
+## Reproducible MCP Build Inputs
 
-Python wheels, Ubuntu packages, Performix, and migrate-ease are captured in a
-private, multi-architecture GHCR artifact before the MCP release consumes
-them. Refreshing that artifact is a deliberate two-step process:
+The final MCP image build does not resolve or download Python packages, Ubuntu
+packages, Performix, or migrate-ease. Those inputs are acquired separately by
+the manually triggered **Build MCP Input Bundle** workflow and published as a
+private, multi-architecture OCI image at `ghcr.io/arm/mcp-build-inputs`.
 
-1. Run the manually triggered **Build MCP Input Bundle** workflow. It resolves
-   only the versions and hashes in `mcp-local/build-inputs.lock.json` and the uv
-   locks, builds native amd64 and arm64 scratch images, and publishes a private
-   `ghcr.io/arm/mcp-build-inputs` image index.
-2. Copy the immutable `ghcr.io/arm/mcp-build-inputs@sha256:...` reference from
-   the workflow summary into `mcp-local/build-inputs.lock.json` in a reviewed
-   follow-up change. For the initial publication, that follow-up also switches
-   the Dockerfile and release workflows from acquisition to the GHCR artifact.
-   Release builds must consume the digest, never the workflow tag.
+The acquisition workflow runs natively on AMD64 and Arm64. For each
+architecture it:
 
-The workflow tag contains the source commit, workflow run ID, and attempt for
-traceability. It is only a discovery aid; the digest is the build input.
+1. verifies the checked-in uv lock and exported, hash-locked requirements;
+2. downloads the exact Python wheels allowed by those hashes;
+3. downloads the complete `.deb` closures from the recorded Ubuntu snapshot
+   and checks every package against `mcp-local/build-inputs.lock.json`;
+4. downloads and verifies the architecture-specific Performix archive and the
+   pinned migrate-ease source archive; and
+5. publishes those bytes and their lock metadata in a scratch image, then
+   combines both architecture images into one private OCI image index.
+
+`mcp-local/Dockerfile` selects the matching architecture from that index and
+copies the files from it. Python and apt installation use only those local
+files with network access disabled. The Ubuntu base image, input bundle, and
+embedding vector-store image are all selected by immutable OCI digest. The
+currently approved input bundle is recorded in
+`mcp-local/build-inputs.lock.json` and defaults to:
+
+```text
+ghcr.io/arm/mcp-build-inputs@sha256:d38c64ad12493ddacfe7a99e49f47e6cfcf1f9d2acf1696c797645d3099758a3
+```
+
+### Building the MCP Image
+
+Authenticate Docker to GHCR before building because the build-input and
+embedding images are private:
+
+```bash
+echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USER" --password-stdin
+docker buildx build \
+  --platform linux/amd64 \
+  --file mcp-local/Dockerfile \
+  --tag arm-mcp:local \
+  --load \
+  .
+```
+
+Use `linux/arm64` to build the Arm64 image. GitHub Actions performs the same
+GHCR login and builds both architectures without running the acquisition
+script.
+
+### Inspecting the Published Inputs
+
+The index and its platform manifests can be inspected without unpacking it:
+
+```bash
+MCP_INPUTS="ghcr.io/arm/mcp-build-inputs@sha256:d38c64ad12493ddacfe7a99e49f47e6cfcf1f9d2acf1696c797645d3099758a3"
+docker buildx imagetools inspect "$MCP_INPUTS"
+docker buildx imagetools inspect "$MCP_INPUTS" --format '{{json .Manifest}}' | jq
+```
+
+To inspect the actual files for one architecture:
+
+```bash
+docker pull --platform linux/amd64 "$MCP_INPUTS"
+container_id="$(docker create --platform linux/amd64 "$MCP_INPUTS")"
+docker cp "$container_id:/mcp-build-inputs" ./mcp-build-inputs-inspect
+docker rm "$container_id"
+find ./mcp-build-inputs-inspect -maxdepth 3 -type f | sort
+```
+
+The copied `metadata/` directory contains the source locks used during
+acquisition. The checked-in manifest additionally records the published index
+digest, per-architecture manifest digests, source commit, workflow run, and
+verification method.
+
+### Refreshing the Inputs
+
+Refreshing is deliberately a reviewed two-step process because an OCI artifact
+cannot contain its own not-yet-known digest:
+
+1. Update the relevant versions and hashes in `mcp-local/pyproject.toml`,
+   `mcp-local/uv.lock`, `mcp-local/requirements.lock`, and/or
+   `mcp-local/build-inputs.lock.json`. Commit those source locks.
+2. From that branch, manually run **Build MCP Input Bundle**. Confirm that both
+   native architecture jobs pass and that the workflow reports the package as
+   private.
+3. Inspect the published index, then copy its immutable index digest,
+   per-architecture manifest digests, source commit, and workflow run into the
+   `container_images.mcp_build_inputs` entry in
+   `mcp-local/build-inputs.lock.json`.
+4. Update the `MCP_BUILD_INPUTS_IMAGE` default in `mcp-local/Dockerfile` to the
+   same index digest and submit that pin as a reviewed follow-up change.
+5. Run the integration workflow. The release and integration builds must pull
+   the digest and must never invoke `stage-build-inputs.py`.
+
+The publication workflow also creates a tag containing the source commit,
+workflow run ID, and attempt. That tag is only a discovery aid; production
+builds always use the digest.
 
 ## Troubleshooting
 

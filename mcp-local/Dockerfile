@@ -16,12 +16,14 @@
 
 # Keep these defaults synchronized with mcp-local/build-inputs.lock.json.
 ARG EMBEDDINGS_IMAGE=ghcr.io/arm/mcp-embedding-vectorstore@sha256:724a53a6a8b29893c196c406a6ba9a41a1ec3b122b7aa2ceb587a67991519f88
+ARG MCP_BUILD_INPUTS_IMAGE=ghcr.io/arm/mcp-build-inputs@sha256:d38c64ad12493ddacfe7a99e49f47e6cfcf1f9d2acf1696c797645d3099758a3
 ARG UBUNTU_IMAGE=ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+
+FROM ${MCP_BUILD_INPUTS_IMAGE} AS mcp-inputs
 
 FROM --platform=linux/arm64 ${EMBEDDINGS_IMAGE} AS embeddings
 
 FROM ${UBUNTU_IMAGE} AS builder
-ARG TARGETARCH
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -29,9 +31,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     VIRTUAL_ENV=/app/.venv \
     PATH=/app/.venv/bin:$PATH
 
-# Install the complete builder package closure downloaded from the locked
-# Ubuntu snapshot. apt is forbidden from downloading anything here.
-COPY mcp-local/build-inputs/${TARGETARCH}/debs/builder/ /var/cache/apt/archives/
+# Install the complete builder package closure from the immutable input bundle.
+# apt is forbidden from downloading anything here.
+COPY --from=mcp-inputs /mcp-build-inputs/debs/builder/ /var/cache/apt/archives/
 RUN --network=none apt-get install -y --no-download --no-install-recommends \
       /var/cache/apt/archives/*.deb && \
     rm -f /var/cache/apt/archives/*.deb && \
@@ -40,10 +42,10 @@ RUN --network=none apt-get install -y --no-download --no-install-recommends \
 WORKDIR /app
 RUN python3 -m venv "$VIRTUAL_ENV"
 
-# stage-build-inputs.py creates this wheelhouse from uv.lock and
-# requirements.lock. Network access is disabled for installation.
-COPY mcp-local/requirements.lock /tmp/requirements.lock
-COPY mcp-local/build-inputs/${TARGETARCH}/wheels/ /tmp/wheels/
+# The requirements file and wheelhouse come from the same immutable input
+# bundle. Network access is disabled for installation.
+COPY --from=mcp-inputs /mcp-build-inputs/metadata/requirements.lock /tmp/requirements.lock
+COPY --from=mcp-inputs /mcp-build-inputs/wheels/ /tmp/wheels/
 RUN --network=none pip install \
     --no-index \
     --find-links=/tmp/wheels \
@@ -54,7 +56,7 @@ RUN --network=none pip install \
 
 # Install only migrate-ease. The old arm-linux-migration-tools installer also
 # installed unrelated profiling tools and then removed them again.
-COPY mcp-local/build-inputs/migrate-ease.tar.gz /tmp/migrate-ease.tar.gz
+COPY --from=mcp-inputs /mcp-build-inputs/migrate-ease.tar.gz /tmp/migrate-ease.tar.gz
 RUN --network=none mkdir -p /opt/arm-migration-tools/migrate-ease && \
     tar -xzf /tmp/migrate-ease.tar.gz \
       --strip-components=1 \
@@ -70,7 +72,7 @@ RUN --network=none mkdir -p /opt/arm-migration-tools/migrate-ease && \
       chmod 0755 "${wrapper}"; \
     done
 
-COPY mcp-local/build-inputs/${TARGETARCH}/performix.tar.gz /tmp/performix.tar.gz
+COPY --from=mcp-inputs /mcp-build-inputs/performix.tar.gz /tmp/performix.tar.gz
 RUN --network=none mkdir -p /opt/ArmPerformix-cli-current && \
     tar -xzf /tmp/performix.tar.gz -C /opt/ArmPerformix-cli-current && \
     chmod 0755 /opt/ArmPerformix-cli-current/apx && \
@@ -105,8 +107,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     VIRTUAL_ENV=/app/.venv \
     PATH=/app/.venv/bin:$PATH
 
-ARG TARGETARCH
-COPY mcp-local/build-inputs/${TARGETARCH}/debs/runtime/ /var/cache/apt/archives/
+COPY --from=mcp-inputs /mcp-build-inputs/debs/runtime/ /var/cache/apt/archives/
 RUN --network=none apt-get install -y --no-download --no-install-recommends \
       /var/cache/apt/archives/*.deb && \
     ln -sf /usr/bin/llvm-mca-18 /usr/bin/llvm-mca && \
