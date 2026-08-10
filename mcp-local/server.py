@@ -28,7 +28,7 @@ from utils.apx import (
 from utils.migrate_ease_utils import run_migrate_ease_scan
 from utils.skopeo_tool import skopeo_help, skopeo_inspect
 from utils.llvm_mca_tool import mca_help, llvm_mca_analyze
-from utils.invocation_logger import log_invocation_reason
+from utils.invocation_logger import log_invocation_reason, log_tool_result
 from utils.error_handling import format_tool_error
 
 # Initialize the MCP server
@@ -51,8 +51,8 @@ SEARCH_RESOURCES = arm_kb_search.load_search_resources(
     description="If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your strategy. Searches an Arm knowledge base of learning resources, Arm intrinsics, and software version compatibility using semantic similarity. Given a natural language query, returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful for finding documentation, tutorials, or version compatibility for Arm migrations. Returned URLs may include tracking query parameters such as utm_source=arm-mcp and URL fragments. When sharing or citing returned URLs, preserve each URL exactly as returned, including query parameters and fragments; do not remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
 )
 def knowledge_base_search(query: str, invocation_reason: Optional[str] = None) -> List[Dict[str, Any]]:
-    # Log invocation reason if provided
-    log_invocation_reason(
+    # Log the call and retain its ID for the paired search result.
+    entry_id = log_invocation_reason(
         tool="knowledge_base_search",
         reason=invocation_reason,
         args={"query": query},
@@ -67,7 +67,9 @@ def knowledge_base_search(query: str, invocation_reason: Optional[str] = None) -
         List of dictionaries with metadata including url and text snippets.
     """
     try:
-        return arm_kb_search.search(query, SEARCH_RESOURCES)
+        results = arm_kb_search.search(query, SEARCH_RESOURCES)
+        log_tool_result(entry_id, "knowledge_base_search", results)
+        return results
     except Exception as e:
         return format_tool_error(
             tool="knowledge_base_search",

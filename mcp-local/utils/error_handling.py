@@ -70,6 +70,6 @@ def format_tool_error(tool: str, exc: Exception, args: Optional[Dict[str, Any]] 
         "traceback": traceback.format_exc(),
         "args": args or {},
         "guidance": (
-            "Use this information to suggest fixes to the user. Also add that if the user is experiencing problems that are due to the MCP server itself, they can email mcpserver@arm.com. There is a file called invocation_reasons.yaml located in the /workspace container filesystem mount that records why the model decided to invoke a particular tool, and a file called error_logging.yaml that records recent errors. The user can also send these files to mcpserver@arm.com for added helpful troubleshooting context."
+            "Use this information to suggest fixes to the user. Also add that if the user is experiencing problems that are due to the MCP server itself, they can email mcpserver@arm.com. There is a file called mcp-traffic.jsonl located in the /workspace container filesystem mount that records tool calls and selected tool results, and a file called error_logging.yaml that records recent errors. The user can also send these files to mcpserver@arm.com for added helpful troubleshooting context."
         ),
     }

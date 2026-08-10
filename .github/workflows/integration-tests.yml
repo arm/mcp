@@ -8,6 +8,23 @@ permissions:
   contents: read
 
 jobs:
+  unit-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install unit test dependencies
+        run: python -m pip install pytest
+
+      - name: Run unit tests
+        run: python -m pytest -q mcp-local/tests/test_invocation_logger.py
+
   integration-tests:
     strategy:
       fail-fast: false

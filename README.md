@@ -177,6 +177,21 @@ args = [
 
 After updating the configuration, restart your MCP client to load the Arm MCP server.
 
+## Logging
+
+Depending on usage, the server may write two log files under `/workspace`. With the
+configuration examples above, these files appear in the project directory on
+your computer:
+
+- `mcp-traffic.jsonl` records when tools are used, the inputs provided, and the
+  reason for each tool call. It also records results from knowledge base
+  searches.
+- `error_logging.yaml` records details about errors encountered by the server.
+  This information can help with troubleshooting.
+
+These logs may contain information from your project and tool requests. Review
+their contents before sharing them.
+
 ## Repository Structure
 
 - **`mcp-local/`**: The MCP server implementation

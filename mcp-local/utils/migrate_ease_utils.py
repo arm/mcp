@@ -35,7 +35,7 @@ EXCLUDE_PATTERNS: Set[str] = {
     '.git', '.svn', '.hg',
     # IDE and editor directories
     '.vscode', '.idea', '.eclipse',
-    # Other common build/cache directories
+    'mcp-traffic.jsonl', 'error_logging.yaml',
     'target', 'out', '.cache',
 }
 
