@@ -244,6 +244,31 @@ currently approved input bundle is recorded in
 ghcr.io/arm/mcp-build-inputs@sha256:d38c64ad12493ddacfe7a99e49f47e6cfcf1f9d2acf1696c797645d3099758a3
 ```
 
+### Why the Build Uses Multiple Dockerfiles
+
+Each Dockerfile represents a different trust or network boundary:
+
+- `mcp-local/Dockerfile.inputs` has no `RUN` commands and starts from
+  `scratch`. It packages the verified wheels, `.deb` files, archives, and lock
+  metadata into the multi-architecture OCI artifact that GHCR can store.
+- `mcp-local/Dockerfile` is the final application build. It consumes the
+  approved MCP-input and embedding artifacts by digest and installs their
+  contents with networking disabled.
+- `embedding-generation/Dockerfile.toolchain` creates the pinned Python and
+  model environment used by the embedding pipeline.
+- `embedding-generation/Dockerfile.acquire` is the controlled network phase
+  that collects source material and publishes the resulting chunks.
+- `embedding-generation/Dockerfile.vectorstore` consumes the pinned toolchain
+  and chunks, generates the model index and metadata offline, and packages the
+  output in a `scratch` artifact for the MCP image.
+
+These could technically be stages in one large Dockerfile, but keeping the
+artifacts separate lets the workflows publish, inspect, cache, approve, and
+pin each boundary independently. It also makes it difficult for a supposedly
+offline phase to acquire dependencies accidentally. `Dockerfile.inputs` is
+the small adapter needed because GHCR stores OCI images rather than arbitrary
+directories; using a `scratch` image adds no runtime operating system.
+
 ### Building the MCP Image
 
 Authenticate Docker to GHCR before building because the build-input and
@@ -290,22 +315,107 @@ verification method.
 
 ### Refreshing the Inputs
 
-Refreshing is deliberately a reviewed two-step process because an OCI artifact
+Refreshing is deliberately a reviewed two-commit process because an OCI artifact
 cannot contain its own not-yet-known digest:
 
-1. Update the relevant versions and hashes in `mcp-local/pyproject.toml`,
-   `mcp-local/uv.lock`, `mcp-local/requirements.lock`, and/or
-   `mcp-local/build-inputs.lock.json`. Commit those source locks.
-2. From that branch, manually run **Build MCP Input Bundle**. Confirm that both
+#### Updating Python Packages
+
+Keep the direct dependency pins in `mcp-local/pyproject.toml` and
+`mcp-local/requirements.txt` synchronized. Use the uv version recorded in
+`mcp-local/build-inputs.lock.json`, then regenerate both locks:
+
+```bash
+uv --version
+uv lock --directory mcp-local --upgrade-package PACKAGE_NAME
+uv export \
+  --directory mcp-local \
+  --locked \
+  --no-dev \
+  --no-emit-project \
+  --format requirements-txt \
+  --output-file mcp-local/requirements.lock
+shasum -a 256 mcp-local/requirements.lock
+```
+
+Record the final checksum as `python.install_requirements_sha256` in
+`mcp-local/build-inputs.lock.json`. The publication workflow checks that the uv
+lock and exported requirements agree before downloading the AMD64 and Arm64
+wheels.
+
+#### Updating the Python Interpreter
+
+An interpreter upgrade changes the wheel ABI and the Ubuntu package closure.
+Update all of the following together:
+
+- `mcp-local/.python-version`;
+- `project.requires-python` in `mcp-local/pyproject.toml`;
+- `generated_with.python` in `mcp-local/build-inputs.lock.json`;
+- `python-version` in `.github/workflows/build-mcp-inputs.yml`;
+- the `--python-version` and `--abi` arguments in
+  `mcp-local/scripts/stage-build-inputs.py`; and
+- the builder and runtime Python packages in the Ubuntu package lock, if the
+  selected Ubuntu base does not provide the new interpreter through the
+  existing `python3` package.
+
+Regenerate the uv and requirements locks, refresh the Ubuntu package manifests
+as described below, and build both architectures before accepting the upgrade.
+
+#### Updating Ubuntu Packages
+
+Change the snapshot timestamp and/or requested package roles in
+`mcp-local/build-inputs.lock.json`. On Linux with Docker configured for both
+target architectures, regenerate the exact `.deb` closures and hashes with:
+
+```bash
+python3 mcp-local/scripts/stage-build-inputs.py \
+  --arch all \
+  --skip-wheels \
+  --refresh-os-lock
+```
+
+Review every package addition, removal, version change, and checksum change in
+the manifest before committing it. The normal publication workflow does not
+rewrite this lock; it fails if the snapshot produces different bytes.
+
+#### Updating Performix or Migrate-ease
+
+Update the versioned URL or source revision and the expected SHA256 in
+`mcp-local/build-inputs.lock.json`. Prefer an upstream-published checksum when
+one is available. Performix has separate AMD64 and Arm64 artifacts;
+migrate-ease is one pinned source archive used by both architectures. The
+publication workflow fails before publishing if any archive differs from its
+recorded checksum.
+
+#### Updating Container Images or Embeddings
+
+Record immutable `@sha256:` references for new Ubuntu, embedding-vector-store,
+or MCP-input images. For a multi-architecture image, also record its AMD64 and
+Arm64 platform manifest digests. Keep the corresponding `UBUNTU_IMAGE`,
+`EMBEDDINGS_IMAGE`, or `MCP_BUILD_INPUTS_IMAGE` default in
+`mcp-local/Dockerfile` synchronized with the checked-in manifest. Production
+must never consume a mutable tag.
+
+#### Publishing and Pinning the Updated Bundle
+
+After updating any source lock, use the same common publication process:
+
+1. Commit and push the updated source locks to a branch.
+2. Start the workflow on that branch:
+
+   ```bash
+   gh workflow run build-mcp-inputs.yml --ref YOUR_BRANCH
+   ```
+
+3. Confirm that both
    native architecture jobs pass and that the workflow reports the package as
    private.
-3. Inspect the published index, then copy its immutable index digest,
+4. Inspect the published index, then copy its immutable index digest,
    per-architecture manifest digests, source commit, and workflow run into the
    `container_images.mcp_build_inputs` entry in
    `mcp-local/build-inputs.lock.json`.
-4. Update the `MCP_BUILD_INPUTS_IMAGE` default in `mcp-local/Dockerfile` to the
+5. Update the `MCP_BUILD_INPUTS_IMAGE` default in `mcp-local/Dockerfile` to the
    same index digest and submit that pin as a reviewed follow-up change.
-5. Run the integration workflow. The release and integration builds must pull
+6. Run the integration workflow. The release and integration builds must pull
    the digest and must never invoke `stage-build-inputs.py`.
 
 The publication workflow also creates a tag containing the source commit,
