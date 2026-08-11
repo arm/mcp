@@ -126,11 +126,5 @@ RUN ln -sf "${APX_BIN}" /usr/local/bin/apx
 
 WORKDIR /app
 
-# Verify every native MCP tool and the Python-backed image checker before the
-# runtime image is published.
-RUN --network=none test -x "${APX_BIN}" && \
-    migrate-ease-cpp --help >/dev/null && \
-    python -c "import magic, requests; from sentence_transformers import SentenceTransformer; from utils.docker_utils import check_docker_image_architectures; SentenceTransformer('/app/embedding-model', local_files_only=True, trust_remote_code=False)"
-
 VOLUME ["/workspace"]
 ENTRYPOINT ["python", "-u", "server.py"]

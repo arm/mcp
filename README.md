@@ -25,7 +25,7 @@ If you would prefer to use a pre-built, multi-arch image, the official image can
 
 ## Prerequisites
 
-- Docker (with buildx support for multi-arch builds)
+- Docker with Buildx support
 - An MCP-compatible AI assistant client (e.g. GitHub Copilot, Kiro CLI, Codex CLI, Claude Code, etc)
 
 ## Quick Start
@@ -35,14 +35,11 @@ If you would prefer to use a pre-built, multi-arch image, the official image can
 From the root of this repository:
 
 ```bash
-docker buildx build --platform linux/arm64,linux/amd64 -f mcp-local/Dockerfile -t armlimited/arm-mcp .
-```
-
-For a single-platform build (faster):
-
-```bash
 docker buildx build -f mcp-local/Dockerfile -t armlimited/arm-mcp . --load
 ```
+
+This builds for the Docker host's native architecture. The release workflow is
+responsible for explicit multi-architecture builds.
 
 ### 2. Configure Your MCP Client
 
@@ -275,18 +272,53 @@ Authenticate Docker to GHCR before building because the build-input and
 embedding images are private:
 
 ```bash
-echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USER" --password-stdin
+docker login ghcr.io
 docker buildx build \
-  --platform linux/amd64 \
   --file mcp-local/Dockerfile \
   --tag arm-mcp:local \
   --load \
   .
 ```
 
-Use `linux/arm64` to build the Arm64 image. GitHub Actions performs the same
-GHCR login and builds both architectures without running the acquisition
-script.
+The local build defaults to the Docker host's native architecture. GitHub
+Actions performs the same GHCR login and explicitly builds both release
+architectures without running the acquisition script.
+
+### Testing a Local MCP Image
+
+The Dockerfile installs the application but does not run the application test
+suite during image assembly. After building `arm-mcp:local`, run a lightweight
+container smoke test explicitly:
+
+```bash
+docker run --rm \
+  --entrypoint sh \
+  arm-mcp:local \
+  -c 'set -eu
+      skopeo --version
+      llvm-mca --version
+      git --version
+      test -x "$APX_BIN"
+      migrate-ease-cpp --help >/dev/null
+      python -c "import magic, requests; from utils.docker_utils import check_docker_image_architectures"'
+```
+
+The packaged embedding model can be checked separately without network
+access:
+
+```bash
+docker run --rm \
+  --network none \
+  --entrypoint python \
+  arm-mcp:local \
+  -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('/app/embedding-model', local_files_only=True, trust_remote_code=False)"
+```
+
+For the full MCP protocol and tool integration suite, tag the local image as
+`arm-mcp:latest` or set `MCP_IMAGE=arm-mcp:local`, then follow the repository's
+integration-test setup. The APX integration cases additionally require the SSH
+target, key mounts, and Java workload configured in
+`.github/workflows/integration-tests.yml`.
 
 ### Inspecting the Published Inputs
 
@@ -298,11 +330,11 @@ docker buildx imagetools inspect "$MCP_INPUTS"
 docker buildx imagetools inspect "$MCP_INPUTS" --format '{{json .Manifest}}' | jq
 ```
 
-To inspect the actual files for one architecture:
+To inspect the actual files for the Docker host's native architecture:
 
 ```bash
-docker pull --platform linux/amd64 "$MCP_INPUTS"
-container_id="$(docker create --platform linux/amd64 "$MCP_INPUTS")"
+docker pull "$MCP_INPUTS"
+container_id="$(docker create "$MCP_INPUTS")"
 docker cp "$container_id:/mcp-build-inputs" ./mcp-build-inputs-inspect
 docker rm "$container_id"
 find ./mcp-build-inputs-inspect -maxdepth 3 -type f | sort
@@ -436,7 +468,7 @@ docker run --rm -it --entrypoint /bin/bash armlimited/arm-mcp
 
 - **Timeout errors during migration scans**: Increase the `timeout` value in your MCP client configuration (e.g., `"timeout": 120000` for 2 minutes)
 - **Empty workspace**: Ensure your volume mount path is correct and the directory exists
-- **Architecture mismatches**: If you encounter platform-specific issues, rebuild for your specific platform using `--platform linux/amd64` or `--platform linux/arm64`
+- **Architecture mismatches**: Confirm that the local image matches the Docker host's native architecture; use the release workflow for explicit cross-platform builds.
 
 ## Contributing
 
