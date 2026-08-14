@@ -306,15 +306,15 @@
     "verification": "signed snapshot metadata plus checked-in SHA256 for every downloaded deb"
   },
   "migrate_ease": {
-    "repository": "https://github.com/JoeStech/migrate-ease",
-    "revision": "a4e67b107e706c6b45be8b41145777df28d86c24",
-    "url": "https://github.com/JoeStech/migrate-ease/archive/a4e67b107e706c6b45be8b41145777df28d86c24.tar.gz",
-    "sha256": "0f561ba824b7c1cd091d44211ae9128221e1e01a35d5eb1eae773a9eacd74417",
+    "repository": "https://github.com/migrate-ease/migrate-ease",
+    "revision": "e92c735f4bdfbe09e96aea7dd5b404f05d07f6fb",
+    "url": "https://github.com/migrate-ease/migrate-ease/archive/e92c735f4bdfbe09e96aea7dd5b404f05d07f6fb.tar.gz",
+    "sha256": "eba8409f683fe236f935c8f7c95758d71c44c149cd95a54a8b4bc36b3e190dea",
     "architectures": [
       "amd64",
       "arm64"
     ],
-    "verification": "source archive SHA256"
+    "verification": "locally calculated SHA256 of pinned upstream source archive"
   },
   "performix": {
     "version": "1.0.0",
@@ -328,6 +328,6 @@
         "sha256": "b5206eb9e78d176928a853f480daea67f7b7c8c176608767f4cd476cfdedb1ad"
       }
     },
-    "verification": "vendor artifact SHA256"
+    "verification": "locally calculated SHA256 of downloaded vendor artifact"
   }
 }

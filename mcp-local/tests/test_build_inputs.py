@@ -78,11 +78,17 @@ def test_os_package_bundles_are_hash_locked() -> None:
 
 def test_external_inputs_are_immutable_and_have_digests() -> None:
     migration = LOCK["migrate_ease"]
+    assert migration["repository"] == "https://github.com/migrate-ease/migrate-ease"
+    assert migration["revision"] in migration["url"]
     assert re.fullmatch(r"[0-9a-f]{40}", migration["revision"])
     assert re.fullmatch(r"[0-9a-f]{64}", migration["sha256"])
+    assert migration["verification"].startswith("locally calculated SHA256")
 
     for artifact in LOCK["performix"]["artifacts"].values():
         assert re.fullmatch(r"[0-9a-f]{64}", artifact["sha256"])
+    assert LOCK["performix"]["verification"].startswith(
+        "locally calculated SHA256"
+    )
 
 
 def test_python_dependencies_have_one_exactly_pinned_source() -> None:
