@@ -1,17 +1,20 @@
 name: Build MCP Image
 
 on:
-  workflow_run:
-    workflows: ["Build Embeddings Image"]
-    types: [completed]
+  pull_request:
+    types: [closed]
     branches: [main]
+    paths:
+      - mcp-local/Dockerfile
+      - mcp-local/build-inputs.lock.json
   workflow_dispatch:
     inputs:
       bump_type:
-        description: "Manual version bump: major (X.0.0) or hotfix (x.y.Z). Minor (x.Y.0) is automatic on knowledge-base rebuilds."
+        description: "Manual version bump. Minor is automatic when a reviewed embedding-promotion PR merges."
         type: choice
         options:
           - major
+          - minor
           - hotfix
         default: major
       dry_run:
@@ -24,7 +27,7 @@ on:
 # only), so that one main+dry check stays inline.
 env:
   IMAGE: armlimited/arm-mcp
-  IS_MAIN: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main') }}
+  IS_MAIN: ${{ (github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
   IS_DRY_RUN: ${{ github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true' }}
 
 # Serialize only publishing runs so overlapping builds can't race on
@@ -37,7 +40,7 @@ concurrency:
   group: >-
     ${{
       (
-        ((github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') || (github.event_name != 'workflow_run' && github.ref == 'refs/heads/main'))
+        ((github.event_name == 'pull_request' && github.event.pull_request.merged == true) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
         && !(github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true')
       )
       && 'build-mcp-image-publish'
@@ -47,7 +50,7 @@ concurrency:
 
 jobs:
   build-arch-images:
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'automation/pin-embedding-vectorstore') }}
     strategy:
       fail-fast: false
       matrix:
@@ -61,6 +64,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
+      packages: read
     outputs:
       build_date: ${{ steps.build_date.outputs.build_date }}
       date_tag: ${{ steps.build_date.outputs.date_tag }}
@@ -84,18 +88,18 @@ jobs:
           fi
 
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # Build the exact upstream commit (head_sha) for workflow_run so the
-          # images and manifests reference it. (The git tag is created later at
-          # the server.json bump commit, not this commit.)
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # Build the exact merge commit for an embedding promotion, or the
+          # selected commit for a manual run. The git tag is created later at
+          # the server.json bump commit, not this commit.
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
 
       - name: Set build date and unique date tag (UTC)
         id: build_date
         run: |
-          if [ -n "${{ github.event.workflow_run.created_at }}" ]; then
-            BUILD_DATE=$(date -u -d "${{ github.event.workflow_run.created_at }}" +%Y-%m-%d)
+          if [ -n "${{ github.event.pull_request.merged_at }}" ]; then
+            BUILD_DATE=$(date -u -d "${{ github.event.pull_request.merged_at }}" +%Y-%m-%d)
           else
             BUILD_DATE=$(date -u +%Y-%m-%d)
           fi
@@ -108,29 +112,68 @@ jobs:
           echo "build_date=$BUILD_DATE" >> "$GITHUB_OUTPUT"
           echo "date_tag=$DATE_TAG" >> "$GITHUB_OUTPUT"
 
+      - name: Load locked image references
+        id: locked_images
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock_file="mcp-local/build-inputs.lock.json"
+          dockerfile="mcp-local/Dockerfile"
+
+          load_image() {
+            local key="$1"
+            local docker_arg="$2"
+            local output_name="$3"
+            local reference
+            reference="$(jq -er --arg key "${key}" '.container_images[$key].reference | select(type == "string")' "${lock_file}")"
+
+            if [[ ! "${reference}" =~ ^[^@[:space:]]+@sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::${key} is not pinned to an immutable image digest: ${reference}"
+              exit 1
+            fi
+            if ! grep -Fqx "ARG ${docker_arg}=${reference}" "${dockerfile}"; then
+              echo "::error::${docker_arg} default does not match ${key} in ${lock_file}."
+              exit 1
+            fi
+            echo "${output_name}=${reference}" >> "${GITHUB_OUTPUT}"
+          }
+
+          load_image ubuntu UBUNTU_IMAGE ubuntu_image
+          load_image embeddings EMBEDDINGS_IMAGE embeddings_image
+          load_image mcp_build_inputs MCP_BUILD_INPUTS_IMAGE mcp_build_inputs_image
+
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Log in to GHCR for locked build inputs
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Log in to Docker Hub
         # Only publishing runs push, so only they log in. Non-dry implies main
         # (the top-level guard rejects non-main non-dry runs).
         if: ${{ env.IS_DRY_RUN != 'true' }}
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push ${{ matrix.platform }} image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: mcp-local/Dockerfile
           platforms: ${{ matrix.platform }}
+          build-args: |
+            UBUNTU_IMAGE=${{ steps.locked_images.outputs.ubuntu_image }}
+            EMBEDDINGS_IMAGE=${{ steps.locked_images.outputs.embeddings_image }}
+            MCP_BUILD_INPUTS_IMAGE=${{ steps.locked_images.outputs.mcp_build_inputs_image }}
           # Push only on publishing runs (non-dry implies main per the guard).
           push: ${{ env.IS_DRY_RUN != 'true' }}
           tags: ${{ env.IMAGE }}:${{ env.DATE_TAG }}-${{ matrix.tag }}
-          build-args: |
-            EMBEDDINGS_IMAGE=${{ env.IMAGE }}:embeddings-latest
 
   merge-manifests:
     needs: build-arch-images
@@ -151,21 +194,21 @@ jobs:
           exit 1
 
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # Check out the upstream build's commit (head_sha) as the base; the
+          # Check out the promotion merge commit as the base; the
           # bump step opens a PR from this commit and the git tag is created at
           # the merged bump commit. fetch-depth: 0 so version tags are available.
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
           fetch-depth: 0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Log in to Docker Hub
         # Only publishing runs write to the registry (non-dry implies main).
         if: ${{ env.IS_DRY_RUN != 'true' }}
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -186,7 +229,7 @@ jobs:
       - name: Determine version tag
         id: version
         env:
-          BUMP_TYPE: ${{ github.event_name == 'workflow_run' && 'minor' || github.event.inputs.bump_type }}
+          BUMP_TYPE: ${{ github.event_name == 'pull_request' && 'minor' || github.event.inputs.bump_type }}
         run: |
           set -euo pipefail
           git fetch --tags --force --quiet
@@ -214,7 +257,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_VERSION: ${{ steps.version.outputs.tag_version }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
         run: |
           set -euo pipefail
           SERVER_JSON="mcp-local/server.json"

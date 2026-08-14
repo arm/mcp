@@ -3,11 +3,17 @@ name: Build Offline Embedding Pipeline
 on:
   workflow_dispatch:
 
+permissions: read-all
+
 env:
   CHUNK_IMAGE: ghcr.io/${{ github.repository_owner }}/mcp-embedding-chunks
   CHUNK_PACKAGE_NAME: mcp-embedding-chunks
   VECTORSTORE_IMAGE: ghcr.io/${{ github.repository_owner }}/mcp-embedding-vectorstore
   VECTORSTORE_PACKAGE_NAME: mcp-embedding-vectorstore
+
+concurrency:
+  group: embedding-pipeline-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   acquire-and-publish-chunks:
@@ -212,6 +218,96 @@ jobs:
             echo "- Attestation: [view provenance](${ATTESTATION_URL})"
           } >> "${GITHUB_STEP_SUMMARY}"
 
+  propose-mcp-embedding-pin:
+    needs:
+      - generate-and-publish-vectorstore
+      - verify-vectorstore-provenance
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      # Required only for pushing the reviewed promotion branch. GitHub token
+      # permissions cannot be narrowed to an individual step.
+      contents: write
+      pull-requests: write
+    env:
+      PROMOTION_BRANCH: automation/pin-embedding-vectorstore
+      EMBEDDINGS_REFERENCE: ghcr.io/${{ github.repository_owner }}/mcp-embedding-vectorstore@${{ needs.generate-and-publish-vectorstore.outputs.embeddings-image-digest }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Update checked-in embedding pin
+        id: update
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout -B "${PROMOTION_BRANCH}"
+          python3 .github/scripts/update-mcp-embedding-pin.py \
+            --reference "${EMBEDDINGS_REFERENCE}" \
+            --source-revision "${GITHUB_SHA}" \
+            --workflow-run "${GITHUB_RUN_ID}"
+
+          if git diff --quiet -- mcp-local/Dockerfile mcp-local/build-inputs.lock.json; then
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+            echo "The generated vector store already matches the checked-in MCP pin." >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Push promotion branch and open or update PR
+        if: ${{ steps.update.outputs.changed == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add mcp-local/Dockerfile mcp-local/build-inputs.lock.json
+          git commit -m "chore: promote embedding vector store"
+
+          git fetch origin "${PROMOTION_BRANCH}:refs/remotes/origin/${PROMOTION_BRANCH}" || true
+          git push --force-with-lease origin "HEAD:refs/heads/${PROMOTION_BRANCH}"
+
+          body_file="${RUNNER_TEMP}/embedding-promotion.md"
+          cat > "${body_file}" <<EOF
+          Promotes the immutable embedding vector store produced by:
+
+          - Source revision: \`${GITHUB_SHA}\`
+          - Workflow run: [${GITHUB_RUN_ID}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})
+          - Candidate: \`${EMBEDDINGS_REFERENCE}\`
+
+          This PR updates both the checked-in build-input manifest and the Dockerfile default. Merging it triggers a minor MCP release using this exact digest.
+          EOF
+
+          pr_url="$(gh pr list \
+            --base main \
+            --head "${PROMOTION_BRANCH}" \
+            --state open \
+            --json url \
+            --jq '.[0].url // empty')"
+          if [ -z "${pr_url}" ]; then
+            pr_url="$(gh pr create \
+              --base main \
+              --head "${PROMOTION_BRANCH}" \
+              --title "chore: promote embedding vector store" \
+              --body-file "${body_file}")"
+          else
+            gh pr edit "${pr_url}" \
+              --title "chore: promote embedding vector store" \
+              --body-file "${body_file}"
+          fi
+
+          {
+            echo "### MCP embedding promotion"
+            echo ""
+            echo "- Pull request: ${pr_url}"
+            echo "- Candidate: \`${EMBEDDINGS_REFERENCE}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
   verify-vectorstore-provenance:
     needs: generate-and-publish-vectorstore
     runs-on: ubuntu-24.04

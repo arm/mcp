@@ -6,24 +6,32 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   unit-tests:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
-      - name: Install unit test dependencies
-        run: python -m pip install pytest
+      - name: Set up locked uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.10.2"
+          enable-cache: false
 
       - name: Run unit tests
-        run: python -m pytest -q mcp-local/tests/test_invocation_logger.py
+        run: |
+          uv run --directory mcp-local --locked --only-group test \
+            pytest -q \
+            tests/test_build_inputs.py \
+            tests/test_invocation_logger.py
 
   integration-tests:
     strategy:
@@ -37,21 +45,28 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: "3.11"
-          cache: pip
+          python-version: "3.12"
 
-      - name: Install test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r mcp-local/tests/requirements.txt
+      - name: Set up locked uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.10.2"
+          enable-cache: false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Log in to GHCR for locked build inputs
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Build MCP Docker image
         run: |
@@ -59,7 +74,6 @@ jobs:
             --platform ${{ matrix.platform }} \
             -f mcp-local/Dockerfile \
             -t arm-mcp:latest \
-            --build-arg EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-latest \
             --output type=docker \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
@@ -132,4 +146,6 @@ jobs:
         env:
           APX_DEBUG_TRACE: "1"
           MCP_IMAGE: arm-mcp:latest
-        run: pytest -s mcp-local/tests/test_mcp.py --platform ${{ matrix.platform }}
+        run: |
+          uv run --directory mcp-local --locked --only-group test \
+            pytest -s tests/test_mcp.py --platform ${{ matrix.platform }}
