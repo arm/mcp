@@ -40,7 +40,7 @@ jobs:
           version: "0.10.2"
           enable-cache: false
 
-      - name: Verify Python dependency locks
+      - name: Verify Python dependency lock
         shell: bash
         run: |
           set -euo pipefail
@@ -48,16 +48,6 @@ jobs:
           actual_uv="$(uv --version | awk '{print $2}')"
           test "${actual_uv}" = "${expected_uv}"
           uv lock --directory mcp-local --check
-          uv export \
-            --directory mcp-local \
-            --locked \
-            --no-dev \
-            --no-emit-project \
-            --format requirements-txt \
-            --no-header \
-            --output-file /tmp/requirements.lock
-          tail -n +3 mcp-local/requirements.lock > /tmp/checked-in-requirements.lock
-          cmp /tmp/requirements.lock /tmp/checked-in-requirements.lock
 
       - name: Install the locked acquisition tool
         shell: bash

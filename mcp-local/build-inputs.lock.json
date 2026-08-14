@@ -59,13 +59,11 @@
   },
   "python": {
     "lock": "mcp-local/uv.lock",
-    "install_requirements": "mcp-local/requirements.lock",
-    "install_requirements_sha256": "6d560ce3e52942a5c4b4d3c21e73970986e1950fd14c9e13f8a85e1454f18121",
     "architectures": [
       "amd64",
       "arm64"
     ],
-    "verification": "uv lock plus pip --require-hashes from a local wheelhouse"
+    "verification": "uv lock exported by pinned uv, then pip --require-hashes from a local wheelhouse"
   },
   "os_packages": {
     "snapshot": "20260805T000000Z",

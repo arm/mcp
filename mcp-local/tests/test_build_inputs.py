@@ -1,6 +1,9 @@
 import json
 from pathlib import Path
 import re
+import subprocess
+import sys
+import tempfile
 import tomllib
 
 
@@ -12,11 +15,15 @@ MODEL_LOCK = json.loads(
 )
 DOCKERFILE = (MCP_LOCAL / "Dockerfile").read_text()
 INPUT_DOCKERFILE = (MCP_LOCAL / "Dockerfile.inputs").read_text()
+STAGE_INPUTS = (MCP_LOCAL / "scripts/stage-build-inputs.py").read_text()
 INPUT_DOCKERIGNORE = (MCP_LOCAL / ".dockerignore").read_text()
 ROOT_DOCKERIGNORE = (REPOSITORY / ".dockerignore").read_text()
 SERVER = (MCP_LOCAL / "server.py").read_text()
 INPUT_WORKFLOW = (
     REPOSITORY / ".github/workflows/build-mcp-inputs.yml"
+).read_text()
+EMBEDDING_WORKFLOW = (
+    REPOSITORY / ".github/workflows/build-embeddings.yml"
 ).read_text()
 IMAGE_WORKFLOW = (REPOSITORY / ".github/workflows/build-mcp-image.yml").read_text()
 INTEGRATION_WORKFLOW = (
@@ -25,8 +32,13 @@ INTEGRATION_WORKFLOW = (
 
 
 def test_docker_base_images_match_manifest() -> None:
-    for image in LOCK["container_images"].values():
-        assert image["reference"] in DOCKERFILE
+    docker_args = {
+        "ubuntu": "UBUNTU_IMAGE",
+        "embeddings": "EMBEDDINGS_IMAGE",
+        "mcp_build_inputs": "MCP_BUILD_INPUTS_IMAGE",
+    }
+    for name, image in LOCK["container_images"].items():
+        assert f'ARG {docker_args[name]}={image["reference"]}' in DOCKERFILE
         assert "@sha256:" in image["reference"]
     ubuntu_manifests = LOCK["container_images"]["ubuntu"]["manifests"]
     assert set(ubuntu_manifests) == {"amd64", "arm64"}
@@ -73,13 +85,16 @@ def test_external_inputs_are_immutable_and_have_digests() -> None:
         assert re.fullmatch(r"[0-9a-f]{64}", artifact["sha256"])
 
 
-def test_direct_python_requirements_are_exactly_pinned() -> None:
-    requirements = (MCP_LOCAL / "requirements.txt").read_text().splitlines()
-    dependencies = [line for line in requirements if line and not line.startswith("#")]
-    assert dependencies
-    assert all("==" in dependency for dependency in dependencies)
+def test_python_dependencies_have_one_exactly_pinned_source() -> None:
     pyproject = tomllib.loads((MCP_LOCAL / "pyproject.toml").read_text())
-    assert set(dependencies) == set(pyproject["project"]["dependencies"])
+    dependencies = pyproject["project"]["dependencies"]
+    assert dependencies
+    assert all(
+        re.fullmatch(r"[A-Za-z0-9_.-]+==[^=]+", dependency)
+        for dependency in dependencies
+    )
+    assert not (MCP_LOCAL / "requirements.txt").exists()
+    assert not (MCP_LOCAL / "requirements.lock").exists()
 
 
 def test_dockerfile_consumes_only_staged_third_party_inputs() -> None:
@@ -109,6 +124,23 @@ def test_final_builds_do_not_acquire_inputs_live() -> None:
     assert "python -m pip install --upgrade pip" not in INTEGRATION_WORKFLOW
 
 
+def test_release_build_loads_image_arguments_from_manifest() -> None:
+    assert 'lock_file="mcp-local/build-inputs.lock.json"' in IMAGE_WORKFLOW
+    assert "@sha256:[0-9a-f]{64}" in IMAGE_WORKFLOW
+    assert (
+        "UBUNTU_IMAGE=${{ steps.locked_images.outputs.ubuntu_image }}"
+        in IMAGE_WORKFLOW
+    )
+    assert (
+        "EMBEDDINGS_IMAGE=${{ steps.locked_images.outputs.embeddings_image }}"
+        in IMAGE_WORKFLOW
+    )
+    assert (
+        "MCP_BUILD_INPUTS_IMAGE=${{ steps.locked_images.outputs.mcp_build_inputs_image }}"
+        in IMAGE_WORKFLOW
+    )
+
+
 def test_model_index_and_metadata_come_from_one_immutable_image() -> None:
     embeddings = LOCK["container_images"]["embeddings"]
     assert embeddings["reference"].startswith(
@@ -120,6 +152,61 @@ def test_model_index_and_metadata_come_from_one_immutable_image() -> None:
         "/embedding-data/usearch_index.bin",
     }
     assert embeddings["model"] == MODEL_LOCK
+
+
+def test_embedding_candidate_requires_reviewed_promotion_before_release() -> None:
+    image_triggers = IMAGE_WORKFLOW.split("jobs:", maxsplit=1)[0]
+    assert "workflow_run:" not in image_triggers
+    assert "pull_request:" in image_triggers
+    assert "types: [closed]" in image_triggers
+    assert "automation/pin-embedding-vectorstore" in IMAGE_WORKFLOW
+    assert "propose-mcp-embedding-pin:" in EMBEDDING_WORKFLOW
+    assert "update-mcp-embedding-pin.py" in EMBEDDING_WORKFLOW
+    assert "gh pr merge" not in EMBEDDING_WORKFLOW
+
+
+def test_embedding_pin_updater_keeps_manifest_and_dockerfile_in_sync() -> None:
+    script = REPOSITORY / ".github/scripts/update-mcp-embedding-pin.py"
+    new_digest = "1" * 64
+    new_revision = "2" * 40
+    new_reference = (
+        "ghcr.io/arm/mcp-embedding-vectorstore@sha256:" + new_digest
+    )
+
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        temporary = Path(temporary_directory)
+        lock_file = temporary / "build-inputs.lock.json"
+        dockerfile = temporary / "Dockerfile"
+        lock_file.write_text(
+            (MCP_LOCAL / "build-inputs.lock.json").read_text(), encoding="utf-8"
+        )
+        dockerfile.write_text(
+            (MCP_LOCAL / "Dockerfile").read_text(), encoding="utf-8"
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "--reference",
+                new_reference,
+                "--source-revision",
+                new_revision,
+                "--workflow-run",
+                "123456",
+                "--lock-file",
+                str(lock_file),
+                "--dockerfile",
+                str(dockerfile),
+            ],
+            check=True,
+        )
+
+        updated = json.loads(lock_file.read_text())
+        embeddings = updated["container_images"]["embeddings"]
+        assert embeddings["reference"] == new_reference
+        assert embeddings["source_revision"] == new_revision
+        assert embeddings["workflow_run"] == "123456"
+        assert f"ARG EMBEDDINGS_IMAGE={new_reference}" in dockerfile.read_text()
 
 
 def test_build_input_bundle_is_immutable_and_auditable() -> None:
@@ -148,12 +235,11 @@ def test_input_artifact_has_one_platform_neutral_layout() -> None:
     assert "build-inputs/${TARGETARCH}/debs/" in INPUT_DOCKERFILE
     assert "build-inputs/${TARGETARCH}/performix.tar.gz" in INPUT_DOCKERFILE
     assert "build-inputs/migrate-ease.tar.gz" in INPUT_DOCKERFILE
+    assert "build-inputs/requirements.lock" in INPUT_DOCKERFILE
     assert "/mcp-build-inputs/metadata/" in INPUT_DOCKERFILE
     for source in (
         "build-inputs/**",
         "build-inputs.lock.json",
-        "requirements.lock",
-        "requirements.txt",
         "pyproject.toml",
         "uv.lock",
     ):
@@ -172,6 +258,9 @@ def test_input_publication_is_manual_private_and_multi_architecture() -> None:
     assert "linux/arm64" in INPUT_WORKFLOW
     assert "docker buildx imagetools create" in INPUT_WORKFLOW
     assert "stage-build-inputs.py --arch ${{ matrix.arch }}" in INPUT_WORKFLOW
+    assert '"uv",' in STAGE_INPUTS
+    assert '"export",' in STAGE_INPUTS
+    assert 'output / "requirements.lock"' in STAGE_INPUTS
     assert 'echo "- MCP build input: \\`${IMAGE}@${digest}\\`"' in INPUT_WORKFLOW
 
 

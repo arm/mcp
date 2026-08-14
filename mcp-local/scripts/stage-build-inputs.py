@@ -24,6 +24,7 @@ REPOSITORY = MCP_LOCAL.parent
 LOCK_PATH = MCP_LOCAL / "build-inputs.lock.json"
 PLATFORM_MACHINES = {"amd64": "x86_64", "arm64": "aarch64"}
 DOCKER_PLATFORMS = {"amd64": "linux/amd64", "arm64": "linux/arm64"}
+DOWNLOAD_TIMEOUT_SECONDS = 5 * 60
 
 
 def ca_certificate_bundle() -> Path:
@@ -62,7 +63,9 @@ def download(url: str, destination: Path, expected_sha256: str | None = None) ->
 
     temporary = destination.with_suffix(destination.suffix + ".part")
     temporary.unlink(missing_ok=True)
-    with urlopen(url) as response, temporary.open("wb") as output:
+    with urlopen(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response, temporary.open(
+        "wb"
+    ) as output:
         shutil.copyfileobj(response, output)
     if expected_sha256 is not None:
         actual = sha256(temporary)
@@ -74,7 +77,36 @@ def download(url: str, destination: Path, expected_sha256: str | None = None) ->
     temporary.replace(destination)
 
 
-def stage_wheels(arch: str, output: Path) -> None:
+def export_install_requirements(output: Path) -> Path:
+    """Export the uv lock into the hashed format consumed by pip."""
+    requirements = output / "requirements.lock"
+    temporary = output / ".requirements.lock.part"
+    temporary.unlink(missing_ok=True)
+    subprocess.run(
+        [
+            "uv",
+            "export",
+            "--quiet",
+            "--directory",
+            str(MCP_LOCAL),
+            "--locked",
+            "--no-default-groups",
+            "--no-emit-project",
+            "--format",
+            "requirements-txt",
+            "--no-header",
+            "--output-file",
+            str(temporary),
+        ],
+        check=True,
+    )
+    if not temporary.is_file() or temporary.stat().st_size == 0:
+        raise RuntimeError("uv exported an empty pip requirements lock")
+    temporary.replace(requirements)
+    return requirements
+
+
+def stage_wheels(arch: str, output: Path, requirements: Path) -> None:
     if sys.platform != "linux":
         raise RuntimeError("wheel staging must run on Linux so Linux markers are selected")
     wheelhouse = output / arch / "wheels"
@@ -108,7 +140,7 @@ def stage_wheels(arch: str, output: Path) -> None:
                 "--extra-index-url=https://pypi.org/simple",
                 f"--dest={temporary}",
                 "--requirement",
-                str(MCP_LOCAL / "requirements.lock"),
+                str(requirements),
             ],
             check=True,
             env={**os.environ, "PIP_DISABLE_PIP_VERSION_CHECK": "1"},
@@ -282,16 +314,7 @@ def main() -> None:
     lock = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
-
-    requirements = MCP_LOCAL / "requirements.lock"
-    python_lock = lock["python"]
-    assert isinstance(python_lock, dict)
-    expected_requirements = str(python_lock["install_requirements_sha256"])
-    if sha256(requirements) != expected_requirements:
-        raise RuntimeError(
-            "requirements.lock does not match build-inputs.lock.json; regenerate it with "
-            f"uv {lock['generated_with']['uv']} and update the recorded SHA256"
-        )
+    requirements = export_install_requirements(output)
 
     migration = lock["migrate_ease"]
     assert isinstance(migration, dict)
@@ -320,7 +343,7 @@ def main() -> None:
             else:
                 stage_os_packages(lock, arch, output)
         if not args.skip_wheels:
-            stage_wheels(arch, output)
+            stage_wheels(arch, output, requirements)
 
     if args.refresh_os_lock:
         LOCK_PATH.write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")

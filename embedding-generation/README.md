@@ -34,6 +34,21 @@ used to generate the index, keeping the model, metadata, and index together as
 one immutable artifact. It is published privately as
 `ghcr.io/arm/mcp-embedding-vectorstore`.
 
+## Promote an Embedding Build into MCP
+
+The embedding pipeline publishes candidates; it does not cause the MCP image
+to consume the newest registry artifact automatically. To promote a candidate:
+
+1. Run **Build Offline Embedding Pipeline** from `main`.
+2. After publishing the vector store, the workflow opens or updates the
+   `automation/pin-embedding-vectorstore` PR with the immutable digest in both
+   `mcp-local/build-inputs.lock.json` and `mcp-local/Dockerfile`.
+3. Review the source revision and image digest.
+4. Merge the PR to trigger the minor MCP release.
+
+The workflow does not merge the promotion PR. A candidate can therefore be
+generated, evaluated, and rejected without changing the released MCP image.
+
 ## Add Documents
 
 Add one row to `vector-db-sources.csv` for each document:

@@ -25,7 +25,7 @@ COPY build-inputs/${TARGETARCH}/debs/ /mcp-build-inputs/debs/
 COPY build-inputs/${TARGETARCH}/performix.tar.gz /mcp-build-inputs/performix.tar.gz
 COPY build-inputs/migrate-ease.tar.gz /mcp-build-inputs/migrate-ease.tar.gz
 
-# Preserve the dependency declarations and locks beside the acquired bytes so
-# the GHCR artifact can be audited independently of a source checkout.
-COPY build-inputs.lock.json requirements.lock uv.lock pyproject.toml requirements.txt \
+# Preserve the dependency declarations, uv lock, and generated pip lock beside
+# the acquired bytes so the GHCR artifact can be audited independently.
+COPY build-inputs/requirements.lock build-inputs.lock.json uv.lock pyproject.toml \
     /mcp-build-inputs/metadata/

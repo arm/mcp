@@ -21,6 +21,12 @@ dependencies = [
     "usearch==2.26.0",
 ]
 
+[dependency-groups]
+test = [
+    "pytest",
+    "testcontainers",
+]
+
 [tool.uv]
 package = false
 required-environments = [

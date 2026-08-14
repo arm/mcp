@@ -203,11 +203,13 @@ their contents before sharing them.
 ### Pre-requisites
 
 - Build the mcp server docker image
-- Install the required test packages using - `pip install -r tests/requirements.txt` within the `mcp_local` directory.
+- Install the locked test dependencies with `uv sync --locked --only-group test`
+  within the `mcp-local` directory.
 
 ### Testing Steps
 
-- Run the test script - `python -m pytest -s tests/test_mcp.py`
+- Run the test script with
+  `uv run --locked --only-group test pytest -s tests/test_mcp.py`
 - Check if following 2 docker containers have started - **mcp server** & **testcontainer**
 - All tests should pass without any errors. Warnings can be ignored.
 
@@ -221,7 +223,7 @@ private, multi-architecture OCI image at `ghcr.io/arm/mcp-build-inputs`.
 The acquisition workflow runs natively on AMD64 and Arm64. For each
 architecture it:
 
-1. verifies the checked-in uv lock and exported, hash-locked requirements;
+1. verifies the checked-in uv lock and exports hash-locked pip requirements;
 2. downloads the exact Python wheels allowed by those hashes;
 3. downloads the complete `.deb` closures from the recorded Ubuntu snapshot
    and checks every package against `mcp-local/build-inputs.lock.json`;
@@ -340,10 +342,10 @@ docker rm "$container_id"
 find ./mcp-build-inputs-inspect -maxdepth 3 -type f | sort
 ```
 
-The copied `metadata/` directory contains the source locks used during
-acquisition. The checked-in manifest additionally records the published index
-digest, per-architecture manifest digests, source commit, workflow run, and
-verification method.
+The copied `metadata/` directory contains the checked-in dependency metadata
+and the generated pip-compatible lock used during acquisition. The checked-in
+manifest additionally records the published index digest, per-architecture
+manifest digests, source commit, workflow run, and verification method.
 
 ### Refreshing the Inputs
 
@@ -352,27 +354,20 @@ cannot contain its own not-yet-known digest:
 
 #### Updating Python Packages
 
-Keep the direct dependency pins in `mcp-local/pyproject.toml` and
-`mcp-local/requirements.txt` synchronized. Use the uv version recorded in
-`mcp-local/build-inputs.lock.json`, then regenerate both locks:
+`mcp-local/pyproject.toml` is the only direct dependency declaration, and
+`mcp-local/uv.lock` is the only checked-in transitive dependency lock. Use the
+uv version recorded in `mcp-local/build-inputs.lock.json` to update the lock:
 
 ```bash
 uv --version
 uv lock --directory mcp-local --upgrade-package PACKAGE_NAME
-uv export \
-  --directory mcp-local \
-  --locked \
-  --no-dev \
-  --no-emit-project \
-  --format requirements-txt \
-  --output-file mcp-local/requirements.lock
-shasum -a 256 mcp-local/requirements.lock
 ```
 
-Record the final checksum as `python.install_requirements_sha256` in
-`mcp-local/build-inputs.lock.json`. The publication workflow checks that the uv
-lock and exported requirements agree before downloading the AMD64 and Arm64
-wheels.
+Review and commit the `pyproject.toml` and `uv.lock` changes. During input
+acquisition, pinned uv exports a pip-compatible hashed lock from `uv.lock`.
+That generated file is used to download the AMD64 and Arm64 wheelhouses and is
+preserved as `metadata/requirements.lock` in the immutable GHCR input artifact;
+it is not checked into the repository.
 
 #### Updating the Python Interpreter
 
@@ -389,8 +384,8 @@ Update all of the following together:
   selected Ubuntu base does not provide the new interpreter through the
   existing `python3` package.
 
-Regenerate the uv and requirements locks, refresh the Ubuntu package manifests
-as described below, and build both architectures before accepting the upgrade.
+Regenerate the uv lock, refresh the Ubuntu package manifests as described
+below, and build both architectures before accepting the upgrade.
 
 #### Updating Ubuntu Packages
 
@@ -420,12 +415,30 @@ recorded checksum.
 
 #### Updating Container Images or Embeddings
 
-Record immutable `@sha256:` references for new Ubuntu, embedding-vector-store,
-or MCP-input images. For a multi-architecture image, also record its AMD64 and
-Arm64 platform manifest digests. Keep the corresponding `UBUNTU_IMAGE`,
-`EMBEDDINGS_IMAGE`, or `MCP_BUILD_INPUTS_IMAGE` default in
-`mcp-local/Dockerfile` synchronized with the checked-in manifest. Production
-must never consume a mutable tag.
+Record immutable `@sha256:` references for new Ubuntu or MCP-input images. For
+a multi-architecture image, also record its AMD64 and Arm64 platform manifest
+digests. Keep the corresponding `UBUNTU_IMAGE` or `MCP_BUILD_INPUTS_IMAGE`
+default in `mcp-local/Dockerfile` synchronized with the checked-in manifest.
+Production must never consume a mutable tag.
+
+Embedding updates use an automated promotion PR instead of being copied into
+the MCP release directly:
+
+1. Manually run **Build Offline Embedding Pipeline** from `main`.
+2. The workflow publishes an immutable candidate vector-store image and opens
+   or updates `automation/pin-embedding-vectorstore`.
+3. The promotion branch updates both `container_images.embeddings` in
+   `mcp-local/build-inputs.lock.json` and `EMBEDDINGS_IMAGE` in
+   `mcp-local/Dockerfile`. It also records the embedding source commit and
+   workflow run.
+4. Review the source revision and digest change before merging.
+5. Merging the promotion PR to `main` triggers a minor MCP release.
+   Merely generating an embedding candidate does not release or alter the MCP
+   image.
+
+The promotion workflow never merges its own PR. This preserves the reviewed,
+checked-in digest as the release boundary and keeps MCP releases independent
+from unsuccessful or unwanted embedding candidates.
 
 #### Publishing and Pinning the Updated Bundle
 
