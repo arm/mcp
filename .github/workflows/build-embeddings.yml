@@ -3,6 +3,8 @@ name: Build Offline Embedding Pipeline
 on:
   workflow_dispatch:
 
+permissions: read-all
+
 env:
   CHUNK_IMAGE: ghcr.io/${{ github.repository_owner }}/mcp-embedding-chunks
   CHUNK_PACKAGE_NAME: mcp-embedding-chunks
@@ -224,6 +226,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
+      # Required only for pushing the reviewed promotion branch. GitHub token
+      # permissions cannot be narrowed to an individual step.
       contents: write
       pull-requests: write
     env:

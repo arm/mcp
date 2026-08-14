@@ -93,6 +93,7 @@ def test_python_dependencies_have_one_exactly_pinned_source() -> None:
         re.fullmatch(r"[A-Za-z0-9_.-]+==[^=]+", dependency)
         for dependency in dependencies
     )
+    assert pyproject["dependency-groups"]["acquisition"] == ["pip==25.1.1"]
     assert not (MCP_LOCAL / "requirements.txt").exists()
     assert not (MCP_LOCAL / "requirements.lock").exists()
 
@@ -249,6 +250,7 @@ def test_input_artifact_has_one_platform_neutral_layout() -> None:
 def test_input_publication_is_manual_private_and_multi_architecture() -> None:
     assert "workflow_dispatch:" in INPUT_WORKFLOW
     workflow_triggers = INPUT_WORKFLOW.split("jobs:", maxsplit=1)[0]
+    assert "permissions: read-all" in workflow_triggers
     assert "push:" not in workflow_triggers
     assert "tags:" not in workflow_triggers
     assert "packages: write" in INPUT_WORKFLOW
@@ -258,6 +260,8 @@ def test_input_publication_is_manual_private_and_multi_architecture() -> None:
     assert "linux/arm64" in INPUT_WORKFLOW
     assert "docker buildx imagetools create" in INPUT_WORKFLOW
     assert "stage-build-inputs.py --arch ${{ matrix.arch }}" in INPUT_WORKFLOW
+    assert "--only-group acquisition" in INPUT_WORKFLOW
+    assert "pip install" not in INPUT_WORKFLOW
     assert '"uv",' in STAGE_INPUTS
     assert '"export",' in STAGE_INPUTS
     assert 'output / "requirements.lock"' in STAGE_INPUTS
