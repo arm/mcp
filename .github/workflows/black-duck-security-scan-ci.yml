@@ -18,22 +18,25 @@ on:
   schedule:
     - cron: '34 5 * * 6'
 
+# Declare default permissions as read only.
+permissions: read-all
+
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
-      security-events: read
+      security-events: write
       actions: read
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Black Duck SCA scan
         id: black-duck-full-scan
         if: ${{ github.event_name != 'pull_request' }}
-        uses: blackduck-inc/black-duck-security-scan@v2
+        uses: blackduck-inc/black-duck-security-scan@152247222aa9cd38124acd5c0cf60f4db71adc3f # v2.11.0
         with:
           ### ---------- BLACKDUCK SCA SCANNING: REQUIRED FIELDS ----------
           blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
@@ -70,7 +73,7 @@ jobs:
       - name: Black Duck SCA PR Scan
         id: black-duck-pr-scan
         if: ${{ github.event_name == 'pull_request' }}
-        uses: blackduck-inc/black-duck-security-scan@v2
+        uses: blackduck-inc/black-duck-security-scan@152247222aa9cd38124acd5c0cf60f4db71adc3f # v2.11.0
         with:
           blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
           blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
