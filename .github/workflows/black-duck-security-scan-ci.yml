@@ -55,10 +55,11 @@ jobs:
           blackducksca_prcomment_enabled: true 
           # github_token: ${{ secrets.GITHUB_TOKEN }} # Required when PR comments is enabled
 
-          ### SARIF report generation and upload to GitHub Adavanced Security: Uncomment below to enable
-          blackducksca_reports_sarif_create: true # Create Black Duck SCA SARIF report and upload it as artifact
-          blackducksca_upload_sarif_report: true  # Upload Black Duck SCA SARIF report in GitHub Advanced Security tab
-          # github_token: ${{ secrets.GITHUB_TOKEN }} # Required when blackducksca_upload_sarif_report is set as true
+          ### SARIF report generation for upload to GitHub Advanced Security
+          blackducksca_reports_sarif_create: true
+          blackducksca_reports_sarif_file_path: blackduck-results.sarif
+          ### Set upload to false & then later upload via github/codeql-action/upload-sarif@v4.37.4 to avoid token-permissions issue flagged by scorecard
+          blackducksca_upload_sarif_report: false
 
           ### Mark build status if policy violating issues are found
           mark_build_status: 'success'
@@ -69,6 +70,12 @@ jobs:
 
           ### Uncomment below configuration if Bridge diagnostic files needs to be uploaded
           include_diagnostics: true
+
+      - name: Upload Black Duck SARIF
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        with:
+          sarif_file: blackduck-results.sarif
           
       - name: Black Duck SCA PR Scan
         id: black-duck-pr-scan
@@ -82,18 +89,3 @@ jobs:
 
           ### Mark build status if policy violating issues are found
           mark_build_status: 'success'
-          
-          ### ---------- COVERITY SCANNING: REQUIRED FIELDS ----------
-          ### coverity_url: ${{ vars.COVERITY_URL }}
-          ### coverity_user: ${{ secrets.COVERITY_USER }}
-          ### coverity_passphrase: ${{ secrets.COVERITY_PASSPHRASE }}
-
-          ### ---------- POLARIS SCANNING: REQUIRED FIELDS ----------
-          ### polaris_server_url: ${{ vars.POLARIS_SERVER_URL }}
-          ### polaris_access_token: ${{ secrets.POLARIS_ACCESS_TOKEN }}
-          ### polaris_assessment_types: "SCA,SAST"
-
-          ### ---------- SRM SCANNING: REQUIRED FIELDS ----------
-          ### srm_url: ${{ vars.SRM_URL }}
-          ### srm_apikey: ${{ secrets.SRM_API_KEY }}
-          ### srm_assessment_types: "SCA,SAST"
