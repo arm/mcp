@@ -42,7 +42,7 @@ jobs:
 
           ### SCANNING: Optional fields
           # blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'
-          detect_args: "--detect.accuracy.required=LOW"
+          detect_args: "--detect.accuracy.required=NONE"
 
           ### FIX PULL REQUEST CREATION: Uncomment below to enable
           blackducksca_fixpr_enabled: true
@@ -75,7 +75,7 @@ jobs:
           blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
           blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
           blackducksca_scan_full: false
-          detect_args: "--detect.accuracy.required=LOW"
+          detect_args: "--detect.accuracy.required=NONE"
 
           ### Mark build status if policy violating issues are found
           mark_build_status: 'success'
