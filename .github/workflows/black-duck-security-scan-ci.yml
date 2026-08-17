@@ -53,7 +53,7 @@ jobs:
 
           ### PULL REQUEST COMMENTS: Uncomment below to enable
           blackducksca_prcomment_enabled: true 
-          # github_token: ${{ secrets.GITHUB_TOKEN }} # Required when PR comments is enabled
+          github_token: ${{ secrets.GITHUB_TOKEN }} # Required when PR comments is enabled
 
           ### SARIF report generation for upload to GitHub Advanced Security
           blackducksca_reports_sarif_create: true
