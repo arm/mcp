@@ -72,6 +72,7 @@ jobs:
         run: |
           docker buildx build \
             --platform ${{ matrix.platform }} \
+            --network none \
             -f mcp-local/Dockerfile \
             -t arm-mcp:latest \
             --output type=docker \

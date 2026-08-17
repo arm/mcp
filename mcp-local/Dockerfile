@@ -40,7 +40,7 @@ RUN --network=none apt-get install -y --no-download --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-RUN python3 -m venv "$VIRTUAL_ENV"
+RUN --network=none python3 -m venv "$VIRTUAL_ENV"
 
 # The requirements file and wheelhouse come from the same immutable input
 # bundle. Network access is disabled for installation.
@@ -81,7 +81,7 @@ RUN --network=none mkdir -p /opt/ArmPerformix-cli-current && \
 # Keep the model, metadata, and index from the same immutable vector-store
 # artifact. The model is architecture-independent even though generation ran
 # on arm64.
-RUN mkdir -p /app/data
+RUN --network=none mkdir -p /app/data
 COPY --from=embeddings /embedding-data/embedding-model/ /app/embedding-model/
 COPY --from=embeddings /embedding-data/metadata.json /app/data/metadata.json
 COPY --from=embeddings /embedding-data/usearch_index.bin /app/data/usearch_index.bin
@@ -122,7 +122,7 @@ COPY --from=builder /opt/arm-migration-tools/migrate-ease /opt/arm-migration-too
 COPY --from=builder /usr/local/bin/migrate-ease-* /usr/local/bin/
 COPY --from=builder /app /app
 
-RUN ln -sf "${APX_BIN}" /usr/local/bin/apx
+RUN --network=none ln -sf "${APX_BIN}" /usr/local/bin/apx
 
 WORKDIR /app
 

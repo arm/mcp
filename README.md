@@ -278,6 +278,7 @@ embedding images are private:
 ```bash
 docker login ghcr.io
 docker buildx build \
+  --network none \
   --file mcp-local/Dockerfile \
   --tag arm-mcp:local \
   --load \
@@ -468,6 +469,15 @@ After updating any source lock, use the same common publication process:
 The publication workflow also creates a tag containing the source commit,
 workflow run ID, and attempt. That tag is only a discovery aid; production
 builds always use the digest.
+
+#### Rolling Back an Input Update
+
+Rollback is a reviewed pin change. Restore the last approved image references
+and metadata in `mcp-local/build-inputs.lock.json`, and keep the corresponding
+image defaults in `mcp-local/Dockerfile` synchronized. Submit the rollback
+through the normal pull-request process and run the AMD64 and Arm64 integration
+builds before release. Do not delete, overwrite, or retag the immutable GHCR
+artifacts.
 
 ## Troubleshooting
 
