@@ -135,11 +135,11 @@ def test_final_builds_disable_network_for_every_run_instruction() -> None:
     run_instructions = [
         line.strip()
         for line in DOCKERFILE.splitlines()
-        if line.strip().startswith("RUN ")
+        if re.match(r"(?i:RUN)(?:\s|$)", line.strip())
     ]
     assert run_instructions
     assert all(
-        instruction.startswith("RUN --network=none ")
+        re.match(r"(?i:RUN)\s+--network=none(?:\s|$)", instruction)
         for instruction in run_instructions
     )
     assert "          network: none\n" in IMAGE_WORKFLOW
