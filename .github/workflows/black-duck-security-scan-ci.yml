@@ -45,7 +45,8 @@ jobs:
           ver_to_reference="${{ github.ref_name }}"
           
           # Replace / with - to avoid issues with Black Duck project version names
-          ver_to_reference="${ver_to_reference//\//-}"
+          # ver_to_reference="${ver_to_reference//\//-}"
+          ver_to_reference="0.0"
           echo "DETECT_PROJECT_VERSION_NAME=$ver_to_reference" >> $GITHUB_ENV
           
           # notice - highlighted in the gh actions UI
