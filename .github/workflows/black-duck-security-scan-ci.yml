@@ -54,7 +54,7 @@ jobs:
       
       - name: Black Duck SCA scan
         id: black-duck-full-scan
-        if: ${{ github.event_name != 'pull_request' }}
+        if: ${{ github.event_name == 'pull_request' }}
         uses: blackduck-inc/black-duck-security-scan@152247222aa9cd38124acd5c0cf60f4db71adc3f # v2.11.0
         with:
           ### ---------- BLACKDUCK SCA SCANNING: REQUIRED FIELDS ----------
@@ -87,14 +87,14 @@ jobs:
           include_diagnostics: true
 
       - name: Upload Black Duck SARIF
-        if: ${{ github.event_name != 'pull_request' }}
+        if: ${{ github.event_name == 'pull_request' }}
         uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
         with:
           sarif_file: blackduck-results.sarif
           
       - name: Black Duck SCA PR Scan
         id: black-duck-pr-scan
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ github.event_name != 'pull_request' }}
         uses: blackduck-inc/black-duck-security-scan@152247222aa9cd38124acd5c0cf60f4db71adc3f # v2.11.0
         with:
           blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
