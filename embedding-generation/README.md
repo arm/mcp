@@ -39,7 +39,8 @@ one immutable artifact. It is published privately as
 The embedding pipeline publishes candidates; it does not cause the MCP image
 to consume the newest registry artifact automatically. To promote a candidate:
 
-1. Run **Build Offline Embedding Pipeline** from `main`.
+1. Let **Build Offline Embedding Pipeline** run from `main` every Sunday at
+   09:00 UTC, or start it manually for an out-of-band update.
 2. After publishing the vector store, the workflow opens or updates the
    `automation/pin-embedding-vectorstore` PR with the immutable digest in both
    `mcp-local/build-inputs.lock.json` and `mcp-local/Dockerfile`.

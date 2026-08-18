@@ -427,7 +427,8 @@ Production must never consume a mutable tag.
 Embedding updates use an automated promotion PR instead of being copied into
 the MCP release directly:
 
-1. Manually run **Build Offline Embedding Pipeline** from `main`.
+1. Let **Build Offline Embedding Pipeline** run from `main` every Sunday at
+   09:00 UTC, or start it manually for an out-of-band update.
 2. The workflow publishes an immutable candidate vector-store image and opens
    or updates `automation/pin-embedding-vectorstore`.
 3. The promotion branch updates both `container_images.embeddings` in
