@@ -64,7 +64,7 @@ jobs:
 
           ### SCANNING: Optional fields
           # blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'
-          detect_args: "--detect.accuracy.required=NONE"
+          detect_args: "--detect.accuracy.required=NONE --detect.diagnostic=true"
 
           ### FIX PULL REQUEST CREATION
           blackducksca_fixpr_enabled: true
