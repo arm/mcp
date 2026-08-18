@@ -21,18 +21,36 @@ on:
 # Declare default permissions as read only.
 permissions: read-all
 
+concurrency:
+  group: blackduck-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
       security-events: write
       actions: read
+    env:
+      DETECT_PROJECT_NAME: ARM:MCP
 
     steps:
       - name: Checkout source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      
+      - name: Set repository reference
+        run: |
+          ver_to_reference="${{ github.ref_name }}"
+          
+          # Replace / with - to avoid issues with Black Duck project version names
+          ver_to_reference="${ver_to_reference//\//-}"
+          echo "DETECT_PROJECT_VERSION_NAME=$ver_to_reference" >> $GITHUB_ENV
+          
+          # notice - highlighted in the gh actions UI
+          echo "::notice title=Black Duck target::${{ env.DETECT_PROJECT_NAME }} / $ver_to_reference"
+      
       - name: Black Duck SCA scan
         id: black-duck-full-scan
         if: ${{ github.event_name != 'pull_request' }}
@@ -47,13 +65,9 @@ jobs:
           # blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'
           detect_args: "--detect.accuracy.required=NONE"
 
-          ### FIX PULL REQUEST CREATION: Uncomment below to enable
+          ### FIX PULL REQUEST CREATION
           blackducksca_fixpr_enabled: true
-          github_token: ${{ secrets.GITHUB_TOKEN }} # Required when Fix PRs is enabled
-
-          ### PULL REQUEST COMMENTS: Uncomment below to enable
-          blackducksca_prcomment_enabled: true 
-          github_token: ${{ secrets.GITHUB_TOKEN }} # Required when PR comments is enabled
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
           ### SARIF report generation for upload to GitHub Advanced Security
           blackducksca_reports_sarif_create: true
@@ -68,7 +82,7 @@ jobs:
           blackducksca_policy_badges_create: true
           blackducksca_policy_badges_maxCount: 5
 
-          ### Uncomment below configuration if Bridge diagnostic files needs to be uploaded
+          ### To upload Bridge diagnostic files
           include_diagnostics: true
 
       - name: Upload Black Duck SARIF
@@ -86,6 +100,10 @@ jobs:
           blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
           blackducksca_scan_full: false
           detect_args: "--detect.accuracy.required=NONE"
+
+          ### PULL REQUEST COMMENTS
+          blackducksca_prcomment_enabled: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
           ### Mark build status if policy violating issues are found
           mark_build_status: 'success'
