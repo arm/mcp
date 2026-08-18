@@ -74,7 +74,7 @@ jobs:
           blackducksca_reports_sarif_create: true
           blackducksca_reports_sarif_file_path: blackduck-results.sarif
           ### Set upload to false & then later upload via github/codeql-action/upload-sarif@v4.37.4 to avoid token-permissions issue flagged by scorecard
-          blackducksca_upload_sarif_report: false
+          blackducksca_upload_sarif_report: true
 
           ### Mark build status if policy violating issues are found
           mark_build_status: 'success'
@@ -86,11 +86,11 @@ jobs:
           ### To upload Bridge diagnostic files
           include_diagnostics: true
 
-      - name: Upload Black Duck SARIF
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
-        with:
-          sarif_file: blackduck-results.sarif
+      ###- name: Upload Black Duck SARIF
+        #if: ${{ github.event_name == 'pull_request' }}
+        #uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        #with:
+        #  sarif_file: blackduck-results.sarif
           
       - name: Black Duck SCA PR Scan
         id: black-duck-pr-scan
