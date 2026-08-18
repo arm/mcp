@@ -84,7 +84,7 @@ jobs:
           blackducksca_policy_badges_maxCount: 5
 
           ### To upload Bridge diagnostic files
-          include_diagnostics: true
+          include_diagnostics: false
 
       ###- name: Upload Black Duck SARIF
         #if: ${{ github.event_name == 'pull_request' }}
@@ -92,19 +92,19 @@ jobs:
         #with:
         #  sarif_file: blackduck-results.sarif
           
-      - name: Black Duck SCA PR Scan
-        id: black-duck-pr-scan
-        if: ${{ github.event_name != 'pull_request' }}
-        uses: blackduck-inc/black-duck-security-scan@152247222aa9cd38124acd5c0cf60f4db71adc3f # v2.11.0
-        with:
-          blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
-          blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
-          blackducksca_scan_full: false
-          detect_args: "--detect.accuracy.required=NONE"
+      ###- name: Black Duck SCA PR Scan
+        #id: black-duck-pr-scan
+        #if: ${{ github.event_name == 'pull_request' }}
+        #uses: blackduck-inc/black-duck-security-scan@152247222aa9cd38124acd5c0cf60f4db71adc3f # v2.11.0
+        #with:
+          #blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
+          #blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+          #blackducksca_scan_full: false
+          #detect_args: "--detect.accuracy.required=NONE"
 
           ### PULL REQUEST COMMENTS
-          blackducksca_prcomment_enabled: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          #blackducksca_prcomment_enabled: true
+          #github_token: ${{ secrets.GITHUB_TOKEN }}
 
           ### Mark build status if policy violating issues are found
-          mark_build_status: 'success'
+          #mark_build_status: 'success'
