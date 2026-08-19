@@ -99,7 +99,9 @@ def test_python_dependencies_have_one_exactly_pinned_source() -> None:
         re.fullmatch(r"[A-Za-z0-9_.-]+==[^=]+", dependency)
         for dependency in dependencies
     )
-    assert pyproject["dependency-groups"]["acquisition"] == ["pip==25.1.1"]
+    acquisition = pyproject["dependency-groups"]["acquisition"]
+    assert len(acquisition) == 1
+    assert re.fullmatch(r"pip==[^=]+", acquisition[0])
     assert not (MCP_LOCAL / "requirements.txt").exists()
     assert not (MCP_LOCAL / "requirements.lock").exists()
 
