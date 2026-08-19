@@ -34,7 +34,7 @@ jobs:
       security-events: write
       actions: read
     env:
-      DETECT_PROJECT_NAME: ARM:MCP
+      DETECT_PROJECT_NAME: Arm:MCP
 
     steps:
       - name: Checkout source
@@ -64,7 +64,7 @@ jobs:
 
           ### SCANNING: Optional fields
           # blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'
-          detect_args: "--detect.project.name='ARM:MCP' --detect.project.version.name='1.0' --detect.accuracy.required=NONE --detect.diagnostic=true"
+          detect_args: "--detect.project.name='Arm:MCP' --detect.project.version.name='1.0' --detect.accuracy.required=NONE --detect.diagnostic=true"
 
           ### FIX PULL REQUEST CREATION
           #blackducksca_fixpr_enabled: true
