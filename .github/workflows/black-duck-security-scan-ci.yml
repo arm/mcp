@@ -72,7 +72,7 @@ jobs:
 
           ### SARIF report generation for upload to GitHub Advanced Security
           blackducksca_reports_sarif_create: true
-          blackducksca_reports_sarif_file_path: blackduck-results.sarif
+          #blackducksca_reports_sarif_file_path: blackduck-results.sarif
           ### Set upload to false & then later upload via github/codeql-action/upload-sarif@v4.37.4 to avoid token-permissions issue flagged by scorecard
           blackducksca_upload_sarif_report: false
 
