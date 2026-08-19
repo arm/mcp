@@ -72,7 +72,7 @@ jobs:
 
           ### SARIF report generation for upload to GitHub Advanced Security
           blackducksca_reports_sarif_create: true
-          #blackducksca_reports_sarif_file_path: blackduck-results.sarif
+          blackducksca_reports_sarif_file_path: blackduck-results.sarif
           ### Set upload to false & then later upload via github/codeql-action/upload-sarif@v4.37.4 to avoid token-permissions issue flagged by scorecard
           blackducksca_upload_sarif_report: false
 
@@ -84,7 +84,7 @@ jobs:
           blackducksca_policy_badges_maxCount: 5
 
           ### To upload Bridge diagnostic files
-          include_diagnostics: false
+          include_diagnostics: true
 
       - name: Upload Black Duck SARIF
         if: ${{ github.event_name == 'pull_request' }}
