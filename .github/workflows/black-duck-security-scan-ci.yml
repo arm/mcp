@@ -54,8 +54,8 @@ jobs:
       
       - name: Black Duck SCA scan
         id: black-duck-full-scan
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: blackduck-inc/black-duck-security-scan@b6f87e0cec75fc586a22ce6e076e3b9d691b685a # v2.5.0
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: blackduck-inc/black-duck-security-scan@152247222aa9cd38124acd5c0cf60f4db71adc3f # v2.11.0
         with:
           ### ---------- BLACKDUCK SCA SCANNING: REQUIRED FIELDS ----------
           blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
@@ -64,7 +64,7 @@ jobs:
 
           ### SCANNING: Optional fields
           # blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'
-          detect_args: "--detect.accuracy.required=NONE --detect.diagnostic=true"
+          detect_args: "--detect.accuracy.required=NONE"
 
           ### FIX PULL REQUEST CREATION
           blackducksca_fixpr_enabled: true
@@ -87,24 +87,24 @@ jobs:
           include_diagnostics: true
 
       - name: Upload Black Duck SARIF
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ github.event_name != 'pull_request' }}
         uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
         with:
           sarif_file: blackduck-results.sarif
           
-      ###- name: Black Duck SCA PR Scan
-        #id: black-duck-pr-scan
-        #if: ${{ github.event_name == 'pull_request' }}
-        #uses: blackduck-inc/black-duck-security-scan@152247222aa9cd38124acd5c0cf60f4db71adc3f # v2.11.0
-        #with:
-          #blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
-          #blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
-          #blackducksca_scan_full: false
-          #detect_args: "--detect.accuracy.required=NONE"
+      - name: Black Duck SCA PR Scan
+        id: black-duck-pr-scan
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: blackduck-inc/black-duck-security-scan@152247222aa9cd38124acd5c0cf60f4db71adc3f # v2.11.0
+        with:
+          blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
+          blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+          blackducksca_scan_full: false
+          detect_args: "--detect.accuracy.required=NONE"
 
           ### PULL REQUEST COMMENTS
-          #blackducksca_prcomment_enabled: true
-          #github_token: ${{ secrets.GITHUB_TOKEN }}
+          blackducksca_prcomment_enabled: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
           ### Mark build status if policy violating issues are found
-          #mark_build_status: 'success'
+          mark_build_status: 'success'
