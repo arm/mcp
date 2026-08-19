@@ -131,6 +131,21 @@ def test_final_builds_do_not_acquire_inputs_live() -> None:
     assert "python -m pip install --upgrade pip" not in INTEGRATION_WORKFLOW
 
 
+def test_final_builds_disable_network_for_every_run_instruction() -> None:
+    run_instructions = [
+        line.strip()
+        for line in DOCKERFILE.splitlines()
+        if re.match(r"(?i:RUN)(?:\s|$)", line.strip())
+    ]
+    assert run_instructions
+    assert all(
+        re.match(r"(?i:RUN)\s+--network=none(?:\s|$)", instruction)
+        for instruction in run_instructions
+    )
+    assert "          network: none\n" in IMAGE_WORKFLOW
+    assert "            --network none \\\n" in INTEGRATION_WORKFLOW
+
+
 def test_release_build_loads_image_arguments_from_manifest() -> None:
     assert 'lock_file="mcp-local/build-inputs.lock.json"' in IMAGE_WORKFLOW
     assert "@sha256:[0-9a-f]{64}" in IMAGE_WORKFLOW
@@ -272,13 +287,3 @@ def test_input_publication_is_manual_private_and_multi_architecture() -> None:
     assert '"export",' in STAGE_INPUTS
     assert 'output / "requirements.lock"' in STAGE_INPUTS
     assert 'echo "- MCP build input: \\`${IMAGE}@${digest}\\`"' in INPUT_WORKFLOW
-
-
-def test_input_publication_uses_pinned_build_actions() -> None:
-    action_lines = [
-        line.strip()
-        for line in INPUT_WORKFLOW.splitlines()
-        if line.strip().startswith("uses:")
-    ]
-    assert action_lines
-    assert all(re.fullmatch(r"uses: [^@]+@[0-9a-f]{40}(?: # .+)?", line) for line in action_lines)

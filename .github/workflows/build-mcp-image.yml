@@ -167,6 +167,7 @@ jobs:
           context: .
           file: mcp-local/Dockerfile
           platforms: ${{ matrix.platform }}
+          network: none
           build-args: |
             UBUNTU_IMAGE=${{ steps.locked_images.outputs.ubuntu_image }}
             EMBEDDINGS_IMAGE=${{ steps.locked_images.outputs.embeddings_image }}

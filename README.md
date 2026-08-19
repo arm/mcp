@@ -278,6 +278,7 @@ embedding images are private:
 ```bash
 docker login ghcr.io
 docker buildx build \
+  --network none \
   --file mcp-local/Dockerfile \
   --tag arm-mcp:local \
   --load \
@@ -426,7 +427,8 @@ Production must never consume a mutable tag.
 Embedding updates use an automated promotion PR instead of being copied into
 the MCP release directly:
 
-1. Manually run **Build Offline Embedding Pipeline** from `main`.
+1. Let **Build Offline Embedding Pipeline** run from `main` every Sunday at
+   09:00 UTC, or start it manually for an out-of-band update.
 2. The workflow publishes an immutable candidate vector-store image and opens
    or updates `automation/pin-embedding-vectorstore`.
 3. The promotion branch updates both `container_images.embeddings` in
@@ -468,6 +470,15 @@ After updating any source lock, use the same common publication process:
 The publication workflow also creates a tag containing the source commit,
 workflow run ID, and attempt. That tag is only a discovery aid; production
 builds always use the digest.
+
+#### Rolling Back an Input Update
+
+Rollback is a reviewed pin change. Restore the last approved image references
+and metadata in `mcp-local/build-inputs.lock.json`, and keep the corresponding
+image defaults in `mcp-local/Dockerfile` synchronized. Submit the rollback
+through the normal pull-request process and run the AMD64 and Arm64 integration
+builds before release. Do not delete, overwrite, or retag the immutable GHCR
+artifacts.
 
 ## Troubleshooting
 
