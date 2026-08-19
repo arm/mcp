@@ -120,6 +120,10 @@ def test_dockerfile_consumes_only_staged_third_party_inputs() -> None:
     assert "--from=mcp-inputs /mcp-build-inputs/debs/runtime/" in DOCKERFILE
     assert "--from=mcp-inputs /mcp-build-inputs/performix.tar.gz" in DOCKERFILE
     assert "--from=mcp-inputs /mcp-build-inputs/migrate-ease.tar.gz" in DOCKERFILE
+    assert (
+        'export PYTHONPATH="/opt/arm-migration-tools/migrate-ease'
+        '${PYTHONPATH:+:$PYTHONPATH}"'
+    ) in DOCKERFILE
     assert "mcp-local/build-inputs/" not in DOCKERFILE
     assert "!mcp-local/build-inputs/" not in ROOT_DOCKERIGNORE
     assert "--from=embeddings /embedding-data/embedding-model/" in DOCKERFILE

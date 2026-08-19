@@ -67,6 +67,7 @@ RUN --network=none mkdir -p /opt/arm-migration-tools/migrate-ease && \
       printf '%s\n' \
         '#!/bin/sh' \
         'cd /opt/arm-migration-tools/migrate-ease' \
+        'export PYTHONPATH="/opt/arm-migration-tools/migrate-ease${PYTHONPATH:+:$PYTHONPATH}"' \
         "exec /app/.venv/bin/python -m ${scanner} \"\$@\"" \
         > "${wrapper}"; \
       chmod 0755 "${wrapper}"; \

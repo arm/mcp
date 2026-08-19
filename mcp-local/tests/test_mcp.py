@@ -205,8 +205,21 @@ def test_mcp_stdio_transport_responds(platform):
             #Check Migrate Ease Tool Test
             raw_socket.sendall(_encode_mcp_message(constants.CHECK_MIGRATE_EASE_TOOL_REQUEST))
             check_migrate_ease_tool_response = _read_response(5, timeout=60)
-            #assert only the status field to avoid mismatches due to dynamic fields
-            assert check_migrate_ease_tool_response.get("result")["structuredContent"]["status"] == constants.EXPECTED_CHECK_MIGRATE_EASE_TOOL_RESPONSE_STATUS, "Test Failed: MCP check_migrate_ease_tool tool failed: status mismatch. Expected: {}, Received: {}".format(constants.EXPECTED_CHECK_MIGRATE_EASE_TOOL_RESPONSE_STATUS, check_migrate_ease_tool_response.get("result")["structuredContent"]["status"])
+            # Assert only the status field to avoid mismatches due to dynamic fields.
+            migrate_ease_content = check_migrate_ease_tool_response.get("result")[
+                "structuredContent"
+            ]
+            assert (
+                migrate_ease_content["status"]
+                == constants.EXPECTED_CHECK_MIGRATE_EASE_TOOL_RESPONSE_STATUS
+            ), (
+                "Test Failed: MCP check_migrate_ease_tool tool failed: status "
+                "mismatch. Expected: {}, Received: {}\nFull response: {}".format(
+                    constants.EXPECTED_CHECK_MIGRATE_EASE_TOOL_RESPONSE_STATUS,
+                    migrate_ease_content["status"],
+                    json.dumps(migrate_ease_content, indent=2),
+                )
+            )
             print("\n***Test Passed: MCP check_migrate_ease_tool tool succeeded")
 
             #Check Sysreport Tool Test
