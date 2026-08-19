@@ -2,12 +2,12 @@ name: Embedding Generation Unit Tests
 
 on:
   push:
-    branches: [main, secure-build]
+    branches: [main]
     paths:
       - 'embedding-generation/**'
       - '.github/workflows/embedding-unit-tests.yml'
   pull_request:
-    branches: [main, secure-build]
+    branches: [main]
     paths:
       - 'embedding-generation/**'
       - '.github/workflows/embedding-unit-tests.yml'

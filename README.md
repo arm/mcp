@@ -242,7 +242,7 @@ currently approved input bundle is recorded in
 `mcp-local/build-inputs.lock.json` and defaults to:
 
 ```text
-ghcr.io/arm/mcp-build-inputs@sha256:d38c64ad12493ddacfe7a99e49f47e6cfcf1f9d2acf1696c797645d3099758a3
+ghcr.io/arm/mcp-build-inputs@sha256:8db95af8e7d819b82adbed0bd1c9eadcd1d0f2afdd144c52618b58bccfbf07cf
 ```
 
 ### Why the Build Uses Multiple Dockerfiles
@@ -330,7 +330,7 @@ target, key mounts, and Java workload configured in
 The index and its platform manifests can be inspected without unpacking it:
 
 ```bash
-MCP_INPUTS="ghcr.io/arm/mcp-build-inputs@sha256:d38c64ad12493ddacfe7a99e49f47e6cfcf1f9d2acf1696c797645d3099758a3"
+MCP_INPUTS="ghcr.io/arm/mcp-build-inputs@sha256:8db95af8e7d819b82adbed0bd1c9eadcd1d0f2afdd144c52618b58bccfbf07cf"
 docker buildx imagetools inspect "$MCP_INPUTS"
 docker buildx imagetools inspect "$MCP_INPUTS" --format '{{json .Manifest}}' | jq
 ```

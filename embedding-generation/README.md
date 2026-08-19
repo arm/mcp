@@ -99,7 +99,7 @@ Leave the column empty for sources that are chunked from their primary `URL`.
 Install dependencies once:
 
 ```sh
-uv sync --frozen
+uv sync --locked
 ```
 
 Python 3.13 is required.
@@ -107,7 +107,7 @@ Python 3.13 is required.
 Run the full local question eval:
 
 ```sh
-uv run ./run-question-eval.sh
+uv run --locked ./run-question-eval.sh
 ```
 
 That command copies intrinsic chunks from the embedding base image if needed,
@@ -118,16 +118,16 @@ without model network access.
 Useful options:
 
 ```sh
-uv run ./run-question-eval.sh --refresh-intrinsic-chunks
-uv run ./run-question-eval.sh --eval eval_questions.json --top-k 5
-SKIP_DISCOVERY=1 uv run ./run-question-eval.sh
+uv run --locked ./run-question-eval.sh --refresh-intrinsic-chunks
+uv run --locked ./run-question-eval.sh --eval eval_questions.json --top-k 5
+SKIP_DISCOVERY=1 uv run --locked ./run-question-eval.sh
 ```
 
 Run lint and tests with:
 
 ```sh
-uv run ruff check .
-uv run pytest
+uv run --locked ruff check .
+uv run --locked pytest
 ```
 
 To check a new document, add or update a question in `eval_questions.json` with the document URL in `expected_urls`, then run the wrapper. Review `Hit@1`, `Hit@3`, `Hit@5`, `MRR`, and any printed misses before committing the CSV change.
