@@ -1,0 +1,106 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+# Black Duck Security Action allows you to integrate Static Analysis Security Testing (SAST) and Software Composition Analysis (SCA) into your CI/CD pipelines.
+# For more information about configuring your workflow,
+# read our documentation at https://github.com/blackduck-inc/black-duck-security-scan
+
+name: CI Black Duck security scan
+
+on:
+  push:
+    branches: [ "main", "secure-build" ] # TODO: remove "secure-build" after merge into main
+  pull_request:
+    # The branches below must be a subset of the branches above
+    branches: [ "main", "secure-build" ]  # TODO: remove "secure-build" after merge into main
+  schedule:
+    - cron: '34 5 * * 6'
+
+# Declare default permissions as read only.
+permissions: read-all
+
+concurrency:
+  group: blackduck-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+      actions: read
+    env:
+      # Set in Arm BlackDuck UI
+      DETECT_PROJECT_NAME: "Arm:MCP"
+      DETECT_PROJECT_VERSION_NAME: "1.0"
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      
+      - name: Show Black Duck target
+        run: |
+          # notice - highlighted in the gh actions UI
+          echo "::notice title=Black Duck target::${{ env.DETECT_PROJECT_NAME }} / ${{ env.DETECT_PROJECT_VERSION_NAME }}"
+      
+      - name: Black Duck SCA scan
+        id: black-duck-full-scan
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: blackduck-inc/black-duck-security-scan@152247222aa9cd38124acd5c0cf60f4db71adc3f # v2.11.0
+        with:
+          ### ---------- BLACKDUCK SCA SCANNING: REQUIRED FIELDS ----------
+          blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
+          blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+          blackducksca_scan_full: true
+
+          ### SCANNING: Optional fields
+          # blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'
+          detect_args: "--detect.accuracy.required=NONE"
+
+          ### FIX PULL REQUEST CREATION
+          blackducksca_fixpr_enabled: true
+          # Dedicated token with Contents and Pull requests read/write access.
+          github_token: ${{ secrets.BLACKDUCK_GITHUB_TOKEN }}
+
+          ### SARIF report generation for upload to GitHub Advanced Security
+          blackducksca_reports_sarif_create: true
+          blackducksca_reports_sarif_file_path: blackduck-results.sarif
+          ### Set upload to false & then later upload via github/codeql-action/upload-sarif@v4.37.4 to avoid token-permissions issue flagged by scorecard
+          blackducksca_upload_sarif_report: false
+
+          ### Mark build status if policy violating issues are found
+          mark_build_status: 'success'
+
+          ### To enable Black Duck SCA policy badges
+          blackducksca_policy_badges_create: true
+          blackducksca_policy_badges_maxCount: 5
+
+          ### To upload Bridge diagnostic files
+          include_diagnostics: true
+
+      - name: Upload Black Duck SARIF
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        with:
+          sarif_file: blackduck-results.sarif
+          
+      - name: Black Duck SCA PR Scan
+        id: black-duck-pr-scan
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: blackduck-inc/black-duck-security-scan@152247222aa9cd38124acd5c0cf60f4db71adc3f # v2.11.0
+        with:
+          blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
+          blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+          blackducksca_scan_full: false
+          detect_args: "--detect.accuracy.required=NONE"
+
+          ### PULL REQUEST COMMENTS
+          blackducksca_prcomment_enabled: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+          ### Mark build status if policy violating issues are found
+          mark_build_status: 'success'
