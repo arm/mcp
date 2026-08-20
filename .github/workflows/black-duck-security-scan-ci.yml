@@ -11,10 +11,10 @@ name: CI Black Duck security scan
 
 on:
   push:
-    branches: [ "main", "secure-build" ]
+    branches: [ "main", "secure-build" ] # TODO: remove "secure-build" after merge into main
   pull_request:
     # The branches below must be a subset of the branches above
-    branches: [ "main", "secure-build" ]
+    branches: [ "main", "secure-build" ]  # TODO: remove "secure-build" after merge into main
   schedule:
     - cron: '34 5 * * 6'
 
@@ -34,23 +34,18 @@ jobs:
       security-events: write
       actions: read
     env:
-      DETECT_PROJECT_NAME: Arm:MCP
+      # Set in Arm BlackDuck UI
+      DETECT_PROJECT_NAME: "Arm:MCP"
+      DETECT_PROJECT_VERSION_NAME: "1.0"
 
     steps:
       - name: Checkout source
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       
-      - name: Set repository reference
+      - name: Show Black Duck target
         run: |
-          ver_to_reference="${{ github.ref_name }}"
-          
-          # Replace / with - to avoid issues with Black Duck project version names
-          # ver_to_reference="${ver_to_reference//\//-}"
-          ver_to_reference="1.0"
-          echo "DETECT_PROJECT_VERSION_NAME=$ver_to_reference" >> $GITHUB_ENV
-          
           # notice - highlighted in the gh actions UI
-          echo "::notice title=Black Duck target::${{ env.DETECT_PROJECT_NAME }} / $ver_to_reference"
+          echo "::notice title=Black Duck target::${{ env.DETECT_PROJECT_NAME }} / ${{ env.DETECT_PROJECT_VERSION_NAME }}"
       
       - name: Black Duck SCA scan
         id: black-duck-full-scan
