@@ -29,7 +29,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
       security-events: write
       actions: read
@@ -68,7 +68,8 @@ jobs:
 
           ### FIX PULL REQUEST CREATION
           blackducksca_fixpr_enabled: true
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Dedicated token with Contents and Pull requests read/write access.
+          github_token: ${{ secrets.BLACKDUCK_GITHUB_TOKEN }}
 
           ### SARIF report generation for upload to GitHub Advanced Security
           blackducksca_reports_sarif_create: true
