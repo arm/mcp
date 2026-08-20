@@ -5,7 +5,7 @@ updates:
     # A root entry scans workflows under .github/workflows.
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     groups:
       github-actions:
         patterns:
@@ -14,7 +14,7 @@ updates:
   - package-ecosystem: "uv"
     directory: "/embedding-generation"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     groups:
       embedding-dependencies:
         patterns:
@@ -23,7 +23,7 @@ updates:
   - package-ecosystem: "uv"
     directory: "/mcp-local"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     groups:
       mcp-local-dependencies:
         patterns:
@@ -34,7 +34,7 @@ updates:
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
     groups:
       root-dependencies:
         patterns:
