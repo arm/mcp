@@ -6,19 +6,36 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
 
   - package-ecosystem: "uv"
     directory: "/embedding-generation"
     schedule:
       interval: "weekly"
+    groups:
+      embedding-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "uv"
+    directory: "/mcp-local"
+    schedule:
+      interval: "weekly"
+    groups:
+      mcp-local-dependencies:
+        patterns:
+          - "*"
 
   # Root project (used for arm-kb-search) is PEP 621
   # but doesn't currently have a uv lockfile.
-  # Move mcp-local to a separate uv entry after its lockfile migration.
   - package-ecosystem: "pip"
-    directories:
-      - "/"
-      - "/mcp-local"
-      - "/mcp-local/tests"
+    directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      root-dependencies:
+        patterns:
+          - "*"
