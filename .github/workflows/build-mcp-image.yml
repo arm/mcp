@@ -2,58 +2,161 @@ name: Build MCP Image
 
 on:
   pull_request:
-    types: [closed]
     branches: [main]
     paths:
-      - mcp-local/Dockerfile
-      - mcp-local/build-inputs.lock.json
+      - mcp-local/server.json
+  push:
+    branches: [main]
+    paths:
+      - mcp-local/server.json
   workflow_dispatch:
     inputs:
-      bump_type:
-        description: "Manual version bump. Minor is automatic when a reviewed embedding-promotion PR merges."
+      release_action:
+        description: Build without publishing, or propose a reviewed release PR
         type: choice
         options:
-          - major
-          - minor
+          - dry-run
           - hotfix
-        default: major
-      dry_run:
-        description: "Build without pushing images, manifests, or git tags"
-        type: boolean
-        default: false
+          - minor
+          - major
+        default: dry-run
 
 permissions:
   contents: read
 
-# Shared expressions, exported to every run step and usable in step if:/with:
-# (env context). NOTE: `concurrency` below can't read env (github/inputs/vars
-# only), so that one main+dry check stays inline.
 env:
   IMAGE: armlimited/arm-mcp
-  IS_MAIN: ${{ (github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main') || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
-  IS_DRY_RUN: ${{ github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true' }}
 
-# Serialize only publishing runs so overlapping builds can't race on
-# computing/publishing the same auto-incremented version (alias + git tag).
-# Publishing runs (from main, not dry_run) share a single static group so they
-# queue behind one another. Non-publishing runs (dry_run or non-main) never
-# touch shared version/tag state, so they get a unique per-run group and run
-# concurrently without blocking the publishing queue.
+# Version PRs serialize naturally at merge time, but publication remains
+# serialized so two closely spaced releases cannot race when updating latest.
 concurrency:
-  group: >-
-    ${{
-      (
-        ((github.event_name == 'pull_request' && github.event.pull_request.merged == true) || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
-        && !(github.event.inputs.dry_run == true || github.event.inputs.dry_run == 'true')
-      )
-      && 'build-mcp-image-publish'
-      || format('build-mcp-image-{0}', github.run_id)
-    }}
+  group: ${{ github.event_name == 'push' && 'build-mcp-image-publish' || format('build-mcp-image-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
+  propose-version:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_action != 'dry-run' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Open or update reviewed version PR
+        shell: bash
+        env:
+          BUMP_TYPE: ${{ inputs.release_action }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          branch="automation/release-${BUMP_TYPE}"
+          git checkout -B "${branch}"
+          version="$(python3 .github/scripts/bump_mcp_version.py --bump-type "${BUMP_TYPE}")"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add mcp-local/server.json
+          git commit -m "chore: propose ${BUMP_TYPE} release ${version}"
+
+          git fetch origin "${branch}:refs/remotes/origin/${branch}" || true
+          git push --force-with-lease origin "HEAD:refs/heads/${branch}"
+
+          body="Proposes reviewed ${BUMP_TYPE} release \`${version}\`. Merging this PR triggers the release workflow."
+          pr_url="$(gh pr list \
+            --base main \
+            --head "${branch}" \
+            --state open \
+            --json url \
+            --jq '.[0].url // empty')"
+          if [ -z "${pr_url}" ]; then
+            pr_url="$(gh pr create \
+              --base main \
+              --head "${branch}" \
+              --title "chore: propose ${BUMP_TYPE} release ${version}" \
+              --body "${body}")"
+          else
+            gh pr edit "${pr_url}" \
+              --title "chore: propose ${BUMP_TYPE} release ${version}" \
+              --body "${body}"
+          fi
+
+          .github/scripts/dispatch-required-pr-checks.sh "${branch}"
+
+          {
+            echo "### Reviewed release proposal"
+            echo ""
+            echo "- Type: ${BUMP_TYPE}"
+            echo "- Version: \`${version}\`"
+            echo "- Pull request: ${pr_url}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  validate-release:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.release_action == 'dry-run' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      source_sha: ${{ steps.release.outputs.source_sha }}
+      publish: ${{ steps.release.outputs.publish }}
+      build: ${{ steps.release.outputs.build }}
+    steps:
+      - name: Checkout reviewed release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Validate reviewed release version
+        id: release
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          CHECK_TAG: ${{ github.event_name != 'workflow_dispatch' }}
+          BUILD: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
+          PUBLISH: ${{ github.event_name == 'push' }}
+        run: |
+          set -euo pipefail
+          server_file="mcp-local/server.json"
+          version="$(jq -er '.version | select(type == "string")' "${server_file}")"
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::server.json version must use X.Y.Z semantic versioning: ${version}"
+            exit 1
+          fi
+
+          expected_image="docker.io/${IMAGE}:${version}"
+          if ! jq -e --arg image "${expected_image}" '
+            [.packages[]? | select(.registryType == "oci") | .identifier] | index($image) != null
+          ' "${server_file}" > /dev/null; then
+            echo "::error::server.json must identify the release image as ${expected_image}."
+            exit 1
+          fi
+
+          if [ "${CHECK_TAG}" = "true" ] && git rev-parse -q --verify "refs/tags/v${version}" > /dev/null; then
+            echo "::error::Release tag v${version} already exists. Submit a new reviewed version PR."
+            exit 1
+          fi
+
+          {
+            echo "version=${version}"
+            echo "source_sha=${SOURCE_SHA}"
+            echo "publish=${PUBLISH}"
+            echo "build=${BUILD}"
+          } >> "${GITHUB_OUTPUT}"
+
+          if [ "${BUILD}" = "true" ] && [ "${PUBLISH}" != "true" ]; then
+            echo "Manual runs validate and build the selected commit but never publish." >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
   build-arch-images:
-    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'automation/pin-embedding-vectorstore') }}
+    needs: validate-release
+    if: ${{ needs.validate-release.outputs.build == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -68,52 +171,11 @@ jobs:
     permissions:
       contents: read
       packages: read
-    outputs:
-      build_date: ${{ steps.build_date.outputs.build_date }}
-      date_tag: ${{ steps.build_date.outputs.date_tag }}
     steps:
-      - name: Guard against non-main publishing
-        run: |
-          # workflow_dispatch can be started from any branch (GitHub has no
-          # branch filter for it). Publishing is main-only; non-main runs are
-          # allowed solely as dry_run validation, else fail fast.
-          if [ "${IS_MAIN}" != "true" ] && [ "${IS_DRY_RUN}" != "true" ]; then
-            echo "::error::Non-main runs must set dry_run=true (build/validate only, never publish)."
-            exit 1
-          fi
-          # Block publishing reruns: the version derives from existing git
-          # tags, so re-running after a tag was pushed would publish a NEW
-          # version for the same build. Reruns bump run_attempt; require
-          # attempt 1. Start a fresh run to recover instead.
-          if [ "${IS_DRY_RUN}" != "true" ] && [ "${{ github.run_attempt }}" != "1" ]; then
-            echo "::error::Publishing reruns are disabled (would republish a new version). Start a fresh workflow run instead."
-            exit 1
-          fi
-
-      - name: Checkout
+      - name: Checkout reviewed release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # Build the exact merge commit for an embedding promotion, or the
-          # selected commit for a manual run. The git tag is created later at
-          # the server.json bump commit, not this commit.
-          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
-
-      - name: Set build date and unique date tag (UTC)
-        id: build_date
-        run: |
-          if [ -n "${{ github.event.pull_request.merged_at }}" ]; then
-            BUILD_DATE=$(date -u -d "${{ github.event.pull_request.merged_at }}" +%Y-%m-%d)
-          else
-            BUILD_DATE=$(date -u +%Y-%m-%d)
-          fi
-          # Append run_number so every run gets a distinct date tag. Without it,
-          # two runs on the same day would share one tag, and the later run would
-          # alias its version/git tag onto the earlier run's image digest.
-          DATE_TAG="${BUILD_DATE}-${{ github.run_number }}"
-          echo "BUILD_DATE=$BUILD_DATE" >> "$GITHUB_ENV"
-          echo "DATE_TAG=$DATE_TAG" >> "$GITHUB_ENV"
-          echo "build_date=$BUILD_DATE" >> "$GITHUB_OUTPUT"
-          echo "date_tag=$DATE_TAG" >> "$GITHUB_OUTPUT"
+          ref: ${{ needs.validate-release.outputs.source_sha }}
 
       - name: Load locked image references
         id: locked_images
@@ -156,15 +218,13 @@ jobs:
           password: ${{ github.token }}
 
       - name: Log in to Docker Hub
-        # Only publishing runs push, so only they log in. Non-dry implies main
-        # (the top-level guard rejects non-main non-dry runs).
-        if: ${{ env.IS_DRY_RUN != 'true' }}
+        if: ${{ needs.validate-release.outputs.publish == 'true' }}
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push ${{ matrix.platform }} image
+      - name: Build ${{ matrix.platform }} image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
@@ -175,216 +235,72 @@ jobs:
             UBUNTU_IMAGE=${{ steps.locked_images.outputs.ubuntu_image }}
             EMBEDDINGS_IMAGE=${{ steps.locked_images.outputs.embeddings_image }}
             MCP_BUILD_INPUTS_IMAGE=${{ steps.locked_images.outputs.mcp_build_inputs_image }}
-          # Push only on publishing runs (non-dry implies main per the guard).
-          push: ${{ env.IS_DRY_RUN != 'true' }}
-          tags: ${{ env.IMAGE }}:${{ env.DATE_TAG }}-${{ matrix.tag }}
+          push: ${{ needs.validate-release.outputs.publish == 'true' }}
+          tags: ${{ env.IMAGE }}:${{ needs.validate-release.outputs.version }}-${{ matrix.tag }}
 
-  merge-manifests:
-    needs: build-arch-images
+  publish-release:
+    needs:
+      - validate-release
+      - build-arch-images
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-      pull-requests: write
     if: ${{ needs.build-arch-images.result == 'success' }}
     steps:
-      - name: Block publishing reruns
-        # Repeated from build-arch-images: "Re-run failed jobs" reruns only
-        # this job, so that job's guard won't fire, but publishing happens
-        # here. See that step for the full rationale (reruns republish a new
-        # version). Start a fresh run to recover instead.
-        if: ${{ env.IS_DRY_RUN != 'true' && github.run_attempt != 1 }}
-        run: |
-          echo "::error::Publishing reruns are disabled (would republish a new version). Start a fresh workflow run instead."
-          exit 1
-
-      - name: Checkout
+      - name: Checkout reviewed release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # Check out the promotion merge commit as the base; the
-          # bump step opens a PR from this commit and the git tag is created at
-          # the merged bump commit. fetch-depth: 0 so version tags are available.
-          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
-          fetch-depth: 0
+          ref: ${{ needs.validate-release.outputs.source_sha }}
+
+      - name: Record successful manual build
+        if: ${{ needs.validate-release.outputs.publish != 'true' }}
+        env:
+          VERSION: ${{ needs.validate-release.outputs.version }}
+          SOURCE_SHA: ${{ needs.validate-release.outputs.source_sha }}
+        run: |
+          {
+            echo "### MCP release dry run"
+            echo ""
+            echo "- Version: \`${VERSION}\`"
+            echo "- Source commit: \`${SOURCE_SHA}\`"
+            echo "- AMD64 and Arm64 builds succeeded without publication."
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Set up Docker Buildx
+        if: ${{ needs.validate-release.outputs.publish == 'true' }}
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Log in to Docker Hub
-        # Only publishing runs write to the registry (non-dry implies main).
-        if: ${{ env.IS_DRY_RUN != 'true' }}
+        if: ${{ needs.validate-release.outputs.publish == 'true' }}
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Create multi-arch manifest for date tag
+      - name: Publish multi-architecture release
+        if: ${{ needs.validate-release.outputs.publish == 'true' }}
         env:
-          DATE_TAG: ${{ needs.build-arch-images.outputs.date_tag }}
-        run: |
-          if [ "${IS_DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would create ${IMAGE}:${DATE_TAG} from ${IMAGE}:${DATE_TAG}-amd64 and ${IMAGE}:${DATE_TAG}-arm64"
-            exit 0
-          fi
-          docker buildx imagetools create \
-            -t "${IMAGE}:${DATE_TAG}" \
-            "${IMAGE}:${DATE_TAG}-amd64" \
-            "${IMAGE}:${DATE_TAG}-arm64"
-
-      - name: Determine version tag
-        id: version
-        env:
-          BUMP_TYPE: ${{ github.event_name == 'pull_request' && 'minor' || github.event.inputs.bump_type }}
+          VERSION: ${{ needs.validate-release.outputs.version }}
         run: |
           set -euo pipefail
-          git fetch --tags --force --quiet
-          # `|| true`: with pipefail, grep exits non-zero when no tag matches;
-          # the explicit empty-check below emits a clearer error than set -e.
-          latest="$(git tag -l | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)" || true
-          [ -n "${latest}" ] || { echo "::error::No vX.Y.Z tags found."; exit 1; }
-          ver="${latest#v}"
-          major="${ver%%.*}"; rest="${ver#*.}"; minor="${rest%%.*}"; patch="${rest##*.}"
-          case "${BUMP_TYPE:-minor}" in
-            major)  TAG_VERSION="$((major + 1)).0.0" ;;
-            minor)  TAG_VERSION="${major}.$((minor + 1)).0" ;;
-            hotfix) TAG_VERSION="${major}.${minor}.$((patch + 1))" ;;
-            *) echo "::error::Unknown bump_type '${BUMP_TYPE}'."; exit 1 ;;
-          esac
-          echo "${latest} -> ${TAG_VERSION} (${BUMP_TYPE})"
-          echo "tag_version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
-
-      # Merge the server.json bump FIRST so the git tag/Release below point at a
-      # main commit whose metadata already matches this version. The bump branch
-      # is created from the exact commit that produced the images.
-      - name: Bump server.json through PR
-        id: bump
-        if: ${{ env.IS_DRY_RUN != 'true' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
-          HEAD_SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
-        run: |
-          set -euo pipefail
-          SERVER_JSON="mcp-local/server.json"
-          BUMP_BRANCH="release/server-json-${TAG_VERSION}-${GITHUB_RUN_ID}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Apply the version bump to server.json (in-memory, single write).
-          IMAGE_REF="docker.io/${IMAGE}"
-          apply_bump_file() {
-            local updated
-            if ! updated="$(jq --arg v "${TAG_VERSION}" --arg img "${IMAGE_REF}" '
-              .version = $v
-              | .packages |= map(
-                  if (.identifier // "") | startswith($img + ":")
-                  then .identifier = $img + ":" + $v
-                  else . end
-                )
-            ' "${SERVER_JSON}")"; then
-              echo "::error::jq failed to update ${SERVER_JSON}."; return 1
-            fi
-            [ -n "${updated}" ] || { echo "::error::jq produced empty output for ${SERVER_JSON}."; return 1; }
-            printf '%s\n' "${updated}" > "${SERVER_JSON}"
-          }
-
-          # Fail fast if main moved past the built commit (HEAD_SHA): committing
-          # the bump elsewhere would tag code that was never built into the
-          # image. Don't rebase -- a fresh run rebuilds from the new main.
-          git fetch origin main
-          ORIGIN_MAIN="$(git rev-parse origin/main)"
-          if [ "${ORIGIN_MAIN}" != "${HEAD_SHA}" ]; then
-            echo "::error::origin/main (${ORIGIN_MAIN}) no longer matches the built commit (${HEAD_SHA}); the image would not match the release. Start a fresh workflow run."
-            exit 1
-          fi
-
-          # Commit the bump on a release branch based on the exact commit that
-          # produced the images, then merge it through a PR so main protection is
-          # respected. If required reviews/checks block the merge, fail before
-          # publishing version aliases or the git tag.
-          git checkout -B "${BUMP_BRANCH}" "${HEAD_SHA}"
-          apply_bump_file
-          if git diff --quiet -- "${SERVER_JSON}"; then
-            echo "${SERVER_JSON} already at ${TAG_VERSION}; nothing to do."
-            echo "bump_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          git add "${SERVER_JSON}"
-          git commit -m "chore: bump server.json to ${TAG_VERSION}"
-          git push origin "HEAD:refs/heads/${BUMP_BRANCH}"
-
-          PR_URL="$(gh pr create \
-            --base main \
-            --head "${BUMP_BRANCH}" \
-            --title "chore: bump server.json to ${TAG_VERSION}" \
-            --body "Automated release metadata bump for ${IMAGE}:${TAG_VERSION}.")"
-          echo "Created ${PR_URL}"
-
-          gh pr merge "${PR_URL}" \
-            --squash \
-            --delete-branch \
-            --subject "chore: bump server.json to ${TAG_VERSION}" \
-            --body "Automated release metadata bump for ${IMAGE}:${TAG_VERSION}."
-
-          git fetch origin main
-          BUMP_SHA="$(git rev-parse origin/main)"
-          echo "Merged server.json bump to ${BUMP_SHA}."
-          echo "bump_sha=${BUMP_SHA}" >> "$GITHUB_OUTPUT"
-
-      # Promote production Docker tags before the git tag (the version cursor) advances. 
-      # Self-healing via a FRESH run (reruns are blocked above): if this fails, no git tag was pushed, so a fresh run recomputes the SAME version 
-      # and overwrites these tags (imagetools create is idempotent) -- nothing to revert or clean up.
-      - name: Add latest and version aliases to date tag
-        env:
-          DATE_TAG: ${{ needs.build-arch-images.outputs.date_tag }}
-          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
-        run: |
-          if [ "${IS_DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would alias ${IMAGE}:${DATE_TAG} as latest and ${TAG_VERSION}"
-            exit 0
-          fi
           docker buildx imagetools create \
+            -t "${IMAGE}:${VERSION}" \
             -t "${IMAGE}:latest" \
-            -t "${IMAGE}:${TAG_VERSION}" \
-            "${IMAGE}:${DATE_TAG}"
-          echo "Aliased ${DATE_TAG} as latest and ${TAG_VERSION}."
+            "${IMAGE}:${VERSION}-amd64" \
+            "${IMAGE}:${VERSION}-arm64"
 
-      # FINAL irreversible step: the git tag is the version cursor, so create it last. Every earlier step (bump, Docker aliases) is idempotent and
-      # leaves no tag on failure, so a FRESH run (reruns are blocked above) recomputes the SAME version and self-heals. Tag and Release are created
-      # together (both at the bump commit) to minimize the window between them.
-      - name: Create git tag and GitHub Release
+      - name: Create tag and GitHub Release
+        if: ${{ needs.validate-release.outputs.publish == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_VERSION: ${{ steps.version.outputs.tag_version }}
-          BUMP_SHA: ${{ steps.bump.outputs.bump_sha }}
-          BUILD_DATE: ${{ needs.build-arch-images.outputs.build_date }}
+          VERSION: ${{ needs.validate-release.outputs.version }}
+          SOURCE_SHA: ${{ needs.validate-release.outputs.source_sha }}
         run: |
           set -euo pipefail
-          GIT_TAG="v${TAG_VERSION}"
-          if [ "${IS_DRY_RUN}" = "true" ]; then
-            echo "[dry-run] Would create git tag ${GIT_TAG} at the bump commit and publish a GitHub Release."
-            exit 0
-          fi
-
-          # Idempotent re-entry: if the Release already exists, this version was
-          # fully published on a prior run -- nothing left to do.
-          if gh release view "${GIT_TAG}" >/dev/null 2>&1; then
-            echo "Release ${GIT_TAG} already exists; nothing to do."
-            exit 0
-          fi
-
-          # Create + push the annotated tag at the bump commit (only if missing,
-          # so a re-run after a partial failure reuses it). This advances the
-          # version cursor, so it stays paired with the Release creation below.
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if ! git rev-parse -q --verify "refs/tags/${GIT_TAG}" >/dev/null 2>&1; then
-            git tag -a "${GIT_TAG}" "${BUMP_SHA}" -m "Release ${GIT_TAG} (matches ${IMAGE}:${TAG_VERSION})"
-            git push origin "refs/tags/${GIT_TAG}"
-            echo "Created and pushed ${GIT_TAG} at ${BUMP_SHA}."
-          fi
-
-          # Publish the Release on that tag with generated notes + image line.
-          gh release create "${GIT_TAG}" --title "${GIT_TAG}" --generate-notes
-          NOTES="$(gh release view "${GIT_TAG}" --json body --jq '.body')"
-          printf 'Docker image: `%s:%s` (built %s)\n\n%s\n' "${IMAGE}" "${TAG_VERSION}" "${BUILD_DATE}" "${NOTES}" | gh release edit "${GIT_TAG}" --notes-file -
-          echo "Published GitHub Release ${GIT_TAG}."
+          notes="$(printf 'Docker image: `%s:%s`\n\nSource commit: `%s`' \
+            "${IMAGE}" "${VERSION}" "${SOURCE_SHA}")"
+          gh release create "v${VERSION}" \
+            --target "${SOURCE_SHA}" \
+            --title "v${VERSION}" \
+            --generate-notes \
+            --notes "${notes}"

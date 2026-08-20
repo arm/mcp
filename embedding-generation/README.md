@@ -43,12 +43,16 @@ to consume the newest registry artifact automatically. To promote a candidate:
    09:00 UTC, or start it manually for an out-of-band update.
 2. After publishing the vector store, the workflow opens or updates the
    `automation/pin-embedding-vectorstore` PR with the immutable digest in both
-   `mcp-local/build-inputs.lock.json` and `mcp-local/Dockerfile`.
-3. Review the source revision and image digest.
-4. Merge the PR to trigger the minor MCP release.
+   `mcp-local/build-inputs.lock.json` and `mcp-local/Dockerfile`, along with the
+   next minor version in `mcp-local/server.json`.
+3. Review the source revision, image digest, and proposed version.
+4. Merge the approved PR to publish the MCP release using that exact embedding
+   digest and version.
 
 The workflow does not merge the promotion PR. A candidate can therefore be
 generated, evaluated, and rejected without changing the released MCP image.
+For a major or hotfix release, run **Build MCP Image** manually with the
+corresponding release action; it opens a separate reviewed version PR.
 
 ## Add Documents
 

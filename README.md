@@ -434,15 +434,43 @@ the MCP release directly:
 3. The promotion branch updates both `container_images.embeddings` in
    `mcp-local/build-inputs.lock.json` and `EMBEDDINGS_IMAGE` in
    `mcp-local/Dockerfile`. It also records the embedding source commit and
-   workflow run.
-4. Review the source revision and digest change before merging.
-5. Merging the promotion PR to `main` triggers a minor MCP release.
-   Merely generating an embedding candidate does not release or alter the MCP
-   image.
+   workflow run and proposes the next minor version in `mcp-local/server.json`.
+4. Review the source revision, digest, and proposed version before merging.
+5. Merge the approved promotion PR to publish the MCP release using that exact
+   embedding digest and version.
 
 The promotion workflow never merges its own PR. This preserves the reviewed,
 checked-in digest as the release boundary and keeps MCP releases independent
 from unsuccessful or unwanted embedding candidates.
+
+#### Creating a Reviewed MCP Release
+
+Production releases are initiated only by a reviewed PR that updates
+`mcp-local/server.json` on `main`. Embedding promotion PRs make this update
+automatically as a minor release. For a release that does not promote a new
+embedding, ask the workflow to create a reviewed version PR:
+
+1. Start **Build MCP Image** manually and select `hotfix`, `minor`, or `major`.
+   From the CLI, for example:
+
+   ```bash
+   gh workflow run build-mcp-image.yml -f release_action=hotfix
+   ```
+
+2. The workflow opens or updates a version PR with the matching semantic
+   version change in `mcp-local/server.json`.
+3. Allow the required status checks and security-team review to complete.
+4. Merge the approved PR. **Build MCP Image** validates the version, builds the
+   exact merge commit for AMD64 and Arm64, publishes the version and `latest`
+   tags, and creates the matching `vX.Y.Z` Git tag and GitHub Release.
+
+Manual workflow runs are dry runs: they build both architectures but cannot
+publish images, tags, or releases when `dry-run` is selected.
+
+Generated PRs use the workflow's short-lived `GITHUB_TOKEN`. Because GitHub
+leaves `pull_request` runs created by that token awaiting manual workflow
+approval, the automation explicitly dispatches the required test workflows
+against the generated branch after opening or updating the PR.
 
 #### Publishing and Pinning the Updated Bundle
 

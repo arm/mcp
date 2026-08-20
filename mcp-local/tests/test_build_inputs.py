@@ -19,6 +19,7 @@ STAGE_INPUTS = (MCP_LOCAL / "scripts/stage-build-inputs.py").read_text()
 INPUT_DOCKERIGNORE = (MCP_LOCAL / ".dockerignore").read_text()
 ROOT_DOCKERIGNORE = (REPOSITORY / ".dockerignore").read_text()
 SERVER = (MCP_LOCAL / "server.py").read_text()
+SERVER_METADATA = json.loads((MCP_LOCAL / "server.json").read_text())
 INPUT_WORKFLOW = (
     REPOSITORY / ".github/workflows/build-mcp-inputs.yml"
 ).read_text()
@@ -26,6 +27,9 @@ EMBEDDING_WORKFLOW = (
     REPOSITORY / ".github/workflows/build-embeddings.yml"
 ).read_text()
 IMAGE_WORKFLOW = (REPOSITORY / ".github/workflows/build-mcp-image.yml").read_text()
+REQUIRED_CHECK_DISPATCH = (
+    REPOSITORY / ".github/scripts/dispatch-required-pr-checks.sh"
+).read_text()
 INTEGRATION_WORKFLOW = (
     REPOSITORY / ".github/workflows/integration-tests.yml"
 ).read_text()
@@ -186,11 +190,93 @@ def test_embedding_candidate_requires_reviewed_promotion_before_release() -> Non
     image_triggers = IMAGE_WORKFLOW.split("jobs:", maxsplit=1)[0]
     assert "workflow_run:" not in image_triggers
     assert "pull_request:" in image_triggers
-    assert "types: [closed]" in image_triggers
-    assert "automation/pin-embedding-vectorstore" in IMAGE_WORKFLOW
+    assert "push:" in image_triggers
+    assert "- mcp-local/server.json" in image_triggers
+    assert "automation/pin-embedding-vectorstore" not in IMAGE_WORKFLOW
     assert "propose-mcp-embedding-pin:" in EMBEDDING_WORKFLOW
     assert "update-mcp-embedding-pin.py" in EMBEDDING_WORKFLOW
+    assert "mcp-local/server.json" in EMBEDDING_WORKFLOW
     assert "gh pr merge" not in EMBEDDING_WORKFLOW
+
+
+def test_release_uses_reviewed_server_version_without_self_merging() -> None:
+    assert "Validate reviewed release version" in IMAGE_WORKFLOW
+    assert "github.event_name == 'push'" in IMAGE_WORKFLOW
+    assert 'version="$(jq -er' in IMAGE_WORKFLOW
+    assert "gh pr merge" not in IMAGE_WORKFLOW
+    assert "BUMP_BRANCH" not in IMAGE_WORKFLOW
+    assert "${IMAGE}:${VERSION}-amd64" in IMAGE_WORKFLOW
+    assert "${IMAGE}:${VERSION}-arm64" in IMAGE_WORKFLOW
+
+
+def test_manual_release_proposals_support_all_release_types() -> None:
+    assert "propose-version:" in IMAGE_WORKFLOW
+    assert "- hotfix" in IMAGE_WORKFLOW
+    assert "- minor" in IMAGE_WORKFLOW
+    assert "- major" in IMAGE_WORKFLOW
+    assert "bump_mcp_version.py" in IMAGE_WORKFLOW
+    assert "gh pr create" in IMAGE_WORKFLOW
+    assert "gh pr merge" not in IMAGE_WORKFLOW
+    assert "RELEASE_PR_TOKEN" not in IMAGE_WORKFLOW
+    assert "dispatch-required-pr-checks.sh" in IMAGE_WORKFLOW
+
+
+def test_generated_prs_dispatch_required_checks_without_an_external_token() -> None:
+    assert "RELEASE_PR_TOKEN" not in EMBEDDING_WORKFLOW
+    assert "actions: write" in IMAGE_WORKFLOW
+    assert "actions: write" in EMBEDDING_WORKFLOW
+    assert "dispatch-required-pr-checks.sh" in EMBEDDING_WORKFLOW
+    for workflow in (
+        "integration-tests.yml",
+        "embedding-unit-tests.yml",
+        "scorecard.yml",
+    ):
+        assert workflow in REQUIRED_CHECK_DISPATCH
+
+
+def test_version_bump_script_supports_all_release_types() -> None:
+    script = REPOSITORY / ".github/scripts/bump_mcp_version.py"
+    major, minor, patch = map(int, SERVER_METADATA["version"].split("."))
+    for bump_type, expected_version in (
+        ("major", f"{major + 1}.0.0"),
+        ("minor", f"{major}.{minor + 1}.0"),
+        ("hotfix", f"{major}.{minor}.{patch + 1}"),
+    ):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            server_file = Path(temporary_directory) / "server.json"
+            server_file.write_text(
+                (MCP_LOCAL / "server.json").read_text(), encoding="utf-8"
+            )
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(script),
+                    "--bump-type",
+                    bump_type,
+                    "--server-file",
+                    str(server_file),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            updated_server = json.loads(server_file.read_text())
+            assert updated_server["version"] == expected_version
+            assert any(
+                package.get("identifier")
+                == f"docker.io/armlimited/arm-mcp:{expected_version}"
+                for package in updated_server["packages"]
+            )
+
+
+def test_server_metadata_uses_its_version_for_the_release_image() -> None:
+    version = SERVER_METADATA["version"]
+    assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version)
+    assert any(
+        package.get("registryType") == "oci"
+        and package.get("identifier") == f"docker.io/armlimited/arm-mcp:{version}"
+        for package in SERVER_METADATA["packages"]
+    )
 
 
 def test_embedding_pin_updater_keeps_manifest_and_dockerfile_in_sync() -> None:
@@ -205,11 +291,15 @@ def test_embedding_pin_updater_keeps_manifest_and_dockerfile_in_sync() -> None:
         temporary = Path(temporary_directory)
         lock_file = temporary / "build-inputs.lock.json"
         dockerfile = temporary / "Dockerfile"
+        server_file = temporary / "server.json"
         lock_file.write_text(
             (MCP_LOCAL / "build-inputs.lock.json").read_text(), encoding="utf-8"
         )
         dockerfile.write_text(
             (MCP_LOCAL / "Dockerfile").read_text(), encoding="utf-8"
+        )
+        server_file.write_text(
+            (MCP_LOCAL / "server.json").read_text(), encoding="utf-8"
         )
         subprocess.run(
             [
@@ -225,6 +315,8 @@ def test_embedding_pin_updater_keeps_manifest_and_dockerfile_in_sync() -> None:
                 str(lock_file),
                 "--dockerfile",
                 str(dockerfile),
+                "--server-file",
+                str(server_file),
             ],
             check=True,
         )
@@ -235,6 +327,17 @@ def test_embedding_pin_updater_keeps_manifest_and_dockerfile_in_sync() -> None:
         assert embeddings["source_revision"] == new_revision
         assert embeddings["workflow_run"] == "123456"
         assert f"ARG EMBEDDINGS_IMAGE={new_reference}" in dockerfile.read_text()
+        updated_server = json.loads(server_file.read_text())
+        current_major, current_minor, _ = map(
+            int, SERVER_METADATA["version"].split(".")
+        )
+        expected_version = f"{current_major}.{current_minor + 1}.0"
+        assert updated_server["version"] == expected_version
+        assert any(
+            package.get("identifier")
+            == f"docker.io/armlimited/arm-mcp:{expected_version}"
+            for package in updated_server["packages"]
+        )
 
 
 def test_build_input_bundle_is_immutable_and_auditable() -> None:

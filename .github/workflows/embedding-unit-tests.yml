@@ -1,6 +1,7 @@
 name: Embedding Generation Unit Tests
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -8,15 +9,12 @@ on:
       - '.github/workflows/embedding-unit-tests.yml'
   pull_request:
     branches: [main]
-    paths:
-      - 'embedding-generation/**'
-      - '.github/workflows/embedding-unit-tests.yml'
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  embedding-unit-tests:
     runs-on: ubuntu-latest
     defaults:
       run:

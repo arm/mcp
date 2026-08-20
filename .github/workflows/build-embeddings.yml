@@ -228,6 +228,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
+      actions: write
       # Required only for pushing the reviewed promotion branch. GitHub token
       # permissions cannot be narrowed to an individual step.
       contents: write
@@ -242,7 +243,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Update checked-in embedding pin
+      - name: Update checked-in embedding pin and release version
         id: update
         shell: bash
         run: |
@@ -253,7 +254,10 @@ jobs:
             --source-revision "${GITHUB_SHA}" \
             --workflow-run "${GITHUB_RUN_ID}"
 
-          if git diff --quiet -- mcp-local/Dockerfile mcp-local/build-inputs.lock.json; then
+          release_version="$(jq -er '.version' mcp-local/server.json)"
+          echo "release_version=${release_version}" >> "${GITHUB_OUTPUT}"
+
+          if git diff --quiet -- mcp-local/Dockerfile mcp-local/build-inputs.lock.json mcp-local/server.json; then
             echo "changed=false" >> "${GITHUB_OUTPUT}"
             echo "The generated vector store already matches the checked-in MCP pin." >> "${GITHUB_STEP_SUMMARY}"
           else
@@ -264,13 +268,14 @@ jobs:
         if: ${{ steps.update.outputs.changed == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.update.outputs.release_version }}
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add mcp-local/Dockerfile mcp-local/build-inputs.lock.json
-          git commit -m "chore: promote embedding vector store"
+          git add mcp-local/Dockerfile mcp-local/build-inputs.lock.json mcp-local/server.json
+          git commit -m "chore: promote embeddings for ${RELEASE_VERSION}"
 
           git fetch origin "${PROMOTION_BRANCH}:refs/remotes/origin/${PROMOTION_BRANCH}" || true
           git push --force-with-lease origin "HEAD:refs/heads/${PROMOTION_BRANCH}"
@@ -282,8 +287,9 @@ jobs:
           - Source revision: \`${GITHUB_SHA}\`
           - Workflow run: [${GITHUB_RUN_ID}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})
           - Candidate: \`${EMBEDDINGS_REFERENCE}\`
+          - Proposed MCP version: \`${RELEASE_VERSION}\`
 
-          This PR updates both the checked-in build-input manifest and the Dockerfile default. Merging it triggers a minor MCP release using this exact digest.
+          This PR updates the checked-in build-input manifest, Dockerfile default, and MCP release version. Merging the reviewed PR releases an MCP image using this exact digest.
           EOF
 
           pr_url="$(gh pr list \
@@ -296,19 +302,22 @@ jobs:
             pr_url="$(gh pr create \
               --base main \
               --head "${PROMOTION_BRANCH}" \
-              --title "chore: promote embedding vector store" \
+              --title "chore: promote embeddings for ${RELEASE_VERSION}" \
               --body-file "${body_file}")"
           else
             gh pr edit "${pr_url}" \
-              --title "chore: promote embedding vector store" \
+              --title "chore: promote embeddings for ${RELEASE_VERSION}" \
               --body-file "${body_file}"
           fi
+
+          .github/scripts/dispatch-required-pr-checks.sh "${PROMOTION_BRANCH}"
 
           {
             echo "### MCP embedding promotion"
             echo ""
             echo "- Pull request: ${pr_url}"
             echo "- Candidate: \`${EMBEDDINGS_REFERENCE}\`"
+            echo "- Proposed MCP version: \`${RELEASE_VERSION}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
   verify-vectorstore-provenance:
     needs: generate-and-publish-vectorstore
