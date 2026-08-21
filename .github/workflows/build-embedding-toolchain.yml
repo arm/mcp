@@ -121,7 +121,7 @@ jobs:
           COMMIT_MESSAGE: "chore: update embedding toolchain input"
           PR_TITLE: "chore: update embedding toolchain input"
           PR_BODY: |
-            Updates the immutable embedding toolchain input after its Python requirements changed.
+            Updates the immutable embedding toolchain input after its source inputs changed.
 
             - Source revision: `${{ github.sha }}`
             - Workflow run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})

@@ -236,7 +236,7 @@ jobs:
           COMMIT_MESSAGE: "chore: update MCP build-input bundle"
           PR_TITLE: "chore: update MCP build-input bundle"
           PR_BODY: |
-            Updates the immutable MCP build-input bundle after its Python requirements changed.
+            Updates the immutable MCP build-input bundle after its source inputs changed.
 
             - Source revision: `${{ github.sha }}`
             - Workflow run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})

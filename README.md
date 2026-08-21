@@ -221,8 +221,8 @@ The final MCP image build does not resolve or download Python packages, Ubuntu
 packages, Performix, or migrate-ease. Those inputs are acquired separately by
 the **Build MCP Input Bundle** workflow and published as a private,
 multi-architecture OCI image at `ghcr.io/arm/mcp-build-inputs`. The workflow
-runs automatically when the MCP Python dependency manifest or uv lock changes
-on `main`, and it can also be started manually.
+runs automatically on `main` when its watched bundle inputs change, and it can
+also be started manually.
 
 The acquisition workflow runs natively on AMD64 and Arm64. For each
 architecture it:
