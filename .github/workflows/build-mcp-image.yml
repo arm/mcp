@@ -225,6 +225,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build ${{ matrix.platform }} image
+        id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
@@ -236,7 +237,71 @@ jobs:
             EMBEDDINGS_IMAGE=${{ steps.locked_images.outputs.embeddings_image }}
             MCP_BUILD_INPUTS_IMAGE=${{ steps.locked_images.outputs.mcp_build_inputs_image }}
           push: ${{ needs.validate-release.outputs.publish == 'true' }}
+          load: ${{ needs.validate-release.outputs.publish != 'true' }}
           tags: ${{ env.IMAGE }}:${{ needs.validate-release.outputs.version }}-${{ matrix.tag }}
+
+      - name: Install runtime egress tracer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends strace
+
+      - name: Select exact image produced by the build
+        id: runtime_image
+        shell: bash
+        env:
+          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
+          PUBLISH: ${{ needs.validate-release.outputs.publish }}
+          VERSION: ${{ needs.validate-release.outputs.version }}
+          ARCH_TAG: ${{ matrix.tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${BUILD_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Build did not produce an immutable image digest: ${BUILD_DIGEST}"
+            exit 1
+          fi
+
+          if [ "${PUBLISH}" = "true" ]; then
+            image="${IMAGE}@${BUILD_DIGEST}"
+            docker pull --platform "${{ matrix.platform }}" "${image}"
+          else
+            image="${IMAGE}:${VERSION}-${ARCH_TAG}"
+          fi
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate runtime has no unapproved egress
+        env:
+          IMAGE_REFERENCE: ${{ steps.runtime_image.outputs.image }}
+          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
+          PLATFORM: ${{ matrix.platform }}
+          EVIDENCE_DIR: ${{ runner.temp }}/runtime-egress-${{ matrix.tag }}
+        run: |
+          python3 mcp-local/scripts/validate-runtime-egress.py \
+            --image "${IMAGE_REFERENCE}" \
+            --digest "${BUILD_DIGEST}" \
+            --platform "${PLATFORM}" \
+            --workspace mcp-local \
+            --evidence-dir "${EVIDENCE_DIR}"
+
+      - name: Add runtime validation summary
+        if: ${{ always() }}
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/runtime-egress-${{ matrix.tag }}
+        run: |
+          if [ -f "${EVIDENCE_DIR}/summary.md" ]; then
+            cat "${EVIDENCE_DIR}/summary.md" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "::error::Runtime egress validation produced no summary."
+            exit 1
+          fi
+
+      - name: Retain runtime validation evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runtime-egress-${{ matrix.tag }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/runtime-egress-${{ matrix.tag }}/
+          if-no-files-found: error
+          retention-days: 90
 
   publish-release:
     needs:
@@ -263,7 +328,7 @@ jobs:
             echo ""
             echo "- Version: \`${VERSION}\`"
             echo "- Source commit: \`${SOURCE_SHA}\`"
-            echo "- AMD64 and Arm64 builds succeeded without publication."
+            echo "- AMD64 and Arm64 builds and runtime egress validations succeeded without publication."
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Set up Docker Buildx

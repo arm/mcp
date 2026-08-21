@@ -141,6 +141,10 @@ def test_final_builds_do_not_acquire_inputs_live() -> None:
     assert "python -m pip install --upgrade pip" not in INTEGRATION_WORKFLOW
 
 
+def test_runtime_disables_unsolicited_update_checks() -> None:
+    assert "FASTMCP_CHECK_FOR_UPDATES=off" in DOCKERFILE
+
+
 def test_final_builds_disable_network_for_every_run_instruction() -> None:
     run_instructions = [
         line.strip()
@@ -207,6 +211,18 @@ def test_release_uses_reviewed_server_version_without_self_merging() -> None:
     assert "BUMP_BRANCH" not in IMAGE_WORKFLOW
     assert "${IMAGE}:${VERSION}-amd64" in IMAGE_WORKFLOW
     assert "${IMAGE}:${VERSION}-arm64" in IMAGE_WORKFLOW
+
+
+def test_release_requires_runtime_egress_validation_for_both_architectures() -> None:
+    assert "id: build" in IMAGE_WORKFLOW
+    assert 'image="${IMAGE}@${BUILD_DIGEST}"' in IMAGE_WORKFLOW
+    assert "validate-runtime-egress.py" in IMAGE_WORKFLOW
+    assert '"--network",\n        "none"' in (
+        MCP_LOCAL / "scripts/validate-runtime-egress.py"
+    ).read_text()
+    assert "runtime-egress-${{ matrix.tag }}" in IMAGE_WORKFLOW
+    assert "if-no-files-found: error" in IMAGE_WORKFLOW
+    assert "needs.build-arch-images.result == 'success'" in IMAGE_WORKFLOW
 
 
 def test_manual_release_proposals_support_all_release_types() -> None:
