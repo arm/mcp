@@ -219,8 +219,10 @@ their contents before sharing them.
 
 The final MCP image build does not resolve or download Python packages, Ubuntu
 packages, Performix, or migrate-ease. Those inputs are acquired separately by
-the manually triggered **Build MCP Input Bundle** workflow and published as a
-private, multi-architecture OCI image at `ghcr.io/arm/mcp-build-inputs`.
+the **Build MCP Input Bundle** workflow and published as a private,
+multi-architecture OCI image at `ghcr.io/arm/mcp-build-inputs`. The workflow
+runs automatically when the MCP Python dependency manifest or uv lock changes
+on `main`, and it can also be started manually.
 
 The acquisition workflow runs natively on AMD64 and Arm64. For each
 architecture it:
@@ -370,7 +372,18 @@ Review and commit the `pyproject.toml` and `uv.lock` changes. During input
 acquisition, pinned uv exports a pip-compatible hashed lock from `uv.lock`.
 That generated file is used to download the AMD64 and Arm64 wheelhouses and is
 preserved as `metadata/requirements.lock` in the immutable GHCR input artifact;
-it is not checked into the repository.
+it is not checked into the repository. Once the dependency change reaches
+`main`, the input workflow publishes a replacement bundle and opens or updates
+`automation/pin-mcp-build-inputs` with the new index and platform digests.
+
+The dependency PR and generated pin PR validate different boundaries. On the
+dependency PR, Python unit tests use the proposed `uv.lock`, while Docker
+integration tests continue to use the currently approved input bundle. After
+the dependency change merges, the generated pin PR updates the Dockerfile to
+the replacement bundle, so its Docker integration tests exercise the new
+dependencies before that bundle is approved. A dependency change therefore
+does not affect MCP image builds until its follow-up pin PR passes review and
+is merged.
 
 #### Updating the Python Interpreter
 
@@ -474,26 +487,31 @@ against the generated branch after opening or updating the PR.
 
 #### Publishing and Pinning the Updated Bundle
 
-After updating any source lock, use the same common publication process:
+Python requirement changes use this automatic publication process:
 
-1. Commit and push the updated source locks to a branch.
-2. Start the workflow on that branch:
+1. Merge the reviewed `mcp-local/pyproject.toml` and `mcp-local/uv.lock`
+   changes to `main`.
+2. The workflow builds both architectures, publishes their index, and opens or
+   updates `automation/pin-mcp-build-inputs`.
+3. Review the immutable index digest, per-architecture manifest digests, source
+   commit, and workflow run recorded by the promotion PR.
+4. Let the required integration checks run against the replacement bundle on
+   the promotion PR. These checks are dispatched automatically because PRs
+   opened with `GITHUB_TOKEN` do not trigger them directly.
+5. Merge the promotion PR after review and successful checks. This keeps
+   `mcp-local/build-inputs.lock.json` and the `MCP_BUILD_INPUTS_IMAGE` default
+   synchronized. Release and integration builds pull this reviewed digest and
+   never invoke `stage-build-inputs.py`.
 
-   ```bash
-   gh workflow run build-mcp-inputs.yml --ref YOUR_BRANCH
-   ```
+For changes to other bundle inputs, or to test a branch without opening a
+promotion PR, start the workflow manually:
 
-3. Confirm that both
-   native architecture jobs pass and that the workflow reports the package as
-   private.
-4. Inspect the published index, then copy its immutable index digest,
-   per-architecture manifest digests, source commit, and workflow run into the
-   `container_images.mcp_build_inputs` entry in
-   `mcp-local/build-inputs.lock.json`.
-5. Update the `MCP_BUILD_INPUTS_IMAGE` default in `mcp-local/Dockerfile` to the
-   same index digest and submit that pin as a reviewed follow-up change.
-6. Run the integration workflow. The release and integration builds must pull
-   the digest and must never invoke `stage-build-inputs.py`.
+```bash
+gh workflow run build-mcp-inputs.yml --ref YOUR_BRANCH
+```
+
+Only runs on `main` open a promotion PR. A manual branch run publishes a
+candidate for inspection without changing checked-in pins.
 
 The publication workflow also creates a tag containing the source commit,
 workflow run ID, and attempt. That tag is only a discovery aid; production

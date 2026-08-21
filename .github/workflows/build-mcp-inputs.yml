@@ -1,6 +1,11 @@
 name: Build MCP Input Bundle
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - mcp-local/pyproject.toml
+      - mcp-local/uv.lock
   workflow_dispatch:
 
 permissions: read-all
@@ -9,6 +14,10 @@ env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/mcp-build-inputs
   PACKAGE_NAME: mcp-build-inputs
   PUBLICATION_TAG: git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
+
+concurrency:
+  group: mcp-input-bundle-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   acquire-and-publish-architecture:
@@ -103,6 +112,10 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      image-reference: ${{ steps.pin.outputs.image-reference }}
+      amd64-reference: ${{ steps.pin.outputs.amd64-reference }}
+      arm64-reference: ${{ steps.pin.outputs.arm64-reference }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -131,6 +144,7 @@ jobs:
         run: bash .github/scripts/verify-ghcr-package-private.sh "${PACKAGE_NAME}"
 
       - name: Record immutable input reference
+        id: pin
         shell: bash
         run: |
           set -euo pipefail
@@ -142,6 +156,31 @@ jobs:
             exit 1
           fi
 
+          raw_manifest="$(docker buildx imagetools inspect \
+            "${IMAGE}:${PUBLICATION_TAG}" --raw)"
+          amd64_digest="$(jq -er '
+            .manifests[] |
+            select(.platform.os == "linux" and .platform.architecture == "amd64") |
+            .digest
+          ' <<<"${raw_manifest}")"
+          arm64_digest="$(jq -er '
+            .manifests[] |
+            select(.platform.os == "linux" and .platform.architecture == "arm64") |
+            .digest
+          ' <<<"${raw_manifest}")"
+          for platform_digest in "${amd64_digest}" "${arm64_digest}"; do
+            if [[ ! "${platform_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::Published index contains an invalid platform digest."
+              exit 1
+            fi
+          done
+
+          {
+            echo "image-reference=${IMAGE}@${digest}"
+            echo "amd64-reference=${IMAGE}@${amd64_digest}"
+            echo "arm64-reference=${IMAGE}@${arm64_digest}"
+          } >> "${GITHUB_OUTPUT}"
+
           {
             echo "### Immutable MCP build-input artifact"
             echo ""
@@ -151,3 +190,57 @@ jobs:
             echo ""
             echo "Record this digest in \`mcp-local/build-inputs.lock.json\` before the release workflow consumes it."
           } >> "${GITHUB_STEP_SUMMARY}"
+
+  propose-input-pin:
+    needs: publish-index
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    env:
+      PROMOTION_BRANCH: automation/pin-mcp-build-inputs
+      INPUT_REFERENCE: ${{ needs.publish-index.outputs.image-reference }}
+      AMD64_REFERENCE: ${{ needs.publish-index.outputs.amd64-reference }}
+      ARM64_REFERENCE: ${{ needs.publish-index.outputs.arm64-reference }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Update checked-in MCP input pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/update-mcp-input-pin.py \
+            --reference "${INPUT_REFERENCE}" \
+            --amd64-reference "${AMD64_REFERENCE}" \
+            --arm64-reference "${ARM64_REFERENCE}" \
+            --source-revision "${GITHUB_SHA}" \
+            --workflow-run "${GITHUB_RUN_ID}"
+
+      - name: Propose MCP input pin for review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_MESSAGE: "chore: update MCP build-input bundle"
+          PR_TITLE: "chore: update MCP build-input bundle"
+          PR_BODY: |
+            Updates the immutable MCP build-input bundle after its Python requirements changed.
+
+            - Source revision: `${{ github.sha }}`
+            - Workflow run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - Candidate: `${{ env.INPUT_REFERENCE }}`
+            - AMD64 manifest: `${{ env.AMD64_REFERENCE }}`
+            - Arm64 manifest: `${{ env.ARM64_REFERENCE }}`
+
+            This PR keeps the build-input manifest and Dockerfile default synchronized.
+          SUMMARY_TITLE: MCP build-input promotion
+          CANDIDATE: ${{ env.INPUT_REFERENCE }}
+        run: >-
+          bash .github/scripts/propose-pin-pr.sh
+          mcp-local/Dockerfile
+          mcp-local/build-inputs.lock.json
