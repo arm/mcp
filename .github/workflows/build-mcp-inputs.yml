@@ -191,8 +191,6 @@ jobs:
             echo "- Tag: \`${IMAGE}:${PUBLICATION_TAG}\`"
             echo "- Digest: \`${digest}\`"
             echo "- MCP build input: \`${IMAGE}@${digest}\`"
-            echo ""
-            echo "Record this digest in \`mcp-local/build-inputs.lock.json\` before the release workflow consumes it."
           } >> "${GITHUB_STEP_SUMMARY}"
 
   propose-input-pin:
