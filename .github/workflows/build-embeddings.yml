@@ -243,6 +243,9 @@ jobs:
           ref: main
           fetch-depth: 0
 
+      - name: Verify main has not advanced
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
       - name: Update checked-in embedding pin and release version
         id: update
         shell: bash

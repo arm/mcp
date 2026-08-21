@@ -350,12 +350,23 @@ def test_embedding_pin_updater_keeps_manifest_and_dockerfile_in_sync() -> None:
         )
 
 
-def test_requirement_changes_rebuild_and_propose_embedding_toolchain_pin() -> None:
+def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
     workflow_triggers = TOOLCHAIN_WORKFLOW.split("jobs:", maxsplit=1)[0]
     assert "push:" in workflow_triggers
     assert "branches: [main]" in workflow_triggers
-    assert "embedding-generation/pyproject.toml" in workflow_triggers
-    assert "embedding-generation/uv.lock" in workflow_triggers
+    for source in (
+        ".dockerignore",
+        ".python-version",
+        "Dockerfile.toolchain",
+        "acquire-model.py",
+        "document_chunking.py",
+        "embedding-model.lock.json",
+        "generate-chunks.py",
+        "local_vectorstore_creation.py",
+        "pyproject.toml",
+        "uv.lock",
+    ):
+        assert f"embedding-generation/{source}" in workflow_triggers
     assert "propose-toolchain-pin:" in TOOLCHAIN_WORKFLOW
     assert "update-embedding-toolchain-pin.py" in TOOLCHAIN_WORKFLOW
     assert "automation/pin-embedding-generator" in TOOLCHAIN_WORKFLOW
@@ -438,8 +449,16 @@ def test_input_publication_is_automatic_private_and_multi_architecture() -> None
     assert "permissions: read-all" in workflow_triggers
     assert "push:" in workflow_triggers
     assert "branches: [main]" in workflow_triggers
-    assert "mcp-local/pyproject.toml" in workflow_triggers
-    assert "mcp-local/uv.lock" in workflow_triggers
+    for source in (
+        ".dockerignore",
+        ".python-version",
+        "Dockerfile.inputs",
+        "pyproject.toml",
+        "scripts/stage-build-inputs.py",
+        "uv.lock",
+    ):
+        assert f"mcp-local/{source}" in workflow_triggers
+    assert "mcp-local/build-inputs.lock.json" not in workflow_triggers
     assert "tags:" not in workflow_triggers
     assert "packages: write" in INPUT_WORKFLOW
     assert "verify-ghcr-package-private.sh" in INPUT_WORKFLOW
@@ -472,6 +491,11 @@ def test_pin_promotions_share_review_pr_mechanics() -> None:
         assert "propose-pin-pr.sh" in workflow
         assert "gh pr create" not in workflow
         assert "gh pr edit" not in workflow
+
+
+def test_pin_promotions_skip_candidates_built_from_stale_inputs() -> None:
+    for workflow in PIN_WORKFLOWS:
+        assert 'test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"' in workflow
 
 
 def test_mcp_input_pin_updater_keeps_manifest_and_dockerfile_in_sync() -> None:

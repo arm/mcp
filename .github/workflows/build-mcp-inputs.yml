@@ -4,7 +4,11 @@ on:
   push:
     branches: [main]
     paths:
+      - mcp-local/.dockerignore
+      - mcp-local/.python-version
+      - mcp-local/Dockerfile.inputs
       - mcp-local/pyproject.toml
+      - mcp-local/scripts/stage-build-inputs.py
       - mcp-local/uv.lock
   workflow_dispatch:
 
@@ -211,6 +215,9 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+
+      - name: Verify main has not advanced
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
 
       - name: Update checked-in MCP input pin
         shell: bash

@@ -4,6 +4,14 @@ on:
   push:
     branches: [main]
     paths:
+      - embedding-generation/.dockerignore
+      - embedding-generation/.python-version
+      - embedding-generation/Dockerfile.toolchain
+      - embedding-generation/acquire-model.py
+      - embedding-generation/document_chunking.py
+      - embedding-generation/embedding-model.lock.json
+      - embedding-generation/generate-chunks.py
+      - embedding-generation/local_vectorstore_creation.py
       - embedding-generation/pyproject.toml
       - embedding-generation/uv.lock
   workflow_dispatch:
@@ -96,6 +104,9 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+
+      - name: Verify main has not advanced
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
 
       - name: Update checked-in toolchain pin
         shell: bash

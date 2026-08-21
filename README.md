@@ -487,10 +487,12 @@ against the generated branch after opening or updating the PR.
 
 #### Publishing and Pinning the Updated Bundle
 
-Python requirement changes use this automatic publication process:
+Changes to the Python requirements, Python version, acquisition script, input
+Dockerfile, or its Docker context configuration use this automatic publication
+process:
 
-1. Merge the reviewed `mcp-local/pyproject.toml` and `mcp-local/uv.lock`
-   changes to `main`.
+1. Merge the reviewed changes to the automatically watched bundle inputs on
+   `main`.
 2. The workflow builds both architectures, publishes their index, and opens or
    updates `automation/pin-mcp-build-inputs`.
 3. Review the immutable index digest, per-architecture manifest digests, source
@@ -503,14 +505,29 @@ Python requirement changes use this automatic publication process:
    synchronized. Release and integration builds pull this reviewed digest and
    never invoke `stage-build-inputs.py`.
 
-For changes to other bundle inputs, or to test a branch without opening a
-promotion PR, start the workflow manually:
+`mcp-local/build-inputs.lock.json` is deliberately excluded from the automatic
+path trigger. The file contains both acquisition inputs and the published
+bundle's own digest, and it is copied into the bundle as audit metadata. If a
+pin-only update triggered another build, that metadata change would produce a
+new digest and an endless sequence of promotion PRs.
+
+After merging a reviewed change to another acquisition input stored in that
+file, such as the Ubuntu snapshot or package closure, Performix artifact, or
+migrate-ease revision, run the workflow manually on `main`:
+
+```bash
+gh workflow run build-mcp-inputs.yml --ref main
+```
+
+The `main` run publishes the replacement bundle and opens or updates
+`automation/pin-mcp-build-inputs`. To test a branch without opening a promotion
+PR, run the same workflow against that branch instead:
 
 ```bash
 gh workflow run build-mcp-inputs.yml --ref YOUR_BRANCH
 ```
 
-Only runs on `main` open a promotion PR. A manual branch run publishes a
+Only runs on `main` open a promotion PR. A manual non-`main` run publishes a
 candidate for inspection without changing checked-in pins.
 
 The publication workflow also creates a tag containing the source commit,
