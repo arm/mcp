@@ -1,0 +1,41 @@
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    # A root entry scans workflows under .github/workflows.
+    directory: "/"
+    schedule:
+      interval: "quarterly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "uv"
+    directory: "/embedding-generation"
+    schedule:
+      interval: "quarterly"
+    groups:
+      embedding-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "uv"
+    directory: "/mcp-local"
+    schedule:
+      interval: "quarterly"
+    groups:
+      mcp-local-dependencies:
+        patterns:
+          - "*"
+
+  # Root project (used for arm-kb-search) is PEP 621
+  # but doesn't currently have a uv lockfile.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "quarterly"
+    groups:
+      root-dependencies:
+        patterns:
+          - "*"
