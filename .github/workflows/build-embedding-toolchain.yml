@@ -1,6 +1,19 @@
 name: Build Embedding Toolchain Image
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - embedding-generation/.dockerignore
+      - embedding-generation/.python-version
+      - embedding-generation/Dockerfile.toolchain
+      - embedding-generation/acquire-model.py
+      - embedding-generation/document_chunking.py
+      - embedding-generation/embedding-model.lock.json
+      - embedding-generation/generate-chunks.py
+      - embedding-generation/local_vectorstore_creation.py
+      - embedding-generation/pyproject.toml
+      - embedding-generation/uv.lock
   workflow_dispatch:
 
 permissions:
@@ -10,6 +23,10 @@ env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/mcp-embedding-generator
   PACKAGE_NAME: mcp-embedding-generator
 
+concurrency:
+  group: embedding-toolchain-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-toolchain:
     runs-on: ubuntu-24.04-arm
@@ -17,6 +34,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -27,7 +46,7 @@ jobs:
         run: bash .github/scripts/verify-ghcr-package-private.sh "${PACKAGE_NAME}" --allow-missing
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
       - name: Log in to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
@@ -66,3 +85,51 @@ jobs:
             echo "- Tag: \`${TAG}\`"
             echo "- Immutable reference: \`${IMAGE}@${DIGEST}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
+
+  propose-toolchain-pin:
+    needs: build-toolchain
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    env:
+      PROMOTION_BRANCH: automation/pin-embedding-generator
+      TOOLCHAIN_REFERENCE: ghcr.io/${{ github.repository_owner }}/mcp-embedding-generator@${{ needs.build-toolchain.outputs.image-digest }}
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Verify main has not advanced
+        run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+      - name: Update checked-in toolchain pin
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/update-embedding-toolchain-pin.py \
+            --reference "${TOOLCHAIN_REFERENCE}"
+
+      - name: Propose toolchain pin for review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_MESSAGE: "chore: update embedding toolchain input"
+          PR_TITLE: "chore: update embedding toolchain input"
+          PR_BODY: |
+            Updates the immutable embedding toolchain input after its source inputs changed.
+
+            - Source revision: `${{ github.sha }}`
+            - Workflow run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - Candidate: `${{ env.TOOLCHAIN_REFERENCE }}`
+
+            Merging this PR makes subsequent embedding-generation runs use the rebuilt toolchain.
+          SUMMARY_TITLE: Embedding toolchain promotion
+          CANDIDATE: ${{ env.TOOLCHAIN_REFERENCE }}
+        run: >-
+          bash .github/scripts/propose-pin-pr.sh
+          embedding-generation/pipeline-inputs.lock.json
