@@ -23,10 +23,17 @@ SERVER_METADATA = json.loads((MCP_LOCAL / "server.json").read_text())
 INPUT_WORKFLOW = (
     REPOSITORY / ".github/workflows/build-mcp-inputs.yml"
 ).read_text()
+TOOLCHAIN_WORKFLOW = (
+    REPOSITORY / ".github/workflows/build-embedding-toolchain.yml"
+).read_text()
+PIN_PROMOTION_SCRIPT = (
+    REPOSITORY / ".github/scripts/propose-pin-pr.sh"
+).read_text()
 EMBEDDING_WORKFLOW = (
     REPOSITORY / ".github/workflows/build-embeddings.yml"
 ).read_text()
 IMAGE_WORKFLOW = (REPOSITORY / ".github/workflows/build-mcp-image.yml").read_text()
+PIN_WORKFLOWS = (TOOLCHAIN_WORKFLOW, INPUT_WORKFLOW, EMBEDDING_WORKFLOW)
 REQUIRED_CHECK_DISPATCH = (
     REPOSITORY / ".github/scripts/dispatch-required-pr-checks.sh"
 ).read_text()
@@ -225,7 +232,10 @@ def test_generated_prs_dispatch_required_checks_without_an_external_token() -> N
     assert "RELEASE_PR_TOKEN" not in EMBEDDING_WORKFLOW
     assert "actions: write" in IMAGE_WORKFLOW
     assert "actions: write" in EMBEDDING_WORKFLOW
-    assert "dispatch-required-pr-checks.sh" in EMBEDDING_WORKFLOW
+    assert "dispatch-required-pr-checks.sh" in PIN_PROMOTION_SCRIPT
+    for workflow in PIN_WORKFLOWS:
+        assert "actions: write" in workflow
+        assert "propose-pin-pr.sh" in workflow
     for workflow in (
         "integration-tests.yml",
         "embedding-unit-tests.yml",
@@ -340,6 +350,62 @@ def test_embedding_pin_updater_keeps_manifest_and_dockerfile_in_sync() -> None:
         )
 
 
+def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
+    workflow_triggers = TOOLCHAIN_WORKFLOW.split("jobs:", maxsplit=1)[0]
+    assert "push:" in workflow_triggers
+    assert "branches: [main]" in workflow_triggers
+    for source in (
+        ".dockerignore",
+        ".python-version",
+        "Dockerfile.toolchain",
+        "acquire-model.py",
+        "document_chunking.py",
+        "embedding-model.lock.json",
+        "generate-chunks.py",
+        "local_vectorstore_creation.py",
+        "pyproject.toml",
+        "uv.lock",
+    ):
+        assert f"embedding-generation/{source}" in workflow_triggers
+    assert "propose-toolchain-pin:" in TOOLCHAIN_WORKFLOW
+    assert "update-embedding-toolchain-pin.py" in TOOLCHAIN_WORKFLOW
+    assert "automation/pin-embedding-generator" in TOOLCHAIN_WORKFLOW
+    assert "cancel-in-progress: false" in TOOLCHAIN_WORKFLOW
+    assert "gh pr merge" not in TOOLCHAIN_WORKFLOW
+
+
+def test_embedding_toolchain_pin_updater_changes_only_generator_input() -> None:
+    script = REPOSITORY / ".github/scripts/update-embedding-toolchain-pin.py"
+    new_reference = "ghcr.io/arm/mcp-embedding-generator@sha256:" + "3" * 64
+
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        lock_file = Path(temporary_directory) / "pipeline-inputs.lock.json"
+        original = json.loads(
+            (
+                REPOSITORY / "embedding-generation/pipeline-inputs.lock.json"
+            ).read_text()
+        )
+        lock_file.write_text(json.dumps(original), encoding="utf-8")
+        subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "--reference",
+                new_reference,
+                "--lock-file",
+                str(lock_file),
+            ],
+            check=True,
+        )
+
+        updated = json.loads(lock_file.read_text())
+        assert updated["generator_image"] == new_reference
+        assert (
+            updated["intrinsic_chunks_image"]
+            == original["intrinsic_chunks_image"]
+        )
+
+
 def test_build_input_bundle_is_immutable_and_auditable() -> None:
     build_inputs = LOCK["container_images"]["mcp_build_inputs"]
     assert build_inputs["reference"].startswith(
@@ -377,11 +443,22 @@ def test_input_artifact_has_one_platform_neutral_layout() -> None:
         assert f"!{source}" in INPUT_DOCKERIGNORE
 
 
-def test_input_publication_is_manual_private_and_multi_architecture() -> None:
+def test_input_publication_is_automatic_private_and_multi_architecture() -> None:
     assert "workflow_dispatch:" in INPUT_WORKFLOW
     workflow_triggers = INPUT_WORKFLOW.split("jobs:", maxsplit=1)[0]
     assert "permissions: read-all" in workflow_triggers
-    assert "push:" not in workflow_triggers
+    assert "push:" in workflow_triggers
+    assert "branches: [main]" in workflow_triggers
+    for source in (
+        ".dockerignore",
+        ".python-version",
+        "Dockerfile.inputs",
+        "pyproject.toml",
+        "scripts/stage-build-inputs.py",
+        "uv.lock",
+    ):
+        assert f"mcp-local/{source}" in workflow_triggers
+    assert "mcp-local/build-inputs.lock.json" not in workflow_triggers
     assert "tags:" not in workflow_triggers
     assert "packages: write" in INPUT_WORKFLOW
     assert "verify-ghcr-package-private.sh" in INPUT_WORKFLOW
@@ -396,3 +473,119 @@ def test_input_publication_is_manual_private_and_multi_architecture() -> None:
     assert '"export",' in STAGE_INPUTS
     assert 'output / "requirements.lock"' in STAGE_INPUTS
     assert 'echo "- MCP build input: \\`${IMAGE}@${digest}\\`"' in INPUT_WORKFLOW
+    assert "propose-input-pin:" in INPUT_WORKFLOW
+    assert "update-mcp-input-pin.py" in INPUT_WORKFLOW
+    assert "automation/pin-mcp-build-inputs" in INPUT_WORKFLOW
+    assert "cancel-in-progress: false" in INPUT_WORKFLOW
+    assert "gh pr merge" not in INPUT_WORKFLOW
+
+
+def test_pin_promotions_share_review_pr_mechanics() -> None:
+    # The workflows declare what to update, while one reviewed helper owns all
+    # mutation of automation branches and pull requests.
+    assert "gh pr create" in PIN_PROMOTION_SCRIPT
+    assert "gh pr edit" in PIN_PROMOTION_SCRIPT
+    assert "dispatch-required-pr-checks.sh" in PIN_PROMOTION_SCRIPT
+    assert "gh pr merge" not in PIN_PROMOTION_SCRIPT
+    for workflow in PIN_WORKFLOWS:
+        assert "propose-pin-pr.sh" in workflow
+        assert "gh pr create" not in workflow
+        assert "gh pr edit" not in workflow
+
+
+def test_pin_promotions_skip_candidates_built_from_stale_inputs() -> None:
+    for workflow in PIN_WORKFLOWS:
+        assert 'test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"' in workflow
+
+
+def test_mcp_input_pin_updater_keeps_manifest_and_dockerfile_in_sync() -> None:
+    script = REPOSITORY / ".github/scripts/update-mcp-input-pin.py"
+    index_reference = "ghcr.io/arm/mcp-build-inputs@sha256:" + "4" * 64
+    amd64_reference = "ghcr.io/arm/mcp-build-inputs@sha256:" + "5" * 64
+    arm64_reference = "ghcr.io/arm/mcp-build-inputs@sha256:" + "6" * 64
+
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        temporary = Path(temporary_directory)
+        lock_file = temporary / "build-inputs.lock.json"
+        dockerfile = temporary / "Dockerfile"
+        lock_file.write_text(
+            (MCP_LOCAL / "build-inputs.lock.json").read_text(), encoding="utf-8"
+        )
+        dockerfile.write_text(
+            (MCP_LOCAL / "Dockerfile").read_text(), encoding="utf-8"
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "--reference",
+                index_reference,
+                "--amd64-reference",
+                amd64_reference,
+                "--arm64-reference",
+                arm64_reference,
+                "--source-revision",
+                "7" * 40,
+                "--workflow-run",
+                "123456",
+                "--lock-file",
+                str(lock_file),
+                "--dockerfile",
+                str(dockerfile),
+            ],
+            check=True,
+        )
+
+        updated = json.loads(lock_file.read_text())["container_images"][
+            "mcp_build_inputs"
+        ]
+        assert updated["reference"] == index_reference
+        assert updated["manifests"] == {
+            "amd64": amd64_reference,
+            "arm64": arm64_reference,
+        }
+        assert updated["source_revision"] == "7" * 40
+        assert updated["workflow_run"] == "123456"
+        assert (
+            f"ARG MCP_BUILD_INPUTS_IMAGE={index_reference}"
+            in dockerfile.read_text()
+        )
+
+
+def test_mcp_input_pin_updater_preserves_provenance_for_same_bundle() -> None:
+    script = REPOSITORY / ".github/scripts/update-mcp-input-pin.py"
+    current = LOCK["container_images"]["mcp_build_inputs"]
+
+    with tempfile.TemporaryDirectory() as temporary_directory:
+        temporary = Path(temporary_directory)
+        lock_file = temporary / "build-inputs.lock.json"
+        dockerfile = temporary / "Dockerfile"
+        original_lock = (MCP_LOCAL / "build-inputs.lock.json").read_text()
+        original_dockerfile = (MCP_LOCAL / "Dockerfile").read_text()
+        lock_file.write_text(original_lock, encoding="utf-8")
+        dockerfile.write_text(original_dockerfile, encoding="utf-8")
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "--reference",
+                current["reference"],
+                "--amd64-reference",
+                current["manifests"]["amd64"],
+                "--arm64-reference",
+                current["manifests"]["arm64"],
+                "--source-revision",
+                "8" * 40,
+                "--workflow-run",
+                "654321",
+                "--lock-file",
+                str(lock_file),
+                "--dockerfile",
+                str(dockerfile),
+            ],
+            check=True,
+        )
+
+        assert lock_file.read_text() == original_lock
+        assert dockerfile.read_text() == original_dockerfile

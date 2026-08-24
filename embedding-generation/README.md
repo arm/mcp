@@ -25,6 +25,13 @@ The toolchain image:
 4. Copies the locked environment, local model, and generation scripts into the
    final image without including the `uv` package manager.
 
+When a file baked into the toolchain changes on `main`, including its
+Dockerfile, Python or model locks, acquisition code, or generation scripts,
+GitHub Actions rebuilds this image and opens or updates
+`automation/pin-embedding-generator`. That PR updates
+`pipeline-inputs.lock.json` to the new immutable digest. The workflow also
+supports manual branch runs, which publish an image without opening a PR.
+
 `Dockerfile.acquire` uses this toolchain for network-enabled discovery and
 content acquisition, then publishes only the acquired chunk snapshot from a
 scratch stage. `Dockerfile.vectorstore` uses the same toolchain and that
