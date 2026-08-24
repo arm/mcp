@@ -21,7 +21,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(os.path.dirname(BASE_DIR), "data")
 USEARCH_INDEX_PATH = os.path.join(DATA_DIR, "usearch_index.bin")
 METADATA_PATH = os.path.join(DATA_DIR, "metadata.json")
-MODEL_NAME = 'all-MiniLM-L6-v2'
+MODEL_NAME = "all-MiniLM-L6-v2"
+MODEL_PATH = os.getenv("SENTENCE_TRANSFORMER_MODEL_PATH")
 
 # Docker architecture checking configuration
 TARGET_ARCHITECTURES = {'amd64', 'arm64'}

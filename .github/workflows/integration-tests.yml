@@ -6,8 +6,33 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
+  unit-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up locked uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.2"
+          enable-cache: false
+
+      - name: Run unit tests
+        run: |
+          uv run --directory mcp-local --locked --only-group test \
+            pytest -q \
+            tests/test_build_inputs.py \
+            tests/test_invocation_logger.py
+
   integration-tests:
     strategy:
       fail-fast: false
@@ -20,29 +45,36 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.11"
-          cache: pip
+          python-version: "3.12"
 
-      - name: Install test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r mcp-local/tests/requirements.txt
+      - name: Set up locked uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.10.2"
+          enable-cache: false
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Log in to GHCR for locked build inputs
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Build MCP Docker image
         run: |
           docker buildx build \
             --platform ${{ matrix.platform }} \
+            --network none \
             -f mcp-local/Dockerfile \
             -t arm-mcp:latest \
-            --build-arg EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-latest \
             --output type=docker \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
@@ -115,4 +147,6 @@ jobs:
         env:
           APX_DEBUG_TRACE: "1"
           MCP_IMAGE: arm-mcp:latest
-        run: pytest -s mcp-local/tests/test_mcp.py --platform ${{ matrix.platform }}
+        run: |
+          uv run --directory mcp-local --locked --only-group test \
+            pytest -s tests/test_mcp.py --platform ${{ matrix.platform }}

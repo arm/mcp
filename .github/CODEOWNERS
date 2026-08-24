@@ -1,0 +1,20 @@
+# Release and supply-chain files require approval from the MCP security team.
+# Files not matched below remain reviewable by any authorized organization
+# member under the repository's normal branch rules.
+/.github/CODEOWNERS @arm/mcp-security-team
+/.github/workflows/ @arm/mcp-security-team
+/.github/scripts/ @arm/mcp-security-team
+/mcp-local/Dockerfile @arm/mcp-security-team
+/mcp-local/Dockerfile.inputs @arm/mcp-security-team
+/mcp-local/server.json @arm/mcp-security-team
+/mcp-local/build-inputs.lock.json @arm/mcp-security-team
+/mcp-local/pyproject.toml @arm/mcp-security-team
+/mcp-local/uv.lock @arm/mcp-security-team
+/mcp-local/scripts/stage-build-inputs.py @arm/mcp-security-team
+/embedding-generation/Dockerfile.acquire @arm/mcp-security-team
+/embedding-generation/Dockerfile.toolchain @arm/mcp-security-team
+/embedding-generation/Dockerfile.vectorstore @arm/mcp-security-team
+/embedding-generation/embedding-model.lock.json @arm/mcp-security-team
+/embedding-generation/pipeline-inputs.lock.json @arm/mcp-security-team
+/embedding-generation/pyproject.toml @arm/mcp-security-team
+/embedding-generation/uv.lock @arm/mcp-security-team

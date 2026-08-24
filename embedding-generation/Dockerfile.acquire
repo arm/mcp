@@ -1,0 +1,49 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# syntax=docker/dockerfile:1.7
+
+# The workflow supplies both named contexts as immutable image references.
+FROM toolchain AS acquisition
+
+ENV YAML_OUTPUT_DIR=/snapshot/yaml_data \
+    CHUNK_DETAILS_FILE=/snapshot/chunk_details.csv
+
+WORKDIR /work
+
+COPY vector-db-sources.csv vector-db-sources.csv
+COPY --from=intrinsic-chunks \
+    /embedding-data/intrinsic_chunks/ \
+    /snapshot/intrinsic_chunks/
+
+RUN --network=none mkdir -p "${YAML_OUTPUT_DIR}" /work/info
+
+# Discovery is intentionally enabled during this controlled network phase.
+RUN --network=default \
+    python /embedding-data/generate-chunks.py /work/vector-db-sources.csv
+
+FROM scratch AS chunks
+
+COPY --from=acquisition \
+    /snapshot/intrinsic_chunks/ \
+    /embedding-data/intrinsic_chunks/
+COPY --from=acquisition \
+    /snapshot/yaml_data/ \
+    /embedding-data/yaml_data/
+COPY --from=acquisition \
+    /work/vector-db-sources.csv \
+    /embedding-data/vector-db-sources.csv
+COPY --from=acquisition \
+    /snapshot/chunk_details.csv \
+    /embedding-data/chunk_details.csv

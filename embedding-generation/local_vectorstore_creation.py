@@ -33,6 +33,11 @@ def load_local_yaml_files() -> list[dict]:
 
     intrinsic_files = glob.glob(os.path.join(intrinsic_dir, "*.yaml"))
     print(f"Found {len(intrinsic_files)} YAML files in {intrinsic_dir} directory")
+    if not intrinsic_files:
+        raise FileNotFoundError(
+            f"No intrinsic chunk YAML files found in '{intrinsic_dir}'. "
+            "Supply the intrinsic chunks before creating the vector store."
+        )
 
     yaml_data_files = glob.glob(os.path.join(yaml_dir, "*.yaml"))
     print(f"Found {len(yaml_data_files)} YAML files in {yaml_dir} directory")

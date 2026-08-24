@@ -1,0 +1,9 @@
+**
+
+!.dockerignore
+!Dockerfile.inputs
+!build-inputs/
+!build-inputs/**
+!build-inputs.lock.json
+!pyproject.toml
+!uv.lock

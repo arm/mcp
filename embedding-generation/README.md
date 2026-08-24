@@ -1,26 +1,65 @@
 # Embedding Generation
 
-This directory builds the vector database artifacts used by the MCP server:
+This directory produces and packages the vector-store assets used by the MCP server:
 
-- `metadata.json`
-- `usearch_index.bin`
+- Generated `metadata.json`
+- Generated `usearch_index.bin`
+- A pinned, locally saved Sentence Transformers model in `embedding-model/`
 
-## Build the Docker Image
+These assets are published together in the final vector-store image and used as
+inputs to the MCP image build.
+
+## Build the Toolchain Image
 
 From this directory:
 
 ```sh
-docker build -t arm-mcp-embeddings .
+docker build -f Dockerfile.toolchain -t arm-mcp-embedding-generator .
 ```
 
-The Dockerfile:
+The toolchain image:
 
-1. Starts from `armlimited/arm-mcp:mcp-embedding-base` to copy cached intrinsic chunks.
-2. Installs the Python dependencies in a build stage.
-3. Acquires the sentence-transformer revision recorded in `embedding-model.lock.json`.
-4. Runs `generate-chunks.py vector-db-sources.csv`.
-5. Runs `local_vectorstore_creation.py` with the acquired model and networking disabled.
-6. Copies only `metadata.json` and `usearch_index.bin` into the final image.
+1. Installs the exact Python dependencies recorded in `uv.lock`.
+2. Acquires the sentence-transformer revision recorded in `embedding-model.lock.json`.
+3. Confirms that the saved model loads with networking disabled.
+4. Copies the locked environment, local model, and generation scripts into the
+   final image without including the `uv` package manager.
+
+When a file baked into the toolchain changes on `main`, including its
+Dockerfile, Python or model locks, acquisition code, or generation scripts,
+GitHub Actions rebuilds this image and opens or updates
+`automation/pin-embedding-generator`. That PR updates
+`pipeline-inputs.lock.json` to the new immutable digest. The workflow also
+supports manual branch runs, which publish an image without opening a PR.
+
+`Dockerfile.acquire` uses this toolchain for network-enabled discovery and
+content acquisition, then publishes only the acquired chunk snapshot from a
+scratch stage. `Dockerfile.vectorstore` uses the same toolchain and that
+immutable chunk snapshot to build `metadata.json` and `usearch_index.bin`
+without network access. The scratch output also includes the exact local model
+used to generate the index, keeping the model, metadata, and index together as
+one immutable artifact. It is published privately as
+`ghcr.io/arm/mcp-embedding-vectorstore`.
+
+## Promote an Embedding Build into MCP
+
+The embedding pipeline publishes candidates; it does not cause the MCP image
+to consume the newest registry artifact automatically. To promote a candidate:
+
+1. Let **Build Offline Embedding Pipeline** run from `main` every Sunday at
+   09:00 UTC, or start it manually for an out-of-band update.
+2. After publishing the vector store, the workflow opens or updates the
+   `automation/pin-embedding-vectorstore` PR with the immutable digest in both
+   `mcp-local/build-inputs.lock.json` and `mcp-local/Dockerfile`, along with the
+   next minor version in `mcp-local/server.json`.
+3. Review the source revision, image digest, and proposed version.
+4. Merge the approved PR to publish the MCP release using that exact embedding
+   digest and version.
+
+The workflow does not merge the promotion PR. A candidate can therefore be
+generated, evaluated, and rejected without changing the released MCP image.
+For a major or hotfix release, run **Build MCP Image** manually with the
+corresponding release action; it opens a separate reviewed version PR.
 
 ## Add Documents
 
@@ -37,7 +76,7 @@ Use clear keywords that users might include in questions. The `URL` is also what
 
 `discover-developer-arm-com-sources.py` searches developer.arm.com and appends any new relevant pages (currently SME-related guides, programmer's guides, and blog posts) to `vector-db-sources.csv`. Existing rows are never modified, so it is safe to re-run occasionally to pick up new content.
 
-It is intentionally not part of the weekly Docker build: it needs Playwright and Chromium (heavy dependencies we don't want in the build image), and each run should be reviewed by a human rather than ingested sight unseen.
+It is intentionally not part of the production Docker build: it needs Playwright and Chromium (heavy dependencies we don't want in the build image), and each run should be reviewed by a human rather than ingested sight unseen.
 
 Run it manually from this directory:
 
@@ -46,7 +85,7 @@ pip install playwright && playwright install chromium
 python discover-developer-arm-com-sources.py vector-db-sources.csv
 ```
 
-Review the printed `[NEW SOURCE]` lines, add a question with the new URL in `expected_urls` to `eval_questions.json` for each one, then commit the updated CSV. The weekly build chunks the new rows automatically — `generate-chunks.py` already handles developer.arm.com documentation and community blog URLs found in the CSV.
+Review the printed `[NEW SOURCE]` lines, add a question with the new URL in `expected_urls` to `eval_questions.json` for each one, then commit the updated CSV. The production build chunks the new rows automatically — `generate-chunks.py` already handles developer.arm.com documentation and community blog URLs found in the CSV.
 
 ### Transcript-backed sources
 
@@ -71,7 +110,7 @@ Leave the column empty for sources that are chunked from their primary `URL`.
 Install dependencies once:
 
 ```sh
-uv sync --frozen
+uv sync --locked
 ```
 
 Python 3.13 is required.
@@ -79,7 +118,7 @@ Python 3.13 is required.
 Run the full local question eval:
 
 ```sh
-uv run ./run-question-eval.sh
+uv run --locked ./run-question-eval.sh
 ```
 
 That command copies intrinsic chunks from the embedding base image if needed,
@@ -90,16 +129,16 @@ without model network access.
 Useful options:
 
 ```sh
-uv run ./run-question-eval.sh --refresh-intrinsic-chunks
-uv run ./run-question-eval.sh --eval eval_questions.json --top-k 5
-SKIP_DISCOVERY=1 uv run ./run-question-eval.sh
+uv run --locked ./run-question-eval.sh --refresh-intrinsic-chunks
+uv run --locked ./run-question-eval.sh --eval eval_questions.json --top-k 5
+SKIP_DISCOVERY=1 uv run --locked ./run-question-eval.sh
 ```
 
 Run lint and tests with:
 
 ```sh
-uv run ruff check .
-uv run pytest
+uv run --locked ruff check .
+uv run --locked pytest
 ```
 
 To check a new document, add or update a question in `eval_questions.json` with the document URL in `expected_urls`, then run the wrapper. Review `Hit@1`, `Hit@3`, `Hit@5`, `MRR`, and any printed misses before committing the CSV change.

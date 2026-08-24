@@ -14,127 +14,116 @@
 
 # syntax=docker/dockerfile:1.7
 
-ARG EMBEDDINGS_IMAGE=armlimited/arm-mcp:embeddings-latest
-ARG EMBEDDING_MODEL=all-MiniLM-L6-v2
-# EMBEDDINGS_IMAGE must point to an embeddings image tag (e.g., armlimited/arm-mcp:embeddings-YYYY-MM-DD).
+# Keep these defaults synchronized with mcp-local/build-inputs.lock.json.
+ARG EMBEDDINGS_IMAGE=ghcr.io/arm/mcp-embedding-vectorstore@sha256:daa21a389038892e87bad624c8d29e46f3f3d02c6ff0b186a325dca9af004e60
+ARG MCP_BUILD_INPUTS_IMAGE=ghcr.io/arm/mcp-build-inputs@sha256:8db95af8e7d819b82adbed0bd1c9eadcd1d0f2afdd144c52618b58bccfbf07cf
+ARG UBUNTU_IMAGE=ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+
+FROM ${MCP_BUILD_INPUTS_IMAGE} AS mcp-inputs
+
 FROM --platform=linux/arm64 ${EMBEDDINGS_IMAGE} AS embeddings
 
-# Stage 1: Build main application with prebuilt vector database
-FROM ubuntu:24.04 AS builder
-ARG EMBEDDING_MODEL=all-MiniLM-L6-v2
-ARG TARGETPLATFORM
+FROM ${UBUNTU_IMAGE} AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    WORKSPACE_DIR=/workspace \
-    HF_HOME=/app/.cache/huggingface \
-    SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence_transformers \
-    SENTENCE_TRANSFORMER_MODEL=${EMBEDDING_MODEL}
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-venv python3-pip \
-    curl git wget unzip sudo \
-    build-essential libelf-dev \
-    ca-certificates file tar xz-utils jq libmagic1 && \
-    rm -rf /var/lib/apt/lists/*
-RUN bash -o pipefail -c 'set -eux; \
-    curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
-      https://raw.githubusercontent.com/JoeStech/arm-linux-migration-tools/main/scripts/install.sh | bash'
-# Temp until migrate-ease is updated
-RUN curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
-    https://raw.githubusercontent.com/JoeStech/migrate-ease/main/js/advisor/main.py \
-    -o /opt/arm-migration-tools/migrate-ease/js/advisor/main.py
-
-RUN rm -f /usr/local/bin/aperf \
-         /usr/local/bin/topdown-tool \
-         /usr/local/bin/processwatch \
-         /usr/local/bin/papi_* && \
-    rm -rf /opt/arm-migration-tools/aperf \
-           /opt/arm-migration-tools/topdown-tool \
-           /opt/arm-migration-tools/telemetry-solution \
-           /opt/arm-migration-tools/processwatch \
-           /opt/arm-migration-tools/papi
-
-RUN set -eux; \
-    if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
-        echo "WARNING: Using x86_64 Performix CLI on amd64 target. Results may vary from Arm64."; \
-        APX_TARBALL="ArmPerformix-cli-1.0.0-linux-x64.tar.gz"; \
-    else \
-        APX_TARBALL="ArmPerformix-cli-1.0.0-linux-arm64.tar.gz"; \
-    fi; \
-    APX_HOME="/opt/ArmPerformix-cli-current"; \
-    APX_URL="https://artifacts.tools.arm.com/arm-performix/cli/1.0.0/${APX_TARBALL}"; \
-    mkdir -p "${APX_HOME}"; \
-    tmpdir="$(mktemp -d)"; \
-    cd "$tmpdir"; \
-    curl -fsSL -L -o "${APX_TARBALL}" "${APX_URL}"; \
-    tar -xzf "${APX_TARBALL}" -C "${APX_HOME}"; \
-    chmod +x "${APX_HOME}/apx"; \
-    ln -sf "${APX_HOME}/apx" /usr/local/bin/apx; \
-    rm -rf "$tmpdir"
-
-# Set up MCP server application
-WORKDIR /app
-ENV VIRTUAL_ENV=/app/.venv \
+    VIRTUAL_ENV=/app/.venv \
     PATH=/app/.venv/bin:$PATH
 
-RUN python3 -m venv "$VIRTUAL_ENV" && pip install --upgrade pip
+# Install the complete builder package closure from the immutable input bundle.
+# apt is forbidden from downloading anything here.
+COPY --from=mcp-inputs /mcp-build-inputs/debs/builder/ /var/cache/apt/archives/
+RUN --network=none apt-get install -y --no-download --no-install-recommends \
+      /var/cache/apt/archives/*.deb && \
+    rm -f /var/cache/apt/archives/*.deb && \
+    rm -rf /var/lib/apt/lists/*
 
-COPY mcp-local/requirements.txt .
-# Install dependencies using CPU-only PyTorch wheels.
-RUN PIP_INDEX_URL=https://download.pytorch.org/whl/cpu \
-    PIP_EXTRA_INDEX_URL=https://pypi.org/simple \
-    pip install --only-binary=:all: --no-cache-dir -r requirements.txt
+WORKDIR /app
+RUN --network=none python3 -m venv "$VIRTUAL_ENV"
 
-RUN mkdir -p "$HF_HOME" "$SENTENCE_TRANSFORMERS_HOME" && \
-    python -c "from sentence_transformers import SentenceTransformer; import os; SentenceTransformer(os.environ['SENTENCE_TRANSFORMER_MODEL'], cache_folder=os.environ['SENTENCE_TRANSFORMERS_HOME'])"
+# The requirements file and wheelhouse come from the same immutable input
+# bundle. Network access is disabled for installation.
+COPY --from=mcp-inputs /mcp-build-inputs/metadata/requirements.lock /tmp/requirements.lock
+COPY --from=mcp-inputs /mcp-build-inputs/wheels/ /tmp/wheels/
+RUN --network=none pip install \
+    --no-index \
+    --find-links=/tmp/wheels \
+    --require-hashes \
+    --only-binary=:all: \
+    --requirement /tmp/requirements.lock && \
+    rm -rf /tmp/wheels /tmp/requirements.lock
 
-# Copy generated vector database files
-RUN mkdir -p ./data
-COPY --from=embeddings /embedding-data/metadata.json ./data/metadata.json
-COPY --from=embeddings /embedding-data/usearch_index.bin ./data/usearch_index.bin
+# Install only migrate-ease. The old arm-linux-migration-tools installer also
+# installed unrelated profiling tools and then removed them again.
+COPY --from=mcp-inputs /mcp-build-inputs/migrate-ease.tar.gz /tmp/migrate-ease.tar.gz
+RUN --network=none mkdir -p /opt/arm-migration-tools/migrate-ease && \
+    tar -xzf /tmp/migrate-ease.tar.gz \
+      --strip-components=1 \
+      -C /opt/arm-migration-tools/migrate-ease && \
+    rm /tmp/migrate-ease.tar.gz && \
+    for scanner in cpp go java js python; do \
+      wrapper="/usr/local/bin/migrate-ease-${scanner}"; \
+      printf '%s\n' \
+        '#!/bin/sh' \
+        'cd /opt/arm-migration-tools/migrate-ease' \
+        'export PYTHONPATH="/opt/arm-migration-tools/migrate-ease${PYTHONPATH:+:$PYTHONPATH}"' \
+        "exec /app/.venv/bin/python -m ${scanner} \"\$@\"" \
+        > "${wrapper}"; \
+      chmod 0755 "${wrapper}"; \
+    done
 
-COPY mcp-local/utils/ ./utils/
-COPY arm_kb_search/ ./arm_kb_search/
-COPY mcp-local/sql ./sql/
-COPY mcp-local/server.py .
+COPY --from=mcp-inputs /mcp-build-inputs/performix.tar.gz /tmp/performix.tar.gz
+RUN --network=none mkdir -p /opt/ArmPerformix-cli-current && \
+    tar -xzf /tmp/performix.tar.gz -C /opt/ArmPerformix-cli-current && \
+    chmod 0755 /opt/ArmPerformix-cli-current/apx && \
+    rm /tmp/performix.tar.gz
 
-FROM ubuntu:24.04 AS runtime
+# Keep the model, metadata, and index from the same immutable vector-store
+# artifact. The model is architecture-independent even though generation ran
+# on arm64.
+RUN --network=none mkdir -p /app/data
+COPY --from=embeddings /embedding-data/embedding-model/ /app/embedding-model/
+COPY --from=embeddings /embedding-data/metadata.json /app/data/metadata.json
+COPY --from=embeddings /embedding-data/usearch_index.bin /app/data/usearch_index.bin
 
-# MCP Registry verification label
+COPY mcp-local/utils/ /app/utils/
+COPY arm_kb_search/ /app/arm_kb_search/
+COPY mcp-local/sql /app/sql/
+COPY mcp-local/server.py /app/server.py
+
+FROM ${UBUNTU_IMAGE} AS runtime
+
 LABEL io.modelcontextprotocol.server.name="io.github.arm/arm-mcp"
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     WORKSPACE_DIR=/workspace \
-    HF_HOME=/app/.cache/huggingface \
-    SENTENCE_TRANSFORMERS_HOME=/app/.cache/sentence_transformers \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    SENTENCE_TRANSFORMER_MODEL_PATH=/app/embedding-model \
     APX_HOME=/opt/ArmPerformix-cli-current \
     APX_BIN=/opt/ArmPerformix-cli-current/apx \
     VIRTUAL_ENV=/app/.venv \
     PATH=/app/.venv/bin:$PATH
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    ca-certificates libmagic1 git llvm-18 \
-    libgpgme11 libassuan0 libdevmapper1.02.1 && \
+COPY --from=mcp-inputs /mcp-build-inputs/debs/runtime/ /var/cache/apt/archives/
+RUN --network=none apt-get install -y --no-download --no-install-recommends \
+      /var/cache/apt/archives/*.deb && \
     ln -sf /usr/bin/llvm-mca-18 /usr/bin/llvm-mca && \
-    rm -rf /var/lib/apt/lists/*
+    rm -f /var/cache/apt/archives/*.deb && \
+    rm -rf /var/lib/apt/lists/* && \
+    skopeo --version && \
+    llvm-mca --version && \
+    git --version
 
 COPY --from=builder /opt/ArmPerformix-cli-current /opt/ArmPerformix-cli-current
 COPY --from=builder /opt/arm-migration-tools/migrate-ease /opt/arm-migration-tools/migrate-ease
-COPY --from=builder /opt/arm-migration-tools/venv /opt/arm-migration-tools/venv
-COPY --from=builder /usr/local/bin/migrate-ease-cpp /usr/local/bin/migrate-ease-cpp
-COPY --from=builder /usr/local/bin/migrate-ease-go /usr/local/bin/migrate-ease-go
-COPY --from=builder /usr/local/bin/migrate-ease-java /usr/local/bin/migrate-ease-java
-COPY --from=builder /usr/local/bin/migrate-ease-js /usr/local/bin/migrate-ease-js
-COPY --from=builder /usr/local/bin/migrate-ease-python /usr/local/bin/migrate-ease-python
-COPY --from=builder /usr/bin/skopeo /usr/bin/skopeo
+COPY --from=builder /usr/local/bin/migrate-ease-* /usr/local/bin/
 COPY --from=builder /app /app
 
-RUN ln -sf "${APX_BIN}" /usr/local/bin/apx
+RUN --network=none ln -sf "${APX_BIN}" /usr/local/bin/apx
 
 WORKDIR /app
 
