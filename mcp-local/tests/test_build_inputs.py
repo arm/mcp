@@ -225,6 +225,19 @@ def test_release_requires_runtime_egress_validation_for_both_architectures() -> 
     assert "needs.build-arch-images.result == 'success'" in IMAGE_WORKFLOW
 
 
+def test_runtime_egress_tracer_is_pinned_and_recorded_in_evidence() -> None:
+    validator = (MCP_LOCAL / "scripts/validate-runtime-egress.py").read_text()
+    version_match = re.search(r"^  STRACE_VERSION: (\S+)$", IMAGE_WORKFLOW, re.MULTILINE)
+
+    assert version_match
+    version = version_match.group(1)
+    assert re.fullmatch(r"[0-9][A-Za-z0-9.+:~-]*-[A-Za-z0-9.+~]+", version)
+    assert '"strace=${STRACE_VERSION}"' in IMAGE_WORKFLOW
+    assert "dpkg-query --show --showformat='${Version}' strace" in IMAGE_WORKFLOW
+    assert '--strace-package-version "${STRACE_PACKAGE_VERSION}"' in IMAGE_WORKFLOW
+    assert '"package_version": args.strace_package_version' in validator
+
+
 def test_manual_release_proposals_support_all_release_types() -> None:
     assert "propose-version:" in IMAGE_WORKFLOW
     assert "- hotfix" in IMAGE_WORKFLOW

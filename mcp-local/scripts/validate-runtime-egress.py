@@ -105,6 +105,7 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--evidence-dir", type=Path, required=True)
     parser.add_argument("--workspace", type=Path, required=True)
     parser.add_argument("--strace", type=Path, default=Path("/usr/bin/strace"))
+    parser.add_argument("--strace-package-version", required=True)
     return parser.parse_args()
 
 
@@ -433,6 +434,10 @@ def main() -> int:
         "digest": args.digest,
         "platform": args.platform,
         "network_mode": "none",
+        "tracer": {
+            "package": "strace",
+            "package_version": args.strace_package_version,
+        },
         "permitted_traffic": [
             "stdio MCP client traffic",
             "AF_UNIX",
@@ -460,6 +465,7 @@ def main() -> int:
         f"### Runtime egress validation — `{args.platform}`",
         "",
         f"- Image digest: `{args.digest}`",
+        f"- Tracer package: `strace={args.strace_package_version}`",
         f"- Result: **{'PASS' if passed else 'FAIL'}**",
         f"- Representative flows: {', '.join(f'`{flow}`' for flow in flows)}",
         f"- Unapproved runtime attempts: **{len(runtime_attempts)}**",

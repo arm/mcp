@@ -26,6 +26,7 @@ permissions:
 
 env:
   IMAGE: armlimited/arm-mcp
+  STRACE_VERSION: 6.8-0ubuntu2
 
 # Version PRs serialize naturally at merge time, but publication remains
 # serialized so two closely spaced releases cannot race when updating latest.
@@ -241,9 +242,17 @@ jobs:
           tags: ${{ env.IMAGE }}:${{ needs.validate-release.outputs.version }}-${{ matrix.tag }}
 
       - name: Install runtime egress tracer
+        id: install_strace
         run: |
+          set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends strace
+          sudo apt-get install -y --no-install-recommends "strace=${STRACE_VERSION}"
+          installed_version="$(dpkg-query --show --showformat='${Version}' strace)"
+          if [ "${installed_version}" != "${STRACE_VERSION}" ]; then
+            echo "::error::Installed strace ${installed_version}; expected ${STRACE_VERSION}."
+            exit 1
+          fi
+          echo "version=${installed_version}" >> "${GITHUB_OUTPUT}"
 
       - name: Select exact image produced by the build
         id: runtime_image
@@ -274,12 +283,14 @@ jobs:
           BUILD_DIGEST: ${{ steps.build.outputs.digest }}
           PLATFORM: ${{ matrix.platform }}
           EVIDENCE_DIR: ${{ runner.temp }}/runtime-egress-${{ matrix.tag }}
+          STRACE_PACKAGE_VERSION: ${{ steps.install_strace.outputs.version }}
         run: |
           python3 mcp-local/scripts/validate-runtime-egress.py \
             --image "${IMAGE_REFERENCE}" \
             --digest "${BUILD_DIGEST}" \
             --platform "${PLATFORM}" \
             --workspace mcp-local \
+            --strace-package-version "${STRACE_PACKAGE_VERSION}" \
             --evidence-dir "${EVIDENCE_DIR}"
 
       - name: Add runtime validation summary

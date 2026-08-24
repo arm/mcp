@@ -147,10 +147,13 @@ separate control.
 
 Each image is selected by the immutable digest emitted by BuildKit and run with
 Docker's `none` network. The runner's `strace` executable records network
-syscalls from the MCP process and all children. The test exercises MCP startup,
-the embedded knowledge/vector search, a local migrate-ease scan, sysreport
-instructions, and (on Arm64) local llvm-mca analysis. Any non-loopback IPv4 or
-IPv6 `connect`, `sendto`, `sendmsg`, or `sendmmsg` destination fails the gate.
+syscalls from the MCP process and all children. The workflow pins the Ubuntu
+package version, verifies the installed version, and records it in both
+`runtime-egress-evidence.json` and the workflow summary. The test exercises MCP
+startup, the embedded knowledge/vector search, a local migrate-ease scan,
+sysreport instructions, and (on Arm64) local llvm-mca analysis. Any non-loopback
+IPv4 or IPv6 `connect`, `sendto`, `sendmsg`, or `sendmmsg` destination fails the
+gate.
 The production image sets `FASTMCP_CHECK_FOR_UPDATES=off` so FastMCP does not
 contact PyPI during server startup; dependency updates remain a build/release
 responsibility rather than a runtime side effect.
@@ -367,4 +370,3 @@ When contributing:
 
 **Note:**
 Images tagged `latest` and semantic version tags (e.g., `2.3.0`) should be treated as the **prod** environment, while dated tags (`YYYY-MM-DD-<run_number>`, e.g., `2026-05-31-123`) should be treated as the **stage** environment. The **dev** environment refers only to locally built images created by individual developers.
-
