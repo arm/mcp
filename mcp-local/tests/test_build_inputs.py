@@ -277,6 +277,11 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
     assert '"${IMAGE_FQDN}@${DIGEST}"' in publish_release_job
     assert "Immutable digest:" in IMAGE_WORKFLOW
     assert "verification instructions" in IMAGE_WORKFLOW
+    assert "blob/main/docs/provenance-verification.md" not in IMAGE_WORKFLOW
+    assert (
+        'blob/${SOURCE_SHA}/docs/provenance-verification.md'
+        in IMAGE_WORKFLOW
+    )
 
 
 def test_provenance_guide_matches_the_enforced_release_identity() -> None:

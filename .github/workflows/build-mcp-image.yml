@@ -27,7 +27,6 @@ permissions:
 env:
   IMAGE: armlimited/arm-mcp
   IMAGE_FQDN: docker.io/armlimited/arm-mcp
-  PROVENANCE_VERIFICATION_URL: https://github.com/arm/mcp/blob/main/docs/provenance-verification.md
 
 # Version PRs serialize naturally at merge time, but publication remains
 # serialized so two closely spaced releases cannot race when updating latest.
@@ -443,6 +442,7 @@ jobs:
         run: |
           set -euo pipefail
           notes_file="${RUNNER_TEMP}/release-notes.md"
+          verification_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${SOURCE_SHA}/docs/provenance-verification.md"
           {
             printf "Docker image: \`%s:%s\`\n" "${IMAGE_FQDN}" "${VERSION}"
             printf "Immutable digest: \`%s\`\n" "${DIGEST}"
@@ -450,7 +450,7 @@ jobs:
               "${SOURCE_SHA}" "${GITHUB_SERVER_URL}" \
               "${GITHUB_REPOSITORY}" "${SOURCE_SHA}"
             printf "Provenance: [attestation](%s) · [verification instructions](%s)\n" \
-              "${ATTESTATION_URL}" "${PROVENANCE_VERIFICATION_URL}"
+              "${ATTESTATION_URL}" "${verification_url}"
           } > "${notes_file}"
           gh release create "v${VERSION}" \
             --target "${SOURCE_SHA}" \
