@@ -340,6 +340,10 @@ jobs:
     if: ${{ needs.publish-image.result == 'success' }}
     permissions:
       contents: read
+      # This is the permission ceiling for every job in the reusable workflow.
+      # The Docker Hub job explicitly downgrades packages access to none, while
+      # the GHCR job needs write access for future embeddings attestations.
+      packages: write
       id-token: write
       attestations: write
       artifact-metadata: write

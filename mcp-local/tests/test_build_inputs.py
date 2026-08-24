@@ -265,7 +265,7 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
     assert "attest-ghcr:" in ATTEST_WORKFLOW
     assert "packages: write" not in dockerhub_attestation_job
     assert "packages: write" in ghcr_attestation_job
-    assert "packages: write" not in attest_image_job
+    assert "packages: write" in attest_image_job
     assert ATTEST_WORKFLOW.count("Validate trusted attestation output") == 2
     assert "verify-provenance:" in IMAGE_WORKFLOW
     assert "attestations: read" in IMAGE_WORKFLOW
