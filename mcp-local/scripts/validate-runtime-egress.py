@@ -125,7 +125,7 @@ def _prepare_tracer(strace: Path, tracer_dir: Path) -> None:
 
 
 def _trace_command(
-    args: argparse.Namespace, tracer_dir: Path, trace_name: str, command: list[str]
+    args: argparse.Namespace, tracer_dir: Path, command: list[str]
 ) -> list[str]:
     return [
         "docker",
@@ -145,8 +145,6 @@ def _trace_command(
         "-v",
         f"{tracer_dir.resolve()}:/validation:ro",
         "-v",
-        f"{args.evidence_dir.resolve()}:/evidence",
-        "-v",
         f"{args.workspace.resolve()}:/workspace:ro",
         "--entrypoint",
         "/validation/strace",
@@ -157,8 +155,6 @@ def _trace_command(
         "256",
         "-e",
         "trace=network",
-        "-o",
-        f"/evidence/{trace_name}",
         *command,
     ]
 
@@ -376,7 +372,7 @@ def main() -> int:
         flows.append("mca")
 
     runtime_command = _trace_command(
-        args, tracer_dir, "runtime.strace", ["python", "-u", "server.py"]
+        args, tracer_dir, ["python", "-u", "server.py"]
     )
     try:
         runtime = _run_mcp(runtime_command, requests)
@@ -387,6 +383,9 @@ def main() -> int:
     (args.evidence_dir / "runtime.stdout").write_text(runtime.stdout, encoding="utf-8")
     (args.evidence_dir / "runtime.stderr").write_text(runtime.stderr, encoding="utf-8")
     runtime_trace = args.evidence_dir / "runtime.strace"
+    # strace writes to Docker's captured stderr. Only the host persists that
+    # stream, so the image under test cannot truncate or replace its trace.
+    runtime_trace.write_text(runtime.stderr, encoding="utf-8")
     runtime_trace_present = runtime_trace.is_file()
     runtime_attempts = parse_trace(runtime_trace)
     response_failures = validate_mcp_responses(runtime.stdout, args.platform)
@@ -395,7 +394,6 @@ def main() -> int:
         _trace_command(
             args,
             tracer_dir,
-            "negative-control.strace",
             ["python", "-c", NEGATIVE_CONTROL],
         )
     )
@@ -406,6 +404,7 @@ def main() -> int:
         negative.stderr, encoding="utf-8"
     )
     negative_trace = args.evidence_dir / "negative-control.strace"
+    negative_trace.write_text(negative.stderr, encoding="utf-8")
     negative_trace_present = negative_trace.is_file()
     negative_attempts = parse_trace(negative_trace)
     try:
@@ -437,6 +436,7 @@ def main() -> int:
         "tracer": {
             "package": "strace",
             "package_version": args.strace_package_version,
+            "output_channel": "docker stderr captured and persisted by host",
         },
         "permitted_traffic": [
             "stdio MCP client traffic",
@@ -466,6 +466,7 @@ def main() -> int:
         "",
         f"- Image digest: `{args.digest}`",
         f"- Tracer package: `strace={args.strace_package_version}`",
+        "- Trace custody: Docker stderr captured and persisted by the host",
         f"- Result: **{'PASS' if passed else 'FAIL'}**",
         f"- Representative flows: {', '.join(f'`{flow}`' for flow in flows)}",
         f"- Unapproved runtime attempts: **{len(runtime_attempts)}**",

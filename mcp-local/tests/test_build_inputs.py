@@ -216,12 +216,16 @@ def test_release_uses_reviewed_server_version_without_self_merging() -> None:
 
 
 def test_release_requires_runtime_egress_validation_for_both_architectures() -> None:
+    validator = (MCP_LOCAL / "scripts/validate-runtime-egress.py").read_text()
+
     assert "id: build" in IMAGE_WORKFLOW
     assert 'image="${IMAGE}@${BUILD_DIGEST}"' in IMAGE_WORKFLOW
     assert "validate-runtime-egress.py" in IMAGE_WORKFLOW
-    assert '"--network",\n        "none"' in (
-        MCP_LOCAL / "scripts/validate-runtime-egress.py"
-    ).read_text()
+    assert '"--network",\n        "none"' in validator
+    assert ':/evidence"' not in validator
+    assert 'runtime_trace.write_text(runtime.stderr' in validator
+    assert 'negative_trace.write_text(negative.stderr' in validator
+    assert '"output_channel": "docker stderr captured and persisted by host"' in validator
     assert "runtime-egress-${{ matrix.tag }}" in IMAGE_WORKFLOW
     assert "if-no-files-found: error" in IMAGE_WORKFLOW
     assert "needs.build-arch-images.result == 'success'" in IMAGE_WORKFLOW

@@ -147,13 +147,15 @@ separate control.
 
 Each image is selected by the immutable digest emitted by BuildKit and run with
 Docker's `none` network. The runner's `strace` executable records network
-syscalls from the MCP process and all children. The workflow pins the Ubuntu
-package version, verifies the installed version, and records it in both
-`runtime-egress-evidence.json` and the workflow summary. The test exercises MCP
-startup, the embedded knowledge/vector search, a local migrate-ease scan,
-sysreport instructions, and (on Arm64) local llvm-mca analysis. Any non-loopback
-IPv4 or IPv6 `connect`, `sendto`, `sendmsg`, or `sendmmsg` destination fails the
-gate.
+syscalls from the MCP process and all children. Trace output is collected from
+Docker's host-captured standard-error channel and persisted only after the
+container exits; the image under test receives no writable evidence mount. The
+workflow pins the Ubuntu package version, verifies the installed version, and
+records it in both `runtime-egress-evidence.json` and the workflow summary. The
+test exercises MCP startup, the embedded knowledge/vector search, a local
+migrate-ease scan, sysreport instructions, and (on Arm64) local llvm-mca
+analysis. Any non-loopback IPv4 or IPv6 `connect`, `sendto`, `sendmsg`, or
+`sendmmsg` destination fails the gate.
 The production image sets `FASTMCP_CHECK_FOR_UPDATES=off` so FastMCP does not
 contact PyPI during server startup; dependency updates remain a build/release
 responsibility rather than a runtime side effect.
