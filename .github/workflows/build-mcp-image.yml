@@ -333,24 +333,53 @@ jobs:
           echo "Resolved ${IMAGE_FQDN}@${created_digest}"
 
   attest-image:
-    name: Attest production image with trusted workflow
+    name: Attest production image provenance
     needs:
       - publish-image
+    runs-on: ubuntu-24.04
     if: ${{ needs.publish-image.result == 'success' }}
     permissions:
       contents: read
-      # This is the permission ceiling for every job in the reusable workflow.
-      # The Docker Hub job explicitly downgrades packages access to none, while
-      # the GHCR job needs write access for future embeddings attestations.
-      packages: write
       id-token: write
       attestations: write
       artifact-metadata: write
-    uses: ./.github/workflows/attest-container-image.yml
-    with:
-      subject-name: docker.io/armlimited/arm-mcp
-      subject-digest: ${{ needs.publish-image.outputs.digest }}
-    secrets: inherit
+    outputs:
+      attestation-url: ${{ steps.attest.outputs.attestation-url }}
+    steps:
+      - name: Validate final image digest
+        env:
+          DIGEST: ${{ needs.publish-image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Attestation subject digest is missing or invalid."
+            exit 1
+          fi
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Generate and publish provenance
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE_FQDN }}
+          subject-digest: ${{ needs.publish-image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Validate attestation output
+        env:
+          ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ATTESTATION_URL}" ]; then
+            echo "::error::Attestation action did not return an attestation URL."
+            exit 1
+          fi
+          echo "Attestation: ${ATTESTATION_URL}" >> "${GITHUB_STEP_SUMMARY}"
 
   verify-provenance:
     needs:
@@ -379,7 +408,7 @@ jobs:
           gh attestation verify \
             "oci://${IMAGE_FQDN}@${DIGEST}" \
             --repo "${GITHUB_REPOSITORY}" \
-            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/attest-container-image.yml" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/build-mcp-image.yml" \
             --source-ref refs/heads/main \
             --source-digest "${SOURCE_SHA}"
 
@@ -393,7 +422,7 @@ jobs:
           gh attestation verify \
             "oci://${IMAGE_FQDN}@${DIGEST}" \
             --repo "${GITHUB_REPOSITORY}" \
-            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/attest-container-image.yml" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/build-mcp-image.yml" \
             --source-ref refs/heads/main \
             --source-digest "${SOURCE_SHA}" \
             --bundle-from-oci

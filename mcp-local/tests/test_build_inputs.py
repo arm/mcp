@@ -33,9 +33,6 @@ EMBEDDING_WORKFLOW = (
     REPOSITORY / ".github/workflows/build-embeddings.yml"
 ).read_text()
 IMAGE_WORKFLOW = (REPOSITORY / ".github/workflows/build-mcp-image.yml").read_text()
-ATTEST_WORKFLOW = (
-    REPOSITORY / ".github/workflows/attest-container-image.yml"
-).read_text()
 PROVENANCE_GUIDE = (
     REPOSITORY / "docs/provenance-verification.md"
 ).read_text()
@@ -229,17 +226,11 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
     publish_release_job = IMAGE_WORKFLOW.split(
         "  publish-release:", maxsplit=1
     )[1]
-    dockerhub_attestation_job = ATTEST_WORKFLOW.split(
-        "  attest-dockerhub:", maxsplit=1
-    )[1].split("  attest-ghcr:", maxsplit=1)[0]
-    ghcr_attestation_job = ATTEST_WORKFLOW.split(
-        "  attest-ghcr:", maxsplit=1
-    )[1]
     attest_image_job = IMAGE_WORKFLOW.split("  attest-image:", maxsplit=1)[
         1
     ].split("  verify-provenance:", maxsplit=1)[0]
     assert "IMAGE_FQDN: docker.io/armlimited/arm-mcp" in IMAGE_WORKFLOW
-    assert "uses: ./.github/workflows/attest-container-image.yml" in IMAGE_WORKFLOW
+    assert "attest-container-image.yml" not in IMAGE_WORKFLOW
     assert "deployment-environment" not in IMAGE_WORKFLOW
     assert (
         '--metadata-file "${RUNNER_TEMP}/manifest-metadata.json"'
@@ -250,23 +241,20 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
         in IMAGE_WORKFLOW
     )
     assert '"${created_digest}" != "${inspected_digest}"' in IMAGE_WORKFLOW
-    assert "uses: actions/attest@" not in IMAGE_WORKFLOW
-    assert "workflow_call:" in ATTEST_WORKFLOW
-    assert "deployment-environment" not in ATTEST_WORKFLOW
-    assert "environment:" not in ATTEST_WORKFLOW
-    assert "id-token: write" in ATTEST_WORKFLOW
-    assert "attestations: write" in ATTEST_WORKFLOW
-    assert "artifact-metadata: write" in ATTEST_WORKFLOW
-    assert "uses: actions/attest@" in ATTEST_WORKFLOW
-    assert "subject-name: ${{ inputs.subject-name }}" in ATTEST_WORKFLOW
-    assert "subject-digest: ${{ inputs.subject-digest }}" in ATTEST_WORKFLOW
-    assert "push-to-registry: true" in ATTEST_WORKFLOW
-    assert "attest-dockerhub:" in ATTEST_WORKFLOW
-    assert "attest-ghcr:" in ATTEST_WORKFLOW
-    assert "packages: write" not in dockerhub_attestation_job
-    assert "packages: write" in ghcr_attestation_job
-    assert "packages: write" in attest_image_job
-    assert ATTEST_WORKFLOW.count("Validate trusted attestation output") == 2
+    assert "runs-on: ubuntu-24.04" in attest_image_job
+    assert "id-token: write" in attest_image_job
+    assert "attestations: write" in attest_image_job
+    assert "artifact-metadata: write" in attest_image_job
+    assert "packages: write" not in attest_image_job
+    assert "environment:" not in attest_image_job
+    assert "uses: actions/attest@" in attest_image_job
+    assert "subject-name: ${{ env.IMAGE_FQDN }}" in attest_image_job
+    assert (
+        "subject-digest: ${{ needs.publish-image.outputs.digest }}"
+        in attest_image_job
+    )
+    assert "push-to-registry: true" in attest_image_job
+    assert "Validate attestation output" in attest_image_job
     assert "verify-provenance:" in IMAGE_WORKFLOW
     assert "attestations: read" in IMAGE_WORKFLOW
     assert IMAGE_WORKFLOW.count("gh attestation verify") == 2
@@ -287,12 +275,15 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
 def test_provenance_guide_matches_the_enforced_release_identity() -> None:
     for expected in (
         "docker.io/armlimited/arm-mcp",
-        "arm/mcp/.github/workflows/attest-container-image.yml",
+        "arm/mcp/.github/workflows/build-mcp-image.yml",
         "refs/heads/main",
         "--source-digest",
         "--bundle-from-oci",
     ):
         assert expected in PROVENANCE_GUIDE
+    assert not (
+        REPOSITORY / ".github/workflows/attest-container-image.yml"
+    ).exists()
 
 
 def test_manual_release_proposals_support_all_release_types() -> None:

@@ -10,7 +10,7 @@ signing key.
 
 - Image: `docker.io/armlimited/arm-mcp`
 - Source repository: `arm/mcp`
-- Signer workflow: `arm/mcp/.github/workflows/attest-container-image.yml`
+- Signer workflow: `arm/mcp/.github/workflows/build-mcp-image.yml`
 - Source ref: `refs/heads/main`
 - Event: a push of a reviewed release commit to `main`
 
@@ -31,7 +31,7 @@ SOURCE_COMMIT='replace-with-release-source-commit'
 gh attestation verify \
   "oci://docker.io/armlimited/arm-mcp@${DIGEST}" \
   --repo arm/mcp \
-  --signer-workflow arm/mcp/.github/workflows/attest-container-image.yml \
+  --signer-workflow arm/mcp/.github/workflows/build-mcp-image.yml \
   --source-ref refs/heads/main \
   --source-digest "${SOURCE_COMMIT}"
 ```
@@ -44,7 +44,7 @@ source commit. Add `--format json` to inspect the complete verification result.
 To fetch the copy attached to the image in Docker Hub instead of GitHub's
 artifact-attestation service, add `--bundle-from-oci` to the command.
 
-The build runs on ephemeral GitHub-hosted runners, while provenance generation
-and signing are isolated in a dedicated reusable signer workflow. Together
-with digest-bound distribution and verification, this architecture is designed
-to meet the SLSA Build Level 3 provenance and isolation controls.
+The build and provenance jobs run on ephemeral GitHub-hosted runners with
+job-scoped permissions. This establishes signed, digest-bound build provenance.
+A trusted reusable build boundary and assessment of the remaining SLSA Build
+Level 3 requirements are tracked separately.
