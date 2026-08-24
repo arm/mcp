@@ -293,6 +293,26 @@ jobs:
             --strace-package-version "${STRACE_PACKAGE_VERSION}" \
             --evidence-dir "${EVIDENCE_DIR}"
 
+      - name: Record validated image digest
+        env:
+          ARCH_TAG: ${{ matrix.tag }}
+          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${BUILD_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Cannot record invalid image digest: ${BUILD_DIGEST}"
+            exit 1
+          fi
+          printf '%s\n' "${BUILD_DIGEST}" > "${RUNNER_TEMP}/validated-image-digest-${ARCH_TAG}.txt"
+
+      - name: Retain validated image digest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: validated-image-digest-${{ matrix.tag }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/validated-image-digest-${{ matrix.tag }}.txt
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Add runtime validation summary
         if: ${{ always() }}
         env:
@@ -320,6 +340,7 @@ jobs:
       - build-arch-images
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: write
     if: ${{ needs.build-arch-images.result == 'success' }}
     steps:
@@ -353,17 +374,45 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Download validated image digests
+        if: ${{ needs.validate-release.outputs.publish == 'true' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: validated-image-digest-*-${{ github.run_id }}
+          path: ${{ runner.temp }}/validated-image-digests
+          merge-multiple: true
+
       - name: Publish multi-architecture release
         if: ${{ needs.validate-release.outputs.publish == 'true' }}
         env:
+          DIGEST_DIR: ${{ runner.temp }}/validated-image-digests
           VERSION: ${{ needs.validate-release.outputs.version }}
         run: |
           set -euo pipefail
+
+          read_digest() {
+            local architecture="$1"
+            local digest_file="${DIGEST_DIR}/validated-image-digest-${architecture}.txt"
+            local digest
+            if [ ! -f "${digest_file}" ]; then
+              echo "::error::Missing validated ${architecture} image digest artifact." >&2
+              return 1
+            fi
+            digest="$(tr -d '\r\n' < "${digest_file}")"
+            if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::Invalid validated ${architecture} image digest: ${digest}" >&2
+              return 1
+            fi
+            printf '%s\n' "${digest}"
+          }
+
+          amd64_digest="$(read_digest amd64)"
+          arm64_digest="$(read_digest arm64)"
           docker buildx imagetools create \
             -t "${IMAGE}:${VERSION}" \
             -t "${IMAGE}:latest" \
-            "${IMAGE}:${VERSION}-amd64" \
-            "${IMAGE}:${VERSION}-arm64"
+            "${IMAGE}@${amd64_digest}" \
+            "${IMAGE}@${arm64_digest}"
 
       - name: Create tag and GitHub Release
         if: ${{ needs.validate-release.outputs.publish == 'true' }}

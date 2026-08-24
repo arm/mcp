@@ -167,6 +167,12 @@ application trace is meaningful. The workflow retains the raw traces, process
 output, and `runtime-egress-evidence.json` for 90 days and adds a digest- and
 platform-specific summary to the workflow run.
 
+After both architecture gates pass, the release job retrieves their validated
+image digests from workflow artifacts and creates the production manifest from
+digest-qualified references. Mutable architecture tags are never used as
+manifest sources, so the published AMD64 and Arm64 images are the exact images
+that passed validation.
+
 There are no approved unsolicited-runtime exceptions. Tools whose explicit
 purpose is remote access are covered by the separate integration suite and are
 not invoked by this offline gate. A future exception must be documented here

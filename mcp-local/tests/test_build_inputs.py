@@ -209,8 +209,10 @@ def test_release_uses_reviewed_server_version_without_self_merging() -> None:
     assert 'version="$(jq -er' in IMAGE_WORKFLOW
     assert "gh pr merge" not in IMAGE_WORKFLOW
     assert "BUMP_BRANCH" not in IMAGE_WORKFLOW
-    assert "${IMAGE}:${VERSION}-amd64" in IMAGE_WORKFLOW
-    assert "${IMAGE}:${VERSION}-arm64" in IMAGE_WORKFLOW
+    assert (
+        "${{ env.IMAGE }}:${{ needs.validate-release.outputs.version }}-"
+        "${{ matrix.tag }}"
+    ) in IMAGE_WORKFLOW
 
 
 def test_release_requires_runtime_egress_validation_for_both_architectures() -> None:
@@ -223,6 +225,20 @@ def test_release_requires_runtime_egress_validation_for_both_architectures() -> 
     assert "runtime-egress-${{ matrix.tag }}" in IMAGE_WORKFLOW
     assert "if-no-files-found: error" in IMAGE_WORKFLOW
     assert "needs.build-arch-images.result == 'success'" in IMAGE_WORKFLOW
+
+
+def test_release_manifest_uses_the_validated_architecture_digests() -> None:
+    publish_step = IMAGE_WORKFLOW.split(
+        "- name: Publish multi-architecture release", maxsplit=1
+    )[1].split("- name: Create tag and GitHub Release", maxsplit=1)[0]
+
+    assert "validated-image-digest-${{ matrix.tag }}-${{ github.run_id }}" in IMAGE_WORKFLOW
+    assert "actions/download-artifact@" in IMAGE_WORKFLOW
+    assert "^sha256:[0-9a-f]{64}$" in publish_step
+    assert '"${IMAGE}@${amd64_digest}"' in publish_step
+    assert '"${IMAGE}@${arm64_digest}"' in publish_step
+    assert '"${IMAGE}:${VERSION}-amd64"' not in publish_step
+    assert '"${IMAGE}:${VERSION}-arm64"' not in publish_step
 
 
 def test_runtime_egress_tracer_is_pinned_and_recorded_in_evidence() -> None:
