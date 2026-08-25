@@ -1,0 +1,136 @@
+name: Black Duck pre-publish image scan
+description: Scan a locally built container image and enforce the release gate
+
+inputs:
+  project_name:
+    description: Black Duck project receiving the image scan
+    required: true
+  project_version:
+    description: Black Duck project version receiving the image scan
+    required: true
+  image_reference:
+    description: Local image tag produced by the preceding build step
+    required: true
+  platform:
+    description: Expected image platform
+    required: true
+  artifact_suffix:
+    description: Unique suffix for the retained SARIF artifact
+    required: true
+  blackducksca_url:
+    description: Black Duck SCA server URL
+    required: true
+  blackducksca_token:
+    description: Black Duck SCA API token
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Validate local scan target
+      shell: bash
+      env:
+        IMAGE_REFERENCE: ${{ inputs.image_reference }}
+        IMAGE_PLATFORM: ${{ inputs.platform }}
+        PROJECT_NAME: ${{ inputs.project_name }}
+        PROJECT_VERSION: ${{ inputs.project_version }}
+        ARTIFACT_SUFFIX: ${{ inputs.artifact_suffix }}
+      run: |
+        set -euo pipefail
+        if [[ ! "${IMAGE_REFERENCE}" =~ ^ghcr\.io/[A-Za-z0-9._/-]+:[A-Za-z0-9._-]+$ ]]; then
+          echo "::error::Pre-publish scans require a valid local GHCR image tag."
+          exit 1
+        fi
+        if [[ ! "${IMAGE_PLATFORM}" =~ ^linux/(amd64|arm64)$ ]]; then
+          echo "::error::Unsupported image platform: ${IMAGE_PLATFORM}"
+          exit 1
+        fi
+
+        actual_platform="$(docker image inspect \
+          --format '{{.Os}}/{{.Architecture}}' "${IMAGE_REFERENCE}")"
+        if [[ "${actual_platform}" != "${IMAGE_PLATFORM}" ]]; then
+          echo "::error::Expected ${IMAGE_PLATFORM}, built ${actual_platform}."
+          exit 1
+        fi
+
+    - name: Show Black Duck image target
+      shell: bash
+      env:
+        PROJECT_NAME: ${{ inputs.project_name }}
+        PROJECT_VERSION: ${{ inputs.project_version }}
+        IMAGE_REFERENCE: ${{ inputs.image_reference }}
+        IMAGE_PLATFORM: ${{ inputs.platform }}
+      run: |
+        set -euo pipefail
+        echo "::notice title=Black Duck pre-publish target::${PROJECT_NAME} / ${PROJECT_VERSION} / ${IMAGE_REFERENCE} / ${IMAGE_PLATFORM}"
+
+    - name: Black Duck SCA image scan
+      id: scan
+      continue-on-error: true
+      uses: blackduck-inc/black-duck-security-scan@152247222aa9cd38124acd5c0cf60f4db71adc3f # v2.11.0
+      env:
+        DETECT_PROJECT_NAME: ${{ inputs.project_name }}
+        DETECT_PROJECT_VERSION_NAME: ${{ inputs.project_version }}
+      with:
+        blackducksca_url: ${{ inputs.blackducksca_url }}
+        blackducksca_token: ${{ inputs.blackducksca_token }}
+        blackducksca_scan_full: true
+        blackducksca_scan_failure_severities: 'CRITICAL,HIGH'
+        blackducksca_waitForScan: true
+        detect_args: >-
+          --detect.accuracy.required=NONE
+          --detect.project.name=${{ inputs.project_name }}
+          --detect.project.version.name=${{ inputs.project_version }}
+          --detect.docker.image=${{ inputs.image_reference }}
+        blackducksca_reports_sarif_create: true
+        blackducksca_reports_sarif_file_path: blackduck-results-${{ inputs.artifact_suffix }}.sarif
+        blackducksca_reports_sarif_severities: 'Critical,High,Medium,Low'
+        blackducksca_reports_sarif_groupSCAIssues: false
+        blackducksca_upload_sarif_report: true
+        mark_build_status: 'failure'
+        include_diagnostics: true
+
+    - name: Retain Black Duck SARIF
+      if: ${{ always() }}
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: blackduck-${{ inputs.artifact_suffix }}
+        path: blackduck-results-${{ inputs.artifact_suffix }}.sarif
+        if-no-files-found: warn
+        retention-days: 30
+
+    - name: Write Black Duck scan summary
+      if: ${{ always() }}
+      shell: bash
+      env:
+        PROJECT_NAME: ${{ inputs.project_name }}
+        PROJECT_VERSION: ${{ inputs.project_version }}
+        IMAGE_REFERENCE: ${{ inputs.image_reference }}
+        IMAGE_PLATFORM: ${{ inputs.platform }}
+        SCAN_OUTCOME: ${{ steps.scan.outcome }}
+      run: |
+        set -euo pipefail
+        {
+          echo "### Black Duck pre-publish image scan"
+          echo ""
+          printf -- '- Project: `%s`\n' "${PROJECT_NAME}"
+          printf -- '- Version: `%s`\n' "${PROJECT_VERSION}"
+          printf -- '- Local image: `%s`\n' "${IMAGE_REFERENCE}"
+          printf -- '- Platform: `%s`\n' "${IMAGE_PLATFORM}"
+          echo '- Release gate: `CRITICAL,HIGH`'
+          printf -- '- Scan outcome: `%s`\n' "${SCAN_OUTCOME}"
+          echo '- Publication occurs only after this scan succeeds.'
+          echo '- SARIF retention: workflow artifact for 30 days'
+        } >> "${GITHUB_STEP_SUMMARY}"
+
+    - name: Enforce Black Duck scan gate
+      if: ${{ always() }}
+      shell: bash
+      env:
+        SCAN_OUTCOME: ${{ steps.scan.outcome }}
+      run: |
+        set -euo pipefail
+        if [[ "${SCAN_OUTCOME}" != "success" ]]; then
+          echo "::error::Black Duck image scan failed or found a CRITICAL/HIGH release-gating issue."
+          exit 1
+        fi

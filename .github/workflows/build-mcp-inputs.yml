@@ -2,7 +2,7 @@ name: Build MCP Input Bundle
 
 on:
   push:
-    branches: [main]
+    branches: [main, stesol-590-ghcr-scan]
     paths:
       - mcp-local/.dockerignore
       - mcp-local/.python-version
@@ -74,13 +74,6 @@ jobs:
             --only-group acquisition \
             --no-install-project
 
-      - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
       - name: Verify existing package is private
         env:
           GH_TOKEN: ${{ github.token }}
@@ -94,7 +87,7 @@ jobs:
       - name: Acquire and verify locked inputs
         run: mcp-local/.venv/bin/python mcp-local/scripts/stage-build-inputs.py --arch ${{ matrix.arch }}
 
-      - name: Publish architecture input image
+      - name: Build architecture input image locally
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: mcp-local
@@ -102,12 +95,97 @@ jobs:
           target: inputs
           platforms: ${{ matrix.platform }}
           no-cache: true
-          push: true
+          load: true
+          push: false
+          provenance: false
           tags: ${{ env.IMAGE }}:${{ env.PUBLICATION_TAG }}-${{ matrix.arch }}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.title=Arm MCP immutable build inputs
+
+      - name: Record local scan-candidate digest
+        id: candidate
+        shell: bash
+        env:
+          TAG: ${{ env.IMAGE }}:${{ env.PUBLICATION_TAG }}-${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          config_digest="$(docker image inspect --format '{{.Id}}' "${TAG}")"
+          if [[ ! "${config_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Local scan candidate did not return a valid config digest."
+            exit 1
+          fi
+          echo "config-digest=${config_digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Scan architecture input image before publication
+        uses: ./.github/actions/blackduck-image-scan
+        with:
+          project_name: "Arm:MCP"
+          project_version: 	"mcp-build-inputs-1.0"
+          image_reference: ${{ env.IMAGE }}:${{ env.PUBLICATION_TAG }}-${{ matrix.arch }}
+          platform: ${{ matrix.platform }}
+          artifact_suffix: mcp-build-inputs-${{ matrix.arch }}
+          blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
+          blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+
+      - name: Log in to GHCR for publication
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # Publish only after Black Duck succeeds. 
+      # This second solve reuses the first solve's BuildKit cache and uses the
+      # registry exporter so BuildKit can attach provenance during publication.
+      - name: Publish scanned architecture input image with provenance
+        id: publish
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: mcp-local
+          file: mcp-local/Dockerfile.inputs
+          target: inputs
+          platforms: ${{ matrix.platform }}
+          push: true
+          provenance: mode=max
+          tags: ${{ env.IMAGE }}:${{ env.PUBLICATION_TAG }}-${{ matrix.arch }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.title=Arm MCP immutable build inputs
+
+      - name: Verify published image matches scanned candidate
+        shell: bash
+        env:
+          TAG: ${{ env.IMAGE }}:${{ env.PUBLICATION_TAG }}-${{ matrix.arch }}
+          ARCH: ${{ matrix.arch }}
+          EXPECTED_CONFIG_DIGEST: ${{ steps.candidate.outputs.config-digest }}
+          PUBLISHED_DIGEST: ${{ steps.publish.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${PUBLISHED_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Published image did not return a valid sha256 digest."
+            exit 1
+          fi
+
+          raw_manifest="$(docker buildx imagetools inspect "${TAG}" --raw)"
+          if jq -e '.manifests | type == "array"' \
+            <<<"${raw_manifest}" > /dev/null; then
+            platform_digest="$(jq -er --arg arch "${ARCH}" '
+              .manifests[] |
+              select(.platform.os == "linux" and .platform.architecture == $arch) |
+              .digest
+            ' <<<"${raw_manifest}")"
+            raw_manifest="$(docker buildx imagetools inspect \
+              "${IMAGE}@${platform_digest}" --raw)"
+          fi
+
+          published_config_digest="$(jq -er '.config.digest' <<<"${raw_manifest}")"
+          if [[ "${published_config_digest}" != "${EXPECTED_CONFIG_DIGEST}" ]]; then
+            echo "::error::Published image config differs from the Black Duck scan candidate."
+            exit 1
+          fi
 
   publish-index:
     needs: acquire-and-publish-architecture
