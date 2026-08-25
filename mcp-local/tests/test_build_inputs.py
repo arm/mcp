@@ -33,6 +33,9 @@ EMBEDDING_WORKFLOW = (
     REPOSITORY / ".github/workflows/build-embeddings.yml"
 ).read_text()
 IMAGE_WORKFLOW = (REPOSITORY / ".github/workflows/build-mcp-image.yml").read_text()
+PROVENANCE_GUIDE = (
+    REPOSITORY / "docs/provenance-verification.md"
+).read_text()
 PIN_WORKFLOWS = (TOOLCHAIN_WORKFLOW, INPUT_WORKFLOW, EMBEDDING_WORKFLOW)
 REQUIRED_CHECK_DISPATCH = (
     REPOSITORY / ".github/scripts/dispatch-required-pr-checks.sh"
@@ -148,6 +151,10 @@ def test_final_builds_do_not_acquire_inputs_live() -> None:
     assert "python -m pip install --upgrade pip" not in INTEGRATION_WORKFLOW
 
 
+def test_runtime_disables_unsolicited_update_checks() -> None:
+    assert "FASTMCP_CHECK_FOR_UPDATES=off" in DOCKERFILE
+
+
 def test_final_builds_disable_network_for_every_run_instruction() -> None:
     run_instructions = [
         line.strip()
@@ -212,8 +219,120 @@ def test_release_uses_reviewed_server_version_without_self_merging() -> None:
     assert 'version="$(jq -er' in IMAGE_WORKFLOW
     assert "gh pr merge" not in IMAGE_WORKFLOW
     assert "BUMP_BRANCH" not in IMAGE_WORKFLOW
-    assert "${IMAGE}:${VERSION}-amd64" in IMAGE_WORKFLOW
-    assert "${IMAGE}:${VERSION}-arm64" in IMAGE_WORKFLOW
+    assert (
+        "${{ env.IMAGE }}:${{ needs.validate-release.outputs.version }}-"
+        "${{ matrix.tag }}"
+    ) in IMAGE_WORKFLOW
+
+
+def test_release_requires_runtime_egress_validation_for_both_architectures() -> None:
+    validator = (MCP_LOCAL / "scripts/validate-runtime-egress.py").read_text()
+
+    assert "id: build" in IMAGE_WORKFLOW
+    assert 'image="${IMAGE}@${BUILD_DIGEST}"' in IMAGE_WORKFLOW
+    assert "validate-runtime-egress.py" in IMAGE_WORKFLOW
+    assert '"--network",\n        "none"' in validator
+    assert ':/evidence"' not in validator
+    assert 'runtime_trace.write_text(runtime.stderr' in validator
+    assert 'negative_trace.write_text(negative.stderr' in validator
+    assert '"output_channel": "docker stderr captured and persisted by host"' in validator
+    assert "runtime-egress-${{ matrix.tag }}" in IMAGE_WORKFLOW
+    assert "if-no-files-found: error" in IMAGE_WORKFLOW
+    assert "needs.build-arch-images.result == 'success'" in IMAGE_WORKFLOW
+
+
+def test_release_manifest_uses_the_validated_architecture_digests() -> None:
+    publish_step = IMAGE_WORKFLOW.split(
+        "- name: Publish multi-architecture release", maxsplit=1
+    )[1].split("- name: Create tag and GitHub Release", maxsplit=1)[0]
+
+    assert "validated-image-digest-${{ matrix.tag }}-${{ github.run_id }}" in IMAGE_WORKFLOW
+    assert "actions/download-artifact@" in IMAGE_WORKFLOW
+    assert "^sha256:[0-9a-f]{64}$" in publish_step
+    assert '"${IMAGE}@${amd64_digest}"' in publish_step
+    assert '"${IMAGE}@${arm64_digest}"' in publish_step
+    assert '"${IMAGE}:${VERSION}-amd64"' not in publish_step
+    assert '"${IMAGE}:${VERSION}-arm64"' not in publish_step
+
+
+def test_runtime_egress_tracer_is_pinned_and_recorded_in_evidence() -> None:
+    validator = (MCP_LOCAL / "scripts/validate-runtime-egress.py").read_text()
+    version_match = re.search(r"^  STRACE_VERSION: (\S+)$", IMAGE_WORKFLOW, re.MULTILINE)
+
+    assert version_match
+    version = version_match.group(1)
+    assert re.fullmatch(r"[0-9][A-Za-z0-9.+:~-]*-[A-Za-z0-9.+~]+", version)
+    assert '"strace=${STRACE_VERSION}"' in IMAGE_WORKFLOW
+    assert "dpkg-query --show --showformat='${Version}' strace" in IMAGE_WORKFLOW
+    assert '--strace-package-version "${STRACE_PACKAGE_VERSION}"' in IMAGE_WORKFLOW
+    assert '"package_version": args.strace_package_version' in validator
+
+
+def test_release_attests_and_verifies_the_final_production_digest() -> None:
+    publish_image_job = IMAGE_WORKFLOW.split("  publish-image:", maxsplit=1)[
+        1
+    ].split("  verify-provenance:", maxsplit=1)[0]
+    publish_release_job = IMAGE_WORKFLOW.split(
+        "  publish-release:", maxsplit=1
+    )[1]
+    attest_image_job = IMAGE_WORKFLOW.split("  attest-image:", maxsplit=1)[
+        1
+    ].split("  verify-provenance:", maxsplit=1)[0]
+    assert "IMAGE_FQDN: docker.io/armlimited/arm-mcp" in IMAGE_WORKFLOW
+    assert "attest-container-image.yml" not in IMAGE_WORKFLOW
+    assert "deployment-environment" not in IMAGE_WORKFLOW
+    assert (
+        '--metadata-file "${RUNNER_TEMP}/manifest-metadata.json"'
+        in IMAGE_WORKFLOW
+    )
+    assert (
+        '[[ ! "${created_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]'
+        in IMAGE_WORKFLOW
+    )
+    assert '"${created_digest}" != "${inspected_digest}"' in IMAGE_WORKFLOW
+    assert "runs-on: ubuntu-24.04" in attest_image_job
+    assert "id-token: write" in attest_image_job
+    assert "attestations: write" in attest_image_job
+    assert "artifact-metadata: write" in attest_image_job
+    assert "packages: write" not in attest_image_job
+    assert "environment:" not in attest_image_job
+    assert "uses: actions/attest@" in attest_image_job
+    assert "subject-name: ${{ env.IMAGE_FQDN }}" in attest_image_job
+    assert (
+        "subject-digest: ${{ needs.publish-image.outputs.digest }}"
+        in attest_image_job
+    )
+    assert "push-to-registry: true" in attest_image_job
+    assert "Validate attestation output" in attest_image_job
+    assert "verify-provenance:" in IMAGE_WORKFLOW
+    assert "attestations: read" in IMAGE_WORKFLOW
+    assert IMAGE_WORKFLOW.count("gh attestation verify") == 2
+    assert "--bundle-from-oci" in IMAGE_WORKFLOW
+    assert "needs.verify-provenance.result == 'success'" in IMAGE_WORKFLOW
+    assert '${IMAGE}:latest' not in publish_image_job
+    assert "Promote verified image to latest" in publish_release_job
+    assert '"${IMAGE_FQDN}@${DIGEST}"' in publish_release_job
+    assert "Immutable digest:" in IMAGE_WORKFLOW
+    assert "verification instructions" in IMAGE_WORKFLOW
+    assert "blob/main/docs/provenance-verification.md" not in IMAGE_WORKFLOW
+    assert (
+        'blob/${SOURCE_SHA}/docs/provenance-verification.md'
+        in IMAGE_WORKFLOW
+    )
+
+
+def test_provenance_guide_matches_the_enforced_release_identity() -> None:
+    for expected in (
+        "docker.io/armlimited/arm-mcp",
+        "arm/mcp/.github/workflows/build-mcp-image.yml",
+        "refs/heads/main",
+        "--source-digest",
+        "--bundle-from-oci",
+    ):
+        assert expected in PROVENANCE_GUIDE
+    assert not (
+        REPOSITORY / ".github/workflows/attest-container-image.yml"
+    ).exists()
 
 
 def test_manual_release_proposals_support_all_release_types() -> None:
