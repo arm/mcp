@@ -78,7 +78,7 @@ runs:
         blackducksca_url: ${{ inputs.blackducksca_url }}
         blackducksca_token: ${{ inputs.blackducksca_token }}
         blackducksca_scan_full: true
-        blackducksca_scan_failure_severities: 'CRITICAL,HIGH'
+        blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'
         blackducksca_waitForScan: true
         detect_args: "--detect.accuracy.required=NONE"
         blackducksca_reports_sarif_create: true
