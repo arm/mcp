@@ -82,7 +82,7 @@ runs:
         blackducksca_reports_sarif_file_path: blackduck-results-${{ inputs.artifact_suffix }}.sarif
         #blackducksca_reports_sarif_severities: 'Critical,High,Medium,Low'
         blackducksca_reports_sarif_groupSCAIssues: false
-        blackducksca_upload_sarif_report: true
+        blackducksca_upload_sarif_report: false
         mark_build_status: 'failure'
         include_diagnostics: true
 
