@@ -102,6 +102,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     WORKSPACE_DIR=/workspace \
     HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1 \
+    FASTMCP_CHECK_FOR_UPDATES=off \
     SENTENCE_TRANSFORMER_MODEL_PATH=/app/embedding-model \
     APX_HOME=/opt/ArmPerformix-cli-current \
     APX_BIN=/opt/ArmPerformix-cli-current/apx \

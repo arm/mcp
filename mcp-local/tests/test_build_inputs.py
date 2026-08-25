@@ -148,6 +148,10 @@ def test_final_builds_do_not_acquire_inputs_live() -> None:
     assert "python -m pip install --upgrade pip" not in INTEGRATION_WORKFLOW
 
 
+def test_runtime_disables_unsolicited_update_checks() -> None:
+    assert "FASTMCP_CHECK_FOR_UPDATES=off" in DOCKERFILE
+
+
 def test_final_builds_disable_network_for_every_run_instruction() -> None:
     run_instructions = [
         line.strip()
@@ -212,8 +216,53 @@ def test_release_uses_reviewed_server_version_without_self_merging() -> None:
     assert 'version="$(jq -er' in IMAGE_WORKFLOW
     assert "gh pr merge" not in IMAGE_WORKFLOW
     assert "BUMP_BRANCH" not in IMAGE_WORKFLOW
-    assert "${IMAGE}:${VERSION}-amd64" in IMAGE_WORKFLOW
-    assert "${IMAGE}:${VERSION}-arm64" in IMAGE_WORKFLOW
+    assert (
+        "${{ env.IMAGE }}:${{ needs.validate-release.outputs.version }}-"
+        "${{ matrix.tag }}"
+    ) in IMAGE_WORKFLOW
+
+
+def test_release_requires_runtime_egress_validation_for_both_architectures() -> None:
+    validator = (MCP_LOCAL / "scripts/validate-runtime-egress.py").read_text()
+
+    assert "id: build" in IMAGE_WORKFLOW
+    assert 'image="${IMAGE}@${BUILD_DIGEST}"' in IMAGE_WORKFLOW
+    assert "validate-runtime-egress.py" in IMAGE_WORKFLOW
+    assert '"--network",\n        "none"' in validator
+    assert ':/evidence"' not in validator
+    assert 'runtime_trace.write_text(runtime.stderr' in validator
+    assert 'negative_trace.write_text(negative.stderr' in validator
+    assert '"output_channel": "docker stderr captured and persisted by host"' in validator
+    assert "runtime-egress-${{ matrix.tag }}" in IMAGE_WORKFLOW
+    assert "if-no-files-found: error" in IMAGE_WORKFLOW
+    assert "needs.build-arch-images.result == 'success'" in IMAGE_WORKFLOW
+
+
+def test_release_manifest_uses_the_validated_architecture_digests() -> None:
+    publish_step = IMAGE_WORKFLOW.split(
+        "- name: Publish multi-architecture release", maxsplit=1
+    )[1].split("- name: Create tag and GitHub Release", maxsplit=1)[0]
+
+    assert "validated-image-digest-${{ matrix.tag }}-${{ github.run_id }}" in IMAGE_WORKFLOW
+    assert "actions/download-artifact@" in IMAGE_WORKFLOW
+    assert "^sha256:[0-9a-f]{64}$" in publish_step
+    assert '"${IMAGE}@${amd64_digest}"' in publish_step
+    assert '"${IMAGE}@${arm64_digest}"' in publish_step
+    assert '"${IMAGE}:${VERSION}-amd64"' not in publish_step
+    assert '"${IMAGE}:${VERSION}-arm64"' not in publish_step
+
+
+def test_runtime_egress_tracer_is_pinned_and_recorded_in_evidence() -> None:
+    validator = (MCP_LOCAL / "scripts/validate-runtime-egress.py").read_text()
+    version_match = re.search(r"^  STRACE_VERSION: (\S+)$", IMAGE_WORKFLOW, re.MULTILINE)
+
+    assert version_match
+    version = version_match.group(1)
+    assert re.fullmatch(r"[0-9][A-Za-z0-9.+:~-]*-[A-Za-z0-9.+~]+", version)
+    assert '"strace=${STRACE_VERSION}"' in IMAGE_WORKFLOW
+    assert "dpkg-query --show --showformat='${Version}' strace" in IMAGE_WORKFLOW
+    assert '--strace-package-version "${STRACE_PACKAGE_VERSION}"' in IMAGE_WORKFLOW
+    assert '"package_version": args.strace_package_version' in validator
 
 
 def test_manual_release_proposals_support_all_release_types() -> None:
