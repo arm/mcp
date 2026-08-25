@@ -80,7 +80,10 @@ runs:
         blackducksca_scan_full: true
         blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'
         blackducksca_waitForScan: true
-        detect_args: "--detect.accuracy.required=NONE"
+        detect_args: >-
+          --detect.accuracy.required=NONE
+          --detect.docker.image=${{ inputs.image_reference }}
+          --detect.tools=DOCKER
         blackducksca_reports_sarif_create: true
         blackducksca_reports_sarif_file_path: blackduck-results-${{ inputs.artifact_suffix }}.sarif
         blackducksca_reports_sarif_severities: 'Critical,High,Medium,Low'
