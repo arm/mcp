@@ -47,6 +47,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      security-events: write
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -135,6 +136,7 @@ jobs:
           artifact_suffix: mcp-build-inputs-${{ matrix.arch }}
           blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
           blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+          github_token: ${{ github.token }}
 
       - name: Log in to GHCR for publication
         if: ${{ env.PUBLISH_IMAGES == 'true' }}

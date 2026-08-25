@@ -130,6 +130,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      security-events: write
       id-token: write
       attestations: write
       artifact-metadata: write
@@ -190,6 +191,7 @@ jobs:
           artifact_suffix: mcp-embedding-vectorstore-arm64
           blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
           blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+          github_token: ${{ github.token }}
 
       - name: Log in to GHCR for publication
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
