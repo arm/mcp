@@ -76,8 +76,8 @@ jobs:
           mark_build_status: 'success'
 
           ### To enable Black Duck SCA policy badges
-          blackducksca_policy_badges_create: false
-          blackducksca_policy_badges_maxCount: 5
+          #blackducksca_policy_badges_create: false
+          #blackducksca_policy_badges_maxCount: 5
 
           ### To upload Bridge diagnostic files
           include_diagnostics: true
