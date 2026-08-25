@@ -87,7 +87,7 @@ runs:
         blackducksca_reports_sarif_groupSCAIssues: false
         blackducksca_upload_sarif_report: true
         github_token: ${{ inputs.github_token }}
-        mark_build_status: 'success'
+        mark_build_status: 'failure'
         include_diagnostics: true
 
     - name: Retain Black Duck SARIF

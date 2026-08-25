@@ -58,7 +58,7 @@ jobs:
           blackducksca_scan_full: true
 
           ### SCANNING: Optional fields
-          # blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'
+          blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'
           detect_args: "--detect.accuracy.required=NONE"
 
           ### FIX PULL REQUEST CREATION
@@ -72,8 +72,8 @@ jobs:
           ### Set upload to false & then later upload via github/codeql-action/upload-sarif@v4.37.4 to avoid token-permissions issue flagged by scorecard
           blackducksca_upload_sarif_report: false
 
-          ### Mark build status if policy violating issues are found
-          mark_build_status: 'success'
+          ### Mark build status as failure if policy violating issues are found
+          mark_build_status: 'failure'
 
           ### To enable Black Duck SCA policy badges
           blackducksca_policy_badges_create: true
@@ -96,11 +96,12 @@ jobs:
           blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
           blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
           blackducksca_scan_full: false
+          blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'
           detect_args: "--detect.accuracy.required=NONE"
 
           ### PULL REQUEST COMMENTS
           blackducksca_prcomment_enabled: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-          ### Mark build status if policy violating issues are found
-          mark_build_status: 'success'
+          ### Mark build status as failure if policy violating issues are found
+          mark_build_status: 'failure'
