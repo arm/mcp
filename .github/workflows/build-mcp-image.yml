@@ -607,6 +607,7 @@ jobs:
               "${ATTESTATION_URL}" "${verification_url}"
           } > "${notes_file}"
           gh release create "v${VERSION}" \
+            --repo "${GITHUB_REPOSITORY}" \
             --target "${SOURCE_SHA}" \
             --title "v${VERSION}" \
             --generate-notes \
