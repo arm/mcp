@@ -6,10 +6,10 @@ name: 'arm-enablement'
 description: 'Assess an OSS codebase with Arm MCP and generate a professional Arm enablement report as Markdown and PDF'
 argument-hint: '[local workspace or GitHub repo URL] [--apply-fixes optional]'
 agent: 'agent'
-tools: ['search/codebase', 'search/fileSearch', 'search/textSearch', 'search/listDirectory', 'edit/editFiles', 'execute/runInTerminal', 'execute/getTerminalOutput', 'read/terminalLastCommand', 'arm-mcp/skopeo', 'arm-mcp/check_image', 'arm-mcp/knowledge_base_search', 'arm-mcp/migrate_ease_scan', 'arm-mcp/mca', 'arm-mcp/apx_recipe_run', 'arm-mcp/sysreport_instructions']
+tools: ['search/codebase', 'search/fileSearch', 'search/textSearch', 'search/listDirectory', 'edit/editFiles', 'execute/runInTerminal', 'execute/getTerminalOutput', 'read/terminalLastCommand', 'arm-mcp/skopeo', 'arm-mcp/check_image', 'arm-mcp/knowledge_base_search', 'arm-mcp/migrate_ease_scan', 'arm-mcp/mca', 'arm-mcp/sysreport_instructions']
 ---
 
-Before starting, verify that the `arm-mcp` MCP server is installed and available. If you don't have access to the arm-mcp tools (skopeo, check_image, knowledge_base_search, migrate_ease_scan, mca, apx_recipe_run, sysreport_instructions), refer to the [MCP Server Installation Guide](https://github.com/arm/mcp/blob/main/agent-integrations/agent-install-instructions.md) to install it in VS Code.
+Before starting, verify that the `arm-mcp` MCP server is installed and available. If you don't have access to the arm-mcp tools (skopeo, check_image, knowledge_base_search, migrate_ease_scan, mca, sysreport_instructions), refer to the [MCP Server Installation Guide](https://github.com/arm/mcp/blob/main/agent-integrations/agent-install-instructions.md) to install it in VS Code.
 
 Your goal is to evaluate an open-source codebase for Arm (aarch64) readiness and generate a polished **Arm Enablement Report**. The report must read like a professional external case study for an OSS maintainer, developer-relations team, or CNCF community audience, not like an internal checklist. It must answer: "What is needed to make this project Arm-ready, and what did the Arm MCP Server discover that ordinary manual review could miss?"
 
@@ -37,7 +37,7 @@ Steps to follow:
 * Review direct runtime/build dependencies and architecture-sensitive packages. Group related dependencies and call `arm-mcp/knowledge_base_search` only where Arm-specific compatibility or version guidance would affect the verdict or remediation plan; do not query every transitive dependency. If no relevant result is returned, record `No Arm-specific KB result`, do not infer incompatibility, and use upstream documentation, published artifacts, or native validation as evidence. Mark the item unverified when no stronger evidence is available.
 * Inspect build entry points (`Makefile`, `build.sh`, `CMakeLists.txt`, `setup.py`, `Dockerfile` build stages, CI workflows) for architecture-switching logic. Manually read shell pipelines and `case`/`switch` blocks that branch on `uname -m`, `$ARCH`, `TARGETARCH`, `GOARCH`, `CPUTYPE`, or similar variables. Subtle shell semantics bugs (subshell variable scope, missing `arm64` cases, hard-coded `amd64` URLs) are common and not catchable by `grep`. Call out anything suspicious as a "Critical Discovery" candidate.
 * If the codebase contains assembly (`.s`, `.S`) or architecture-specific intrinsics (SSE/AVX, NEON), use `arm-mcp/mca` to analyze representative hot paths and use `arm-mcp/knowledge_base_search` to find the Arm equivalent (NEON, SVE, or SVE2 depending on target).
-* OPTIONAL: If the user is on an Arm host or has access to an Arm runner (AWS Graviton, Azure Cobalt, GCP Axion), validate the final state with native builds, `file <binary>` architecture checks, `sysreport_instructions`, and `arm-mcp/apx_recipe_run` for performance/hotspot evidence when relevant. If no Arm host is available, mark validation as deferred.
+* OPTIONAL: If the user is on an Arm host or has access to an Arm runner (AWS Graviton, Azure Cobalt, GCP Axion), validate the final state with native builds, `file <binary>` architecture checks, `sysreport_instructions`, and the dedicated Performix MCP server for performance/hotspot evidence when relevant. If Performix is unavailable, use `knowledge_base_search` for setup and fallback guidance. If no Arm host is available, mark validation as deferred.
 * Maintain an audit trail for every `arm-mcp` tool call: UTC timestamp, tool, relevant arguments, purpose, result summary, and duration when available. If duration is unavailable, state that it was not captured. This drives the "Audit Trail" section of the final report.
 
 Pitfalls to avoid:
@@ -48,7 +48,7 @@ Pitfalls to avoid:
 * Do not confuse a software version with a language wrapper package version. For example, when checking the Python Redis client, check the Python package name "redis" rather than the Redis server version.
 * NEON lane indices must be compile-time constants, not variables.
 * Do not mark a finding as resolved without running `migrate_ease_scan` again to confirm. Re-scan after every batch of fixes.
-* Do not present unmeasured gains as improvements. Performance numbers in the report must come from a real build and (optionally) `arm-mcp/apx_recipe_run` measurement.
+* Do not present unmeasured gains as improvements. Performance numbers in the report must come from a real build and, optionally, a dedicated Performix MCP measurement.
 * Do not skip the audit trail. The report's value to maintainers is reproducibility; an undocumented run cannot be defended.
 * Be sure to find out from the user or system what the target machine is, and use the appropriate intrinsics. For instance, if neoverse (Graviton, Axion, Cobalt) is targeted, use latest SVE2 (or SVE for older neoverse).
 * Do not generate a generic checklist. The final report must be specific to the scanned repository, cite real files, and distinguish confirmed findings from recommended follow-up work.

@@ -15,6 +15,8 @@ Your goal is to help an experienced performance engineer maximize application sp
 Use this prompt when the user wants aggressive performance tuning (often C/C++/C#) and expects deep technical guidance, but is less familiar with Arm cloud optimization.
 
 Primary workflow:
+* Start with `arm-mcp/knowledge_base_search` for current Arm runtime-performance guidance.
+* If the dedicated Performix MCP server is connected, use it. Otherwise recommend downloading Performix, enabling its MCP server, reconnecting, and retrying; offer Linux `perf` if installation is not possible or desired.
 * Keep changes measurable: one focused optimization at a time, then re-profile.
 * Use a fixed workload command, dataset, and runtime environment for all comparisons.
 * Follow this sequence exactly:
@@ -35,8 +37,8 @@ Steps to follow:
 * Target host/IP, SSH username, workload command, input dataset, build flags, and repetition count.
 * Compiler/toolchain versions and current optimization flags.
 * CPU/platform details (Neoverse generation if available).
-* If ATP/APX setup is missing, surface exact error and request MCP ATP config fix.
-* Establish initial baseline with `arm-mcp/apx_recipe_run` and recipe `code_hotspots`.
+* If the Performix MCP server reports a target error, surface it and use its target-management guidance.
+* Establish initial baseline with `Performix MCP run_recipe` and recipe `code_hotspots`.
 * For each recipe phase (`code_hotspots`, `instruction_mix`, `cpu_microarchitecture`, `memory_access`):
 * Run baseline for that recipe.
 * Identify the strongest actionable bottleneck.
@@ -58,7 +60,6 @@ Arm-specific guidance:
 
 Pitfalls to avoid:
 * Do not apply multiple unrelated edits in one measurement step.
-* Do not include multiple commands in the cmd param for `apx_recipe_run` tool. For example, this is wrong: ```cd /home/ec2-user/arm-migration-example && if [ ! -x ./benchmark ]; then g++ -O3 -march=armv8-a -o benchmark main.cpp matrix_operations.cpp hash_operations.cpp string_search.cpp memory_operations.cpp polynomial_eval.cpp -std=c++14; fi && ./benchmark```. Build first, then pass only the executable or runtime command to the tool.
 * Do not change workload inputs between baseline and re-profile runs.
 * Do not present unmeasured gains as improvements.
 * Do not force intrinsics where compiler auto-vectorization with proper flags is sufficient.

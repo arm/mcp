@@ -2,12 +2,13 @@
      Invoke using /prompts:performance-beginner in the codex chat.
 -->
 ---
-description: Guide a beginner through Arm cloud performance tuning using ATP code_hotspots baseline, targeted code changes, and delta validation
+description: Guide a beginner through Arm cloud performance tuning using a Performix code_hotspots baseline, targeted code changes, and delta validation
 ---
 
 Your goal is to help a cloud developer with zero optimization experience improve code performance on an Arm-based cloud machine using an iterative, measurable workflow.
 
 Primary workflow:
+* Start with `arm-mcp/knowledge_base_search` for current Arm runtime-performance guidance.
 * Keep the process beginner-friendly. Explain what you are doing in plain language and avoid unexplained jargon.
 * Use `code_hotspots` as the default recipe unless the user explicitly asks for another recipe.
 * Follow this loop exactly: baseline profile -> one focused code change -> re-profile -> compare delta.
@@ -19,9 +20,9 @@ Steps to follow:
         * For Python code: `python /home/user/workspace/train.py`
         * For Java: `java -cp "absolute/path/to/class" some.package.Main`
     * If localhost is requested, use `localhost` as the remote_ip.
-    * If APX setup is missing, surface the exact tool error and ask the user to fix MCP APX mount/config first.
-    * Identify the build or compile command if the code language requires it. Then build or compile the binary or executable before running APX. 
-* Run first profile with `arm-mcp/apx_recipe_run` using recipe `code_hotspots` and the user workload command. This workload command should be simply the path to the executable. Do not combine other commands such as `cd` or `cat` or any other bash commands. 
+    * If the dedicated Performix MCP server is unavailable, recommend downloading Performix, enabling its MCP server, reconnecting, and retrying. If the user cannot or will not install it, offer Linux perf as a minimal fallback.
+    * Identify the build or compile command if the code language requires it. Then build or compile the binary or executable before profiling.
+* Run first profile with `Performix MCP run_recipe` using recipe `code_hotspots` and the user workload command. This workload command should be simply the path to the executable. Do not combine other commands such as `cd` or `cat` or any other bash commands.
 * Parse and summarize hotspots:
     * Identify top hot functions/regions and estimate where most CPU time is spent.
     * Give a short "why this is hot" hypothesis for each top hotspot.
@@ -32,7 +33,7 @@ Steps to follow:
     * Reduce allocations/copies in hot paths.
     * Replace inefficient data access patterns.
     * Use compiler/runtime flags that are safe for Arm cloud targets.
-* Re-build or re-compile if required and re-run `arm-mcp/apx_recipe_run` with the same command and recipe (`code_hotspots`).
+* Re-build or re-compile if required and re-run `Performix MCP run_recipe` with the same command and recipe (`code_hotspots`).
 * Compare baseline vs new run:
 * Report hotspot movement and runtime delta in clear, concrete numbers when available.
 * State whether the change improved, regressed, or had no meaningful effect.
@@ -40,7 +41,6 @@ Steps to follow:
 * If regressed or neutral, revert or adjust strategy and run one more validation profile.
 
 Tool usage guidance:
-* The command for `arm-mcp-2/apx_recipe_run` needs to be a single executable. The profiler should be profiling only the application executable or binary.
 * Use `search/codebase` to find hotspot symbols, call sites, and related code quickly.
 * Use `arm-mcp/knowledge_base_search` for Arm-specific optimization guidance, intrinsics, compiler flags, and microarchitecture advice.
 * Use `arm-mcp/mca` when assembly-level bottlenecks are suspected and an assembly/object file is available.
@@ -50,7 +50,6 @@ Tool usage guidance:
 
 Pitfalls to avoid:
 * Do not apply many optimizations at once; this breaks attribution.
-* Do not include multiple commands in the cmd param for `apx_recipe_run` tool. For example, this is wrong: ```cd /home/ec2-user/arm-migration-example && if [ ! -x ./benchmark ]; then g++ -O3 -march=armv8-a -o benchmark main.cpp matrix_operations.cpp hash_operations.cpp string_search.cpp memory_operations.cpp polynomial_eval.cpp -std=c++14; fi && ./benchmark```. Instead, just simply build the executable before the tool call and then provide the path to the executable for the tool call.
 * Do not compare runs with different workload commands, inputs, or environments.
 * Do not present unmeasured claims as performance wins.
 * Do not jump to architecture-specific intrinsics before simpler algorithmic/data fixes unless profiling strongly indicates it.

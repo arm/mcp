@@ -48,7 +48,6 @@
       "contents": [
         "/mcp-build-inputs/wheels/",
         "/mcp-build-inputs/debs/",
-        "/mcp-build-inputs/performix.tar.gz",
         "/mcp-build-inputs/migrate-ease.tar.gz",
         "/mcp-build-inputs/metadata/"
       ],
@@ -316,19 +315,5 @@
       "arm64"
     ],
     "verification": "locally calculated SHA256 of pinned upstream source archive"
-  },
-  "performix": {
-    "version": "1.0.0",
-    "artifacts": {
-      "amd64": {
-        "url": "https://artifacts.tools.arm.com/arm-performix/cli/1.0.0/ArmPerformix-cli-1.0.0-linux-x64.tar.gz",
-        "sha256": "83edba4708daf6633b4d5a85270d14ee2913c9bfc1de523ab9280b0d9ac5461e"
-      },
-      "arm64": {
-        "url": "https://artifacts.tools.arm.com/arm-performix/cli/1.0.0/ArmPerformix-cli-1.0.0-linux-arm64.tar.gz",
-        "sha256": "b5206eb9e78d176928a853f480daea67f7b7c8c176608767f4cd476cfdedb1ad"
-      }
-    },
-    "verification": "locally calculated SHA256 of downloaded vendor artifact"
   }
 }

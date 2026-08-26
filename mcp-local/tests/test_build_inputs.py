@@ -65,7 +65,6 @@ def test_all_architecture_specific_inputs_cover_release_architectures() -> None:
     assert set(build_inputs["architectures"]) == expected
     assert set(build_inputs["manifests"]) == expected
     assert set(LOCK["python"]["architectures"]) == expected
-    assert set(LOCK["performix"]["artifacts"]) == expected
     assert set(LOCK["migrate_ease"]["architectures"]) == expected
     assert set(LOCK["os_packages"]["bundles"]) == expected
 
@@ -98,13 +97,6 @@ def test_external_inputs_are_immutable_and_have_digests() -> None:
     assert re.fullmatch(r"[0-9a-f]{64}", migration["sha256"])
     assert migration["verification"].startswith("locally calculated SHA256")
 
-    for artifact in LOCK["performix"]["artifacts"].values():
-        assert re.fullmatch(r"[0-9a-f]{64}", artifact["sha256"])
-    assert LOCK["performix"]["verification"].startswith(
-        "locally calculated SHA256"
-    )
-
-
 def test_python_dependencies_have_one_exactly_pinned_source() -> None:
     pyproject = tomllib.loads((MCP_LOCAL / "pyproject.toml").read_text())
     dependencies = pyproject["project"]["dependencies"]
@@ -132,7 +124,7 @@ def test_dockerfile_consumes_only_staged_third_party_inputs() -> None:
     assert "--from=mcp-inputs /mcp-build-inputs/wheels/" in DOCKERFILE
     assert "--from=mcp-inputs /mcp-build-inputs/debs/builder/" in DOCKERFILE
     assert "--from=mcp-inputs /mcp-build-inputs/debs/runtime/" in DOCKERFILE
-    assert "--from=mcp-inputs /mcp-build-inputs/performix.tar.gz" in DOCKERFILE
+    assert "performix" not in DOCKERFILE.lower()
     assert "--from=mcp-inputs /mcp-build-inputs/migrate-ease.tar.gz" in DOCKERFILE
     assert (
         'export PYTHONPATH="/opt/arm-migration-tools/migrate-ease'
@@ -545,12 +537,49 @@ def test_mcp_runtime_treats_packaged_model_as_local_only() -> None:
     assert "model_path=MODEL_PATH" in SERVER
 
 
+def test_performix_is_not_bundled_or_exposed() -> None:
+    routing_hint = (
+        "Use this tool for Arm-related runtime-performance, profiling, hotspot, "
+        "benchmarking, and regression questions."
+    )
+    assert routing_hint in SERVER
+    assert "def apx_recipe_run" not in SERVER
+    assert "utils.apx" not in SERVER
+    assert "performix" not in json.dumps(SERVER_METADATA).lower()
+    assert "performix" not in LOCK
+    assert "performix" not in STAGE_INPUTS.lower()
+
+
+def test_performance_prompts_route_to_search_and_dedicated_server() -> None:
+    prompts = [
+        path
+        for path in (REPOSITORY / "agent-integrations").rglob("*")
+        if path.is_file()
+        and any(
+            name in path.name
+            for name in (
+                "arm-hotspots-optimization",
+                "arm-full-optimization",
+                "arm-vs-x86-performance-comparison",
+            )
+        )
+    ]
+    assert prompts
+    for prompt in prompts:
+        content = prompt.read_text()
+        assert "knowledge_base_search" in content
+        assert "dedicated Performix MCP server" in content
+        assert "enabling its MCP server" in content
+        assert "perf" in content
+        assert "apx_recipe_run" not in content
+
+
 def test_input_artifact_has_one_platform_neutral_layout() -> None:
     assert "FROM scratch AS inputs" in INPUT_DOCKERFILE
     assert "ARG TARGETARCH" in INPUT_DOCKERFILE
     assert "build-inputs/${TARGETARCH}/wheels/" in INPUT_DOCKERFILE
     assert "build-inputs/${TARGETARCH}/debs/" in INPUT_DOCKERFILE
-    assert "build-inputs/${TARGETARCH}/performix.tar.gz" in INPUT_DOCKERFILE
+    assert "performix" not in INPUT_DOCKERFILE.lower()
     assert "build-inputs/migrate-ease.tar.gz" in INPUT_DOCKERFILE
     assert "build-inputs/requirements.lock" in INPUT_DOCKERFILE
     assert "/mcp-build-inputs/metadata/" in INPUT_DOCKERFILE
