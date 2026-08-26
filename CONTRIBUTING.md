@@ -153,7 +153,7 @@ container exits; the image under test receives no writable evidence mount. The
 workflow pins the Ubuntu package version, verifies the installed version, and
 records it in both `runtime-egress-evidence.json` and the workflow summary. The
 test exercises MCP startup, the embedded knowledge/vector search, a local
-migrate-ease scan, sysreport instructions, and (on Arm64) local llvm-mca
+migrate-ease scan, and (on Arm64) local llvm-mca
 analysis. Any non-loopback IPv4 or IPv6 `connect`, `sendto`, `sendmsg`, or
 `sendmmsg` destination fails the gate.
 The production image sets `FASTMCP_CHECK_FOR_UPDATES=off` so FastMCP does not

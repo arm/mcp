@@ -19,7 +19,6 @@ This MCP server equips AI assistants with specialized tools for Arm development:
 - **Container Architecture Inspection**: Check Docker image architecture support using integrated [Skopeo](https://github.com/containers/skopeo) and check-image tools.
 - **Assembly Performance Analysis**: Analyze assembly code performance using LLVM-MCA
 - **Arm Performix**: Run APX recipe workflows against a target device over SSH to capture and analyze workload performance data
-- **System Information**: Instructions for gathering detailed system architecture information via [sysreport](https://github.com/ArmDeveloperEcosystem/sysreport)
 
 ## Pre-Built Image
 
