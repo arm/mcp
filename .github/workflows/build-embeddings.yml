@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   acquire-and-publish-chunks:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     permissions:
       contents: read
