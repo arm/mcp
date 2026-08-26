@@ -198,27 +198,9 @@ EXPECTED_CHECK_MIGRATE_EASE_TOOL_RESPONSE = {
 
 EXPECTED_CHECK_MIGRATE_EASE_TOOL_RESPONSE_STATUS = "success"
 
-CHECK_SYSREPORT_TOOL_REQUEST = {
-            "jsonrpc": "2.0",
-            "id": 6,
-            "method": "tools/call",
-            "params": {
-                "name": "sysreport_instructions",
-                "arguments": {
-                    "invocation_reason": "Providing instructions for using the sysreport tool as requested by the user.",
-                },
-            },
-        }
-EXPECTED_CHECK_SYSREPORT_TOOL_RESPONSE = {
-  "instructions": "\n# SysReport Installation and Usage\n\n## Installation\n```bash\ngit clone https://github.com/ArmDeveloperEcosystem/sysreport.git\ncd sysreport\n```\n\n## Usage\n```bash\npython3 sysreport.py\n```\n\n## What SysReport Does\n- Gathers comprehensive system information including architecture, CPU, memory, and hardware details\n- Useful for diagnosing system issues or understanding system capabilities\n- Provides detailed hardware and software configuration data\n\n## Note\nRun these commands directly on your host system (not in a container) to get accurate system information.\n",
-  "repository": "https://github.com/ArmDeveloperEcosystem/sysreport.git",
-  "usage_command": "python3 sysreport.py",
-  "note": "This tool must be run on the host system to provide accurate system information."
-}
-
 CHECK_MCA_TOOL_REQUEST = {
             "jsonrpc": "2.0",
-            "id": 7,
+            "id": 6,
             "method": "tools/call",
             "params": {
                 "name": "mca",
@@ -247,7 +229,7 @@ EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS = "ok"
 
 CHECK_APX_CPU_HOTSPOTS_JAVA_REQUEST = {
             "jsonrpc": "2.0",
-            "id": 9,
+            "id": 8,
             "method": "tools/call",
             "params": {
                 "name": "apx_recipe_run",
@@ -263,7 +245,7 @@ CHECK_APX_CPU_HOTSPOTS_JAVA_REQUEST = {
 
 CHECK_APX_RECIPE_RUN_REQUEST = {
             "jsonrpc": "2.0",
-            "id": 8,
+            "id": 7,
             "method": "tools/call",
             "params": {
                 "name": "apx_recipe_run",

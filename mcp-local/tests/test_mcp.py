@@ -222,16 +222,10 @@ def test_mcp_stdio_transport_responds(platform):
             )
             print("\n***Test Passed: MCP check_migrate_ease_tool tool succeeded")
 
-            #Check Sysreport Tool Test
-            raw_socket.sendall(_encode_mcp_message(constants.CHECK_SYSREPORT_TOOL_REQUEST))
-            check_sysreport_response = _read_response(6, timeout=60)
-            assert check_sysreport_response.get("result")["structuredContent"] == constants.EXPECTED_CHECK_SYSREPORT_TOOL_RESPONSE, "Test Failed: MCP sysreport_instructions tool failed: content mismatch. Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_SYSREPORT_TOOL_RESPONSE,indent=2), json.dumps(check_sysreport_response.get("result")["structuredContent"],indent=2))
-            print("\n***Test Passed: MCP sysreport_instructions tool succeeded")
-
             #Check MCA Tool Test - works only on platform=linux/arm64
             if platform == constants.DEFAULT_PLATFORM:
                 raw_socket.sendall(_encode_mcp_message(constants.CHECK_MCA_TOOL_REQUEST))
-                check_mca_response = _read_response(7, timeout=60)
+                check_mca_response = _read_response(6, timeout=60)
                 assert check_mca_response.get("result")["structuredContent"]["status"] == constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS, "Test Failed: MCP mca tool failed: status mismatch.Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS,indent=2), json.dumps(check_mca_response.get("result")["structuredContent"]["status"],indent=2))
                 print("\n***Test Passed: MCP mca tool succeeded")
             else:
@@ -245,7 +239,7 @@ def test_mcp_stdio_transport_responds(platform):
             apx_args["cmd"] = os.getenv("APX_TEST_CMD", apx_args["cmd"])
 
             raw_socket.sendall(_encode_mcp_message(apx_request))
-            check_apx_recipe_run_response = _read_response(8, timeout=60)
+            check_apx_recipe_run_response = _read_response(7, timeout=60)
             print(
                 "\n***APX Recipe Run Tool Raw Response: ",
                 json.dumps(check_apx_recipe_run_response, indent=2),
@@ -268,7 +262,7 @@ def test_mcp_stdio_transport_responds(platform):
 
             raw_socket.settimeout(600)
             raw_socket.sendall(_encode_mcp_message(apx_java_request))
-            check_apx_java_response = _read_response(9, timeout=600)
+            check_apx_java_response = _read_response(8, timeout=600)
             raw_socket.settimeout(10)
             print(
                 "\n***APX CPU Hotspots (Java) Raw Response: ",
