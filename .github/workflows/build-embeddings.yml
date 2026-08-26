@@ -256,7 +256,7 @@ jobs:
       - name: Scan vectorstore image before publication
         uses: ./.github/actions/blackduck-image-scan
         with:
-          project_name: Arm:MCP:mcp-embedding-vectorstore
+          project_name: "Arm:MCP"
           project_version: "mcp-embedding-vectorstore-1.0"
           image_reference: ${{ env.VECTORSTORE_IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
           platform: linux/arm64
