@@ -425,18 +425,31 @@ def test_release_calls_have_distinct_authorization_permissions_and_secrets() -> 
 
     assert "release_mode: dry-run" in dry_run_call
     assert "actions: read" in dry_run_call
-    assert "contents: read" in dry_run_call
+    assert "contents: write" in dry_run_call
     assert "packages: read" in dry_run_call
+    assert "id-token: write" in dry_run_call
+    assert "attestations: write" in dry_run_call
+    assert "artifact-metadata: write" in dry_run_call
     assert "secrets:" not in dry_run_call
     for forbidden in (
-        "contents: write",
-        "id-token: write",
-        "attestations: write",
-        "artifact-metadata: write",
         "DOCKERHUB_USERNAME",
         "DOCKERHUB_TOKEN",
     ):
         assert forbidden not in dry_run_call
+
+    for job_start, job_end in (
+        ("  authorize:", "  validate-release:"),
+        ("  validate-release:", "  build-arch-images:"),
+        ("  build-arch-images:", "  record-dry-run:"),
+        ("  record-dry-run:", "  publish-image:"),
+    ):
+        dry_run_job = TRUSTED_RELEASE_WORKFLOW.split(job_start, maxsplit=1)[1].split(
+            job_end, maxsplit=1
+        )[0]
+        assert "contents: write" not in dry_run_job
+        assert "id-token: write" not in dry_run_job
+        assert "attestations: write" not in dry_run_job
+        assert "artifact-metadata: write" not in dry_run_job
 
     assert "DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}" in production_call
     assert "DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}" in production_call

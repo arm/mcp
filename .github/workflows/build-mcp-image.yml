@@ -24,6 +24,9 @@ on:
 permissions:
   contents: read
 
+env:
+  IMAGE_FQDN: docker.io/armlimited/arm-mcp
+
 # Version PRs serialize naturally at merge time. The production reusable call
 # remains serialized so closely spaced releases cannot race when updating latest.
 concurrency:
@@ -116,7 +119,7 @@ jobs:
             exit 1
           fi
 
-          expected_image="docker.io/armlimited/arm-mcp:${version}"
+          expected_image="${IMAGE_FQDN}:${version}"
           if ! jq -e --arg image "${expected_image}" '
             [.packages[]? | select(.registryType == "oci") | .identifier] | index($image) != null
           ' "${server_file}" > /dev/null; then
@@ -137,9 +140,16 @@ jobs:
         && inputs.release_action == 'dry-run'
       }}
     permissions:
+      # GitHub validates every nested job's maximum permissions before it
+      # evaluates mode-specific conditions. Jobs that execute in dry-run mode
+      # explicitly downgrade these permissions, and this call receives no
+      # production secrets.
       actions: read
-      contents: read
+      contents: write
       packages: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     uses: ./.github/workflows/trusted-mcp-release.yml
     with:
       release_mode: dry-run
