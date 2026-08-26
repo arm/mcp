@@ -162,7 +162,8 @@ jobs:
 
   generate-and-publish-vectorstore:
     needs: acquire-and-publish-chunks
-    runs-on: ubuntu-24.04-arm
+    # Run this job on x64 so Black Duck Docker Inspector starts reliably.
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     permissions:
       actions: read
@@ -201,6 +202,11 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+      
+      - name: Set up QEMU for ARM64 image builds
+        uses: docker/setup-qemu-action@c47758d2930fb4fcea9f2c2a266a9348b3e20eaa # v3
+        with:
+          platforms: arm64
 
       - name: Resolve chunk build context
         id: chunk-context
