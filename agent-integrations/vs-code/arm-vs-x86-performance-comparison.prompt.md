@@ -5,7 +5,7 @@
 name: 'arm-vs-x86-performance-comparison'
 description: 'Guide a user through APX code_hotspots profiling on x86 and Arm hosts, then report architecture-driven performance delta and price-performance signals'
 agent: 'agent'
-tools: ['arm-mcp/apx_recipe_run', 'arm-mcp/sysreport_instructions', 'arm-mcp/knowledge_base_search', 'search/codebase', 'edit/editFiles']
+tools: ['arm-mcp/apx_recipe_run', 'arm-mcp/knowledge_base_search', 'search/codebase', 'edit/editFiles']
 ---
 
 Your goal is to help a user compare application performance between an existing x86 cloud instance and an existing Arm cloud instance using a repeatable APX workflow.
@@ -50,7 +50,6 @@ Steps to follow:
 
 Tool usage guidance:
 * Use `arm-mcp/apx_recipe_run` for both x86 and Arm runs.
-* Use `arm-mcp/sysreport_instructions` when machine metadata (CPU model, core count, frequency behavior, memory) is missing and needed for interpretation.
 * Use `arm-mcp/knowledge_base_search` for architecture-specific guidance when explaining hotspot differences or next optimizations.
 * Use `search/codebase` and `edit/editFiles` only if user asks for code-level optimization after the comparison.
 

@@ -46,7 +46,6 @@ Tool usage guidance:
 * Use `arm-mcp/mca` when assembly-level bottlenecks are suspected and an assembly/object file is available.
 * Use `arm-mcp/check_image` or `arm-mcp/skopeo` when Docker base images or deployment images may affect Arm performance or compatibility.
 * Use `arm-mcp/migrate_ease_scan` when architecture migration issues are likely mixed with performance issues.
-* Use `arm-mcp/sysreport_instructions` when system-level CPU/memory/platform facts are missing.
 
 Pitfalls to avoid:
 * Do not apply many optimizations at once; this breaks attribution.

@@ -5,7 +5,7 @@
 name: 'arm-full-optimization'
 description: 'Drive expert-level iterative Arm performance tuning across code_hotspots, instruction_mix, cpu_microarchitecture, and memory recipes with measured deltas after each code change'
 agent: 'agent'
-tools: ['arm-mcp/apx_recipe_run', 'arm-mcp/knowledge_base_search', 'arm-mcp/sysreport_instructions', 'search/codebase', 'edit/editFiles']
+tools: ['arm-mcp/apx_recipe_run', 'arm-mcp/knowledge_base_search', 'search/codebase', 'edit/editFiles']
 ---
 
 Your goal is to help an experienced performance engineer maximize application speed on Arm-based cloud systems, with a measured and repeatable optimization workflow.

@@ -45,7 +45,6 @@ Steps to follow:
 
 Tool usage guidance:
 * Use `arm-mcp/apx_recipe_run` for both x86 and Arm runs.
-* Use `arm-mcp/sysreport_instructions` when machine metadata (CPU model, core count, frequency behavior, memory) is missing and needed for interpretation.
 * Use `arm-mcp/knowledge_base_search` for architecture-specific guidance when explaining hotspot differences or next optimizations.
 * Use `search/codebase` and `edit/editFiles` only if user asks for code-level optimization after the comparison.
 

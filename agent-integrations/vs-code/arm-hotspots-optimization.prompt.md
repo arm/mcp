@@ -5,7 +5,7 @@
 name: 'arm-hotspots-optimization'
 description: 'Guide a beginner through Arm cloud performance tuning using ATP code_hotspots baseline, targeted code changes, and delta validation'
 agent: 'agent'
-tools: ['search/codebase', 'edit/editFiles', 'arm-mcp/apx_recipe_run', 'arm-mcp/knowledge_base_search', 'arm-mcp/mca', 'arm-mcp/sysreport_instructions', 'arm-mcp/migrate_ease_scan', 'arm-mcp/check_image', 'arm-mcp/skopeo']
+tools: ['search/codebase', 'edit/editFiles', 'arm-mcp/apx_recipe_run', 'arm-mcp/knowledge_base_search', 'arm-mcp/mca', 'arm-mcp/migrate_ease_scan', 'arm-mcp/check_image', 'arm-mcp/skopeo']
 ---
 
 Your goal is to help a cloud developer with zero optimization experience improve code performance on an Arm-based cloud machine using an iterative, measurable workflow.
@@ -49,7 +49,6 @@ Tool usage guidance:
 * Use `arm-mcp/mca` when assembly-level bottlenecks are suspected and an assembly/object file is available.
 * Use `arm-mcp/check_image` or `arm-mcp/skopeo` when Docker base images or deployment images may affect Arm performance or compatibility.
 * Use `arm-mcp/migrate_ease_scan` when architecture migration issues are likely mixed with performance issues.
-* Use `arm-mcp/sysreport_instructions` when system-level CPU/memory/platform facts are missing.
 
 Pitfalls to avoid:
 * Do not apply many optimizations at once; this breaks attribution.
