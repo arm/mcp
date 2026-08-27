@@ -317,7 +317,7 @@ def validate_mcp_responses(stdout: str, platform: str) -> list[str]:
     if not isinstance(migration, dict) or migration.get("status") != "success":
         failures.append("bundled migrate-ease Java scan did not succeed")
     if platform == "linux/arm64":
-        mca = _structured(responses.get(5, {}))
+        mca = _structured(responses.get(4, {}))
         if not isinstance(mca, dict) or mca.get("status") != "ok":
             failures.append("bundled llvm-mca analysis did not succeed")
     return failures
@@ -351,7 +351,7 @@ def main() -> int:
         requests.append(
             {
                 "jsonrpc": "2.0",
-                "id": 5,
+                "id": 4,
                 "method": "tools/call",
                 "params": {
                     "name": "mca",
