@@ -1,4 +1,5 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/arm/mcp/badge)](https://scorecard.dev/viewer/?uri=github.com/arm/mcp)
+[![SLSA Build Level 3](https://slsa.dev/images/gh-badge-level3.svg)](docs/slsa-build-level-3.md)
 
 # Arm MCP Server
 

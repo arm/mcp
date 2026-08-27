@@ -307,7 +307,7 @@ from unsuccessful or unwanted embedding candidates.
 Production releases are initiated only by a reviewed PR that updates
 `mcp-local/server.json` on `main`. Embedding promotion PRs make this update
 automatically as a minor release. For a release that does not promote a new
-embedding, ask the workflow to create a reviewed version PR:
+embedding, use the normal release procedure:
 
 1. Start **Build MCP Image** manually and select `hotfix`, `minor`, or `major`.
    From the CLI, for example:
@@ -319,12 +319,19 @@ embedding, ask the workflow to create a reviewed version PR:
 2. The workflow opens or updates a version PR with the matching semantic
    version change in `mcp-local/server.json`.
 3. Allow the required status checks and security-team review to complete.
-4. Merge the approved PR. **Build MCP Image** validates the version, builds the
-   exact merge commit for AMD64 and Arm64, publishes the version and `latest`
-   tags, and creates the matching `vX.Y.Z` Git tag and GitHub Release.
+4. Merge the approved PR. The trusted workflow builds AMD64 and Arm64 images,
+   verifies their provenance, and publishes the image tags and GitHub Release.
+5. Verify the release using the digest and commit recorded in the GitHub Release
+   and the [provenance verification guide](docs/provenance-verification.md).
 
-Manual workflow runs are dry runs: they build both architectures but cannot
-publish images, tags, or releases when `dry-run` is selected.
+For a dry run, start **Build MCP Image** with `release_action=dry-run`. Confirm
+that both architectures and both runtime-egress checks pass, and that the
+summary says no image, manifest, attestation, tag, or release was published.
+
+To roll back a production release, do not overwrite or delete immutable release
+tags or digests. Submit a new reviewed patch release that restores the last
+approved source or input pins, merge it normally, and use the same trusted
+workflow and provenance checks.
 
 Generated PRs use the workflow's short-lived `GITHUB_TOKEN`. Because GitHub
 leaves `pull_request` runs created by that token awaiting manual workflow

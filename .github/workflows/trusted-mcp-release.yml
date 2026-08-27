@@ -1,0 +1,611 @@
+name: Trusted MCP Release
+
+on:
+  workflow_call:
+    inputs:
+      release_mode:
+        description: Requested operation; authorization is derived from the caller context
+        required: true
+        type: string
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: armlimited/arm-mcp
+  IMAGE_FQDN: docker.io/armlimited/arm-mcp
+  STRACE_VERSION: 6.8-0ubuntu2
+
+jobs:
+  authorize:
+    name: Authorize original caller context
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.authorization.outputs.mode }}
+      source_sha: ${{ steps.authorization.outputs.source_sha }}
+    steps:
+      - name: Fail closed unless invocation is authorized
+        id: authorization
+        shell: bash
+        env:
+          REQUESTED_MODE: ${{ inputs.release_mode }}
+          CALLER_REPOSITORY: ${{ github.repository }}
+          CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}
+          CALLER_EVENT: ${{ github.event_name }}
+          CALLER_REF: ${{ github.ref }}
+          CALLER_REF_TYPE: ${{ github.ref_type }}
+          CALLER_REF_PROTECTED: ${{ github.ref_protected }}
+          CALLER_SHA: ${{ github.sha }}
+          PUSH_AFTER: ${{ github.event.after }}
+          DISPATCH_ACTION: ${{ github.event.inputs.release_action }}
+        run: |
+          set -euo pipefail
+
+          production_authorized=false
+          if [ "${REQUESTED_MODE}" = "production" ] \
+            && [ "${CALLER_REPOSITORY}" = "arm/mcp" ] \
+            && [ "${CALLER_WORKFLOW_REF}" = "arm/mcp/.github/workflows/build-mcp-image.yml@refs/heads/main" ] \
+            && [ "${CALLER_EVENT}" = "push" ] \
+            && [ "${CALLER_REF}" = "refs/heads/main" ] \
+            && [ "${CALLER_REF_TYPE}" = "branch" ] \
+            && [ "${CALLER_REF_PROTECTED}" = "true" ] \
+            && [ "${CALLER_SHA}" = "${PUSH_AFTER}" ]; then
+            production_authorized=true
+          fi
+
+          dry_run_authorized=false
+          if [ "${REQUESTED_MODE}" = "dry-run" ] \
+            && [ "${CALLER_REPOSITORY}" = "arm/mcp" ] \
+            && [ "${CALLER_EVENT}" = "workflow_dispatch" ] \
+            && [ "${DISPATCH_ACTION}" = "dry-run" ]; then
+            dry_run_authorized=true
+          fi
+
+          if [ "${production_authorized}" = "true" ]; then
+            authorized_mode=production
+          elif [ "${dry_run_authorized}" = "true" ]; then
+            authorized_mode=dry-run
+          else
+            echo "::error::Unauthorized trusted release invocation."
+            echo "Production requires the exact protected-main push context; dry-run requires a manual dry-run dispatch from arm/mcp."
+            exit 1
+          fi
+
+          if [[ ! "${CALLER_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Authorized source commit is not a complete Git SHA: ${CALLER_SHA}"
+            exit 1
+          fi
+
+          {
+            echo "mode=${authorized_mode}"
+            echo "source_sha=${CALLER_SHA}"
+          } >> "${GITHUB_OUTPUT}"
+          echo "Authorized ${authorized_mode} for ${CALLER_REPOSITORY}@${CALLER_SHA}." >> "${GITHUB_STEP_SUMMARY}"
+
+  validate-release:
+    needs: authorize
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      source_sha: ${{ needs.authorize.outputs.source_sha }}
+      mode: ${{ needs.authorize.outputs.mode }}
+    steps:
+      - name: Checkout exact authorized source commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.authorize.outputs.source_sha }}
+          fetch-depth: 0
+
+      - name: Validate authorized release version and source
+        id: release
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ needs.authorize.outputs.source_sha }}
+          RELEASE_MODE: ${{ needs.authorize.outputs.mode }}
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse HEAD)" != "${SOURCE_SHA}" ]; then
+            echo "::error::Checkout does not match the authorized source commit."
+            exit 1
+          fi
+
+          server_file="mcp-local/server.json"
+          version="$(jq -er '.version | select(type == "string")' "${server_file}")"
+          if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::server.json version must use X.Y.Z semantic versioning: ${version}"
+            exit 1
+          fi
+
+          expected_image="docker.io/${IMAGE}:${version}"
+          if ! jq -e --arg image "${expected_image}" '
+            [.packages[]? | select(.registryType == "oci") | .identifier] | index($image) != null
+          ' "${server_file}" > /dev/null; then
+            echo "::error::server.json must identify the release image as ${expected_image}."
+            exit 1
+          fi
+
+          if [ "${RELEASE_MODE}" = "production" ] \
+            && git rev-parse -q --verify "refs/tags/v${version}" > /dev/null; then
+            echo "::error::Release tag v${version} already exists. Submit a new reviewed version PR."
+            exit 1
+          fi
+
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          if [ "${RELEASE_MODE}" = "dry-run" ]; then
+            echo "Manual dry runs build and validate the selected commit but never publish." >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+  build-arch-images:
+    needs: validate-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux/amd64
+            tag: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            tag: arm64
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+    steps:
+      - name: Checkout exact authorized source commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.validate-release.outputs.source_sha }}
+
+      - name: Load locked image references
+        id: locked_images
+        shell: bash
+        run: |
+          set -euo pipefail
+          lock_file="mcp-local/build-inputs.lock.json"
+          dockerfile="mcp-local/Dockerfile"
+
+          load_image() {
+            local key="$1"
+            local docker_arg="$2"
+            local output_name="$3"
+            local reference
+            reference="$(
+              jq -er \
+                --arg key "${key}" \
+                '.container_images[$key].reference | select(type == "string")' \
+                "${lock_file}"
+            )"
+
+            if [[ ! "${reference}" =~ ^[^@[:space:]]+@sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::${key} is not pinned to an immutable image digest: ${reference}"
+              exit 1
+            fi
+            if ! grep -Fqx "ARG ${docker_arg}=${reference}" "${dockerfile}"; then
+              echo "::error::${docker_arg} default does not match ${key} in ${lock_file}."
+              exit 1
+            fi
+            echo "${output_name}=${reference}" >> "${GITHUB_OUTPUT}"
+          }
+
+          load_image ubuntu UBUNTU_IMAGE ubuntu_image
+          load_image embeddings EMBEDDINGS_IMAGE embeddings_image
+          load_image mcp_build_inputs MCP_BUILD_INPUTS_IMAGE mcp_build_inputs_image
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Log in to GHCR for locked build inputs
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Log in to Docker Hub
+        if: ${{ needs.validate-release.outputs.mode == 'production' }}
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build ${{ matrix.platform }} image
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: mcp-local/Dockerfile
+          platforms: ${{ matrix.platform }}
+          network: none
+          build-args: |
+            UBUNTU_IMAGE=${{ steps.locked_images.outputs.ubuntu_image }}
+            EMBEDDINGS_IMAGE=${{ steps.locked_images.outputs.embeddings_image }}
+            MCP_BUILD_INPUTS_IMAGE=${{ steps.locked_images.outputs.mcp_build_inputs_image }}
+          push: ${{ needs.validate-release.outputs.mode == 'production' }}
+          load: ${{ needs.validate-release.outputs.mode == 'dry-run' }}
+          tags: ${{ env.IMAGE }}:${{ needs.validate-release.outputs.version }}-${{ matrix.tag }}
+
+      - name: Install runtime egress tracer
+        id: install_strace
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends "strace=${STRACE_VERSION}"
+          installed_version="$(dpkg-query --show --showformat='${Version}' strace)"
+          if [ "${installed_version}" != "${STRACE_VERSION}" ]; then
+            echo "::error::Installed strace ${installed_version}; expected ${STRACE_VERSION}."
+            exit 1
+          fi
+          echo "version=${installed_version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Select exact image produced by the build
+        id: runtime_image
+        shell: bash
+        env:
+          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
+          RELEASE_MODE: ${{ needs.validate-release.outputs.mode }}
+          VERSION: ${{ needs.validate-release.outputs.version }}
+          ARCH_TAG: ${{ matrix.tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${BUILD_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Build did not produce an immutable image digest: ${BUILD_DIGEST}"
+            exit 1
+          fi
+
+          if [ "${RELEASE_MODE}" = "production" ]; then
+            image="${IMAGE}@${BUILD_DIGEST}"
+            docker pull --platform "${{ matrix.platform }}" "${image}"
+          else
+            image="${IMAGE}:${VERSION}-${ARCH_TAG}"
+          fi
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate runtime has no unapproved egress
+        env:
+          IMAGE_REFERENCE: ${{ steps.runtime_image.outputs.image }}
+          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
+          PLATFORM: ${{ matrix.platform }}
+          EVIDENCE_DIR: ${{ runner.temp }}/runtime-egress-${{ matrix.tag }}
+          STRACE_PACKAGE_VERSION: ${{ steps.install_strace.outputs.version }}
+        run: |
+          python3 mcp-local/scripts/validate-runtime-egress.py \
+            --image "${IMAGE_REFERENCE}" \
+            --digest "${BUILD_DIGEST}" \
+            --platform "${PLATFORM}" \
+            --workspace mcp-local \
+            --strace-package-version "${STRACE_PACKAGE_VERSION}" \
+            --evidence-dir "${EVIDENCE_DIR}"
+
+      - name: Record validated image digest
+        env:
+          ARCH_TAG: ${{ matrix.tag }}
+          BUILD_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${BUILD_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Cannot record invalid image digest: ${BUILD_DIGEST}"
+            exit 1
+          fi
+          printf '%s\n' "${BUILD_DIGEST}" > "${RUNNER_TEMP}/validated-image-digest-${ARCH_TAG}.txt"
+
+      - name: Retain validated image digest
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: validated-image-digest-${{ matrix.tag }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/validated-image-digest-${{ matrix.tag }}.txt
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Add runtime validation summary
+        if: ${{ always() }}
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/runtime-egress-${{ matrix.tag }}
+        run: |
+          if [ -f "${EVIDENCE_DIR}/summary.md" ]; then
+            cat "${EVIDENCE_DIR}/summary.md" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "::error::Runtime egress validation produced no summary."
+            exit 1
+          fi
+
+      - name: Retain runtime validation evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runtime-egress-${{ matrix.tag }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/runtime-egress-${{ matrix.tag }}/
+          if-no-files-found: error
+          retention-days: 90
+
+  record-dry-run:
+    needs:
+      - validate-release
+      - build-arch-images
+    if: >-
+      ${{
+        needs.build-arch-images.result == 'success'
+        && needs.validate-release.outputs.mode == 'dry-run'
+      }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Record successful manual build
+        env:
+          VERSION: ${{ needs.validate-release.outputs.version }}
+          SOURCE_SHA: ${{ needs.validate-release.outputs.source_sha }}
+        run: |
+          {
+            echo "### MCP release dry run"
+            echo ""
+            echo "- Version: \`${VERSION}\`"
+            echo "- Source commit: \`${SOURCE_SHA}\`"
+            echo "- AMD64 and Arm64 builds and runtime egress validations succeeded."
+            echo "- No image, manifest, attestation, tag, or release was published."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  publish-image:
+    needs:
+      - validate-release
+      - build-arch-images
+    if: >-
+      ${{
+        needs.build-arch-images.result == 'success'
+        && needs.validate-release.outputs.mode == 'production'
+      }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      digest: ${{ steps.final_image_digest.outputs.digest }}
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Download validated image digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: validated-image-digest-*-${{ github.run_id }}
+          path: ${{ runner.temp }}/validated-image-digests
+          merge-multiple: true
+
+      - name: Publish multi-architecture release from validated digests
+        env:
+          DIGEST_DIR: ${{ runner.temp }}/validated-image-digests
+          VERSION: ${{ needs.validate-release.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          read_digest() {
+            local architecture="$1"
+            local digest_file="${DIGEST_DIR}/validated-image-digest-${architecture}.txt"
+            local digest
+            if [ ! -f "${digest_file}" ]; then
+              echo "::error::Missing validated ${architecture} image digest artifact." >&2
+              return 1
+            fi
+            digest="$(tr -d '\r\n' < "${digest_file}")"
+            if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::Invalid validated ${architecture} image digest: ${digest}" >&2
+              return 1
+            fi
+            printf '%s\n' "${digest}"
+          }
+
+          amd64_digest="$(read_digest amd64)"
+          arm64_digest="$(read_digest arm64)"
+          docker buildx imagetools create \
+            --metadata-file "${RUNNER_TEMP}/manifest-metadata.json" \
+            -t "${IMAGE}:${VERSION}" \
+            "${IMAGE}@${amd64_digest}" \
+            "${IMAGE}@${arm64_digest}"
+
+      - name: Resolve and validate final image digest
+        id: final_image_digest
+        env:
+          VERSION: ${{ needs.validate-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          created_digest="$(
+            jq -r \
+              '."containerimage.descriptor".digest // empty' \
+              "${RUNNER_TEMP}/manifest-metadata.json"
+          )"
+          inspected_digest="$(
+            docker buildx imagetools inspect \
+              "${IMAGE}:${VERSION}" \
+              --format '{{json .Manifest}}' |
+              jq -r '.digest // empty'
+          )"
+
+          if [[ ! "${created_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Published image digest is missing or invalid."
+            exit 1
+          fi
+          if [ "${created_digest}" != "${inspected_digest}" ]; then
+            echo "::error::Published and registry-resolved image digests differ."
+            echo "Published: ${created_digest}"
+            echo "Registry: ${inspected_digest}"
+            exit 1
+          fi
+
+          echo "digest=${created_digest}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved ${IMAGE_FQDN}@${created_digest}"
+
+  attest-image:
+    name: Attest production image provenance
+    needs: publish-image
+    if: ${{ needs.publish-image.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    outputs:
+      attestation-url: ${{ steps.attest.outputs.attestation-url }}
+    steps:
+      - name: Validate final image digest
+        env:
+          DIGEST: ${{ needs.publish-image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Attestation subject digest is missing or invalid."
+            exit 1
+          fi
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Generate and publish provenance
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE_FQDN }}
+          subject-digest: ${{ needs.publish-image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Validate attestation output
+        env:
+          ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ATTESTATION_URL}" ]; then
+            echo "::error::Attestation action did not return an attestation URL."
+            exit 1
+          fi
+          echo "Attestation: ${ATTESTATION_URL}" >> "${GITHUB_STEP_SUMMARY}"
+
+  verify-provenance:
+    needs:
+      - validate-release
+      - publish-image
+      - attest-image
+    if: ${{ needs.attest-image.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Verify provenance through GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIGEST: ${{ needs.publish-image.outputs.digest }}
+          SOURCE_SHA: ${{ needs.validate-release.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          gh attestation verify \
+            "oci://${IMAGE_FQDN}@${DIGEST}" \
+            --repo arm/mcp \
+            --signer-workflow arm/mcp/.github/workflows/trusted-mcp-release.yml \
+            --source-ref refs/heads/main \
+            --source-digest "${SOURCE_SHA}"
+
+      - name: Verify registry-attached provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIGEST: ${{ needs.publish-image.outputs.digest }}
+          SOURCE_SHA: ${{ needs.validate-release.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          gh attestation verify \
+            "oci://${IMAGE_FQDN}@${DIGEST}" \
+            --repo arm/mcp \
+            --signer-workflow arm/mcp/.github/workflows/trusted-mcp-release.yml \
+            --source-ref refs/heads/main \
+            --source-digest "${SOURCE_SHA}" \
+            --bundle-from-oci
+
+  publish-release:
+    needs:
+      - validate-release
+      - publish-image
+      - attest-image
+      - verify-provenance
+    if: >-
+      ${{
+        always()
+        && needs.publish-image.result == 'success'
+        && needs.attest-image.result == 'success'
+        && needs.verify-provenance.result == 'success'
+      }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Promote verified image to latest
+        env:
+          DIGEST: ${{ needs.publish-image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            -t "${IMAGE}:latest" \
+            "${IMAGE_FQDN}@${DIGEST}"
+
+      - name: Create tag and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.validate-release.outputs.version }}
+          SOURCE_SHA: ${{ needs.validate-release.outputs.source_sha }}
+          DIGEST: ${{ needs.publish-image.outputs.digest }}
+          ATTESTATION_URL: ${{ needs.attest-image.outputs.attestation-url }}
+        run: |
+          set -euo pipefail
+          notes_file="${RUNNER_TEMP}/release-notes.md"
+          docs_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${SOURCE_SHA}/docs"
+          verification_url="${docs_url}/provenance-verification.md"
+          assurance_url="${docs_url}/slsa-build-level-3.md"
+          {
+            printf "Docker image: \`%s:%s\`\n" "${IMAGE_FQDN}" "${VERSION}"
+            printf "Immutable digest: \`%s\`\n" "${DIGEST}"
+            printf "Source commit: [\`%s\`](%s/%s/commit/%s)\n" \
+              "${SOURCE_SHA}" "${GITHUB_SERVER_URL}" \
+              "${GITHUB_REPOSITORY}" "${SOURCE_SHA}"
+            printf "Provenance: [attestation](%s) · [source-pinned verification instructions](%s)\n" \
+              "${ATTESTATION_URL}" "${verification_url}"
+            printf "SLSA Build Level 3: [how the trusted build meets the requirements](%s)\n" \
+              "${assurance_url}"
+          } > "${notes_file}"
+          gh release create "v${VERSION}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${SOURCE_SHA}" \
+            --title "v${VERSION}" \
+            --generate-notes \
+            --notes-file "${notes_file}"
