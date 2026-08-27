@@ -2861,6 +2861,12 @@
     ]
   },
   {
+    "question": "How do I get ready for performance analysis with Sysreport?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sysreport/"
+    ]
+  },
+  {
     "question": "How can I collect a quick report of my Arm Linux system configuration for performance analysis?",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sysreport/"
@@ -2869,13 +2875,15 @@
   {
     "question": "How can I gather a single-page summary of my Arm Linux system configuration before troubleshooting?",
     "expected_urls": [
-      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sysreport/"
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sysreport/",
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sysreport/before-you-begin/"
     ]
   },
   {
     "question": "How can I collect diagnostic system configuration information before investigating an Arm Linux performance problem?",
     "expected_urls": [
-      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sysreport/"
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sysreport/",
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sysreport/before-you-begin/"
     ]
   },
   {
