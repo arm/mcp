@@ -126,7 +126,7 @@ jobs:
           fi
           echo "config-digest=${config_digest}" >> "${GITHUB_OUTPUT}"
 
-      - name: Scan architecture input image before publication
+      - name: Secure Container scan architecture input image before publication
         uses: ./.github/actions/blackduck-image-scan
         with:
           project_name: "Arm:MCP"
@@ -209,7 +209,7 @@ jobs:
             echo ""
             echo "- Platform: \`${{ matrix.platform }}\`"
             echo "- Candidate: \`${IMAGE}:${PUBLICATION_TAG}-${{ matrix.arch }}\`"
-            echo "- Black Duck scan: completed"
+            echo "- Black Duck Secure Container scan: completed"
             echo "- GHCR publication: skipped"
             echo "- Provenance publication: skipped"
           } >> "${GITHUB_STEP_SUMMARY}"

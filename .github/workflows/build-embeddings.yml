@@ -162,8 +162,7 @@ jobs:
 
   generate-and-publish-vectorstore:
     needs: acquire-and-publish-chunks
-    # Run this job on x64 so Black Duck Docker Inspector starts reliably.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 180
     permissions:
       actions: read
@@ -202,11 +201,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
-      
-      - name: Set up QEMU for ARM64 image builds
-        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
-        with:
-          platforms: arm64
 
       - name: Resolve chunk build context
         id: chunk-context
@@ -259,7 +253,7 @@ jobs:
       - name: Remove GHCR credentials before scanning
         run: docker logout ghcr.io
 
-      - name: Scan vectorstore image before publication
+      - name: Secure Container scan vectorstore image before publication
         uses: ./.github/actions/blackduck-image-scan
         with:
           project_name: "Arm:MCP"

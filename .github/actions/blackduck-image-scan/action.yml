@@ -1,5 +1,5 @@
-name: Black Duck pre-publish image scan
-description: Scan a locally built container image and enforce the release gate
+name: Black Duck Secure Container pre-publish scan
+description: Scan a locally built container archive and enforce the release gate
 
 inputs:
   project_name:
@@ -30,7 +30,8 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Validate local scan target
+    - name: Prepare Secure Container scan archive
+      id: prepare
       shell: bash
       env:
         IMAGE_REFERENCE: ${{ inputs.image_reference }}
@@ -48,6 +49,10 @@ runs:
           echo "::error::Unsupported image platform: ${IMAGE_PLATFORM}"
           exit 1
         fi
+        if [[ ! "${ARTIFACT_SUFFIX}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+          echo "::error::Artifact suffix contains unsupported characters."
+          exit 1
+        fi
 
         actual_platform="$(docker image inspect \
           --format '{{.Os}}/{{.Architecture}}' "${IMAGE_REFERENCE}")"
@@ -55,6 +60,14 @@ runs:
           echo "::error::Expected ${IMAGE_PLATFORM}, built ${actual_platform}."
           exit 1
         fi
+
+        archive_path="${RUNNER_TEMP}/blackduck-container-${ARTIFACT_SUFFIX}.tar"
+        docker image save --output "${archive_path}" "${IMAGE_REFERENCE}"
+        if [[ ! -s "${archive_path}" ]]; then
+          echo "::error::Secure Container scan archive is empty."
+          exit 1
+        fi
+        printf 'archive_path=%s\n' "${archive_path}" >> "${GITHUB_OUTPUT}"
 
     - name: Show Black Duck image target
       shell: bash
@@ -67,7 +80,7 @@ runs:
         set -euo pipefail
         echo "::notice title=Black Duck pre-publish target::${PROJECT_NAME} / ${PROJECT_VERSION} / ${IMAGE_REFERENCE} / ${IMAGE_PLATFORM}"
 
-    - name: Black Duck SCA image scan
+    - name: Black Duck SCA Secure Container scan
       id: scan
       continue-on-error: true
       uses: blackduck-inc/black-duck-security-scan@152247222aa9cd38124acd5c0cf60f4db71adc3f # v2.11.0
@@ -82,8 +95,8 @@ runs:
         blackducksca_waitForScan: true
         detect_args: >-
           --detect.accuracy.required=NONE
-          --detect.docker.image=${{ inputs.image_reference }}
-          --detect.tools=DOCKER
+          --detect.tools=CONTAINER_SCAN
+          --detect.container.scan.file.path=${{ steps.prepare.outputs.archive_path }}
         blackducksca_reports_sarif_create: true
         blackducksca_reports_sarif_file_path: blackduck-results-${{ inputs.artifact_suffix }}.sarif
         blackducksca_reports_sarif_severities: 'Critical,High,Medium,Low'
@@ -92,6 +105,17 @@ runs:
         github_token: ${{ inputs.github_token }}
         mark_build_status: 'failure'
         include_diagnostics: true
+
+    - name: Remove Secure Container scan archive
+      if: ${{ always() }}
+      shell: bash
+      env:
+        CONTAINER_ARCHIVE: ${{ steps.prepare.outputs.archive_path }}
+      run: |
+        set -euo pipefail
+        if [[ -n "${CONTAINER_ARCHIVE}" ]]; then
+          rm -f -- "${CONTAINER_ARCHIVE}"
+        fi
 
     - name: Retain Black Duck SARIF
       if: ${{ always() }}
@@ -114,13 +138,14 @@ runs:
       run: |
         set -euo pipefail
         {
-          echo "### Black Duck pre-publish image scan"
+          echo "### Black Duck Secure Container pre-publish scan"
           echo ""
           printf -- '- Project: `%s`\n' "${PROJECT_NAME}"
           printf -- '- Version: `%s`\n' "${PROJECT_VERSION}"
           printf -- '- Local image: `%s`\n' "${IMAGE_REFERENCE}"
           printf -- '- Platform: `%s`\n' "${IMAGE_PLATFORM}"
-          echo '- Release gate: `CRITICAL,HIGH`'
+          echo '- Scan engine: `CONTAINER_SCAN` (Docker Inspector disabled)'
+          echo '- Release gate: `BLOCKER,CRITICAL`'
           printf -- '- Scan outcome: `%s`\n' "${SCAN_OUTCOME}"
           echo '- Publication occurs only after this scan succeeds.'
           echo '- SARIF retention: workflow artifact for 10 days'
@@ -134,6 +159,6 @@ runs:
       run: |
         set -euo pipefail
         if [[ "${SCAN_OUTCOME}" != "success" ]]; then
-          echo "::error::Black Duck image scan failed or found a CRITICAL/HIGH release-gating issue."
+          echo "::error::Black Duck Secure Container scan failed or found a BLOCKER/CRITICAL release-gating issue."
           exit 1
         fi
