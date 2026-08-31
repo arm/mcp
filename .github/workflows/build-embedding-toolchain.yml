@@ -15,6 +15,12 @@ on:
       - embedding-generation/pyproject.toml
       - embedding-generation/uv.lock
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build and scan without publishing the image or proposing a pin update
+        required: true
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -22,6 +28,7 @@ permissions:
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/mcp-embedding-generator
   PACKAGE_NAME: mcp-embedding-generator
+  PUBLISH_IMAGE: ${{ github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
 
 concurrency:
   group: embedding-toolchain-${{ github.ref }}
@@ -32,15 +39,18 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     permissions:
+      actions: read
       contents: read
       packages: write
+      security-events: write
     outputs:
-      image-digest: ${{ steps.build.outputs.digest }}
+      image-digest: ${{ steps.publish.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Verify existing GHCR package is private
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash .github/scripts/verify-ghcr-package-private.sh "${PACKAGE_NAME}" --allow-missing
@@ -48,35 +58,70 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
-      - name: Log in to GHCR
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-
-      - name: Build and push toolchain image
-        id: build
+      - name: Build toolchain image locally
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: embedding-generation
           file: embedding-generation/Dockerfile.toolchain
           platforms: linux/arm64
-          push: true
+          load: true
+          push: false
+          provenance: false
           tags: ${{ env.IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.title=Arm MCP embedding toolchain
 
+      - name: Secure Container scan toolchain image before publication
+        uses: ./.github/actions/blackduck-image-scan
+        with:
+          project_name: "Arm:MCP"
+          project_version: "mcp-embedding-generator-container-1.0"
+          image_reference: ${{ env.IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
+          platform: linux/arm64
+          artifact_suffix: mcp-embedding-generator-arm64
+          blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
+          blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+          github_token: ${{ github.token }}
+
+      - name: Log in to GHCR for publication
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # Publish only the local image that passed the Black Duck gate.
+      - name: Publish scanned toolchain image
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
+        id: publish
+        shell: bash
+        env:
+          TAG: ${{ env.IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          docker push "${TAG}"
+          manifest="$(docker buildx imagetools inspect \
+            "${TAG}" --format '{{json .Manifest}}')"
+          digest="$(jq -er '.digest' <<<"${manifest}")"
+          if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Published image did not return a valid sha256 digest."
+            exit 1
+          fi
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+
       - name: Verify published GHCR package is private
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash .github/scripts/verify-ghcr-package-private.sh "${PACKAGE_NAME}"
 
       - name: Record published digest
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
         env:
-          DIGEST: ${{ steps.build.outputs.digest }}
+          DIGEST: ${{ steps.publish.outputs.digest }}
           TAG: ${{ env.IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           {
@@ -88,7 +133,7 @@ jobs:
 
   propose-toolchain-pin:
     needs: build-toolchain
-    if: ${{ github.ref == 'refs/heads/main' }}
+    if: ${{ github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

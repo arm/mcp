@@ -135,8 +135,16 @@ runs:
         IMAGE_REFERENCE: ${{ inputs.image_reference }}
         IMAGE_PLATFORM: ${{ inputs.platform }}
         SCAN_OUTCOME: ${{ steps.scan.outcome }}
+        SCAN_STATUS: ${{ steps.scan.outputs.status }}
       run: |
         set -euo pipefail
+        if [[ "${SCAN_OUTCOME}" == "success" ]]; then
+          scan_result="passed"
+        elif [[ "${SCAN_STATUS}" == "8" ]]; then
+          scan_result="policy violation"
+        else
+          scan_result="container scan error"
+        fi
         {
           echo "### Black Duck Secure Container pre-publish scan"
           echo ""
@@ -144,21 +152,28 @@ runs:
           printf -- '- Version: `%s`\n' "${PROJECT_VERSION}"
           printf -- '- Local image: `%s`\n' "${IMAGE_REFERENCE}"
           printf -- '- Platform: `%s`\n' "${IMAGE_PLATFORM}"
-          echo '- Scan engine: `CONTAINER_SCAN` (Docker Inspector disabled)'
+          echo '- Scan engine: `CONTAINER_SCAN`'
           echo '- Release gate: `BLOCKER,CRITICAL`'
           printf -- '- Scan outcome: `%s`\n' "${SCAN_OUTCOME}"
+          printf -- '- Bridge exit status: `%s`\n' "${SCAN_STATUS:-unavailable}"
+          printf -- '- Result classification: `%s`\n' "${scan_result}"
           echo '- Publication occurs only after this scan succeeds.'
           echo '- SARIF retention: workflow artifact for 10 days'
         } >> "${GITHUB_STEP_SUMMARY}"
 
-    - name: Enforce Black Duck scan gate
-      if: ${{ always() }}
+    - name: Report Black Duck policy violation
+      if: ${{ always() && steps.scan.outcome != 'success' && steps.scan.outputs.status == '8' }}
+      shell: bash
+      run: |
+        echo "::error title=Black Duck policy violation::The container scan completed, but a BLOCKER/CRITICAL policy violation failed the release gate (Bridge exit code 8)."
+        exit 1
+
+    - name: Report Black Duck container scan failure
+      if: ${{ always() && steps.scan.outcome != 'success' && steps.scan.outputs.status != '8' }}
       shell: bash
       env:
         SCAN_OUTCOME: ${{ steps.scan.outcome }}
+        SCAN_STATUS: ${{ steps.scan.outputs.status }}
       run: |
-        set -euo pipefail
-        if [[ "${SCAN_OUTCOME}" != "success" ]]; then
-          echo "::error::Black Duck Secure Container scan failed or found a BLOCKER/CRITICAL release-gating issue."
-          exit 1
-        fi
+        echo "::error title=Black Duck container scan failure::The scan or its integration failed (outcome=${SCAN_OUTCOME}, Bridge exit code=${SCAN_STATUS:-unavailable}). Review the retained diagnostics for the underlying error."
+        exit 1
