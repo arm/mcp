@@ -130,7 +130,7 @@ jobs:
         uses: ./.github/actions/blackduck-image-scan
         with:
           project_name: "Arm:MCP"
-          project_version: "mcp-build-inputs-${{ matrix.arch }}-1.0"
+          project_version: "mcp-build-inputs-container-${{ matrix.arch }}-1.0"
           image_reference: ${{ env.IMAGE }}:${{ env.PUBLICATION_TAG }}-${{ matrix.arch }}
           platform: ${{ matrix.platform }}
           artifact_suffix: mcp-build-inputs-${{ matrix.arch }}
