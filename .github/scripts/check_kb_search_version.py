@@ -21,7 +21,7 @@ def project_version(project_text: str) -> tuple[int, int, int]:
         raise ValueError("invalid pyproject.toml") from exc
     try:
         version = project["project"]["version"]
-    except KeyError as exc:
+    except (KeyError, TypeError) as exc:
         raise ValueError("pyproject.toml must define [project].version") from exc
     try:
         parts = tuple(int(part) for part in version.split("."))
