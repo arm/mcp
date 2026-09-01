@@ -15,7 +15,14 @@ PACKAGE_FILES = {"LICENSE", "MANIFEST.in", "pyproject.toml"}
 
 
 def project_version(project_text: str) -> tuple[int, int, int]:
-    version = tomllib.loads(project_text)["project"]["version"]
+    try:
+        project = tomllib.loads(project_text)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError("invalid pyproject.toml") from exc
+    try:
+        version = project["project"]["version"]
+    except KeyError as exc:
+        raise ValueError("pyproject.toml must define [project].version") from exc
     try:
         parts = tuple(int(part) for part in version.split("."))
     except (AttributeError, ValueError) as exc:
@@ -23,6 +30,10 @@ def project_version(project_text: str) -> tuple[int, int, int]:
     if len(parts) != 3 or any(part < 0 for part in parts):
         raise ValueError(f"invalid arm-kb-search version: {version}")
     return parts
+
+
+def format_version(version: tuple[int, int, int]) -> str:
+    return ".".join(map(str, version))
 
 
 def is_package_input(path: str) -> bool:
@@ -45,8 +56,8 @@ def validate_version_change(
         changed = ", ".join(relevant_changes)
         raise ValueError(
             "arm-kb-search package inputs changed without a version increase "
-            f"({base_version} -> {head_version}): {changed}. Increase the "
-            "[project] version in pyproject.toml."
+            f"({format_version(base_version)} -> {format_version(head_version)}): "
+            f"{changed}. Increase the [project] version in pyproject.toml."
         )
     return relevant_changes
 
@@ -75,10 +86,10 @@ def main() -> None:
     parser.add_argument("--head-ref", default="HEAD")
     args = parser.parse_args()
 
-    paths = changed_paths(args.base_ref, args.head_ref)
-    base_version = project_version(project_text_at(args.base_ref))
-    head_version = project_version(project_text_at(args.head_ref))
     try:
+        paths = changed_paths(args.base_ref, args.head_ref)
+        base_version = project_version(project_text_at(args.base_ref))
+        head_version = project_version(project_text_at(args.head_ref))
         relevant_changes = validate_version_change(paths, base_version, head_version)
     except ValueError as exc:
         print(f"::error title=arm-kb-search version::{exc}", file=sys.stderr)
@@ -87,8 +98,7 @@ def main() -> None:
     if relevant_changes:
         print(
             "arm-kb-search package inputs changed and version increased: "
-            f"{'.'.join(map(str, base_version))} -> "
-            f"{'.'.join(map(str, head_version))}"
+            f"{format_version(base_version)} -> {format_version(head_version)}"
         )
         for path in relevant_changes:
             print(f"- {path}")
