@@ -23,10 +23,6 @@ inputs:
   blackducksca_token:
     description: Black Duck SCA API token
     required: true
-  github_token:
-    description: GitHub token used to upload the SARIF report
-    required: true
-
 runs:
   using: composite
   steps:
@@ -102,10 +98,15 @@ runs:
         blackducksca_reports_sarif_file_path: blackduck-results-${{ inputs.artifact_suffix }}.sarif
         blackducksca_reports_sarif_severities: 'Critical,High,Medium,Low'
         blackducksca_reports_sarif_groupSCAIssues: false
-        blackducksca_upload_sarif_report: true
-        github_token: ${{ inputs.github_token }}
+        blackducksca_upload_sarif_report: false
         mark_build_status: 'failure'
         include_diagnostics: true
+
+    - name: Upload Black Duck SARIF
+      if: ${{ !cancelled() }}
+      uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+      with:
+        sarif_file: blackduck-results-${{ inputs.artifact_suffix }}.sarif
 
     - name: Remove Secure Container scan archive
       if: ${{ always() }}

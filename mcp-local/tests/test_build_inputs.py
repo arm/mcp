@@ -26,6 +26,9 @@ INPUT_WORKFLOW = (
 TOOLCHAIN_WORKFLOW = (
     REPOSITORY / ".github/workflows/build-embedding-toolchain.yml"
 ).read_text()
+BLACKDUCK_IMAGE_SCAN_ACTION = (
+    REPOSITORY / ".github/actions/blackduck-image-scan/action.yml"
+).read_text()
 PIN_PROMOTION_SCRIPT = (
     REPOSITORY / ".github/scripts/propose-pin-pr.sh"
 ).read_text()
@@ -700,6 +703,13 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
     assert "subject-name: ${{ env.IMAGE }}" in TOOLCHAIN_WORKFLOW
     assert "subject-digest: ${{ steps.publish.outputs.digest }}" in TOOLCHAIN_WORKFLOW
     assert "push-to-registry: true" in TOOLCHAIN_WORKFLOW
+
+
+def test_container_scan_uses_explicit_codeql_sarif_upload() -> None:
+    assert "blackducksca_upload_sarif_report: false" in BLACKDUCK_IMAGE_SCAN_ACTION
+    assert "uses: github/codeql-action/upload-sarif@" in BLACKDUCK_IMAGE_SCAN_ACTION
+    assert "if: ${{ !cancelled() }}" in BLACKDUCK_IMAGE_SCAN_ACTION
+    assert "github_token:" not in BLACKDUCK_IMAGE_SCAN_ACTION
 
 
 def test_embedding_toolchain_pin_updater_changes_only_generator_input() -> None:

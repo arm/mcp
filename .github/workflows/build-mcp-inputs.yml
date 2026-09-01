@@ -45,6 +45,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     permissions:
+      actions: read
       contents: read
       packages: write
       security-events: write
@@ -136,7 +137,6 @@ jobs:
           artifact_suffix: mcp-build-inputs-${{ matrix.arch }}
           blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
           blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
-          github_token: ${{ github.token }}
 
       - name: Log in to GHCR for publication
         if: ${{ env.PUBLISH_IMAGES == 'true' }}
