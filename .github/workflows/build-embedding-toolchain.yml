@@ -43,6 +43,9 @@ jobs:
       contents: read
       packages: write
       security-events: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     outputs:
       image-digest: ${{ steps.publish.outputs.digest }}
     steps:
@@ -112,6 +115,15 @@ jobs:
           fi
           echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
 
+      - name: Generate toolchain provenance attestation
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          push-to-registry: true
+
       - name: Verify published GHCR package is private
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
         env:
@@ -123,12 +135,20 @@ jobs:
         env:
           DIGEST: ${{ steps.publish.outputs.digest }}
           TAG: ${{ env.IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
+          ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
         run: |
+          set -euo pipefail
+          if [[ -z "${ATTESTATION_URL}" ]]; then
+            echo "::error::Attestation action did not return an attestation URL."
+            exit 1
+          fi
+
           {
             echo "### Embedding toolchain image"
             echo ""
             echo "- Tag: \`${TAG}\`"
             echo "- Immutable reference: \`${IMAGE}@${DIGEST}\`"
+            echo "- Attestation: [view provenance](${ATTESTATION_URL})"
           } >> "${GITHUB_STEP_SUMMARY}"
 
   propose-toolchain-pin:

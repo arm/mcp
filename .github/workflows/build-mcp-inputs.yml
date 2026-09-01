@@ -2,7 +2,7 @@ name: Build MCP Input Bundle
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
     paths:
       - mcp-local/.dockerignore
       - mcp-local/.python-version
@@ -146,7 +146,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      # Publish only after Black Duck succeeds. 
+      # Publish only after Black Duck succeeds.
       # This second solve reuses the first solve's BuildKit cache and uses the
       # registry exporter so BuildKit can attach provenance during publication.
       - name: Publish scanned architecture input image with provenance

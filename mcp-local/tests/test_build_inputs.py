@@ -693,6 +693,13 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
     assert "automation/pin-embedding-generator" in TOOLCHAIN_WORKFLOW
     assert "cancel-in-progress: false" in TOOLCHAIN_WORKFLOW
     assert "gh pr merge" not in TOOLCHAIN_WORKFLOW
+    assert "id-token: write" in TOOLCHAIN_WORKFLOW
+    assert "attestations: write" in TOOLCHAIN_WORKFLOW
+    assert "artifact-metadata: write" in TOOLCHAIN_WORKFLOW
+    assert "uses: actions/attest@" in TOOLCHAIN_WORKFLOW
+    assert "subject-name: ${{ env.IMAGE }}" in TOOLCHAIN_WORKFLOW
+    assert "subject-digest: ${{ steps.publish.outputs.digest }}" in TOOLCHAIN_WORKFLOW
+    assert "push-to-registry: true" in TOOLCHAIN_WORKFLOW
 
 
 def test_embedding_toolchain_pin_updater_changes_only_generator_input() -> None:
