@@ -2,7 +2,7 @@ name: Build MCP Input Bundle
 
 on:
   push:
-    branches: [main, stesol-590-ghcr-scan]
+    branches: [ "main" ]
     paths:
       - mcp-local/.dockerignore
       - mcp-local/.python-version
