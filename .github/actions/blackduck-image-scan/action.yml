@@ -97,6 +97,7 @@ runs:
           --detect.accuracy.required=NONE
           --detect.tools=CONTAINER_SCAN
           --detect.container.scan.file.path=${{ steps.prepare.outputs.archive_path }}
+          --detect.blackduck.scan.wait.for.results.timeout=1800
         blackducksca_reports_sarif_create: true
         blackducksca_reports_sarif_file_path: blackduck-results-${{ inputs.artifact_suffix }}.sarif
         blackducksca_reports_sarif_severities: 'Critical,High,Medium,Low'
