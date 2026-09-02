@@ -209,6 +209,8 @@ def test_release_uses_reviewed_server_version_without_self_merging() -> None:
     assert "Validate reviewed release version" in IMAGE_WORKFLOW
     assert "github.event_name == 'push'" in IMAGE_WORKFLOW
     assert 'version="$(jq -er' in IMAGE_WORKFLOW
+    assert 'git show "${BASE_SHA}:${server_file}"' in IMAGE_WORKFLOW
+    assert "server.json version is unchanged; no release will be built." in IMAGE_WORKFLOW
     assert "gh pr merge" not in IMAGE_WORKFLOW
     assert "BUMP_BRANCH" not in IMAGE_WORKFLOW
     assert (

@@ -299,6 +299,10 @@ from unsuccessful or unwanted embedding candidates.
 
 #### Creating a Reviewed MCP Release
 
+`mcp-local/server.json` is the checked-in MCP registry manifest and release
+control file. Metadata-only changes are validated without publishing; changing
+its version and matching OCI image identifier initiates a release.
+
 Production releases are initiated only by a reviewed PR that updates
 `mcp-local/server.json` on `main`. Embedding promotion PRs make this update
 automatically as a minor release. For a release that does not promote a new

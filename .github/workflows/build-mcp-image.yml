@@ -119,6 +119,8 @@ jobs:
         id: release
         shell: bash
         env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           CHECK_TAG: ${{ github.event_name != 'workflow_dispatch' }}
           BUILD: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
@@ -138,6 +140,15 @@ jobs:
           ' "${server_file}" > /dev/null; then
             echo "::error::server.json must identify the release image as ${expected_image}."
             exit 1
+          fi
+
+          if [ "${EVENT_NAME}" != "workflow_dispatch" ] \
+            && git cat-file -e "${BASE_SHA}:${server_file}" 2>/dev/null \
+            && [ "${version}" = "$(git show "${BASE_SHA}:${server_file}" | jq -er '.version')" ]; then
+            CHECK_TAG=false
+            BUILD=false
+            PUBLISH=false
+            echo "server.json version is unchanged; no release will be built." >> "${GITHUB_STEP_SUMMARY}"
           fi
 
           if [ "${CHECK_TAG}" = "true" ] && git rev-parse -q --verify "refs/tags/v${version}" > /dev/null; then
