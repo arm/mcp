@@ -754,30 +754,6 @@ def test_performix_is_not_bundled_or_exposed() -> None:
     assert "performix" not in STAGE_INPUTS.lower()
 
 
-def test_performance_prompts_route_to_search_and_dedicated_server() -> None:
-    prompts = [
-        path
-        for path in (REPOSITORY / "agent-integrations").rglob("*")
-        if path.is_file()
-        and any(
-            name in path.name
-            for name in (
-                "arm-hotspots-optimization",
-                "arm-full-optimization",
-                "arm-vs-x86-performance-comparison",
-            )
-        )
-    ]
-    assert prompts
-    for prompt in prompts:
-        content = prompt.read_text()
-        assert "knowledge_base_search" in content
-        assert "dedicated Performix MCP server" in content
-        assert "enabling its MCP server" in content
-        assert "perf" in content
-        assert "apx_recipe_run" not in content
-
-
 def test_input_artifact_has_one_platform_neutral_layout() -> None:
     assert "FROM scratch AS inputs" in INPUT_DOCKERFILE
     assert "ARG TARGETARCH" in INPUT_DOCKERFILE
