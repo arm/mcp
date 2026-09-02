@@ -159,7 +159,7 @@ def test_mcp_stdio_transport_responds(platform):
             in knowledge_search["description"]
         )
 
-        print("\n***Test Passed: arm-mcp container initilized and ran successfully")
+        print("\n***Test Passed: arm-mcp container initialized and ran successfully")
 
         #Check Image Tool Test
         raw_socket.sendall(_encode_mcp_message(constants.CHECK_IMAGE_REQUEST))

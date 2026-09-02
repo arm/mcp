@@ -30,7 +30,7 @@ reproducible build inputs, and the reviewed release workflows.
 ## Reproducible MCP Build Inputs
 
 The final MCP image build does not resolve or download Python packages, Ubuntu
-packages or migrate-ease. Those inputs are acquired separately by
+packages, or migrate-ease. Those inputs are acquired separately by
 the manually triggered **Build MCP Input Bundle** workflow and published as a
 private, multi-architecture OCI image at `ghcr.io/arm/mcp-build-inputs`.
 
