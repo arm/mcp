@@ -73,12 +73,6 @@ RUN --network=none mkdir -p /opt/arm-migration-tools/migrate-ease && \
       chmod 0755 "${wrapper}"; \
     done
 
-COPY --from=mcp-inputs /mcp-build-inputs/performix.tar.gz /tmp/performix.tar.gz
-RUN --network=none mkdir -p /opt/ArmPerformix-cli-current && \
-    tar -xzf /tmp/performix.tar.gz -C /opt/ArmPerformix-cli-current && \
-    chmod 0755 /opt/ArmPerformix-cli-current/apx && \
-    rm /tmp/performix.tar.gz
-
 # Keep the model, metadata, and index from the same immutable vector-store
 # artifact. The model is architecture-independent even though generation ran
 # on arm64.
@@ -89,7 +83,6 @@ COPY --from=embeddings /embedding-data/usearch_index.bin /app/data/usearch_index
 
 COPY mcp-local/utils/ /app/utils/
 COPY arm_kb_search/ /app/arm_kb_search/
-COPY mcp-local/sql /app/sql/
 COPY mcp-local/server.py /app/server.py
 
 FROM ${UBUNTU_IMAGE} AS runtime
@@ -104,8 +97,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TRANSFORMERS_OFFLINE=1 \
     FASTMCP_CHECK_FOR_UPDATES=off \
     SENTENCE_TRANSFORMER_MODEL_PATH=/app/embedding-model \
-    APX_HOME=/opt/ArmPerformix-cli-current \
-    APX_BIN=/opt/ArmPerformix-cli-current/apx \
     VIRTUAL_ENV=/app/.venv \
     PATH=/app/.venv/bin:$PATH
 
@@ -119,12 +110,9 @@ RUN --network=none apt-get install -y --no-download --no-install-recommends \
     llvm-mca --version && \
     git --version
 
-COPY --from=builder /opt/ArmPerformix-cli-current /opt/ArmPerformix-cli-current
 COPY --from=builder /opt/arm-migration-tools/migrate-ease /opt/arm-migration-tools/migrate-ease
 COPY --from=builder /usr/local/bin/migrate-ease-* /usr/local/bin/
 COPY --from=builder /app /app
-
-RUN --network=none ln -sf "${APX_BIN}" /usr/local/bin/apx
 
 WORKDIR /app
 
