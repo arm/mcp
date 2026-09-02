@@ -260,6 +260,38 @@ def test_release_requires_runtime_egress_validation_for_both_architectures() -> 
     assert "needs.build-arch-images.result == 'success'" in TRUSTED_RELEASE_WORKFLOW
 
 
+def test_release_scans_validated_runtime_images_in_all_modes() -> None:
+    build_job = TRUSTED_RELEASE_WORKFLOW.split(
+        "  build-arch-images:", maxsplit=1
+    )[1].split("  record-dry-run:", maxsplit=1)[0]
+    scan_steps = build_job.split(
+        "Prepare validated runtime image for Black Duck", maxsplit=1
+    )[1].split("Record validated image digest", maxsplit=1)[0]
+
+    assert "security-events: write" in build_job
+    assert "platform: linux/amd64" in build_job
+    assert "platform: linux/arm64" in build_job
+    assert "Prepare validated runtime image for Black Duck" in build_job
+    assert "SOURCE_IMAGE: ${{ steps.runtime_image.outputs.image }}" in build_job
+    assert "Remove registry credentials before scanning" in build_job
+    assert "docker logout ghcr.io" in build_job
+    assert "uses: ./.github/actions/blackduck-image-scan" in build_job
+    assert 'project_name: "Arm:MCP"' in build_job
+    assert (
+        'project_version: "mcp-runtime-container-${{ matrix.tag }}-1.0"'
+        in build_job
+    )
+    assert "platform: ${{ matrix.platform }}" in build_job
+    assert "blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}" in build_job
+    assert (
+        "if: ${{ needs.validate-release.outputs.mode == 'production' }}"
+        not in scan_steps
+    )
+    assert build_job.index("Black Duck scan validated runtime image") < build_job.index(
+        "Record validated image digest"
+    )
+
+
 def test_release_manifest_uses_the_validated_architecture_digests() -> None:
     publish_step = TRUSTED_RELEASE_WORKFLOW.split(
         "- name: Publish multi-architecture release from validated digests",
@@ -430,10 +462,11 @@ def test_release_calls_have_distinct_authorization_permissions_and_secrets() -> 
     assert "actions: read" in dry_run_call
     assert "contents: write" in dry_run_call
     assert "packages: read" in dry_run_call
+    assert "security-events: write" in dry_run_call
     assert "id-token: write" in dry_run_call
     assert "attestations: write" in dry_run_call
     assert "artifact-metadata: write" in dry_run_call
-    assert "secrets:" not in dry_run_call
+    assert "BLACKDUCKSCA_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}" in dry_run_call
     for forbidden in (
         "DOCKERHUB_USERNAME",
         "DOCKERHUB_TOKEN",
@@ -456,6 +489,7 @@ def test_release_calls_have_distinct_authorization_permissions_and_secrets() -> 
 
     assert "DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}" in production_call
     assert "DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}" in production_call
+    assert "BLACKDUCKSCA_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}" in production_call
     assert "secrets: inherit" not in IMAGE_WORKFLOW
     assert "secrets: inherit" not in TRUSTED_RELEASE_WORKFLOW
     assert "environment:" not in IMAGE_WORKFLOW
@@ -510,13 +544,17 @@ def test_trusted_release_reauthorizes_the_original_caller_and_fails_closed() -> 
 
 
 def test_production_release_actions_are_immutably_pinned() -> None:
-    external_actions = re.findall(
+    referenced_actions = re.findall(
         r"^\s*uses:\s+([^\s#]+)", TRUSTED_RELEASE_WORKFLOW, re.MULTILINE
     )
+    external_actions = [
+        action for action in referenced_actions if not action.startswith("./")
+    ]
     assert external_actions
     assert all(
         re.fullmatch(r"[^@]+@[0-9a-f]{40}", action) for action in external_actions
     )
+    assert "./.github/actions/blackduck-image-scan" in referenced_actions
 
 
 def test_codeowners_covers_release_sensitive_workflows_and_inputs() -> None:
@@ -717,6 +755,12 @@ def test_container_scan_uses_explicit_codeql_sarif_upload() -> None:
     assert "inputs.artifact_suffix" in upload_step
     assert "!= ''" in upload_step
     assert "github_token:" not in BLACKDUCK_IMAGE_SCAN_ACTION
+    assert (
+        "blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'"
+        in BLACKDUCK_IMAGE_SCAN_ACTION
+    )
+    assert "mark_build_status: 'failure'" in BLACKDUCK_IMAGE_SCAN_ACTION
+    assert "Report Black Duck policy violation" in BLACKDUCK_IMAGE_SCAN_ACTION
 
 
 def test_embedding_toolchain_pin_updater_changes_only_generator_input() -> None:

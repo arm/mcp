@@ -143,16 +143,19 @@ jobs:
       # GitHub validates every nested job's maximum permissions before it
       # evaluates mode-specific conditions. Jobs that execute in dry-run mode
       # explicitly downgrade these permissions, and this call receives no
-      # production secrets.
+      # registry publication secrets.
       actions: read
       contents: write
       packages: read
+      security-events: write
       id-token: write
       attestations: write
       artifact-metadata: write
     uses: ./.github/workflows/trusted-mcp-release.yml
     with:
       release_mode: dry-run
+    secrets:
+      BLACKDUCKSCA_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}
 
   production:
     if: >-
@@ -168,6 +171,7 @@ jobs:
       actions: read
       contents: write
       packages: read
+      security-events: write
       id-token: write
       attestations: write
       artifact-metadata: write
@@ -175,5 +179,6 @@ jobs:
     with:
       release_mode: production
     secrets:
+      BLACKDUCKSCA_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

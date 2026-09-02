@@ -8,6 +8,8 @@ on:
         required: true
         type: string
     secrets:
+      BLACKDUCKSCA_TOKEN:
+        required: true
       DOCKERHUB_USERNAME:
         required: false
       DOCKERHUB_TOKEN:
@@ -161,6 +163,7 @@ jobs:
       actions: read
       contents: read
       packages: read
+      security-events: write
     steps:
       - name: Checkout exact authorized source commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -287,6 +290,41 @@ jobs:
             --strace-package-version "${STRACE_PACKAGE_VERSION}" \
             --evidence-dir "${EVIDENCE_DIR}"
 
+      - name: Prepare validated runtime image for Black Duck
+        id: scan_image
+        shell: bash
+        env:
+          SOURCE_IMAGE: ${{ steps.runtime_image.outputs.image }}
+          SOURCE_SHA: ${{ needs.validate-release.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          scan_image="ghcr.io/${GITHUB_REPOSITORY_OWNER}/arm-mcp-runtime-scan:git-${SOURCE_SHA}-${{ matrix.tag }}"
+          docker image inspect "${SOURCE_IMAGE}" > /dev/null
+          docker tag "${SOURCE_IMAGE}" "${scan_image}"
+          echo "image=${scan_image}" >> "${GITHUB_OUTPUT}"
+
+      - name: Remove registry credentials before scanning
+        shell: bash
+        env:
+          RELEASE_MODE: ${{ needs.validate-release.outputs.mode }}
+        run: |
+          set -euo pipefail
+          docker logout ghcr.io
+          if [ "${RELEASE_MODE}" = "production" ]; then
+            docker logout
+          fi
+
+      - name: Black Duck scan validated runtime image
+        uses: ./.github/actions/blackduck-image-scan
+        with:
+          project_name: "Arm:MCP"
+          project_version: "mcp-runtime-container-${{ matrix.tag }}-1.0"
+          image_reference: ${{ steps.scan_image.outputs.image }}
+          platform: ${{ matrix.platform }}
+          artifact_suffix: mcp-runtime-${{ matrix.tag }}
+          blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
+          blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+
       - name: Record validated image digest
         env:
           ARCH_TAG: ${{ matrix.tag }}
@@ -351,7 +389,7 @@ jobs:
             echo ""
             echo "- Version: \`${VERSION}\`"
             echo "- Source commit: \`${SOURCE_SHA}\`"
-            echo "- AMD64 and Arm64 builds and runtime egress validations succeeded."
+            echo "- AMD64 and Arm64 builds, runtime egress validations, and Black Duck scans succeeded."
             echo "- No image, manifest, attestation, tag, or release was published."
           } >> "${GITHUB_STEP_SUMMARY}"
 
