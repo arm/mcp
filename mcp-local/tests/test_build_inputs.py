@@ -706,9 +706,16 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
 
 
 def test_container_scan_uses_explicit_codeql_sarif_upload() -> None:
+    upload_step = BLACKDUCK_IMAGE_SCAN_ACTION.split(
+        "    - name: Upload Black Duck SARIF", maxsplit=1
+    )[1].split("    - name: Remove Secure Container scan archive", maxsplit=1)[0]
+
     assert "blackducksca_upload_sarif_report: false" in BLACKDUCK_IMAGE_SCAN_ACTION
-    assert "uses: github/codeql-action/upload-sarif@" in BLACKDUCK_IMAGE_SCAN_ACTION
-    assert "if: ${{ !cancelled() }}" in BLACKDUCK_IMAGE_SCAN_ACTION
+    assert "uses: github/codeql-action/upload-sarif@" in upload_step
+    assert "!cancelled()" in upload_step
+    assert "hashFiles(format(" in upload_step
+    assert "inputs.artifact_suffix" in upload_step
+    assert "!= ''" in upload_step
     assert "github_token:" not in BLACKDUCK_IMAGE_SCAN_ACTION
 
 
