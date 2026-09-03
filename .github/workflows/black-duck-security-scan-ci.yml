@@ -58,7 +58,7 @@ jobs:
           blackducksca_scan_full: true
 
           ### SCANNING: Optional fields
-          # blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'
+          blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'
           detect_args: "--detect.accuracy.required=NONE"
 
           ### FIX PULL REQUEST CREATION
@@ -72,8 +72,8 @@ jobs:
           ### Set upload to false & then later upload via github/codeql-action/upload-sarif@v4.37.4 to avoid token-permissions issue flagged by scorecard
           blackducksca_upload_sarif_report: false
 
-          ### Mark build status if policy violating issues are found
-          mark_build_status: 'success'
+          ### Mark build status as failure if policy violating issues are found
+          mark_build_status: 'failure'
 
           ### To enable Black Duck SCA policy badges
           #blackducksca_policy_badges_create: false
@@ -83,10 +83,44 @@ jobs:
           include_diagnostics: true
 
       - name: Upload Black Duck SARIF
-        if: ${{ github.event_name != 'pull_request' }}
+        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
         uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
         with:
           sarif_file: blackduck-results.sarif
+
+      - name: Export Black Duck CycloneDX SBOM
+        id: source-sbom-export
+        if: >-
+          ${{
+            !cancelled()
+            && github.event_name != 'pull_request'
+            && steps.black-duck-full-scan.outcome == 'success'
+          }}
+        env:
+          BLACKDUCK_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+          BLACKDUCK_URL: ${{ vars.BLACKDUCKSCA_URL }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/export-blackduck-cyclonedx.py \
+            --blackduck-url "${BLACKDUCK_URL}" \
+            --project "${DETECT_PROJECT_NAME}" \
+            --version "${DETECT_PROJECT_VERSION_NAME}" \
+            --output "${RUNNER_TEMP}/blackduck-source-sbom-${GITHUB_SHA}.cdx.json"
+
+      - name: Retain Black Duck source CycloneDX SBOM
+        if: >-
+          ${{
+            !cancelled()
+            && github.event_name != 'pull_request'
+            && steps.black-duck-full-scan.outcome == 'success'
+            && steps.source-sbom-export.outcome == 'success'
+          }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: blackduck-source-sbom-${{ github.run_id }}
+          path: ${{ runner.temp }}/blackduck-source-sbom-${{ github.sha }}.cdx.json
+          if-no-files-found: error
+          retention-days: 10
           
       - name: Black Duck SCA PR Scan
         id: black-duck-pr-scan
@@ -96,11 +130,12 @@ jobs:
           blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
           blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
           blackducksca_scan_full: false
+          blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'
           detect_args: "--detect.accuracy.required=NONE"
 
           ### PULL REQUEST COMMENTS
           blackducksca_prcomment_enabled: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-          ### Mark build status if policy violating issues are found
-          mark_build_status: 'success'
+          ### Mark build status as failure if policy violating issues are found
+          mark_build_status: 'failure'
