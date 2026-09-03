@@ -86,6 +86,7 @@ jobs:
           artifact_suffix: mcp-embedding-generator-arm64
           blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
           blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+          distribution: "INTERNAL"
 
       - name: Log in to GHCR for publication
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
