@@ -33,9 +33,13 @@ EMBEDDING_WORKFLOW = (
     REPOSITORY / ".github/workflows/build-embeddings.yml"
 ).read_text()
 IMAGE_WORKFLOW = (REPOSITORY / ".github/workflows/build-mcp-image.yml").read_text()
+TRUSTED_RELEASE_WORKFLOW = (
+    REPOSITORY / ".github/workflows/trusted-mcp-release.yml"
+).read_text()
 PROVENANCE_GUIDE = (
     REPOSITORY / "docs/provenance-verification.md"
 ).read_text()
+CODEOWNERS = (REPOSITORY / ".github/CODEOWNERS").read_text()
 PIN_WORKFLOWS = (TOOLCHAIN_WORKFLOW, INPUT_WORKFLOW, EMBEDDING_WORKFLOW)
 REQUIRED_CHECK_DISPATCH = (
     REPOSITORY / ".github/scripts/dispatch-required-pr-checks.sh"
@@ -65,7 +69,6 @@ def test_all_architecture_specific_inputs_cover_release_architectures() -> None:
     assert set(build_inputs["architectures"]) == expected
     assert set(build_inputs["manifests"]) == expected
     assert set(LOCK["python"]["architectures"]) == expected
-    assert set(LOCK["performix"]["artifacts"]) == expected
     assert set(LOCK["migrate_ease"]["architectures"]) == expected
     assert set(LOCK["os_packages"]["bundles"]) == expected
 
@@ -98,13 +101,6 @@ def test_external_inputs_are_immutable_and_have_digests() -> None:
     assert re.fullmatch(r"[0-9a-f]{64}", migration["sha256"])
     assert migration["verification"].startswith("locally calculated SHA256")
 
-    for artifact in LOCK["performix"]["artifacts"].values():
-        assert re.fullmatch(r"[0-9a-f]{64}", artifact["sha256"])
-    assert LOCK["performix"]["verification"].startswith(
-        "locally calculated SHA256"
-    )
-
-
 def test_python_dependencies_have_one_exactly_pinned_source() -> None:
     pyproject = tomllib.loads((MCP_LOCAL / "pyproject.toml").read_text())
     dependencies = pyproject["project"]["dependencies"]
@@ -132,7 +128,7 @@ def test_dockerfile_consumes_only_staged_third_party_inputs() -> None:
     assert "--from=mcp-inputs /mcp-build-inputs/wheels/" in DOCKERFILE
     assert "--from=mcp-inputs /mcp-build-inputs/debs/builder/" in DOCKERFILE
     assert "--from=mcp-inputs /mcp-build-inputs/debs/runtime/" in DOCKERFILE
-    assert "--from=mcp-inputs /mcp-build-inputs/performix.tar.gz" in DOCKERFILE
+    assert "performix" not in DOCKERFILE.lower()
     assert "--from=mcp-inputs /mcp-build-inputs/migrate-ease.tar.gz" in DOCKERFILE
     assert (
         'export PYTHONPATH="/opt/arm-migration-tools/migrate-ease'
@@ -144,7 +140,7 @@ def test_dockerfile_consumes_only_staged_third_party_inputs() -> None:
 
 
 def test_final_builds_do_not_acquire_inputs_live() -> None:
-    for workflow in (IMAGE_WORKFLOW, INTEGRATION_WORKFLOW):
+    for workflow in (TRUSTED_RELEASE_WORKFLOW, INTEGRATION_WORKFLOW):
         assert "stage-build-inputs.py" not in workflow
         assert "packages: read" in workflow
         assert "Log in to GHCR for locked build inputs" in workflow
@@ -166,24 +162,27 @@ def test_final_builds_disable_network_for_every_run_instruction() -> None:
         re.match(r"(?i:RUN)\s+--network=none(?:\s|$)", instruction)
         for instruction in run_instructions
     )
-    assert "          network: none\n" in IMAGE_WORKFLOW
+    assert "          network: none\n" in TRUSTED_RELEASE_WORKFLOW
     assert "            --network none \\\n" in INTEGRATION_WORKFLOW
 
 
 def test_release_build_loads_image_arguments_from_manifest() -> None:
-    assert 'lock_file="mcp-local/build-inputs.lock.json"' in IMAGE_WORKFLOW
-    assert "@sha256:[0-9a-f]{64}" in IMAGE_WORKFLOW
+    assert (
+        'lock_file="mcp-local/build-inputs.lock.json"'
+        in TRUSTED_RELEASE_WORKFLOW
+    )
+    assert "@sha256:[0-9a-f]{64}" in TRUSTED_RELEASE_WORKFLOW
     assert (
         "UBUNTU_IMAGE=${{ steps.locked_images.outputs.ubuntu_image }}"
-        in IMAGE_WORKFLOW
+        in TRUSTED_RELEASE_WORKFLOW
     )
     assert (
         "EMBEDDINGS_IMAGE=${{ steps.locked_images.outputs.embeddings_image }}"
-        in IMAGE_WORKFLOW
+        in TRUSTED_RELEASE_WORKFLOW
     )
     assert (
         "MCP_BUILD_INPUTS_IMAGE=${{ steps.locked_images.outputs.mcp_build_inputs_image }}"
-        in IMAGE_WORKFLOW
+        in TRUSTED_RELEASE_WORKFLOW
     )
 
 
@@ -214,40 +213,56 @@ def test_embedding_candidate_requires_reviewed_promotion_before_release() -> Non
 
 
 def test_release_uses_reviewed_server_version_without_self_merging() -> None:
-    assert "Validate reviewed release version" in IMAGE_WORKFLOW
+    assert "Validate proposed release version" in IMAGE_WORKFLOW
+    assert (
+        "Validate authorized release version and source"
+        in TRUSTED_RELEASE_WORKFLOW
+    )
     assert "github.event_name == 'push'" in IMAGE_WORKFLOW
-    assert 'version="$(jq -er' in IMAGE_WORKFLOW
+    assert 'version="$(jq -er' in TRUSTED_RELEASE_WORKFLOW
+    assert "detect-version-change:" in IMAGE_WORKFLOW
+    assert 'git show "${BASE_SHA}:${server_file}"' in IMAGE_WORKFLOW
+    assert "needs.detect-version-change.outputs.changed == 'true'" in IMAGE_WORKFLOW
     assert "gh pr merge" not in IMAGE_WORKFLOW
+    assert "gh pr merge" not in TRUSTED_RELEASE_WORKFLOW
     assert "BUMP_BRANCH" not in IMAGE_WORKFLOW
     assert (
         "${{ env.IMAGE }}:${{ needs.validate-release.outputs.version }}-"
         "${{ matrix.tag }}"
-    ) in IMAGE_WORKFLOW
+    ) in TRUSTED_RELEASE_WORKFLOW
 
 
 def test_release_requires_runtime_egress_validation_for_both_architectures() -> None:
     validator = (MCP_LOCAL / "scripts/validate-runtime-egress.py").read_text()
 
-    assert "id: build" in IMAGE_WORKFLOW
-    assert 'image="${IMAGE}@${BUILD_DIGEST}"' in IMAGE_WORKFLOW
-    assert "validate-runtime-egress.py" in IMAGE_WORKFLOW
+    assert "runner: ubuntu-24.04" in TRUSTED_RELEASE_WORKFLOW
+    assert "platform: linux/amd64" in TRUSTED_RELEASE_WORKFLOW
+    assert "runner: ubuntu-24.04-arm" in TRUSTED_RELEASE_WORKFLOW
+    assert "platform: linux/arm64" in TRUSTED_RELEASE_WORKFLOW
+    assert "id: build" in TRUSTED_RELEASE_WORKFLOW
+    assert 'image="${IMAGE}@${BUILD_DIGEST}"' in TRUSTED_RELEASE_WORKFLOW
+    assert "validate-runtime-egress.py" in TRUSTED_RELEASE_WORKFLOW
     assert '"--network",\n        "none"' in validator
     assert ':/evidence"' not in validator
     assert 'runtime_trace.write_text(runtime.stderr' in validator
     assert 'negative_trace.write_text(negative.stderr' in validator
     assert '"output_channel": "docker stderr captured and persisted by host"' in validator
-    assert "runtime-egress-${{ matrix.tag }}" in IMAGE_WORKFLOW
-    assert "if-no-files-found: error" in IMAGE_WORKFLOW
-    assert "needs.build-arch-images.result == 'success'" in IMAGE_WORKFLOW
+    assert "runtime-egress-${{ matrix.tag }}" in TRUSTED_RELEASE_WORKFLOW
+    assert "if-no-files-found: error" in TRUSTED_RELEASE_WORKFLOW
+    assert "needs.build-arch-images.result == 'success'" in TRUSTED_RELEASE_WORKFLOW
 
 
 def test_release_manifest_uses_the_validated_architecture_digests() -> None:
-    publish_step = IMAGE_WORKFLOW.split(
-        "- name: Publish multi-architecture release", maxsplit=1
+    publish_step = TRUSTED_RELEASE_WORKFLOW.split(
+        "- name: Publish multi-architecture release from validated digests",
+        maxsplit=1,
     )[1].split("- name: Create tag and GitHub Release", maxsplit=1)[0]
 
-    assert "validated-image-digest-${{ matrix.tag }}-${{ github.run_id }}" in IMAGE_WORKFLOW
-    assert "actions/download-artifact@" in IMAGE_WORKFLOW
+    assert (
+        "validated-image-digest-${{ matrix.tag }}-${{ github.run_id }}"
+        in TRUSTED_RELEASE_WORKFLOW
+    )
+    assert "actions/download-artifact@" in TRUSTED_RELEASE_WORKFLOW
     assert "^sha256:[0-9a-f]{64}$" in publish_step
     assert '"${IMAGE}@${amd64_digest}"' in publish_step
     assert '"${IMAGE}@${arm64_digest}"' in publish_step
@@ -257,39 +272,53 @@ def test_release_manifest_uses_the_validated_architecture_digests() -> None:
 
 def test_runtime_egress_tracer_is_pinned_and_recorded_in_evidence() -> None:
     validator = (MCP_LOCAL / "scripts/validate-runtime-egress.py").read_text()
-    version_match = re.search(r"^  STRACE_VERSION: (\S+)$", IMAGE_WORKFLOW, re.MULTILINE)
+    version_match = re.search(
+        r"^  STRACE_VERSION: (\S+)$", TRUSTED_RELEASE_WORKFLOW, re.MULTILINE
+    )
 
     assert version_match
     version = version_match.group(1)
     assert re.fullmatch(r"[0-9][A-Za-z0-9.+:~-]*-[A-Za-z0-9.+~]+", version)
-    assert '"strace=${STRACE_VERSION}"' in IMAGE_WORKFLOW
-    assert "dpkg-query --show --showformat='${Version}' strace" in IMAGE_WORKFLOW
-    assert '--strace-package-version "${STRACE_PACKAGE_VERSION}"' in IMAGE_WORKFLOW
+    assert '"strace=${STRACE_VERSION}"' in TRUSTED_RELEASE_WORKFLOW
+    assert (
+        "dpkg-query --show --showformat='${Version}' strace"
+        in TRUSTED_RELEASE_WORKFLOW
+    )
+    assert (
+        '--strace-package-version "${STRACE_PACKAGE_VERSION}"'
+        in TRUSTED_RELEASE_WORKFLOW
+    )
     assert '"package_version": args.strace_package_version' in validator
 
 
 def test_release_attests_and_verifies_the_final_production_digest() -> None:
-    publish_image_job = IMAGE_WORKFLOW.split("  publish-image:", maxsplit=1)[
-        1
-    ].split("  verify-provenance:", maxsplit=1)[0]
-    publish_release_job = IMAGE_WORKFLOW.split(
+    publish_image_job = TRUSTED_RELEASE_WORKFLOW.split(
+        "  publish-image:", maxsplit=1
+    )[1].split("  attest-image:", maxsplit=1)[0]
+    publish_release_job = TRUSTED_RELEASE_WORKFLOW.split(
         "  publish-release:", maxsplit=1
     )[1]
-    attest_image_job = IMAGE_WORKFLOW.split("  attest-image:", maxsplit=1)[
-        1
-    ].split("  verify-provenance:", maxsplit=1)[0]
-    assert "IMAGE_FQDN: docker.io/armlimited/arm-mcp" in IMAGE_WORKFLOW
-    assert "attest-container-image.yml" not in IMAGE_WORKFLOW
-    assert "deployment-environment" not in IMAGE_WORKFLOW
+    attest_image_job = TRUSTED_RELEASE_WORKFLOW.split(
+        "  attest-image:", maxsplit=1
+    )[1].split("  verify-provenance:", maxsplit=1)[0]
+    assert (
+        "IMAGE_FQDN: docker.io/armlimited/arm-mcp"
+        in TRUSTED_RELEASE_WORKFLOW
+    )
+    assert "attest-container-image.yml" not in TRUSTED_RELEASE_WORKFLOW
+    assert "deployment-environment" not in TRUSTED_RELEASE_WORKFLOW
     assert (
         '--metadata-file "${RUNNER_TEMP}/manifest-metadata.json"'
-        in IMAGE_WORKFLOW
+        in TRUSTED_RELEASE_WORKFLOW
     )
     assert (
         '[[ ! "${created_digest}" =~ ^sha256:[0-9a-f]{64}$ ]]'
-        in IMAGE_WORKFLOW
+        in TRUSTED_RELEASE_WORKFLOW
     )
-    assert '"${created_digest}" != "${inspected_digest}"' in IMAGE_WORKFLOW
+    assert (
+        '"${created_digest}" != "${inspected_digest}"'
+        in TRUSTED_RELEASE_WORKFLOW
+    )
     assert "runs-on: ubuntu-24.04" in attest_image_job
     assert "id-token: write" in attest_image_job
     assert "attestations: write" in attest_image_job
@@ -304,28 +333,42 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
     )
     assert "push-to-registry: true" in attest_image_job
     assert "Validate attestation output" in attest_image_job
-    assert "verify-provenance:" in IMAGE_WORKFLOW
-    assert "attestations: read" in IMAGE_WORKFLOW
-    assert IMAGE_WORKFLOW.count("gh attestation verify") == 2
-    assert "--bundle-from-oci" in IMAGE_WORKFLOW
-    assert "needs.verify-provenance.result == 'success'" in IMAGE_WORKFLOW
+    assert "verify-provenance:" in TRUSTED_RELEASE_WORKFLOW
+    assert "attestations: read" in TRUSTED_RELEASE_WORKFLOW
+    assert TRUSTED_RELEASE_WORKFLOW.count("gh attestation verify") == 2
+    assert "--bundle-from-oci" in TRUSTED_RELEASE_WORKFLOW
+    assert (
+        "arm/mcp/.github/workflows/trusted-mcp-release.yml"
+        in TRUSTED_RELEASE_WORKFLOW
+    )
+    assert "packages: write" not in TRUSTED_RELEASE_WORKFLOW
+    assert (
+        "needs.verify-provenance.result == 'success'"
+        in TRUSTED_RELEASE_WORKFLOW
+    )
     assert '${IMAGE}:latest' not in publish_image_job
     assert "Promote verified image to latest" in publish_release_job
     assert '"${IMAGE_FQDN}@${DIGEST}"' in publish_release_job
     assert '--repo "${GITHUB_REPOSITORY}"' in publish_release_job
-    assert "Immutable digest:" in IMAGE_WORKFLOW
-    assert "verification instructions" in IMAGE_WORKFLOW
-    assert "blob/main/docs/provenance-verification.md" not in IMAGE_WORKFLOW
+    assert "Immutable digest:" in TRUSTED_RELEASE_WORKFLOW
+    assert "verification instructions" in TRUSTED_RELEASE_WORKFLOW
+    assert "SLSA Build Level 3:" in TRUSTED_RELEASE_WORKFLOW
     assert (
-        'blob/${SOURCE_SHA}/docs/provenance-verification.md'
-        in IMAGE_WORKFLOW
+        "blob/main/docs/provenance-verification.md"
+        not in TRUSTED_RELEASE_WORKFLOW
     )
+    assert (
+        'docs_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/'
+        '${SOURCE_SHA}/docs"' in TRUSTED_RELEASE_WORKFLOW
+    )
+    assert "${docs_url}/provenance-verification.md" in TRUSTED_RELEASE_WORKFLOW
+    assert "${docs_url}/slsa-build-level-3.md" in TRUSTED_RELEASE_WORKFLOW
 
 
 def test_provenance_guide_matches_the_enforced_release_identity() -> None:
     for expected in (
         "docker.io/armlimited/arm-mcp",
-        "arm/mcp/.github/workflows/build-mcp-image.yml",
+        "arm/mcp/.github/workflows/trusted-mcp-release.yml",
         "refs/heads/main",
         "--source-digest",
         "--bundle-from-oci",
@@ -334,6 +377,159 @@ def test_provenance_guide_matches_the_enforced_release_identity() -> None:
     assert not (
         REPOSITORY / ".github/workflows/attest-container-image.yml"
     ).exists()
+
+
+def test_release_controller_calls_only_the_trusted_release_implementation() -> None:
+    trusted_path = REPOSITORY / ".github/workflows/trusted-mcp-release.yml"
+    assert trusted_path.exists()
+    assert (
+        "  workflow_call:"
+        in TRUSTED_RELEASE_WORKFLOW.split("permissions:", maxsplit=1)[0]
+    )
+    assert (
+        IMAGE_WORKFLOW.count("uses: ./.github/workflows/trusted-mcp-release.yml") == 2
+    )
+    assert "release_mode: dry-run" in IMAGE_WORKFLOW
+    assert "release_mode: production" in IMAGE_WORKFLOW
+
+    for production_command in (
+        "docker buildx imagetools create",
+        "actions/attest@",
+        "gh attestation verify",
+        "gh release create",
+        "Log in to Docker Hub",
+    ):
+        assert production_command not in IMAGE_WORKFLOW
+
+
+def test_release_calls_have_distinct_authorization_permissions_and_secrets() -> None:
+    dry_run_call = IMAGE_WORKFLOW.split("  dry-run:", maxsplit=1)[1].split(
+        "  production:", maxsplit=1
+    )[0]
+    production_call = IMAGE_WORKFLOW.split("  production:", maxsplit=1)[1]
+
+    for expected in (
+        "github.repository == 'arm/mcp'",
+        "github.event_name == 'push'",
+        "github.ref == 'refs/heads/main'",
+        "github.ref_type == 'branch'",
+        "github.ref_protected == true",
+        "github.sha == github.event.after",
+    ):
+        assert expected in production_call
+
+    assert "release_mode: dry-run" in dry_run_call
+    assert "actions: read" in dry_run_call
+    assert "contents: write" in dry_run_call
+    assert "packages: read" in dry_run_call
+    assert "id-token: write" in dry_run_call
+    assert "attestations: write" in dry_run_call
+    assert "artifact-metadata: write" in dry_run_call
+    assert "secrets:" not in dry_run_call
+    for forbidden in (
+        "DOCKERHUB_USERNAME",
+        "DOCKERHUB_TOKEN",
+    ):
+        assert forbidden not in dry_run_call
+
+    for job_start, job_end in (
+        ("  authorize:", "  validate-release:"),
+        ("  validate-release:", "  build-arch-images:"),
+        ("  build-arch-images:", "  record-dry-run:"),
+        ("  record-dry-run:", "  publish-image:"),
+    ):
+        dry_run_job = TRUSTED_RELEASE_WORKFLOW.split(job_start, maxsplit=1)[1].split(
+            job_end, maxsplit=1
+        )[0]
+        assert "contents: write" not in dry_run_job
+        assert "id-token: write" not in dry_run_job
+        assert "attestations: write" not in dry_run_job
+        assert "artifact-metadata: write" not in dry_run_job
+
+    assert "DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}" in production_call
+    assert "DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}" in production_call
+    assert "secrets: inherit" not in IMAGE_WORKFLOW
+    assert "secrets: inherit" not in TRUSTED_RELEASE_WORKFLOW
+    assert "environment:" not in IMAGE_WORKFLOW
+    assert "environment:" not in TRUSTED_RELEASE_WORKFLOW
+
+
+def test_trusted_release_reauthorizes_the_original_caller_and_fails_closed() -> None:
+    authorization = TRUSTED_RELEASE_WORKFLOW.split("  authorize:", maxsplit=1)[1].split(
+        "  validate-release:", maxsplit=1
+    )[0]
+    for expected in (
+        "CALLER_REPOSITORY: ${{ github.repository }}",
+        "CALLER_WORKFLOW_REF: ${{ github.workflow_ref }}",
+        "CALLER_EVENT: ${{ github.event_name }}",
+        "CALLER_REF: ${{ github.ref }}",
+        "CALLER_REF_TYPE: ${{ github.ref_type }}",
+        "CALLER_REF_PROTECTED: ${{ github.ref_protected }}",
+        "CALLER_SHA: ${{ github.sha }}",
+        "PUSH_AFTER: ${{ github.event.after }}",
+        "DISPATCH_ACTION: ${{ github.event.inputs.release_action }}",
+        'REQUESTED_MODE}" = "production',
+        'CALLER_WORKFLOW_REF}" = "arm/mcp/.github/workflows/build-mcp-image.yml@refs/heads/main',
+        'REQUESTED_MODE}" = "dry-run',
+        'DISPATCH_ACTION}" = "dry-run',
+        "Unauthorized trusted release invocation",
+        "exit 1",
+    ):
+        assert expected in authorization
+
+    assert (
+        "needs: authorize"
+        in TRUSTED_RELEASE_WORKFLOW.split("  validate-release:", maxsplit=1)[1].split(
+            "  build-arch-images:", maxsplit=1
+        )[0]
+    )
+    assert (
+        "needs: validate-release"
+        in TRUSTED_RELEASE_WORKFLOW.split("  build-arch-images:", maxsplit=1)[1].split(
+            "  record-dry-run:", maxsplit=1
+        )[0]
+    )
+    assert (
+        "needs: publish-image"
+        in TRUSTED_RELEASE_WORKFLOW.split("  attest-image:", maxsplit=1)[1].split(
+            "  verify-provenance:", maxsplit=1
+        )[0]
+    )
+    assert (
+        "verify-provenance"
+        in TRUSTED_RELEASE_WORKFLOW.split("  publish-release:", maxsplit=1)[1]
+    )
+
+
+def test_production_release_actions_are_immutably_pinned() -> None:
+    external_actions = re.findall(
+        r"^\s*uses:\s+([^\s#]+)", TRUSTED_RELEASE_WORKFLOW, re.MULTILINE
+    )
+    assert external_actions
+    assert all(
+        re.fullmatch(r"[^@]+@[0-9a-f]{40}", action) for action in external_actions
+    )
+
+
+def test_codeowners_covers_release_sensitive_workflows_and_inputs() -> None:
+    for protected_path in (
+        "/.github/workflows/",
+        "/.github/scripts/",
+        "/mcp-local/Dockerfile ",
+        "/mcp-local/Dockerfile.inputs ",
+        "/mcp-local/server.json ",
+        "/mcp-local/build-inputs.lock.json ",
+        "/mcp-local/pyproject.toml ",
+        "/mcp-local/uv.lock ",
+        "/embedding-generation/Dockerfile.acquire ",
+        "/embedding-generation/Dockerfile.toolchain ",
+        "/embedding-generation/Dockerfile.vectorstore ",
+        "/embedding-generation/embedding-model.lock.json ",
+        "/embedding-generation/pipeline-inputs.lock.json ",
+        "/embedding-generation/pyproject.toml ",
+        "/embedding-generation/uv.lock ",
+    ):
+        assert protected_path in CODEOWNERS
 
 
 def test_manual_release_proposals_support_all_release_types() -> None:
@@ -545,12 +741,25 @@ def test_mcp_runtime_treats_packaged_model_as_local_only() -> None:
     assert "model_path=MODEL_PATH" in SERVER
 
 
+def test_performix_is_not_bundled_or_exposed() -> None:
+    routing_hint = (
+        "Use this tool for Arm-related runtime-performance, profiling, hotspot, "
+        "benchmarking, and regression questions."
+    )
+    assert routing_hint in SERVER
+    assert "def apx_recipe_run" not in SERVER
+    assert "utils.apx" not in SERVER
+    assert "performix" not in json.dumps(SERVER_METADATA).lower()
+    assert "performix" not in LOCK
+    assert "performix" not in STAGE_INPUTS.lower()
+
+
 def test_input_artifact_has_one_platform_neutral_layout() -> None:
     assert "FROM scratch AS inputs" in INPUT_DOCKERFILE
     assert "ARG TARGETARCH" in INPUT_DOCKERFILE
     assert "build-inputs/${TARGETARCH}/wheels/" in INPUT_DOCKERFILE
     assert "build-inputs/${TARGETARCH}/debs/" in INPUT_DOCKERFILE
-    assert "build-inputs/${TARGETARCH}/performix.tar.gz" in INPUT_DOCKERFILE
+    assert "performix" not in INPUT_DOCKERFILE.lower()
     assert "build-inputs/migrate-ease.tar.gz" in INPUT_DOCKERFILE
     assert "build-inputs/requirements.lock" in INPUT_DOCKERFILE
     assert "/mcp-build-inputs/metadata/" in INPUT_DOCKERFILE

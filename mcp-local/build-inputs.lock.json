@@ -18,7 +18,7 @@
       "verification": "OCI manifest-list digest"
     },
     "embeddings": {
-      "reference": "ghcr.io/arm/mcp-embedding-vectorstore@sha256:daa21a389038892e87bad624c8d29e46f3f3d02c6ff0b186a325dca9af004e60",
+      "reference": "ghcr.io/arm/mcp-embedding-vectorstore@sha256:0d5cb4ea875398ff20ff4a520bc0a7e31bb926b41b6b41d8ab4fed08836ec477",
       "architectures": [
         "arm64"
       ],
@@ -27,13 +27,13 @@
         "/embedding-data/metadata.json",
         "/embedding-data/usearch_index.bin"
       ],
-      "source_revision": "703fcc79497216b868c6aea113cc7bfad4e88bdd",
+      "source_revision": "932d616c9676f8c0154028d16eabbfd4be3e28d5",
       "model": {
         "model_id": "sentence-transformers/all-MiniLM-L6-v2",
         "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
       },
       "verification": "private GHCR OCI image-index digest",
-      "workflow_run": "32630208697"
+      "workflow_run": "33303532929"
     },
     "mcp_build_inputs": {
       "reference": "ghcr.io/arm/mcp-build-inputs@sha256:ab9e0862c3910ff9b45ab130562e8a87175f1c6987299625444a101245300a1c",
@@ -48,7 +48,6 @@
       "contents": [
         "/mcp-build-inputs/wheels/",
         "/mcp-build-inputs/debs/",
-        "/mcp-build-inputs/performix.tar.gz",
         "/mcp-build-inputs/migrate-ease.tar.gz",
         "/mcp-build-inputs/metadata/"
       ],
@@ -316,19 +315,5 @@
       "arm64"
     ],
     "verification": "locally calculated SHA256 of pinned upstream source archive"
-  },
-  "performix": {
-    "version": "1.0.0",
-    "artifacts": {
-      "amd64": {
-        "url": "https://artifacts.tools.arm.com/arm-performix/cli/1.0.0/ArmPerformix-cli-1.0.0-linux-x64.tar.gz",
-        "sha256": "83edba4708daf6633b4d5a85270d14ee2913c9bfc1de523ab9280b0d9ac5461e"
-      },
-      "arm64": {
-        "url": "https://artifacts.tools.arm.com/arm-performix/cli/1.0.0/ArmPerformix-cli-1.0.0-linux-arm64.tar.gz",
-        "sha256": "b5206eb9e78d176928a853f480daea67f7b7c8c176608767f4cd476cfdedb1ad"
-      }
-    },
-    "verification": "locally calculated SHA256 of downloaded vendor artifact"
   }
 }

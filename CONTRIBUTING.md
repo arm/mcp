@@ -30,7 +30,7 @@ reproducible build inputs, and the reviewed release workflows.
 ## Reproducible MCP Build Inputs
 
 The final MCP image build does not resolve or download Python packages, Ubuntu
-packages, Performix, or migrate-ease. Those inputs are acquired separately by
+packages, or migrate-ease. Those inputs are acquired separately by
 the manually triggered **Build MCP Input Bundle** workflow and published as a
 private, multi-architecture OCI image at `ghcr.io/arm/mcp-build-inputs`.
 
@@ -41,8 +41,7 @@ architecture it:
 2. downloads the exact Python wheels allowed by those hashes;
 3. downloads the complete `.deb` closures from the recorded Ubuntu snapshot
    and checks every package against `mcp-local/build-inputs.lock.json`;
-4. downloads and verifies the architecture-specific Performix archive and the
-   pinned migrate-ease source archive; and
+4. downloads and verifies the pinned migrate-ease source archive; and
 5. publishes those bytes and their lock metadata in a scratch image, then
    combines both architecture images into one private OCI image index.
 
@@ -115,7 +114,6 @@ docker run --rm \
       skopeo --version
       llvm-mca --version
       git --version
-      test -x "$APX_BIN"
       migrate-ease-cpp --help >/dev/null
       python -c "import magic, requests; from utils.docker_utils import check_docker_image_architectures"'
 ```
@@ -133,9 +131,7 @@ docker run --rm \
 
 For the full MCP protocol and tool integration suite, tag the local image as
 `arm-mcp:latest` or set `MCP_IMAGE=arm-mcp:local`, then follow the repository's
-integration-test setup. The APX integration cases additionally require the SSH
-target, key mounts, and Java workload configured in
-`.github/workflows/integration-tests.yml`.
+integration-test setup.
 
 ### Runtime Egress Release Gate
 
@@ -266,12 +262,11 @@ Review every package addition, removal, version change, and checksum change in
 the manifest before committing it. The normal publication workflow does not
 rewrite this lock; it fails if the snapshot produces different bytes.
 
-#### Updating Performix or Migrate-ease
+#### Updating Migrate-ease
 
 Update the versioned URL or source revision and the expected SHA256 in
 `mcp-local/build-inputs.lock.json`. Prefer an upstream-published checksum when
-one is available. Performix has separate AMD64 and Arm64 artifacts;
-migrate-ease is one pinned source archive used by both architectures. The
+one is available. Migrate-ease is one pinned source archive used by both architectures. The
 publication workflow fails before publishing if any archive differs from its
 recorded checksum.
 
@@ -304,10 +299,14 @@ from unsuccessful or unwanted embedding candidates.
 
 #### Creating a Reviewed MCP Release
 
+`mcp-local/server.json` is the checked-in MCP registry manifest and release
+control file. Metadata-only changes are validated without publishing; changing
+its version and matching OCI image identifier initiates a release.
+
 Production releases are initiated only by a reviewed PR that updates
 `mcp-local/server.json` on `main`. Embedding promotion PRs make this update
 automatically as a minor release. For a release that does not promote a new
-embedding, ask the workflow to create a reviewed version PR:
+embedding, use the normal release procedure:
 
 1. Start **Build MCP Image** manually and select `hotfix`, `minor`, or `major`.
    From the CLI, for example:
@@ -319,12 +318,19 @@ embedding, ask the workflow to create a reviewed version PR:
 2. The workflow opens or updates a version PR with the matching semantic
    version change in `mcp-local/server.json`.
 3. Allow the required status checks and security-team review to complete.
-4. Merge the approved PR. **Build MCP Image** validates the version, builds the
-   exact merge commit for AMD64 and Arm64, publishes the version and `latest`
-   tags, and creates the matching `vX.Y.Z` Git tag and GitHub Release.
+4. Merge the approved PR. The trusted workflow builds AMD64 and Arm64 images,
+   verifies their provenance, and publishes the image tags and GitHub Release.
+5. Verify the release using the digest and commit recorded in the GitHub Release
+   and the [provenance verification guide](docs/provenance-verification.md).
 
-Manual workflow runs are dry runs: they build both architectures but cannot
-publish images, tags, or releases when `dry-run` is selected.
+For a dry run, start **Build MCP Image** with `release_action=dry-run`. Confirm
+that both architectures and both runtime-egress checks pass, and that the
+summary says no image, manifest, attestation, tag, or release was published.
+
+To roll back a production release, do not overwrite or delete immutable release
+tags or digests. Submit a new reviewed patch release that restores the last
+approved source or input pins, merge it normally, and use the same trusted
+workflow and provenance checks.
 
 Generated PRs use the workflow's short-lived `GITHUB_TOKEN`. Because GitHub
 leaves `pull_request` runs created by that token awaiting manual workflow

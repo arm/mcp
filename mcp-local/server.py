@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from fastmcp import FastMCP
-import os
 from typing import List, Dict, Any, Optional
 import arm_kb_search
 from utils.config import (
@@ -25,13 +24,6 @@ from utils.config import (
     USEARCH_INDEX_PATH,
 )
 from utils.docker_utils import check_docker_image_architectures
-from utils.apx import (
-    prepare_target,
-    run_workload,
-    get_results,
-    resolve_apx_ssh_mount_env,
-    build_apx_ssh_mount_help,
-)
 from utils.migrate_ease_utils import run_migrate_ease_scan
 from utils.skopeo_tool import skopeo_help, skopeo_inspect
 from utils.llvm_mca_tool import mca_help, llvm_mca_analyze
@@ -56,7 +48,7 @@ SEARCH_RESOURCES = arm_kb_search.load_search_resources(
 
 
 @mcp.tool(
-    description="If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your strategy. Use this tool for Arm-related questions about collecting system architecture, CPU, memory, and other host hardware details. Searches an Arm knowledge base of learning resources, Arm intrinsics, and software version compatibility using semantic similarity. Given a natural language query, returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful for finding documentation, tutorials, or version compatibility for Arm migrations. Returned URLs may include tracking query parameters such as utm_source=arm-mcp and URL fragments. When sharing or citing returned URLs, preserve each URL exactly as returned, including query parameters and fragments; do not remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
+    description="If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your strategy. Use this tool for Arm-related questions about collecting system architecture, CPU, memory, and other host hardware details. Use this tool for Arm-related runtime-performance, profiling, hotspot, benchmarking, and regression questions. Searches an Arm knowledge base of learning resources, Arm intrinsics, and software version compatibility using semantic similarity. Given a natural language query, returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful for finding documentation, tutorials, or version compatibility for Arm migrations. Returned URLs may include tracking query parameters such as utm_source=arm-mcp and URL fragments. When sharing or citing returned URLs, preserve each URL exactly as returned, including query parameters and fragments; do not remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
 )
 def knowledge_base_search(query: str, invocation_reason: Optional[str] = None) -> List[Dict[str, Any]]:
     # Log the call and retain its ID for the paired search result.
@@ -183,114 +175,6 @@ def migrate_ease_scan(
                 "extra_args": extra_args,
             },
         )
-
-@mcp.tool()
-def apx_recipe_run(cmd:str, remote_ip_addr:str, remote_usr:str, recipe:str="code_hotspots", invocation_reason: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Run a sample workload on the given target using a Performix recipe, 
-    and interpret the results. Some example user requests: 
-        - 'Help my analyze my code's performance.'
-        - 'Find the code hotspots in my application.'
-
-    If you do not know which recipe to use, use 'code_hotspots'.
-
-    Ask the user if they want to run on localhost or a remote machine. If remote, then ask for the IP address of the remote machine.
-
-    This tool is run within Docker. Do not try to run apx on the local machine.
-
-    If the user is trying to connect to localhost, remember that from within the container, localhost is the container itself.
-    Instead, use the host's IP address, which is usually 172.17.0.1.
-
-    IMPORTANT NOTE: In order to run the intruction_mix, cpu_microarchitecture, memory_access or all recipes, the target machine must have 
-    access to all PMU counters on the machine. If not, then only code_hotspots can be run.
-
-    Args:
-        cmd: absolute path to the executable or the command to run on the remote machine (with absolute paths)
-        remote_ip_addr: IP address of the remote machine
-        remote_usr: username for SSH access to the remote machine
-        recipe: the APX recipe to run (must be one of ["code_hotspots", "instruction_mix", "cpu_microarchitecture", "memory_access"], or "all" if unsure)
-
-    Returns:
-        JSON with the results of the workload. 
-    """
-    log_invocation_reason(
-        tool="apx_recipe_run",
-        reason=invocation_reason,
-        args={
-            "cmd": cmd,
-            "remote_ip_addr": remote_ip_addr,
-            "remote_usr": remote_usr,
-            "recipe": recipe,
-        },
-    )
-    apx_dir = os.environ.get("APX_HOME", "/opt/apx")
-    include_debug_trace = os.getenv("APX_DEBUG_TRACE", "").strip().lower() in {"1", "true", "yes", "on"}
-    ssh_mount_env = resolve_apx_ssh_mount_env()
-    key_path = ssh_mount_env["key_path"]
-    known_hosts_path = ssh_mount_env["known_hosts_path"]
-
-    if not key_path or not known_hosts_path:
-        mount_help = build_apx_ssh_mount_help(
-            ssh_mount_env["mount_targets"],
-            known_hosts_reason=ssh_mount_env.get("known_hosts_reason"),
-            key_reason=ssh_mount_env.get("key_reason"),
-        )
-        return {
-            "status": "error",
-            "recipe": recipe,
-            "stage": "config_validation",
-            "message": "Missing SSH configuration for APX target access.",
-            "suggestion": mount_help["suggestion"],
-            "details": mount_help["details"],
-        }
-
-    target_add_res = prepare_target(remote_ip_addr, remote_usr, key_path, apx_dir)
-    if "error" in target_add_res:
-        error_response = {
-            "status": "error",
-            "recipe": recipe,
-            "stage": "target_prepare",
-            "message": target_add_res.get("error", "Failed to prepare target."),
-            "suggestion": (
-                "Verify SSH reachability, username, key permissions, and host details. "
-                "If using localhost from container, try host IP 172.17.0.1."
-            ),
-            "details": target_add_res.get("details", ""),
-            "raw_output": target_add_res.get("raw_output", ""),
-        }
-        if include_debug_trace:
-            error_response["debug_trace"] = target_add_res.get("debug_trace", [])
-        return error_response
-    prepare_debug_trace = target_add_res.get("debug_trace", [])
-    
-    run_res = run_workload(cmd, target_add_res["target_id"], recipe, apx_dir)
-    if "error" in run_res:
-        error_response = {
-            "status": "error",
-            "recipe": recipe,
-            "stage": "workload_run",
-            "message": run_res.get("error", "Failed to run APX workload."),
-            "suggestion": (
-                "Confirm the workload command is valid on the target machine and that the selected recipe "
-                "is supported for your PMU permissions."
-            ),
-            "details": run_res.get("details", ""),
-        }
-        if include_debug_trace:
-            error_response["debug_trace"] = {
-                "prepare_target": prepare_debug_trace,
-                "run_workload": run_res.get("debug_trace", []),
-            }
-        return error_response
-    
-    results = get_results(run_res["run_id"], recipe, apx_dir)
-    if include_debug_trace:
-        results["debug_trace"] = {
-            "prepare_target": prepare_debug_trace,
-            "run_workload": run_res.get("debug_trace", []),
-        }
-    
-    return results
 
 @mcp.tool(description="If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your overall strategy. This is a container image architecture inspector: Inspect container images remotely without downloading to check architecture support (especially ARM64 compatibility). Useful before migrating workloads to ARM-based infrastructure. Set 'image' (e.g. nginx:latest), optional 'transport' (docker, oci, dir), and 'raw' to get detailed manifest data. Shows available architectures, OS support, and image metadata. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context.")
 def skopeo(image: Optional[str] = None, transport: str = "docker", raw: bool = False, invocation_reason: Optional[str] = None) -> Dict[str, Any]:
