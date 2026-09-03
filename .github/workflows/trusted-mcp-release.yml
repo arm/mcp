@@ -324,6 +324,7 @@ jobs:
           artifact_suffix: mcp-runtime-${{ matrix.tag }}
           blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
           blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+          distribution: "OPENSOURCE"
 
       - name: Record validated image digest
         env:

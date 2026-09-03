@@ -23,6 +23,9 @@ inputs:
   blackducksca_token:
     description: Black Duck SCA API token
     required: true
+  distribution:
+    description: Black Duck distribution (e.g., 'EXTERNAL', 'INTERNAL', 'OPENSOURCE', 'SAAS')
+    required: true
 runs:
   using: composite
   steps:
@@ -94,6 +97,8 @@ runs:
           --detect.tools=CONTAINER_SCAN
           --detect.container.scan.file.path=${{ steps.prepare.outputs.archive_path }}
           --detect.blackduck.scan.wait.for.results.timeout=6000
+          --detect.project.version.distribution=${{ inputs.distribution }}
+          --detect.project.version.update=true
         blackducksca_reports_sarif_create: true
         blackducksca_reports_sarif_file_path: blackduck-results-${{ inputs.artifact_suffix }}.sarif
         blackducksca_reports_sarif_severities: 'Critical,High,Medium,Low'
