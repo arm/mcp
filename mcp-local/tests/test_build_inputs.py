@@ -43,6 +43,9 @@ TOOLCHAIN_WORKFLOW = (
 BLACKDUCK_IMAGE_SCAN_ACTION = (
     REPOSITORY / ".github/actions/blackduck-image-scan/action.yml"
 ).read_text()
+BLACKDUCK_SOURCE_SCAN_WORKFLOW = (
+    REPOSITORY / ".github/workflows/black-duck-security-scan-ci.yml"
+).read_text()
 BLACKDUCK_SBOM_EXPORT_SCRIPT = (
     REPOSITORY / ".github/scripts/export-blackduck-cyclonedx.py"
 ).read_text()
@@ -353,6 +356,29 @@ def test_release_exports_cyclonedx_sboms_and_attaches_them_to_release() -> None:
     assert publish_release_job.index("Validate runtime CycloneDX SBOMs") < (
         publish_release_job.index("gh release create")
     )
+
+
+def test_source_scan_exports_cyclonedx_sbom_for_full_scans_only() -> None:
+    full_scan_section = BLACKDUCK_SOURCE_SCAN_WORKFLOW.split(
+        "      - name: Black Duck SCA scan", maxsplit=1
+    )[1].split("      - name: Black Duck SCA PR Scan", maxsplit=1)[0]
+    pr_scan_section = BLACKDUCK_SOURCE_SCAN_WORKFLOW.split(
+        "      - name: Black Duck SCA PR Scan", maxsplit=1
+    )[1]
+
+    assert "Export Black Duck CycloneDX SBOM" in full_scan_section
+    assert "id: source-sbom-export" in full_scan_section
+    assert "export-blackduck-cyclonedx.py" in full_scan_section
+    assert '--project "${DETECT_PROJECT_NAME}"' in full_scan_section
+    assert '--version "${DETECT_PROJECT_VERSION_NAME}"' in full_scan_section
+    assert "steps.black-duck-full-scan.outcome == 'success'" in full_scan_section
+    assert "steps.source-sbom-export.outcome == 'success'" in full_scan_section
+    assert full_scan_section.count("!cancelled()") >= 3
+    assert "Retain Black Duck source CycloneDX SBOM" in full_scan_section
+    assert "blackduck-source-sbom-${{ github.run_id }}" in full_scan_section
+    assert "if-no-files-found: error" in full_scan_section
+    assert "retention-days: 10" in full_scan_section
+    assert "Export Black Duck CycloneDX SBOM" not in pr_scan_section
 
 
 def test_release_manifest_uses_the_validated_architecture_digests() -> None:

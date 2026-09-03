@@ -87,6 +87,40 @@ jobs:
         uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
         with:
           sarif_file: blackduck-results.sarif
+
+      - name: Export Black Duck CycloneDX SBOM
+        id: source-sbom-export
+        if: >-
+          ${{
+            !cancelled()
+            && github.event_name != 'pull_request'
+            && steps.black-duck-full-scan.outcome == 'success'
+          }}
+        env:
+          BLACKDUCK_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+          BLACKDUCK_URL: ${{ vars.BLACKDUCKSCA_URL }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/export-blackduck-cyclonedx.py \
+            --blackduck-url "${BLACKDUCK_URL}" \
+            --project "${DETECT_PROJECT_NAME}" \
+            --version "${DETECT_PROJECT_VERSION_NAME}" \
+            --output "${RUNNER_TEMP}/blackduck-source-sbom-${GITHUB_SHA}.cdx.json"
+
+      - name: Retain Black Duck source CycloneDX SBOM
+        if: >-
+          ${{
+            !cancelled()
+            && github.event_name != 'pull_request'
+            && steps.black-duck-full-scan.outcome == 'success'
+            && steps.source-sbom-export.outcome == 'success'
+          }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: blackduck-source-sbom-${{ github.run_id }}
+          path: ${{ runner.temp }}/blackduck-source-sbom-${{ github.sha }}.cdx.json
+          if-no-files-found: error
+          retention-days: 10
           
       - name: Black Duck SCA PR Scan
         id: black-duck-pr-scan
