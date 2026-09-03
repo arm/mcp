@@ -1,3 +1,17 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 from pathlib import Path
 import re
@@ -28,6 +42,9 @@ TOOLCHAIN_WORKFLOW = (
 ).read_text()
 BLACKDUCK_IMAGE_SCAN_ACTION = (
     REPOSITORY / ".github/actions/blackduck-image-scan/action.yml"
+).read_text()
+BLACKDUCK_SBOM_EXPORT_SCRIPT = (
+    REPOSITORY / ".github/scripts/export-blackduck-cyclonedx.py"
 ).read_text()
 PIN_PROMOTION_SCRIPT = (
     REPOSITORY / ".github/scripts/propose-pin-pr.sh"
@@ -276,6 +293,7 @@ def test_release_scans_validated_runtime_images_in_all_modes() -> None:
         'project_version: "mcp-runtime-container-${{ matrix.tag }}-1.0"'
         in build_job
     )
+    assert "Define isolated Black Duck project version" not in build_job
     assert "platform: ${{ matrix.platform }}" in build_job
     assert "blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}" in build_job
     assert (
@@ -284,6 +302,56 @@ def test_release_scans_validated_runtime_images_in_all_modes() -> None:
     )
     assert build_job.index("Black Duck scan validated runtime image") < build_job.index(
         "Record validated image digest"
+    )
+
+
+def test_release_exports_cyclonedx_sboms_and_attaches_them_to_release() -> None:
+    build_job = TRUSTED_RELEASE_WORKFLOW.split(
+        "  build-arch-images:", maxsplit=1
+    )[1].split("  record-dry-run:", maxsplit=1)[0]
+    publish_release_job = TRUSTED_RELEASE_WORKFLOW.split(
+        "  publish-release:", maxsplit=1
+    )[1]
+
+    assert '"reportFormat": "JSON"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert '"reportType": "SBOM"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert '"sbomType": "CYCLONEDX_16"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert '"specification": "CycloneDX-1.6"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert "/api/tokens/authenticate" in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert "/sbom-reports" in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert "/download.zip" in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert 'report.get("bomFormat") == "CycloneDX"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert 'report.get("specVersion") == "1.6"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+
+    assert "Export Black Duck CycloneDX SBOM" in build_job
+    assert "BLACKDUCK_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}" in build_job
+    assert (
+        "BLACKDUCK_PROJECT_VERSION: "
+        "mcp-runtime-container-${{ matrix.tag }}-1.0" in build_job
+    )
+    assert "export-blackduck-cyclonedx.py" in build_job
+    assert "Retain CycloneDX SBOM" in build_job
+    assert "runtime-sbom-${{ matrix.tag }}-${{ github.run_id }}" in build_job
+    assert "if-no-files-found: error" in build_job
+    assert build_job.index("Black Duck scan validated runtime image") < build_job.index(
+        "Export Black Duck CycloneDX SBOM"
+    )
+    assert build_job.index("Export Black Duck CycloneDX SBOM") < build_job.index(
+        "Retain CycloneDX SBOM"
+    )
+
+    assert "actions: read" in publish_release_job
+    assert "Download runtime CycloneDX SBOMs" in publish_release_job
+    assert "pattern: runtime-sbom-*-${{ github.run_id }}" in publish_release_job
+    assert "Validate runtime CycloneDX SBOMs" in publish_release_job
+    assert (
+        '.bomFormat == "CycloneDX" and .specVersion == "1.6"'
+        in publish_release_job
+    )
+    assert '"${amd64_sbom}#CycloneDX SBOM (AMD64)"' in publish_release_job
+    assert '"${arm64_sbom}#CycloneDX SBOM (Arm64)"' in publish_release_job
+    assert publish_release_job.index("Validate runtime CycloneDX SBOMs") < (
+        publish_release_job.index("gh release create")
     )
 
 
