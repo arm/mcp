@@ -96,7 +96,33 @@ jobs:
             echo "- Pull request: ${pr_url}"
           } >> "${GITHUB_STEP_SUMMARY}"
 
+  detect-version-change:
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.version.outputs.changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - id: version
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          changed=true
+          server_file=mcp-local/server.json
+          if git cat-file -e "${BASE_SHA}:${server_file}" 2>/dev/null \
+            && [ "$(jq -r '.version' "${server_file}")" = "$(git show "${BASE_SHA}:${server_file}" | jq -r '.version')" ]; then
+            changed=false
+          fi
+          echo "changed=${changed}" >> "${GITHUB_OUTPUT}"
+
   validate-version-pr:
+    needs: detect-version-change
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-24.04
     permissions:
@@ -110,6 +136,8 @@ jobs:
 
       - name: Validate proposed release version
         shell: bash
+        env:
+          VERSION_CHANGED: ${{ needs.detect-version-change.outputs.changed }}
         run: |
           set -euo pipefail
           server_file="mcp-local/server.json"
@@ -127,7 +155,8 @@ jobs:
             exit 1
           fi
 
-          if git rev-parse -q --verify "refs/tags/v${version}" > /dev/null; then
+          if [ "${VERSION_CHANGED}" = "true" ] \
+            && git rev-parse -q --verify "refs/tags/v${version}" > /dev/null; then
             echo "::error::Release tag v${version} already exists. Submit a new reviewed version PR."
             exit 1
           fi
@@ -158,10 +187,12 @@ jobs:
       BLACKDUCKSCA_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}
 
   production:
+    needs: detect-version-change
     if: >-
       ${{
         github.repository == 'arm/mcp'
         && github.event_name == 'push'
+        && needs.detect-version-change.outputs.changed == 'true'
         && github.ref == 'refs/heads/main'
         && github.ref_type == 'branch'
         && github.ref_protected == true

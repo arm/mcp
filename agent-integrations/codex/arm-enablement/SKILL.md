@@ -25,7 +25,7 @@ Write for OSS maintainers, developer-relations teams, and CNCF-style community a
 
 Before assessing the project:
 
-1. Confirm that the configured `arm-mcp` server exposes `migrate_ease_scan`, `knowledge_base_search`, `check_image`, `skopeo`, `mca`, `apx_recipe_run`, and `sysreport_instructions` as applicable.
+1. Confirm that the configured `arm-mcp` server exposes `migrate_ease_scan`, `knowledge_base_search`, `check_image`, `skopeo`, `mca`, and `sysreport_instructions` as applicable.
 2. Treat these as MCP tools, not command-line programs. Do not search for similarly named executables on `PATH`.
 3. Confirm that the target checkout visible to Codex is the same checkout mounted at `/workspace` in the Arm MCP container. Compare a distinctive file or the repository root listing.
 4. If the server or workspace mapping is unavailable, stop and report the exact configuration problem. Point to the [Arm MCP installation guide](https://github.com/arm/mcp/blob/main/agent-integrations/agent-install-instructions.md); do not fabricate scan results.
@@ -42,7 +42,7 @@ Maintain an audit record for every Arm MCP call: UTC timestamp, tool, relevant a
 6. Review direct runtime/build dependencies and architecture-sensitive packages. Group related dependencies and use `knowledge_base_search` only where Arm-specific compatibility or version guidance would affect the verdict or remediation plan; do not query every transitive dependency. If no relevant KB result is returned, record `No Arm-specific KB result`, do not infer incompatibility, and use upstream documentation, published artifacts, or native validation as evidence. Mark the item unverified when no stronger evidence is available.
 7. If assembly or SIMD intrinsics exist, identify architecture guards. Use `mca` for representative supported assembly and `knowledge_base_search` for appropriate NEON, SVE, or SVE2 guidance. Never invent performance gains.
 8. Build and test using the project's documented commands. Cross-compile when supported, then inspect produced binaries with `file` or the platform equivalent.
-9. When an authorized native Arm host is available, run a native build and relevant tests there. Record the host CPU/OS and exact commands. Use `sysreport_instructions` or `apx_recipe_run` only when system/performance evidence is relevant and access is configured.
+9. When an authorized native Arm host is available, run a native build and relevant tests there. Record the host CPU/OS and exact commands. Use `sysreport_instructions` or the dedicated Performix MCP server only when system/performance evidence is relevant and access is configured; otherwise use `knowledge_base_search` for current setup and fallback guidance.
 10. If fixes were requested, apply them, rerun tests, and rerun `migrate_ease_scan` against the changed `/workspace` checkout. Do not label a finding resolved without evidence from the repeated check.
 
 Avoid these errors:

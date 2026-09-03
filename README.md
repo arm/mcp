@@ -19,7 +19,6 @@ This MCP server equips AI assistants with specialized tools for Arm development:
 - **Code Migration Analysis**: Scan codebases for Arm compatibility using [migrate-ease](https://github.com/migrate-ease/migrate-ease) (supports C++, Python, Go, JavaScript, Java)
 - **Container Architecture Inspection**: Check Docker image architecture support using integrated [Skopeo](https://github.com/containers/skopeo) and check-image tools.
 - **Assembly Performance Analysis**: Analyze assembly code performance using LLVM-MCA
-- **Arm Performix**: Run APX recipe workflows against a target device over SSH to capture and analyze workload performance data
 - **System Information**: Instructions for gathering detailed system architecture information via [sysreport](https://github.com/ArmDeveloperEcosystem/sysreport)
 
 ## Pre-Built Image
@@ -48,8 +47,6 @@ responsible for explicit multi-architecture builds.
 
 Choose the configuration that matches your MCP client:
 
-The examples below include the optional Docker arguments required for **Arm Performix**. These SSH-related settings are only needed when you want the MCP server to run remote commands on a target device through Arm Performix. If you are not using Arm Performix, you can omit the SSH `-v` lines.
-
 #### Claude Code
 
 Add to `.mcp.json` in your project:
@@ -65,8 +62,6 @@ Add to `.mcp.json` in your project:
         "-i",
         "--pull=always",
         "-v", "/path/to/your/workspace:/workspace",
-        "-v", "/path/to/your/ssh/private_key:/run/keys/ssh-key.pem:ro",
-        "-v", "/path/to/your/ssh/known_hosts:/run/keys/known_hosts:ro",
         "armlimited/arm-mcp"
       ]
     }
@@ -90,8 +85,6 @@ Add to `.vscode/mcp.json` in your project, or globally at `~/Library/Application
         "-i",
         "--pull=always",
         "-v", "/path/to/your/workspace:/workspace",
-        "-v", "/path/to/your/ssh/private_key:/run/keys/ssh-key.pem:ro",
-        "-v", "/path/to/your/ssh/known_hosts:/run/keys/known_hosts:ro",
         "armlimited/arm-mcp"
       ]
     }
@@ -118,8 +111,6 @@ Add to `~/.kiro/settings/mcp.json`:
         "-i",
         "--pull=always",
         "-v", "/path/to/your/workspace:/workspace",
-        "-v", "/path/to/your/ssh/private_key:/run/keys/ssh-key.pem:ro",
-        "-v", "/path/to/your/ssh/known_hosts:/run/keys/known_hosts:ro",
         "armlimited/arm-mcp"
       ],
       "timeout": 60000
@@ -145,8 +136,6 @@ Add to `.gemini/settings.json` in your project root:
         "-i",
         "--pull=always",
         "-v", "/path/to/your/workspace:/workspace",
-        "-v", "/path/to/your/ssh/private_key:/run/keys/ssh-key.pem:ro",
-        "-v", "/path/to/your/ssh/known_hosts:/run/keys/known_hosts:ro",
         "armlimited/arm-mcp"
       ]
     }
@@ -165,13 +154,11 @@ args = [
   "-i",
   "--pull=always",
   "-v", "/path/to/your/workspace:/workspace",
-  "-v", "/path/to/your/ssh/private_key:/run/keys/ssh-key.pem:ro",
-  "-v", "/path/to/your/ssh/known_hosts:/run/keys/known_hosts:ro",
   "armlimited/arm-mcp"
 ]
 ```
 
-**Note**: Replace `/path/to/your/workspace` with the actual path to your project directory that you want the MCP server to access. If you are enabling Arm Performix, also replace the `/path/to/your/ssh/private_key` and `/path/to/your/ssh/known_hosts` paths with your local files. The MCP container auto-discovers files mounted under `/run/keys`, as shown in the configs above.
+**Note**: Replace `/path/to/your/workspace` with the actual path to your project directory that you want the MCP server to access.
 
 ### 3. Restart Your MCP Client
 

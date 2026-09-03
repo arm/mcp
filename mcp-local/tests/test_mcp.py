@@ -15,8 +15,6 @@
 import json
 import constants
 import os
-import subprocess
-import tempfile
 import time
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
@@ -113,186 +111,114 @@ def test_mcp_stdio_transport_responds(platform):
     repo_root = Path(__file__).resolve().parents[1]
     print("\n***Repo Root: ", repo_root)
 
-    external_ssh_key_path = os.getenv("APX_TEST_SSH_KEY_PATH")
-    external_known_hosts_path = os.getenv("APX_TEST_KNOWN_HOSTS_PATH")
+    with (
+        DockerContainer(image)
+        .with_volume_mapping(str(repo_root), "/workspace")
+        .with_kwargs(stdin_open=True, tty=False)
+    ) as container:
+        wait_for_logs(container, "Starting MCP server", timeout=60)
+        socket_wrapper = container.get_wrapped_container().attach_socket(
+            params={"stdin": 1, "stdout": 1, "stderr": 1, "stream": 1}
+        )
+        raw_socket = socket_wrapper._sock
+        raw_socket.settimeout(10)
 
-    with tempfile.TemporaryDirectory(prefix="apx-test-keys-") as temp_keys_dir:
-        temp_keys_path = Path(temp_keys_dir)
-        ssh_key_path = external_ssh_key_path
-        known_hosts_path = external_known_hosts_path
-        pub_key_path = temp_keys_path / "ssh-key.pem.pub"
+        raw_socket.sendall(_encode_mcp_message(constants.INIT_REQUEST))
+        response = _read_mcp_message(raw_socket, timeout=20)
 
-        if not ssh_key_path:
-            ssh_key_path = str(temp_keys_path / "ssh-key.pem")
-            subprocess.run(
-                ["ssh-keygen", "-t", "ed25519", "-N", "", "-f", ssh_key_path],
-                check=True,
-                capture_output=True,
-                text=True,
+        #Check Container Init Test
+        assert response.get("id") == 1, "Test Failed: MCP initialize response id mismatch."
+        assert "result" in response, "Test Failed: MCP initialize response missing result field."
+        assert "serverInfo" in response["result"], "Test Failed: MCP initialize response missing serverInfo field."
+        raw_socket.sendall(
+            _encode_mcp_message({"jsonrpc": "2.0", "method": "initialized", "params": {}})
+        )
+
+        def _read_response(expected_id: int, timeout: float = 10.0) -> dict:
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                message = _read_mcp_message(raw_socket, timeout=timeout)
+                if message.get("id") == expected_id:
+                    return message
+            raise TimeoutError(f"Timed out waiting for MCP response id={expected_id}.")
+
+        raw_socket.sendall(
+            _encode_mcp_message(
+                {"jsonrpc": "2.0", "id": 8, "method": "tools/list", "params": {}}
             )
-            if pub_key_path.exists():
-                pub_key_path.unlink()
+        )
+        tools = _read_response(8)["result"]["tools"]
+        tool_names = {tool["name"] for tool in tools}
+        assert "apx_recipe_run" not in tool_names
+        knowledge_search = next(
+            tool for tool in tools if tool["name"] == "knowledge_base_search"
+        )
+        assert (
+            "Use this tool for Arm-related runtime-performance, profiling, hotspot, "
+            "benchmarking, and regression questions."
+            in knowledge_search["description"]
+        )
 
-        if not known_hosts_path:
-            known_hosts_path = str(temp_keys_path / "known_hosts")
-            Path(known_hosts_path).write_text(
-                "172.17.0.1 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFakeKnownHostKeyForIntegrationTestsOnly\n",
-                encoding="utf-8",
+        print("\n***Test Passed: arm-mcp container initialized and ran successfully")
+
+        #Check Image Tool Test
+        raw_socket.sendall(_encode_mcp_message(constants.CHECK_IMAGE_REQUEST))
+        check_image_response = _read_response(2, timeout=60)
+        assert check_image_response.get("result")["structuredContent"] == constants.EXPECTED_CHECK_IMAGE_RESPONSE, "Test Failed: MCP check_image tool failed: content mismatch. Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_IMAGE_RESPONSE,indent=2), json.dumps(check_image_response.get("result")["structuredContent"],indent=2))
+        print("\n***Test Passed: MCP check_image tool succeeded")
+
+        #Check Skopeo Tool Test
+        raw_socket.sendall(_encode_mcp_message(constants.CHECK_SKOPEO_REQUEST))
+        check_skopeo_response = _read_response(3, timeout=60)
+        actual_os = json.loads(check_skopeo_response.get("result")["structuredContent"]["stdout"]).get("Os")
+        actual_status = check_skopeo_response.get("result")["structuredContent"].get("status")
+        assert actual_os == json.loads(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["stdout"]).get("Os"), "Test Failed: MCP check_skopeo tool failed: Os mismatch. Expected: {}, Received: {}".format(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["Os"], actual_os)
+        assert actual_status == constants.EXPECTED_CHECK_SKOPEO_RESPONSE["status"], "Test Failed: MCP check_skopeo tool failed: Status mismatch. Expected: {}, Received: {}".format(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["status"], actual_status)
+        print("\n***Test Passed: MCP check_skopeo tool succeeded")
+
+        #Check NGINX Query Test
+        raw_socket.sendall(_encode_mcp_message(constants.CHECK_NGINX_REQUEST))
+        check_nginx_response = _read_response(4, timeout=60)
+        nginx_structured_content = check_nginx_response["result"]["structuredContent"]
+        expected_nginx_urls = {_base_url(expected) for expected in constants.EXPECTED_CHECK_NGINX_RESPONSE}
+        actual_nginx_urls = {_base_url(url) for url in _result_urls(nginx_structured_content)}
+        assert expected_nginx_urls & actual_nginx_urls, "Test Failed: MCP check_nginx tool failed: content mismatch., Expected one of: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_NGINX_RESPONSE,indent=2), json.dumps(check_nginx_response.get("result")["structuredContent"],indent=2))
+        print("\n***Test Passed: MCP check_nginx tool succeeded")
+
+        #Check Migrate Ease Tool Test
+        raw_socket.sendall(_encode_mcp_message(constants.CHECK_MIGRATE_EASE_TOOL_REQUEST))
+        check_migrate_ease_tool_response = _read_response(5, timeout=60)
+        # Assert only the status field to avoid mismatches due to dynamic fields.
+        migrate_ease_content = check_migrate_ease_tool_response.get("result")[
+            "structuredContent"
+        ]
+        assert (
+            migrate_ease_content["status"]
+            == constants.EXPECTED_CHECK_MIGRATE_EASE_TOOL_RESPONSE_STATUS
+        ), (
+            "Test Failed: MCP check_migrate_ease_tool tool failed: status "
+            "mismatch. Expected: {}, Received: {}\nFull response: {}".format(
+                constants.EXPECTED_CHECK_MIGRATE_EASE_TOOL_RESPONSE_STATUS,
+                migrate_ease_content["status"],
+                json.dumps(migrate_ease_content, indent=2),
             )
+        )
+        print("\n***Test Passed: MCP check_migrate_ease_tool tool succeeded")
 
-        os.chmod(ssh_key_path, 0o600)
-        os.chmod(known_hosts_path, 0o644)
+        #Check Sysreport Tool Test
+        raw_socket.sendall(_encode_mcp_message(constants.CHECK_SYSREPORT_TOOL_REQUEST))
+        check_sysreport_response = _read_response(6, timeout=60)
+        assert check_sysreport_response.get("result")["structuredContent"] == constants.EXPECTED_CHECK_SYSREPORT_TOOL_RESPONSE, "Test Failed: MCP sysreport_instructions tool failed: content mismatch. Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_SYSREPORT_TOOL_RESPONSE,indent=2), json.dumps(check_sysreport_response.get("result")["structuredContent"],indent=2))
+        print("\n***Test Passed: MCP sysreport_instructions tool succeeded")
 
-        with (
-            DockerContainer(image)
-            .with_volume_mapping(str(repo_root), "/workspace")
-            .with_volume_mapping(ssh_key_path, "/run/keys/ssh-key.pem", mode="ro")
-            .with_volume_mapping(known_hosts_path, "/run/keys/known_hosts", mode="ro")
-            .with_kwargs(stdin_open=True, tty=False)
-        ) as container:
-            wait_for_logs(container, "Starting MCP server", timeout=60)
-            socket_wrapper = container.get_wrapped_container().attach_socket(
-                params={"stdin": 1, "stdout": 1, "stderr": 1, "stream": 1}
-            )
-            raw_socket = socket_wrapper._sock
-            raw_socket.settimeout(10)
+        #Check MCA Tool Test - works only on platform=linux/arm64
+        if platform == constants.DEFAULT_PLATFORM:
+            raw_socket.sendall(_encode_mcp_message(constants.CHECK_MCA_TOOL_REQUEST))
+            check_mca_response = _read_response(7, timeout=60)
+            assert check_mca_response.get("result")["structuredContent"]["status"] == constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS, "Test Failed: MCP mca tool failed: status mismatch.Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS,indent=2), json.dumps(check_mca_response.get("result")["structuredContent"]["status"],indent=2))
+            print("\n***Test Passed: MCP mca tool succeeded")
+        else:
+            print("\n***Test NA: MCP mca tool is not supported on this platform: {}".format(platform))
 
-            raw_socket.sendall(_encode_mcp_message(constants.INIT_REQUEST))
-            response = _read_mcp_message(raw_socket, timeout=20)
-
-            #Check Container Init Test
-            assert response.get("id") == 1, "Test Failed: MCP initialize response id mismatch."
-            assert "result" in response, "Test Failed: MCP initialize response missing result field."
-            assert "serverInfo" in response["result"], "Test Failed: MCP initialize response missing serverInfo field."
-            raw_socket.sendall(
-                _encode_mcp_message({"jsonrpc": "2.0", "method": "initialized", "params": {}})
-            )
-
-            def _read_response(expected_id: int, timeout: float = 10.0) -> dict:
-                deadline = time.time() + timeout
-                while time.time() < deadline:
-                    message = _read_mcp_message(raw_socket, timeout=timeout)
-                    if message.get("id") == expected_id:
-                        return message
-                raise TimeoutError(f"Timed out waiting for MCP response id={expected_id}.")
-
-            print("\n***Test Passed: arm-mcp container initilized and ran successfully")
-
-            #Check Image Tool Test
-            raw_socket.sendall(_encode_mcp_message(constants.CHECK_IMAGE_REQUEST))
-            check_image_response = _read_response(2, timeout=60)
-            assert check_image_response.get("result")["structuredContent"] == constants.EXPECTED_CHECK_IMAGE_RESPONSE, "Test Failed: MCP check_image tool failed: content mismatch. Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_IMAGE_RESPONSE,indent=2), json.dumps(check_image_response.get("result")["structuredContent"],indent=2))
-            print("\n***Test Passed: MCP check_image tool succeeded")
-
-            #Check Skopeo Tool Test
-            raw_socket.sendall(_encode_mcp_message(constants.CHECK_SKOPEO_REQUEST))
-            check_skopeo_response = _read_response(3, timeout=60)
-            actual_os = json.loads(check_skopeo_response.get("result")["structuredContent"]["stdout"]).get("Os")
-            actual_status = check_skopeo_response.get("result")["structuredContent"].get("status")
-            assert actual_os == json.loads(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["stdout"]).get("Os"), "Test Failed: MCP check_skopeo tool failed: Os mismatch. Expected: {}, Received: {}".format(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["Os"], actual_os)
-            assert actual_status == constants.EXPECTED_CHECK_SKOPEO_RESPONSE["status"], "Test Failed: MCP check_skopeo tool failed: Status mismatch. Expected: {}, Received: {}".format(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["status"], actual_status)
-            print("\n***Test Passed: MCP check_skopeo tool succeeded")
-
-            #Check NGINX Query Test
-            raw_socket.sendall(_encode_mcp_message(constants.CHECK_NGINX_REQUEST))
-            check_nginx_response = _read_response(4, timeout=60)
-            nginx_structured_content = check_nginx_response["result"]["structuredContent"]
-            expected_nginx_urls = {_base_url(expected) for expected in constants.EXPECTED_CHECK_NGINX_RESPONSE}
-            actual_nginx_urls = {_base_url(url) for url in _result_urls(nginx_structured_content)}
-            assert expected_nginx_urls & actual_nginx_urls, "Test Failed: MCP check_nginx tool failed: content mismatch., Expected one of: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_NGINX_RESPONSE,indent=2), json.dumps(check_nginx_response.get("result")["structuredContent"],indent=2))
-            print("\n***Test Passed: MCP check_nginx tool succeeded")
-
-            #Check Migrate Ease Tool Test
-            raw_socket.sendall(_encode_mcp_message(constants.CHECK_MIGRATE_EASE_TOOL_REQUEST))
-            check_migrate_ease_tool_response = _read_response(5, timeout=60)
-            # Assert only the status field to avoid mismatches due to dynamic fields.
-            migrate_ease_content = check_migrate_ease_tool_response.get("result")[
-                "structuredContent"
-            ]
-            assert (
-                migrate_ease_content["status"]
-                == constants.EXPECTED_CHECK_MIGRATE_EASE_TOOL_RESPONSE_STATUS
-            ), (
-                "Test Failed: MCP check_migrate_ease_tool tool failed: status "
-                "mismatch. Expected: {}, Received: {}\nFull response: {}".format(
-                    constants.EXPECTED_CHECK_MIGRATE_EASE_TOOL_RESPONSE_STATUS,
-                    migrate_ease_content["status"],
-                    json.dumps(migrate_ease_content, indent=2),
-                )
-            )
-            print("\n***Test Passed: MCP check_migrate_ease_tool tool succeeded")
-
-            #Check Sysreport Tool Test
-            raw_socket.sendall(_encode_mcp_message(constants.CHECK_SYSREPORT_TOOL_REQUEST))
-            check_sysreport_response = _read_response(6, timeout=60)
-            assert check_sysreport_response.get("result")["structuredContent"] == constants.EXPECTED_CHECK_SYSREPORT_TOOL_RESPONSE, "Test Failed: MCP sysreport_instructions tool failed: content mismatch. Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_SYSREPORT_TOOL_RESPONSE,indent=2), json.dumps(check_sysreport_response.get("result")["structuredContent"],indent=2))
-            print("\n***Test Passed: MCP sysreport_instructions tool succeeded")
-
-            #Check MCA Tool Test - works only on platform=linux/arm64
-            if platform == constants.DEFAULT_PLATFORM:
-                raw_socket.sendall(_encode_mcp_message(constants.CHECK_MCA_TOOL_REQUEST))
-                check_mca_response = _read_response(7, timeout=60)
-                assert check_mca_response.get("result")["structuredContent"]["status"] == constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS, "Test Failed: MCP mca tool failed: status mismatch.Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS,indent=2), json.dumps(check_mca_response.get("result")["structuredContent"]["status"],indent=2))
-                print("\n***Test Passed: MCP mca tool succeeded")
-            else:
-                print("\n***Test NA: MCP mca tool is not supported on this platform: {}".format(platform))
-
-            #Check APX Recipe Run Tool Test
-            apx_request = json.loads(json.dumps(constants.CHECK_APX_RECIPE_RUN_REQUEST))
-            apx_args = apx_request["params"]["arguments"]
-            apx_args["remote_ip_addr"] = os.getenv("APX_TEST_REMOTE_IP", apx_args["remote_ip_addr"])
-            apx_args["remote_usr"] = os.getenv("APX_TEST_REMOTE_USER", apx_args["remote_usr"])
-            apx_args["cmd"] = os.getenv("APX_TEST_CMD", apx_args["cmd"])
-
-            raw_socket.sendall(_encode_mcp_message(apx_request))
-            check_apx_recipe_run_response = _read_response(8, timeout=60)
-            print(
-                "\n***APX Recipe Run Tool Raw Response: ",
-                json.dumps(check_apx_recipe_run_response, indent=2),
-            )
-            apx_structured = check_apx_recipe_run_response.get("result", {}).get("structuredContent", {})
-            print(
-                "\n***APX Recipe Run Tool Structured Content: ",
-                json.dumps(apx_structured, indent=2),
-            )
-            assert apx_structured.get("recipe") == "code_hotspots", "Test Failed: MCP apx_recipe_run tool failed: recipe mismatch. Expected: code_hotspots, Received: {}".format(apx_structured.get("recipe"))
-            assert apx_structured.get("status") in {"success"}, "Test Failed: MCP apx_recipe_run tool failed: unexpected status. Received: {}".format(apx_structured.get("status"))
-            print("\n***Test Passed: MCP apx_recipe_run tool call completed")
-
-            #Check APX Code Hotspots Tool Test - CpuBurner Java Workload
-            apx_java_request = json.loads(json.dumps(constants.CHECK_APX_CPU_HOTSPOTS_JAVA_REQUEST))
-            apx_java_args = apx_java_request["params"]["arguments"]
-            apx_java_args["remote_ip_addr"] = os.getenv("APX_TEST_REMOTE_IP", apx_java_args["remote_ip_addr"])
-            apx_java_args["remote_usr"] = os.getenv("APX_TEST_REMOTE_USER", apx_java_args["remote_usr"])
-            apx_java_args["cmd"] = os.getenv("APX_TEST_JAVA_CMD", apx_java_args["cmd"])
-
-            raw_socket.settimeout(600)
-            raw_socket.sendall(_encode_mcp_message(apx_java_request))
-            check_apx_java_response = _read_response(9, timeout=600)
-            raw_socket.settimeout(10)
-            print(
-                "\n***APX CPU Hotspots (Java) Raw Response: ",
-                json.dumps(check_apx_java_response, indent=2),
-            )
-            apx_java_structured = check_apx_java_response.get("result", {}).get("structuredContent", {})
-            print(
-                "\n***APX CPU Hotspots (Java) Structured Content: ",
-                json.dumps(apx_java_structured, indent=2),
-            )
-            java_rows = apx_java_structured.get("rows", [])
-            assert java_rows, "Test Failed: Expected non-empty APX Java hotspots rows output."
-            workc_found = False
-            for row in java_rows:
-                if not isinstance(row, dict):
-                    continue
-                function_name = row.get("FUNCTION_NAME") or row.get("function_name") or ""
-                if "CpuBurner::workC" in str(function_name):
-                    workc_found = True
-                    break
-            assert workc_found, "Test Failed: Expected CpuBurner::workC in APX Java hotspots output."
-            assert apx_java_structured.get("recipe") == "code_hotspots", "Test Failed: MCP apx_recipe_run (Java) tool failed: recipe mismatch. Expected: code_hotspots, Received: {}".format(apx_java_structured.get("recipe"))
-            assert apx_java_structured.get("status") in {"success"}, "Test Failed: MCP apx_recipe_run (Java) tool failed: unexpected status. Received: {}".format(apx_java_structured.get("status"))
-            print("\n***Test Passed: MCP apx_recipe_run (Java CpuBurner) tool call completed")
-        
 if __name__ == "__main__":
     pytest.main([__file__])
