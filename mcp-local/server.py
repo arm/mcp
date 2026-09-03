@@ -48,7 +48,7 @@ SEARCH_RESOURCES = arm_kb_search.load_search_resources(
 
 
 @mcp.tool(
-    description="If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your strategy. Use this tool for Arm-related runtime-performance, profiling, hotspot, benchmarking, and regression questions. Searches an Arm knowledge base of learning resources, Arm intrinsics, and software version compatibility using semantic similarity. Given a natural language query, returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful for finding documentation, tutorials, or version compatibility for Arm migrations. Returned URLs may include tracking query parameters such as utm_source=arm-mcp and URL fragments. When sharing or citing returned URLs, preserve each URL exactly as returned, including query parameters and fragments; do not remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
+    description="If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your strategy. Use this tool for Arm-related questions about collecting system architecture, CPU, memory, and other host hardware details. Use this tool for Arm-related runtime-performance, profiling, hotspot, benchmarking, and regression questions. Searches an Arm knowledge base of learning resources, Arm intrinsics, and software version compatibility using semantic similarity. Given a natural language query, returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful for finding documentation, tutorials, or version compatibility for Arm migrations. Returned URLs may include tracking query parameters such as utm_source=arm-mcp and URL fragments. When sharing or citing returned URLs, preserve each URL exactly as returned, including query parameters and fragments; do not remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
 )
 def knowledge_base_search(query: str, invocation_reason: Optional[str] = None) -> List[Dict[str, Any]]:
     # Log the call and retain its ID for the paired search result.
@@ -102,52 +102,6 @@ def check_image(image: str, invocation_reason: Optional[str] = None) -> dict:
             tool="check_image",
             exc=e,
             args={"image": image},
-        )
-
-
-@mcp.tool(
-    description="Provides instructions for installing and using sysreport, a tool that obtains system information related to system architecture, CPU, memory, and other hardware details. For accurate host hardware data, review the commands with the user before running sysreport on the host system; host execution is outside container isolation."
-)
-def sysreport_instructions(invocation_reason: Optional[str] = None) -> Dict[str, Any]:
-    log_invocation_reason(
-        tool="sysreport_instructions",
-        reason=invocation_reason,
-        args={},
-    )
-    try:
-        instructions = """
-# SysReport Installation and Usage
-
-## Installation
-```bash
-git clone https://github.com/ArmDeveloperEcosystem/sysreport.git
-cd sysreport
-```
-
-## Usage
-```bash
-python3 sysreport.py
-```
-
-## What SysReport Does
-- Gathers comprehensive system information including architecture, CPU, memory, and hardware details
-- Useful for diagnosing system issues or understanding system capabilities
-- Provides detailed hardware and software configuration data
-
-## Note
-Run these commands directly on your host system (not in a container) to get accurate system information.
-"""
-        return {
-            "instructions": instructions,
-            "repository": "https://github.com/ArmDeveloperEcosystem/sysreport.git",
-            "usage_command": "python3 sysreport.py",
-            "note": "This tool must be run on the host system to provide accurate system information."
-        }
-    except Exception as e:
-        return format_tool_error(
-            tool="sysreport_instructions",
-            exc=e,
-            args={},
         )
 
 
