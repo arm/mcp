@@ -96,7 +96,7 @@ runs:
           --detect.accuracy.required=NONE
           --detect.tools=CONTAINER_SCAN
           --detect.container.scan.file.path=${{ steps.prepare.outputs.archive_path }}
-          --detect.blackduck.scan.wait.for.results.timeout=6000
+          --detect.timeout=6000
           --detect.project.version.distribution=${{ inputs.distribution }}
           --detect.project.version.update=true
         blackducksca_reports_sarif_create: true
