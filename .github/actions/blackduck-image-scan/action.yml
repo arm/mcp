@@ -175,7 +175,7 @@ runs:
         exit 1
 
     - name: Report Black Duck container scan failure
-      if: ${{ always() && steps.scan.outcome != 'success' && steps.scan.outputs.status != '8' }}
+      if: ${{ always() && steps.scan.outcome != 'success' && steps.scan.outputs.status == '8' }}
       shell: bash
       env:
         SCAN_OUTCOME: ${{ steps.scan.outcome }}
