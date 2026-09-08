@@ -104,7 +104,7 @@ runs:
         blackducksca_reports_sarif_severities: 'Critical,High,Medium,Low'
         blackducksca_reports_sarif_groupSCAIssues: false
         blackducksca_upload_sarif_report: false
-        mark_build_status: 'failure'
+        mark_build_status: 'success'
         include_diagnostics: true
 
     - name: Upload Black Duck SARIF

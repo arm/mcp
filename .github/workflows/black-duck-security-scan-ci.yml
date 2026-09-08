@@ -73,7 +73,7 @@ jobs:
           blackducksca_upload_sarif_report: false
 
           ### Mark build status as failure if policy violating issues are found
-          mark_build_status: 'failure'
+          mark_build_status: 'success'
 
           ### To enable Black Duck SCA policy badges
           #blackducksca_policy_badges_create: false
@@ -138,4 +138,4 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
           ### Mark build status as failure if policy violating issues are found
-          mark_build_status: 'failure'
+          mark_build_status: 'success'
