@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - pyproject.toml
       - mcp-local/.dockerignore
       - mcp-local/.python-version
       - mcp-local/Dockerfile.inputs
