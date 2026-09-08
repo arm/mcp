@@ -44,7 +44,7 @@ minimum supported Python version.
 ## Reproducible MCP Build Inputs
 
 The final MCP image build does not resolve or download Python packages, Ubuntu
-packages, Performix, or migrate-ease. Those inputs are acquired separately by
+packages, or migrate-ease. Those inputs are acquired separately by
 the manually triggered **Build MCP Input Bundle** workflow and published as a
 private, multi-architecture OCI image at `ghcr.io/arm/mcp-build-inputs`.
 
@@ -55,8 +55,7 @@ architecture it:
 2. downloads the exact Python wheels allowed by those hashes;
 3. downloads the complete `.deb` closures from the recorded Ubuntu snapshot
    and checks every package against `mcp-local/build-inputs.lock.json`;
-4. downloads and verifies the architecture-specific Performix archive and the
-   pinned migrate-ease source archive; and
+4. downloads and verifies the pinned migrate-ease source archive; and
 5. publishes those bytes and their lock metadata in a scratch image, then
    combines both architecture images into one private OCI image index.
 
@@ -129,7 +128,6 @@ docker run --rm \
       skopeo --version
       llvm-mca --version
       git --version
-      test -x "$APX_BIN"
       migrate-ease-cpp --help >/dev/null
       python -c "import magic, requests; from utils.docker_utils import check_docker_image_architectures"'
 ```
@@ -147,9 +145,7 @@ docker run --rm \
 
 For the full MCP protocol and tool integration suite, tag the local image as
 `arm-mcp:latest` or set `MCP_IMAGE=arm-mcp:local`, then follow the repository's
-integration-test setup. The APX integration cases additionally require the SSH
-target, key mounts, and Java workload configured in
-`.github/workflows/integration-tests.yml`.
+integration-test setup.
 
 ### Runtime Egress Release Gate
 
@@ -167,7 +163,7 @@ container exits; the image under test receives no writable evidence mount. The
 workflow pins the Ubuntu package version, verifies the installed version, and
 records it in both `runtime-egress-evidence.json` and the workflow summary. The
 test exercises MCP startup, the embedded knowledge/vector search, a local
-migrate-ease scan, sysreport instructions, and (on Arm64) local llvm-mca
+migrate-ease scan, and (on Arm64) local llvm-mca
 analysis. Any non-loopback IPv4 or IPv6 `connect`, `sendto`, `sendmsg`, or
 `sendmmsg` destination fails the gate.
 The production image sets `FASTMCP_CHECK_FOR_UPDATES=off` so FastMCP does not
@@ -280,12 +276,11 @@ Review every package addition, removal, version change, and checksum change in
 the manifest before committing it. The normal publication workflow does not
 rewrite this lock; it fails if the snapshot produces different bytes.
 
-#### Updating Performix or Migrate-ease
+#### Updating Migrate-ease
 
 Update the versioned URL or source revision and the expected SHA256 in
 `mcp-local/build-inputs.lock.json`. Prefer an upstream-published checksum when
-one is available. Performix has separate AMD64 and Arm64 artifacts;
-migrate-ease is one pinned source archive used by both architectures. The
+one is available. Migrate-ease is one pinned source archive used by both architectures. The
 publication workflow fails before publishing if any archive differs from its
 recorded checksum.
 
@@ -317,6 +312,10 @@ checked-in digest as the release boundary and keeps MCP releases independent
 from unsuccessful or unwanted embedding candidates.
 
 #### Creating a Reviewed MCP Release
+
+`mcp-local/server.json` is the checked-in MCP registry manifest and release
+control file. Metadata-only changes are validated without publishing; changing
+its version and matching OCI image identifier initiates a release.
 
 Production releases are initiated only by a reviewed PR that updates
 `mcp-local/server.json` on `main`. Embedding promotion PRs make this update

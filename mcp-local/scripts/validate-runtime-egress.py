@@ -59,12 +59,6 @@ MCP_REQUESTS = [
             "arguments": {"scanner": "java"},
         },
     },
-    {
-        "jsonrpc": "2.0",
-        "id": 4,
-        "method": "tools/call",
-        "params": {"name": "sysreport_instructions", "arguments": {}},
-    },
 ]
 
 NEGATIVE_CONTROL = r"""
@@ -322,11 +316,8 @@ def validate_mcp_responses(stdout: str, platform: str) -> list[str]:
     migration = _structured(responses.get(3, {}))
     if not isinstance(migration, dict) or migration.get("status") != "success":
         failures.append("bundled migrate-ease Java scan did not succeed")
-    sysreport = _structured(responses.get(4, {}))
-    if not isinstance(sysreport, dict) or "instructions" not in sysreport:
-        failures.append("bundled sysreport instructions did not succeed")
     if platform == "linux/arm64":
-        mca = _structured(responses.get(5, {}))
+        mca = _structured(responses.get(4, {}))
         if not isinstance(mca, dict) or mca.get("status") != "ok":
             failures.append("bundled llvm-mca analysis did not succeed")
     return failures
@@ -355,13 +346,12 @@ def main() -> int:
         "initialize",
         "knowledge_base_search",
         "migrate_ease_scan",
-        "sysreport_instructions",
     ]
     if args.platform == "linux/arm64":
         requests.append(
             {
                 "jsonrpc": "2.0",
-                "id": 5,
+                "id": 4,
                 "method": "tools/call",
                 "params": {
                     "name": "mca",

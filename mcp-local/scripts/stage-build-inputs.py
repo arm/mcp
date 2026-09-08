@@ -279,20 +279,6 @@ def stage_os_packages(lock: dict[str, object], arch: str, output: Path) -> None:
         stage_os_package_role(lock, arch, role, output)
 
 
-def stage_arch(lock: dict[str, object], arch: str, output: Path) -> None:
-    performix = lock["performix"]
-    assert isinstance(performix, dict)
-    artifacts = performix["artifacts"]
-    assert isinstance(artifacts, dict)
-    artifact = artifacts[arch]
-    assert isinstance(artifact, dict)
-    download(
-        str(artifact["url"]),
-        output / arch / "performix.tar.gz",
-        str(artifact["sha256"]),
-    )
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--arch", choices=(*PLATFORM_MACHINES, "all"), required=True)
@@ -325,7 +311,6 @@ def main() -> None:
     )
     arches = PLATFORM_MACHINES if args.arch == "all" else (args.arch,)
     for arch in arches:
-        stage_arch(lock, arch, output)
         if not args.skip_os_packages:
             if args.refresh_os_lock:
                 os_packages = lock["os_packages"]

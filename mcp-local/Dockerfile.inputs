@@ -16,13 +16,12 @@
 
 # The publication workflow builds one manifest per target architecture. Each
 # manifest exposes the same paths, but contains the wheels, Ubuntu package
-# closure, and Performix binary for its own architecture.
+# closure for its own architecture.
 FROM scratch AS inputs
 ARG TARGETARCH
 
 COPY build-inputs/${TARGETARCH}/wheels/ /mcp-build-inputs/wheels/
 COPY build-inputs/${TARGETARCH}/debs/ /mcp-build-inputs/debs/
-COPY build-inputs/${TARGETARCH}/performix.tar.gz /mcp-build-inputs/performix.tar.gz
 COPY build-inputs/migrate-ease.tar.gz /mcp-build-inputs/migrate-ease.tar.gz
 
 # Preserve the dependency declarations, uv lock, and generated pip lock beside
