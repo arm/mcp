@@ -72,7 +72,9 @@ def git_output(*args: str) -> str:
 
 
 def changed_paths(base_ref: str, head_ref: str) -> list[str]:
-    output = git_output("diff", "--name-only", f"{base_ref}...{head_ref}", "--")
+    output = git_output(
+        "diff", "--no-renames", "--name-only", f"{base_ref}...{head_ref}", "--"
+    )
     return [line for line in output.splitlines() if line]
 
 

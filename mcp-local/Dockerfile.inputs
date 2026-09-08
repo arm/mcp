@@ -26,5 +26,6 @@ COPY build-inputs/migrate-ease.tar.gz /mcp-build-inputs/migrate-ease.tar.gz
 
 # Preserve the dependency declarations, uv lock, and generated pip lock beside
 # the acquired bytes so the GHCR artifact can be audited independently.
-COPY build-inputs/requirements.lock build-inputs.lock.json uv.lock pyproject.toml \
+COPY build-inputs/requirements.lock build-inputs/arm-kb-search.pyproject.toml \
+    build-inputs.lock.json uv.lock pyproject.toml \
     /mcp-build-inputs/metadata/
