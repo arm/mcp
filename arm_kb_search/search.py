@@ -232,6 +232,15 @@ def lexical_prepass_search(
     """Return high-exactness lexical candidates before dense retrieval is merged."""
     prepass_depth = max(k, candidate_depth)
     candidates = bm25_search(query, metadata, bm25_index, prepass_depth)
+    return _rank_lexical_candidates(query, candidates, k)
+
+
+def _rank_lexical_candidates(
+    query: str,
+    candidates: List[Dict[str, Any]],
+    k: int,
+) -> List[Dict[str, Any]]:
+    """Rank already retrieved BM25 candidates without rescoring the corpus."""
     if not candidates:
         return []
     scored_candidates: List[Dict[str, Any]] = []
@@ -523,15 +532,17 @@ def hybrid_search(
     candidate_depth: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     candidate_depth = candidate_depth or max(k * 20, 100)
-    lexical_results = lexical_prepass_search(
+    lexical_k = max(k * 3, PINNED_LEXICAL_CANDIDATES)
+    # Score and sort once at the depth required by both lexical consumers.
+    bm25_results = bm25_search(
         query,
         metadata,
         bm25_index,
-        k=max(k * 3, PINNED_LEXICAL_CANDIDATES),
-        candidate_depth=max(candidate_depth, LEXICAL_PREPASS_DEPTH),
+        k=max(candidate_depth, LEXICAL_PREPASS_DEPTH, lexical_k),
     )
+    lexical_results = _rank_lexical_candidates(query, bm25_results, lexical_k)
     dense_results = embedding_search(query, usearch_index, metadata, embedding_model, candidate_depth)
-    sparse_results = bm25_search(query, metadata, bm25_index, candidate_depth)
+    sparse_results = bm25_results[:candidate_depth]
 
     candidates: Dict[str, Dict[str, Any]] = {}
     for result in lexical_results:
