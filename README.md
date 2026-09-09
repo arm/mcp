@@ -500,8 +500,6 @@ docker run --rm -it --entrypoint /bin/bash armlimited/arm-mcp
 
 Contributions are welcome! Please feel free to submit issues or pull requests.
 
-Suspected vulnerabilities must not be reported in public issues. Follow the existing [Arm MCP security policy](https://github.com/arm/mcp?tab=security-ov-file) and Arm PSIRT reporting instructions.
-
 When contributing:
 - Follow PEP 8 style guidelines for Python code
 - Update documentation for any new features or changes
