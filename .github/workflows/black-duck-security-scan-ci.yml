@@ -105,7 +105,7 @@ jobs:
             --blackduck-url "${BLACKDUCK_URL}" \
             --project "${DETECT_PROJECT_NAME}" \
             --version "${DETECT_PROJECT_VERSION_NAME}" \
-            --timeout 3600 \
+            --timeout 14400 \
             --output "${RUNNER_TEMP}/blackduck-source-sbom-${GITHUB_SHA}.cdx.json"
 
       - name: Retain Black Duck source CycloneDX SBOM

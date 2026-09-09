@@ -340,7 +340,7 @@ jobs:
             --blackduck-url "${BLACKDUCK_URL}" \
             --project "Arm:MCP" \
             --version "${BLACKDUCK_PROJECT_VERSION}" \
-            --timeout 3600 \
+            --timeout 14400 \
             --output "${RUNNER_TEMP}/runtime-sbom/arm-mcp-${VERSION}-${ARCH_TAG}.cdx.json"
 
       - name: Retain CycloneDX SBOM

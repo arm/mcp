@@ -335,7 +335,7 @@ def test_release_exports_cyclonedx_sboms_and_attaches_them_to_release() -> None:
         "mcp-runtime-container-${{ matrix.tag }}-1.0" in build_job
     )
     assert "export-blackduck-cyclonedx.py" in build_job
-    assert "--timeout 3600" in build_job
+    assert "--timeout 14400" in build_job
     assert "Retain CycloneDX SBOM" in build_job
     assert "runtime-sbom-${{ matrix.tag }}-${{ github.run_id }}" in build_job
     assert "if-no-files-found: error" in build_job
@@ -374,7 +374,7 @@ def test_source_scan_exports_cyclonedx_sbom_for_full_scans_only() -> None:
     assert "export-blackduck-cyclonedx.py" in full_scan_section
     assert '--project "${DETECT_PROJECT_NAME}"' in full_scan_section
     assert '--version "${DETECT_PROJECT_VERSION_NAME}"' in full_scan_section
-    assert "--timeout 3600" in full_scan_section
+    assert "--timeout 14400" in full_scan_section
     assert "steps.black-duck-full-scan.outcome == 'success'" in full_scan_section
     assert "steps.source-sbom-export.outcome == 'success'" in full_scan_section
     assert full_scan_section.count("!cancelled()") >= 3
@@ -852,7 +852,7 @@ def test_container_scan_uses_explicit_codeql_sarif_upload() -> None:
         "blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'"
         in BLACKDUCK_IMAGE_SCAN_ACTION
     )
-    assert "--detect.blackduck.scan.timeout=3600" in BLACKDUCK_IMAGE_SCAN_ACTION
+    assert "--detect.blackduck.scan.timeout=14400" in BLACKDUCK_IMAGE_SCAN_ACTION
     assert "mark_build_status: 'failure'" in BLACKDUCK_IMAGE_SCAN_ACTION
     assert "Report Black Duck policy violation" in BLACKDUCK_IMAGE_SCAN_ACTION
 
