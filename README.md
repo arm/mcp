@@ -200,6 +200,8 @@ docker run --rm -it --entrypoint /bin/bash armlimited/arm-mcp
 - **Empty workspace**: Ensure your volume mount path is correct and the directory exists
 - **Architecture mismatches**: Confirm that the local image matches the Docker host's native architecture; use the release workflow for explicit cross-platform builds.
 
+Suspected vulnerabilities must not be reported in public issues. Follow the existing [Arm MCP security policy](https://github.com/arm/mcp?tab=security-ov-file) and Arm PSIRT reporting instructions.
+
 ## License
 
 Copyright © 2026, Arm Limited and Contributors. All rights reserved.
