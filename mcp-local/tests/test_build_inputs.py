@@ -852,7 +852,12 @@ def test_container_scan_uses_explicit_codeql_sarif_upload() -> None:
         "blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'"
         in BLACKDUCK_IMAGE_SCAN_ACTION
     )
-    assert "--detect.blackduck.scan.timeout=14400" in BLACKDUCK_IMAGE_SCAN_ACTION
+    assert "--detect.timeout=14400" in BLACKDUCK_IMAGE_SCAN_ACTION
+    assert "--detect.blackduck.scan.timeout=" not in BLACKDUCK_IMAGE_SCAN_ACTION
+    assert (
+        "--detect.blackduck.scan.wait.for.results.timeout="
+        not in BLACKDUCK_IMAGE_SCAN_ACTION
+    )
     assert "mark_build_status: 'failure'" in BLACKDUCK_IMAGE_SCAN_ACTION
     assert "Report Black Duck policy violation" in BLACKDUCK_IMAGE_SCAN_ACTION
 
