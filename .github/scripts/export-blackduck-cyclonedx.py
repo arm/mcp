@@ -32,7 +32,6 @@ from zipfile import BadZipFile, ZipFile
 
 
 REPORT_MEDIA_TYPE = "application/vnd.blackducksoftware.report-4+json"
-SCAN_MEDIA_TYPE = "application/vnd.blackducksoftware.scan-4+json"
 CYCLONEDX_REPORT = {
     "reportFormat": "JSON",
     "reportType": "SBOM",
@@ -108,7 +107,7 @@ class BlackDuckClient:
         method: str = "GET",
         body: bytes | None = None,
         content_type: str | None = None,
-        accept: str = "application/json",
+        accept: str = "*/*",
         use_api_token: bool = False,
     ) -> tuple[bytes, dict[str, str]]:
         trusted_url = self._trusted_url(url)
@@ -135,8 +134,9 @@ class BlackDuckClient:
             with self.opener.open(request, timeout=self.request_timeout) as response:
                 return response.read(), dict(response.headers.items())
         except HTTPError as error:
+            endpoint = urlsplit(trusted_url).path
             raise BlackDuckExportError(
-                f"Black Duck API request failed with HTTP {error.code}."
+                f"Black Duck API {method} {endpoint} failed with HTTP {error.code}."
             ) from error
         except URLError as error:
             raise BlackDuckExportError(
@@ -224,9 +224,7 @@ class BlackDuckClient:
     ) -> None:
         deadline = time.monotonic() + timeout
         while True:
-            response = self._json_request(
-                f"{version_url}/codelocations", accept=SCAN_MEDIA_TYPE
-            )
+            response = self._json_request(f"{version_url}/codelocations")
             pending = False
             items = response.get("items", [])
             if not isinstance(items, list):
@@ -260,9 +258,7 @@ class BlackDuckClient:
             time.sleep(poll_interval)
 
     def _reports(self, version_url: str) -> list[dict[str, Any]]:
-        response = self._json_request(
-            f"{version_url}/reports", accept=REPORT_MEDIA_TYPE
-        )
+        response = self._json_request(f"{version_url}/reports")
         items = response.get("items", [])
         if not isinstance(items, list):
             raise BlackDuckExportError("Black Duck returned invalid report results.")
@@ -288,7 +284,6 @@ class BlackDuckClient:
             method="POST",
             body=report_body,
             content_type=REPORT_MEDIA_TYPE,
-            accept=REPORT_MEDIA_TYPE,
         )
         location = headers.get("Location") or headers.get("location")
         requested_report = self._trusted_url(location) if location else None
@@ -334,9 +329,7 @@ class BlackDuckClient:
             time.sleep(poll_interval)
 
     def download_report(self, report_url: str) -> bytes:
-        report, _ = self._request(
-            f"{report_url}/download.zip", accept="application/zip"
-        )
+        report, _ = self._request(f"{report_url}/download.zip")
         if not report:
             raise BlackDuckExportError("Black Duck returned an empty report archive.")
         return report
