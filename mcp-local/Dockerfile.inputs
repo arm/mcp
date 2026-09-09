@@ -1,0 +1,31 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# syntax=docker/dockerfile:1.7
+
+# The publication workflow builds one manifest per target architecture. Each
+# manifest exposes the same paths, but contains the wheels, Ubuntu package
+# closure, and Performix binary for its own architecture.
+FROM scratch AS inputs
+ARG TARGETARCH
+
+COPY build-inputs/${TARGETARCH}/wheels/ /mcp-build-inputs/wheels/
+COPY build-inputs/${TARGETARCH}/debs/ /mcp-build-inputs/debs/
+COPY build-inputs/${TARGETARCH}/performix.tar.gz /mcp-build-inputs/performix.tar.gz
+COPY build-inputs/migrate-ease.tar.gz /mcp-build-inputs/migrate-ease.tar.gz
+
+# Preserve the dependency declarations, uv lock, and generated pip lock beside
+# the acquired bytes so the GHCR artifact can be audited independently.
+COPY build-inputs/requirements.lock build-inputs.lock.json uv.lock pyproject.toml \
+    /mcp-build-inputs/metadata/

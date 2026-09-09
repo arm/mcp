@@ -6,7 +6,6 @@ requires-python = ">=3.13,<3.14"
 dependencies = [
     # Content acquisition and chunk generation
     "beautifulsoup4",
-    "boto3",
     "pypdf",
     "requests",
 

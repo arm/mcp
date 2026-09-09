@@ -1,0 +1,12 @@
+**
+
+!.dockerignore
+!mcp-local/
+!mcp-local/Dockerfile
+!mcp-local/server.py
+!mcp-local/sql/
+!mcp-local/sql/**
+!mcp-local/utils/
+!mcp-local/utils/**
+!arm_kb_search/
+!arm_kb_search/**

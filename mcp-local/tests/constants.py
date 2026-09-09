@@ -131,7 +131,7 @@ EXPECTED_CHECK_MIGRATE_EASE_TOOL_RESPONSE = {
   "output_file": "/tmp/migrate_ease_java_20260126-215207.json",
   "output_format": "json",
   "workspace_listing": [
-    "invocation_reasons.yaml"
+    "mcp-traffic.jsonl"
   ],
   "excluded_items": [],
   "excluded_count": 0,

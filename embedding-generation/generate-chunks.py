@@ -22,10 +22,8 @@ import sys
 import uuid
 from urllib.parse import parse_qs, urlparse
 
-import boto3
 import requests
 import yaml
-from botocore.exceptions import ClientError, NoCredentialsError
 from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -66,40 +64,6 @@ def create_retry_session(
 
 # Global session for all HTTP requests
 http_session = create_retry_session()
-
-
-def ensure_intrinsic_chunks_from_s3(
-    local_folder="intrinsic_chunks",
-    s3_bucket="arm-github-copilot-extension",
-    s3_prefix="embedding_data/intrinsic_chunks/",
-):
-    """
-    Ensure the local 'intrinsic_chunks' folder exists and is populated with files from S3.
-    If the folder does not exist, create it and download all files from the S3 prefix.
-    """
-    if not os.path.exists(local_folder):
-        os.makedirs(local_folder, exist_ok=True)
-        print(f"Created local folder: {local_folder}")
-        s3 = boto3.client("s3")
-        try:
-            paginator = s3.get_paginator("list_objects_v2")
-            for page in paginator.paginate(Bucket=s3_bucket, Prefix=s3_prefix):
-                for obj in page.get("Contents", []):
-                    key = obj["Key"]
-                    if key.endswith("/"):
-                        continue  # skip folders
-                    filename = os.path.basename(key)
-                    local_path = os.path.join(local_folder, filename)
-                    print(f"Downloading {key} to {local_path}")
-                    s3.download_file(s3_bucket, key, local_path)
-        except NoCredentialsError:
-            print("AWS credentials not found. Please configure them.")
-        except ClientError as e:
-            print(f"S3 ClientError: {e}")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-    else:
-        print(f"Folder '{local_folder}' already exists. Skipping S3 download.")
 
 
 """
@@ -1215,9 +1179,6 @@ def chunkSaveAndTrack(url, chunk):
 
 def main():
     skip_discovery = os.getenv("SKIP_DISCOVERY", "").lower() in {"1", "true", "yes"}
-
-    # Ensure intrinsic_chunks folder and files from S3 are present
-    ensure_intrinsic_chunks_from_s3()
 
     # Argparse inputs
     parser = argparse.ArgumentParser(

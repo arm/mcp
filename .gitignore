@@ -1,3 +1,6 @@
+# MCP server logs
+mcp-traffic.jsonl
+error_logging.yaml
 invocation_reasons.yaml
 
 # Virtual environments
@@ -44,4 +47,3 @@ embedding-generation/intrinsic_chunks/*.yaml
 embedding-generation/*.txt
 embedding-generation/metadata.json
 embedding-generation/usearch_index.bin
-
