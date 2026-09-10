@@ -240,7 +240,7 @@ def _rank_lexical_candidates(
     candidates: List[Dict[str, Any]],
     k: int,
 ) -> List[Dict[str, Any]]:
-    """Rank already retrieved BM25 candidates without rescoring the corpus."""
+    """Apply lexical prepass scoring to existing results without recomputing BM25."""
     if not candidates:
         return []
     scored_candidates: List[Dict[str, Any]] = []
@@ -532,17 +532,25 @@ def hybrid_search(
     candidate_depth: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     candidate_depth = candidate_depth or max(k * 20, 100)
-    lexical_k = max(k * 3, PINNED_LEXICAL_CANDIDATES)
-    # Score and sort once at the depth required by both lexical consumers.
+    lexical_limit = max(k * 3, PINNED_LEXICAL_CANDIDATES)
+    bm25_depth = max(candidate_depth, LEXICAL_PREPASS_DEPTH, lexical_limit)
+
+    # Share one BM25 ranking between the lexical prepass and sparse search.
     bm25_results = bm25_search(
         query,
         metadata,
         bm25_index,
-        k=max(candidate_depth, LEXICAL_PREPASS_DEPTH, lexical_k),
+        k=bm25_depth,
     )
-    lexical_results = _rank_lexical_candidates(query, bm25_results, lexical_k)
-    dense_results = embedding_search(query, usearch_index, metadata, embedding_model, candidate_depth)
+
+    lexical_results = _rank_lexical_candidates(
+        query, bm25_results, k=lexical_limit
+    )
     sparse_results = bm25_results[:candidate_depth]
+
+    dense_results = embedding_search(
+        query, usearch_index, metadata, embedding_model, candidate_depth
+    )
 
     candidates: Dict[str, Dict[str, Any]] = {}
     for result in lexical_results:
