@@ -11,6 +11,20 @@ reproducible build inputs, and the reviewed release workflows.
   - `data/`: Pre-built knowledge base (embeddings and metadata)
   - `Dockerfile`: Multi-stage Docker build
 - **`embedding-generation/`**: Scripts for regenerating the knowledge base from source documents
+- **`arm_kb_search/`**: The independently versioned Python package used by
+  other applications
+
+## Versioning `arm-kb-search`
+
+The root `pyproject.toml` builds `arm-kb-search`; it is not a shared workspace
+manifest. Changes to `arm_kb_search/`, the root `pyproject.toml`, or other
+packaged metadata must increase its independent semantic version. Embedding,
+MCP tooling, and container-only changes do not require a package bump.
+
+Use a patch bump by default, or a minor/major bump when the package API or
+compatibility contract changes. The pull-request package job compares package
+inputs and versions with the base branch, then builds the wheel using the
+minimum supported Python version.
 
 ## Integration Testing
 
@@ -149,7 +163,7 @@ container exits; the image under test receives no writable evidence mount. The
 workflow pins the Ubuntu package version, verifies the installed version, and
 records it in both `runtime-egress-evidence.json` and the workflow summary. The
 test exercises MCP startup, the embedded knowledge/vector search, a local
-migrate-ease scan, sysreport instructions, and (on Arm64) local llvm-mca
+migrate-ease scan, and (on Arm64) local llvm-mca
 analysis. Any non-loopback IPv4 or IPv6 `connect`, `sendto`, `sendmsg`, or
 `sendmmsg` destination fails the gate.
 The production image sets `FASTMCP_CHECK_FOR_UPDATES=off` so FastMCP does not

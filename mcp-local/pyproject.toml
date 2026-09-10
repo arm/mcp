@@ -5,22 +5,19 @@ description = "Runtime dependencies for the Arm MCP server image"
 requires-python = "==3.12.*"
 dependencies = [
     "ar==1.0.1",
+    "arm-kb-search",
     "fastmcp==3.4.7",
     "flask==3.1.3",
     "gitpython==3.1.59",
     "jinja2==3.1.6",
     "lxml==6.1.1",
     "mcp==1.29.0",
-    "numkong==7.8.0",
     "pycryptodome==3.23.0",
     "python-magic==0.4.27",
     "pyyaml==6.0.3",
-    "rank-bm25==0.2.2",
     "requests==2.34.2",
     "ruamel-yaml==0.19.1",
-    "sentence-transformers==5.7.0",
     "torch==2.13.0",
-    "usearch==2.26.0",
 ]
 
 [dependency-groups]
@@ -40,6 +37,7 @@ required-environments = [
 ]
 
 [tool.uv.sources]
+arm-kb-search = { path = ".." }
 torch = { index = "pytorch-cpu", marker = "sys_platform == 'linux'" }
 
 [[tool.uv.index]]

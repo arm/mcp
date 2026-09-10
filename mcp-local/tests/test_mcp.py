@@ -150,12 +150,18 @@ def test_mcp_stdio_transport_responds(platform):
         tools = _read_response(8)["result"]["tools"]
         tool_names = {tool["name"] for tool in tools}
         assert "apx_recipe_run" not in tool_names
+        assert "sysreport_instructions" not in tool_names
         knowledge_search = next(
             tool for tool in tools if tool["name"] == "knowledge_base_search"
         )
         assert (
             "Use this tool for Arm-related runtime-performance, profiling, hotspot, "
             "benchmarking, and regression questions."
+            in knowledge_search["description"]
+        )
+        assert (
+            "Use this tool for Arm-related questions about collecting system architecture, "
+            "CPU, memory, and other host hardware details."
             in knowledge_search["description"]
         )
 
@@ -205,16 +211,10 @@ def test_mcp_stdio_transport_responds(platform):
         )
         print("\n***Test Passed: MCP check_migrate_ease_tool tool succeeded")
 
-        #Check Sysreport Tool Test
-        raw_socket.sendall(_encode_mcp_message(constants.CHECK_SYSREPORT_TOOL_REQUEST))
-        check_sysreport_response = _read_response(6, timeout=60)
-        assert check_sysreport_response.get("result")["structuredContent"] == constants.EXPECTED_CHECK_SYSREPORT_TOOL_RESPONSE, "Test Failed: MCP sysreport_instructions tool failed: content mismatch. Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_SYSREPORT_TOOL_RESPONSE,indent=2), json.dumps(check_sysreport_response.get("result")["structuredContent"],indent=2))
-        print("\n***Test Passed: MCP sysreport_instructions tool succeeded")
-
         #Check MCA Tool Test - works only on platform=linux/arm64
         if platform == constants.DEFAULT_PLATFORM:
             raw_socket.sendall(_encode_mcp_message(constants.CHECK_MCA_TOOL_REQUEST))
-            check_mca_response = _read_response(7, timeout=60)
+            check_mca_response = _read_response(6, timeout=60)
             assert check_mca_response.get("result")["structuredContent"]["status"] == constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS, "Test Failed: MCP mca tool failed: status mismatch.Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS,indent=2), json.dumps(check_mca_response.get("result")["structuredContent"]["status"],indent=2))
             print("\n***Test Passed: MCP mca tool succeeded")
         else:

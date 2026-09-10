@@ -92,6 +92,8 @@ def export_install_requirements(output: Path) -> Path:
             "--locked",
             "--no-default-groups",
             "--no-emit-project",
+            "--no-emit-package",
+            "arm-kb-search",
             "--format",
             "requirements-txt",
             "--no-header",
@@ -300,6 +302,10 @@ def main() -> None:
     lock = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(
+        REPOSITORY / "pyproject.toml",
+        output / "arm-kb-search.pyproject.toml",
+    )
     requirements = export_install_requirements(output)
 
     migration = lock["migrate_ease"]

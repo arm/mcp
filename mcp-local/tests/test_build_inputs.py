@@ -128,10 +128,15 @@ def test_python_dependencies_have_one_exactly_pinned_source() -> None:
     pyproject = tomllib.loads((MCP_LOCAL / "pyproject.toml").read_text())
     dependencies = pyproject["project"]["dependencies"]
     assert dependencies
+    assert "arm-kb-search" in dependencies
     assert all(
         re.fullmatch(r"[A-Za-z0-9_.-]+==[^=]+", dependency)
         for dependency in dependencies
+        if dependency != "arm-kb-search"
     )
+    assert pyproject["tool"]["uv"]["sources"]["arm-kb-search"] == {
+        "path": ".."
+    }
     acquisition = pyproject["dependency-groups"]["acquisition"]
     assert len(acquisition) == 1
     assert re.fullmatch(r"pip==[^=]+", acquisition[0])
@@ -945,6 +950,7 @@ def test_input_artifact_has_one_platform_neutral_layout() -> None:
     assert "performix" not in INPUT_DOCKERFILE.lower()
     assert "build-inputs/migrate-ease.tar.gz" in INPUT_DOCKERFILE
     assert "build-inputs/requirements.lock" in INPUT_DOCKERFILE
+    assert "build-inputs/arm-kb-search.pyproject.toml" in INPUT_DOCKERFILE
     assert "/mcp-build-inputs/metadata/" in INPUT_DOCKERFILE
     for source in (
         "build-inputs/**",
@@ -970,6 +976,7 @@ def test_input_publication_is_automatic_private_and_multi_architecture() -> None
         "uv.lock",
     ):
         assert f"mcp-local/{source}" in workflow_triggers
+    assert "      - pyproject.toml" in workflow_triggers
     assert "mcp-local/build-inputs.lock.json" not in workflow_triggers
     assert "tags:" not in workflow_triggers
     assert "packages: write" in INPUT_WORKFLOW
@@ -983,6 +990,9 @@ def test_input_publication_is_automatic_private_and_multi_architecture() -> None
     assert "pip install" not in INPUT_WORKFLOW
     assert '"uv",' in STAGE_INPUTS
     assert '"export",' in STAGE_INPUTS
+    assert '"--no-emit-package",' in STAGE_INPUTS
+    assert '"arm-kb-search",' in STAGE_INPUTS
+    assert 'output / "arm-kb-search.pyproject.toml"' in STAGE_INPUTS
     assert 'output / "requirements.lock"' in STAGE_INPUTS
     assert 'echo "- MCP build input: \\`${IMAGE}@${digest}\\`"' in INPUT_WORKFLOW
     assert "propose-input-pin:" in INPUT_WORKFLOW
