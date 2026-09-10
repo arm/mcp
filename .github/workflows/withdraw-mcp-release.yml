@@ -51,6 +51,7 @@ jobs:
         id: validate
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           WITHDRAW_VERSION: ${{ inputs.withdraw_version }}
           RESTORE_VERSION: ${{ inputs.restore_version }}
           CONFIRMATION: ${{ inputs.confirmation }}
@@ -68,10 +69,20 @@ jobs:
               --format '{{json .Manifest}}' | jq -er '.digest'
           }
 
-          withdraw_digest="$(digest "${IMAGE_FQDN}:${WITHDRAW_VERSION}")"
+          gh release view "v${RESTORE_VERSION}" \
+            --repo "${GITHUB_REPOSITORY}" > /dev/null
+
           restore_digest="$(digest "${IMAGE_FQDN}:${RESTORE_VERSION}")"
           latest_digest="$(digest "${IMAGE_FQDN}:latest")"
-          [ "${latest_digest}" = "${withdraw_digest}" ]
+          withdraw_digest="$(
+            digest "${IMAGE_FQDN}:${WITHDRAW_VERSION}" 2>/dev/null || true
+          )"
+          if [ -n "${withdraw_digest}" ]; then
+            [ "${latest_digest}" = "${withdraw_digest}" ] ||
+              [ "${latest_digest}" = "${restore_digest}" ]
+          else
+            [ "${latest_digest}" = "${restore_digest}" ]
+          fi
 
           echo "restore_digest=${restore_digest}" >> "${GITHUB_OUTPUT}"
 
@@ -140,8 +151,16 @@ jobs:
           set -euo pipefail
           gh release edit "v${RESTORE_VERSION}" \
             --repo "${GITHUB_REPOSITORY}" --latest
-          gh release delete "v${WITHDRAW_VERSION}" \
-            --repo "${GITHUB_REPOSITORY}" --cleanup-tag --yes
+          if gh release view "v${WITHDRAW_VERSION}" \
+            --repo "${GITHUB_REPOSITORY}" > /dev/null 2>&1; then
+            gh release delete "v${WITHDRAW_VERSION}" \
+              --repo "${GITHUB_REPOSITORY}" --yes
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${WITHDRAW_VERSION}" \
+            > /dev/null 2>&1; then
+            gh api --method DELETE \
+              "repos/${GITHUB_REPOSITORY}/git/refs/tags/v${WITHDRAW_VERSION}"
+          fi
 
           {
             echo "### Withdrawn v${WITHDRAW_VERSION}"

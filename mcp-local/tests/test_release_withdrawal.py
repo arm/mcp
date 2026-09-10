@@ -21,14 +21,22 @@ def test_withdrawal_is_manual_guarded_and_serialized() -> None:
 
 
 def test_latest_is_restored_before_release_tags_are_deleted() -> None:
+    preflight = WORKFLOW.index('gh release view "v${RESTORE_VERSION}"')
     restore = WORKFLOW.index("- name: Restore latest")
     delete_docker = WORKFLOW.index("- name: Delete withdrawn Docker tags")
     delete_github = WORKFLOW.index("- name: Withdraw GitHub release and tag")
 
-    assert restore < delete_docker < delete_github
+    assert preflight < restore < delete_docker < delete_github
     assert '"${WITHDRAW_VERSION}-amd64"' in WORKFLOW
     assert '"${WITHDRAW_VERSION}-arm64"' in WORKFLOW
-    assert "--cleanup-tag --yes" in WORKFLOW
+    assert 'git/refs/tags/v${WITHDRAW_VERSION}' in WORKFLOW
+
+
+def test_withdrawal_can_resume_after_latest_or_tags_were_updated() -> None:
+    assert 'digest "${IMAGE_FQDN}:${WITHDRAW_VERSION}" 2>/dev/null || true' in WORKFLOW
+    assert '"${latest_digest}" = "${restore_digest}"' in WORKFLOW
+    assert 'if gh release view "v${WITHDRAW_VERSION}"' in WORKFLOW
+    assert "202|204|404" in WORKFLOW
 
 
 def test_workflow_does_not_change_main_and_runbook_covers_compromise() -> None:

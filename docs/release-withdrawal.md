@@ -22,6 +22,9 @@ The workflow checks that `latest` is currently the withdrawn image, moves
 Docker tags, marks the fallback GitHub release as latest, and deletes the
 withdrawn GitHub release and tag.
 
+The workflow can be rerun if an earlier attempt only completed some of these
+steps.
+
 Leave `main` at the withdrawn version; that version is used and must not be
 republished. Choose the next version according to the reason for the withdrawal.
 For example, skip to the next minor version with:
