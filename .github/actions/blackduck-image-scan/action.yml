@@ -104,7 +104,7 @@ runs:
         blackducksca_reports_sarif_severities: 'Critical,High,Medium,Low'
         blackducksca_reports_sarif_groupSCAIssues: false
         blackducksca_upload_sarif_report: false
-        mark_build_status: 'success'
+        mark_build_status: 'failure'
         include_diagnostics: true
 
     - name: Upload Black Duck SARIF
@@ -175,7 +175,7 @@ runs:
         exit 1
 
     - name: Report Black Duck container scan failure
-      if: ${{ always() && steps.scan.outcome != 'success' && steps.scan.outputs.status == '8' }}
+      if: ${{ always() && steps.scan.outcome != 'success' && steps.scan.outputs.status != '8' }}
       shell: bash
       env:
         SCAN_OUTCOME: ${{ steps.scan.outcome }}
