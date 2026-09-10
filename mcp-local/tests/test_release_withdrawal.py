@@ -16,8 +16,23 @@ def test_withdrawal_is_manual_guarded_and_serialized() -> None:
     assert "push:" not in triggers
     assert "environment: production" in WORKFLOW
     assert "group: build-mcp-image-publish" in WORKFLOW
-    assert '"WITHDRAW ${WITHDRAW_VERSION} TO ${RESTORE_VERSION}"' in WORKFLOW
+    assert '"${CONFIRMATION^^}" != "WITHDRAW"' in WORKFLOW
+    assert "Confirmation must be WITHDRAW." in WORKFLOW
     assert '"${WITHDRAW_VERSION}" != "${RESTORE_VERSION}"' in WORKFLOW
+
+
+def test_validation_runs_before_production_approval() -> None:
+    validation_job = WORKFLOW.split("  validate:", maxsplit=1)[1].split(
+        "  withdraw:", maxsplit=1
+    )[0]
+    withdrawal_job = WORKFLOW.split("  withdraw:", maxsplit=1)[1]
+
+    assert "environment:" not in validation_job
+    assert "DOCKERHUB_TOKEN" not in validation_job
+    assert "### Withdrawal request" in validation_job
+    assert "needs: validate" in withdrawal_job
+    assert "environment: production" in withdrawal_job
+    assert "DOCKERHUB_TOKEN" in withdrawal_job
 
 
 def test_latest_is_restored_before_release_tags_are_deleted() -> None:
