@@ -376,6 +376,7 @@ def test_source_scan_exports_cyclonedx_sbom_for_full_scans_only() -> None:
 
     assert "Export Black Duck CycloneDX SBOM" in full_scan_section
     assert "id: source-sbom-export" in full_scan_section
+    assert "continue-on-error: true" in full_scan_section
     assert "export-blackduck-cyclonedx.py" in full_scan_section
     assert '--project "${DETECT_PROJECT_NAME}"' in full_scan_section
     assert '--version "${DETECT_PROJECT_VERSION_NAME}"' in full_scan_section
@@ -387,6 +388,22 @@ def test_source_scan_exports_cyclonedx_sbom_for_full_scans_only() -> None:
     assert "blackduck-source-sbom-${{ github.run_id }}" in full_scan_section
     assert "if-no-files-found: error" in full_scan_section
     assert "retention-days: 10" in full_scan_section
+    assert "hashFiles('blackduck-results.sarif') != ''" in full_scan_section
+    assert (
+        "blackducksca_reports_sarif_severities: 'Critical,High,Medium,Low'"
+        in full_scan_section
+    )
+    assert "blackducksca_reports_sarif_groupSCAIssues: false" in full_scan_section
+    assert "Retain Black Duck source SARIF" in full_scan_section
+    assert "blackduck-source-sarif-${{ github.run_id }}" in full_scan_section
+    assert "if-no-files-found: warn" in full_scan_section
+    assert "Write Black Duck source scan summary" in full_scan_section
+    assert 'SCAN_STATUS}" == "8"' in full_scan_section
+    assert 'scan_result="policy violation"' in full_scan_section
+    assert "Report Black Duck source policy violation" in full_scan_section
+    assert "Report Black Duck source scan failure" in full_scan_section
+    assert "steps.black-duck-full-scan.outputs.status == '8'" in full_scan_section
+    assert "steps.black-duck-full-scan.outputs.status != '8'" in full_scan_section
     assert "Export Black Duck CycloneDX SBOM" not in pr_scan_section
 
 

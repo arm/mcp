@@ -36,7 +36,7 @@ jobs:
     env:
       # Set in Arm BlackDuck UI
       DETECT_PROJECT_NAME: "Arm:MCP"
-      DETECT_PROJECT_VERSION_NAME: "1.0"
+      DETECT_PROJECT_VERSION_NAME: "mcp-source-1.0"
 
     steps:
       - name: Checkout source
@@ -50,6 +50,7 @@ jobs:
       - name: Black Duck SCA scan
         id: black-duck-full-scan
         if: ${{ github.event_name != 'pull_request' }}
+        continue-on-error: true
         uses: blackduck-inc/black-duck-security-scan@152247222aa9cd38124acd5c0cf60f4db71adc3f # v2.11.0
         with:
           ### ---------- BLACKDUCK SCA SCANNING: REQUIRED FIELDS ----------
@@ -69,6 +70,8 @@ jobs:
           ### SARIF report generation for upload to GitHub Advanced Security
           blackducksca_reports_sarif_create: true
           blackducksca_reports_sarif_file_path: blackduck-results.sarif
+          blackducksca_reports_sarif_severities: 'Critical,High,Medium,Low'
+          blackducksca_reports_sarif_groupSCAIssues: false
           ### Set upload to false & then later upload via github/codeql-action/upload-sarif@v4.37.4 to avoid token-permissions issue flagged by scorecard
           blackducksca_upload_sarif_report: false
 
@@ -83,10 +86,19 @@ jobs:
           include_diagnostics: true
 
       - name: Upload Black Duck SARIF
-        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+        if: ${{ !cancelled() && github.event_name != 'pull_request' && hashFiles('blackduck-results.sarif') != '' }}
         uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
         with:
           sarif_file: blackduck-results.sarif
+
+      - name: Retain Black Duck source SARIF
+        if: ${{ always() && github.event_name != 'pull_request' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: blackduck-source-sarif-${{ github.run_id }}
+          path: blackduck-results.sarif
+          if-no-files-found: warn
+          retention-days: 10
 
       - name: Export Black Duck CycloneDX SBOM
         id: source-sbom-export
@@ -122,6 +134,50 @@ jobs:
           path: ${{ runner.temp }}/blackduck-source-sbom-${{ github.sha }}.cdx.json
           if-no-files-found: error
           retention-days: 10
+
+      - name: Write Black Duck source scan summary
+        if: ${{ always() && github.event_name != 'pull_request' }}
+        env:
+          SCAN_OUTCOME: ${{ steps.black-duck-full-scan.outcome }}
+          SCAN_STATUS: ${{ steps.black-duck-full-scan.outputs.status }}
+          SBOM_OUTCOME: ${{ steps.source-sbom-export.outcome }}
+        run: |
+          set -euo pipefail
+          if [[ "${SCAN_OUTCOME}" == "success" ]]; then
+            scan_result="passed"
+          elif [[ "${SCAN_STATUS}" == "8" ]]; then
+            scan_result="policy violation"
+          else
+            scan_result="source scan error"
+          fi
+          {
+            echo "### Black Duck source scan"
+            echo ""
+            printf -- '- Project: `%s`\n' "${DETECT_PROJECT_NAME}"
+            printf -- '- Version: `%s`\n' "${DETECT_PROJECT_VERSION_NAME}"
+            echo '- Policy gate: `BLOCKER,CRITICAL`'
+            printf -- '- Scan outcome: `%s`\n' "${SCAN_OUTCOME}"
+            printf -- '- Bridge exit status: `%s`\n' "${SCAN_STATUS:-unavailable}"
+            printf -- '- Result classification: `%s`\n' "${scan_result}"
+            printf -- '- CycloneDX SBOM export: `%s`\n' "${SBOM_OUTCOME:-not-run}"
+            echo '- SARIF retention: workflow artifact for 10 days'
+            echo '- Bridge diagnostics: retained by the Black Duck action'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Report Black Duck source policy violation
+        if: ${{ always() && github.event_name != 'pull_request' && steps.black-duck-full-scan.outcome != 'success' && steps.black-duck-full-scan.outputs.status == '8' }}
+        run: |
+          echo "::error title=Black Duck policy violation::The source scan completed, but a BLOCKER/CRITICAL policy violation failed the CI gate (Bridge exit code 8)."
+          exit 1
+
+      - name: Report Black Duck source scan failure
+        if: ${{ always() && github.event_name != 'pull_request' && steps.black-duck-full-scan.outcome != 'success' && steps.black-duck-full-scan.outputs.status != '8' }}
+        env:
+          SCAN_OUTCOME: ${{ steps.black-duck-full-scan.outcome }}
+          SCAN_STATUS: ${{ steps.black-duck-full-scan.outputs.status }}
+        run: |
+          echo "::error title=Black Duck source scan failure::The scan or its integration failed (outcome=${SCAN_OUTCOME}, Bridge exit code=${SCAN_STATUS:-unavailable}). Review the retained diagnostics for the underlying error."
+          exit 1
           
       - name: Black Duck SCA PR Scan
         id: black-duck-pr-scan
