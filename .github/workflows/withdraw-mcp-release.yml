@@ -69,8 +69,10 @@ jobs:
               --format '{{json .Manifest}}' | jq -er '.digest'
           }
 
-          gh release view "v${RESTORE_VERSION}" \
-            --repo "${GITHUB_REPOSITORY}" > /dev/null
+          for version in "${WITHDRAW_VERSION}" "${RESTORE_VERSION}"; do
+            gh release view "v${version}" \
+              --repo "${GITHUB_REPOSITORY}" > /dev/null
+          done
 
           restore_digest="$(digest "${IMAGE_FQDN}:${RESTORE_VERSION}")"
           latest_digest="$(digest "${IMAGE_FQDN}:latest")"
@@ -141,7 +143,7 @@ jobs:
             esac
           done
 
-      - name: Withdraw GitHub release and tag
+      - name: Mark GitHub release withdrawn
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -151,21 +153,28 @@ jobs:
           set -euo pipefail
           gh release edit "v${RESTORE_VERSION}" \
             --repo "${GITHUB_REPOSITORY}" --latest
-          if gh release view "v${WITHDRAW_VERSION}" \
-            --repo "${GITHUB_REPOSITORY}" > /dev/null 2>&1; then
-            gh release delete "v${WITHDRAW_VERSION}" \
-              --repo "${GITHUB_REPOSITORY}" --yes
+
+          marker='<!-- arm-mcp-withdrawn -->'
+          notes="$(gh release view "v${WITHDRAW_VERSION}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --json body --jq '.body // ""')"
+          if [[ "${notes}" != *"${marker}"* ]]; then
+            printf -v notes \
+              '%s\n> This release has been withdrawn, and its Docker images are no longer available.\n>\n> Use v%s until a replacement is published.\n\n%s' \
+              "${marker}" "${RESTORE_VERSION}" "${notes}"
           fi
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${WITHDRAW_VERSION}" \
-            > /dev/null 2>&1; then
-            gh api --method DELETE \
-              "repos/${GITHUB_REPOSITORY}/git/refs/tags/v${WITHDRAW_VERSION}"
-          fi
+
+          gh release edit "v${WITHDRAW_VERSION}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "v${WITHDRAW_VERSION} — WITHDRAWN" \
+            --notes "${notes}" \
+            --latest=false
 
           {
             echo "### Withdrawn v${WITHDRAW_VERSION}"
             echo
             echo "- Docker \`latest\` now points to \`v${RESTORE_VERSION}\`."
             echo "- Docker tags for \`v${WITHDRAW_VERSION}\` were deleted."
-            echo "- GitHub release and tag \`v${WITHDRAW_VERSION}\` were deleted."
+            echo "- GitHub release \`v${WITHDRAW_VERSION}\` was marked withdrawn."
+            echo "- Git tag \`v${WITHDRAW_VERSION}\` was retained."
           } >> "${GITHUB_STEP_SUMMARY}"

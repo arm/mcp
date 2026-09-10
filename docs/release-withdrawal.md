@@ -19,8 +19,9 @@ gh workflow run withdraw-mcp-release.yml \
 
 The workflow checks that `latest` is currently the withdrawn image, moves
 `latest` to the fallback image, deletes the version and architecture-specific
-Docker tags, marks the fallback GitHub release as latest, and deletes the
-withdrawn GitHub release and tag.
+Docker tags, and marks the fallback GitHub release as latest. It retains the Git
+tag and marks the GitHub release as withdrawn while preserving its original
+notes.
 
 The workflow can be rerun if an earlier attempt only completed some of these
 steps.
