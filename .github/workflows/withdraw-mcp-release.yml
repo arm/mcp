@@ -14,7 +14,7 @@ on:
         required: true
         type: string
       confirmation:
-        description: Type WITHDRAW <version> TO <version>
+        description: Type WITHDRAW to confirm
         required: true
         type: string
 
@@ -31,21 +31,17 @@ env:
   IMAGE_FQDN: docker.io/armlimited/arm-mcp
 
 jobs:
-  withdraw:
+  validate:
+    name: Validate v${{ inputs.withdraw_version }} to v${{ inputs.restore_version }}
     if: ${{ github.repository == 'arm/mcp' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
-    environment: production
     permissions:
-      contents: write
+      contents: read
+    outputs:
+      restore_digest: ${{ steps.validate.outputs.restore_digest }}
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Validate withdrawal
         id: validate
@@ -61,8 +57,10 @@ jobs:
           [[ "${WITHDRAW_VERSION}" =~ ${version_pattern} ]]
           [[ "${RESTORE_VERSION}" =~ ${version_pattern} ]]
           [ "${WITHDRAW_VERSION}" != "${RESTORE_VERSION}" ]
-          [ "${CONFIRMATION}" = \
-            "WITHDRAW ${WITHDRAW_VERSION} TO ${RESTORE_VERSION}" ]
+          if [ "${CONFIRMATION^^}" != "WITHDRAW" ]; then
+            echo "::error::Confirmation must be WITHDRAW."
+            exit 1
+          fi
 
           digest() {
             docker buildx imagetools inspect "$1" \
@@ -88,10 +86,36 @@ jobs:
 
           echo "restore_digest=${restore_digest}" >> "${GITHUB_OUTPUT}"
 
+          {
+            echo "### Withdrawal request"
+            echo
+            echo "- Withdraw: \`${IMAGE_FQDN}:${WITHDRAW_VERSION}\`"
+            echo "- Restore: \`${IMAGE_FQDN}:${RESTORE_VERSION}\`"
+            echo "- Current \`latest\`: \`${latest_digest}\`"
+            echo "- Restore digest: \`${restore_digest}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  withdraw:
+    name: Withdraw v${{ inputs.withdraw_version }} to v${{ inputs.restore_version }}
+    needs: validate
+    runs-on: ubuntu-24.04
+    environment: production
+    permissions:
+      contents: write
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Restore latest
         shell: bash
         env:
-          RESTORE_DIGEST: ${{ steps.validate.outputs.restore_digest }}
+          RESTORE_DIGEST: ${{ needs.validate.outputs.restore_digest }}
         run: |
           set -euo pipefail
           docker buildx imagetools create \
