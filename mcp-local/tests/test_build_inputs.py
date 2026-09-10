@@ -434,6 +434,9 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
     attest_image_job = TRUSTED_RELEASE_WORKFLOW.split(
         "  attest-image:", maxsplit=1
     )[1].split("  verify-provenance:", maxsplit=1)[0]
+    verify_attestations_job = TRUSTED_RELEASE_WORKFLOW.split(
+        "  verify-provenance:", maxsplit=1
+    )[1].split("  publish-release:", maxsplit=1)[0]
     assert (
         "IMAGE_FQDN: docker.io/armlimited/arm-mcp"
         in TRUSTED_RELEASE_WORKFLOW
@@ -453,23 +456,31 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
         in TRUSTED_RELEASE_WORKFLOW
     )
     assert "runs-on: ubuntu-24.04" in attest_image_job
+    assert "actions: read" in attest_image_job
     assert "id-token: write" in attest_image_job
     assert "attestations: write" in attest_image_job
     assert "artifact-metadata: write" in attest_image_job
     assert "packages: write" not in attest_image_job
     assert "environment:" not in attest_image_job
-    assert "uses: actions/attest@" in attest_image_job
+    assert attest_image_job.count("uses: actions/attest@") == 3
     assert "subject-name: ${{ env.IMAGE_FQDN }}" in attest_image_job
     assert (
         "subject-digest: ${{ needs.publish-image.outputs.digest }}"
         in attest_image_job
     )
     assert "push-to-registry: true" in attest_image_job
-    assert "Validate attestation output" in attest_image_job
+    assert "Validate attestation outputs" in attest_image_job
+    assert "Attach AMD64 CycloneDX SBOM to the image" in attest_image_job
+    assert "Attach ARM64 CycloneDX SBOM to the image" in attest_image_job
+    assert attest_image_job.count("sbom-path:") == 2
+    assert "steps.sbom-subjects.outputs.amd64_digest" in attest_image_job
+    assert "steps.sbom-subjects.outputs.arm64_digest" in attest_image_job
     assert "verify-provenance:" in TRUSTED_RELEASE_WORKFLOW
     assert "attestations: read" in TRUSTED_RELEASE_WORKFLOW
-    assert TRUSTED_RELEASE_WORKFLOW.count("gh attestation verify") == 2
+    assert TRUSTED_RELEASE_WORKFLOW.count("gh attestation verify") == 3
     assert "--bundle-from-oci" in TRUSTED_RELEASE_WORKFLOW
+    assert "Verify registry-attached architecture SBOMs" in verify_attestations_job
+    assert "--predicate-type https://cyclonedx.org/bom" in verify_attestations_job
     assert (
         "arm/mcp/.github/workflows/trusted-mcp-release.yml"
         in TRUSTED_RELEASE_WORKFLOW
@@ -485,6 +496,7 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
     assert '--repo "${GITHUB_REPOSITORY}"' in publish_release_job
     assert "Immutable digest:" in TRUSTED_RELEASE_WORKFLOW
     assert "verification instructions" in TRUSTED_RELEASE_WORKFLOW
+    assert "SBOM attestations:" in TRUSTED_RELEASE_WORKFLOW
     assert "SLSA Build Level 3:" in TRUSTED_RELEASE_WORKFLOW
     assert (
         "blob/main/docs/provenance-verification.md"
@@ -624,12 +636,11 @@ def test_trusted_release_reauthorizes_the_original_caller_and_fails_closed() -> 
             "  record-dry-run:", maxsplit=1
         )[0]
     )
-    assert (
-        "needs: publish-image"
-        in TRUSTED_RELEASE_WORKFLOW.split("  attest-image:", maxsplit=1)[1].split(
-            "  verify-provenance:", maxsplit=1
-        )[0]
-    )
+    attest_image_job = TRUSTED_RELEASE_WORKFLOW.split(
+        "  attest-image:", maxsplit=1
+    )[1].split("  verify-provenance:", maxsplit=1)[0]
+    assert "- validate-release" in attest_image_job
+    assert "- publish-image" in attest_image_job
     assert (
         "verify-provenance"
         in TRUSTED_RELEASE_WORKFLOW.split("  publish-release:", maxsplit=1)[1]
