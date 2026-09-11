@@ -685,6 +685,7 @@ def test_production_release_actions_are_immutably_pinned() -> None:
 
 def test_codeowners_covers_release_sensitive_workflows_and_inputs() -> None:
     for protected_path in (
+        "/.github/actions/",
         "/.github/workflows/",
         "/.github/scripts/",
         "/mcp-local/Dockerfile ",
