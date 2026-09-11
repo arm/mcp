@@ -328,6 +328,9 @@ def test_release_exports_cyclonedx_sboms_and_attaches_them_to_release() -> None:
     assert "/api/tokens/authenticate" in BLACKDUCK_SBOM_EXPORT_SCRIPT
     assert "/sbom-reports" in BLACKDUCK_SBOM_EXPORT_SCRIPT
     assert "/download.zip" in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert 'self._json_request(requested_report)' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert 'f"{version_url}/reports"' not in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert "report creation returned no Location header" in BLACKDUCK_SBOM_EXPORT_SCRIPT
     assert 'accept: str = "*/*"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
     assert "accept=REPORT_MEDIA_TYPE" not in BLACKDUCK_SBOM_EXPORT_SCRIPT
     assert 'report.get("bomFormat") == "CycloneDX"' in BLACKDUCK_SBOM_EXPORT_SCRIPT

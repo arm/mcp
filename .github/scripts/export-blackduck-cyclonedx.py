@@ -257,27 +257,9 @@ class BlackDuckClient:
                 )
             time.sleep(poll_interval)
 
-    def _reports(self, version_url: str) -> list[dict[str, Any]]:
-        response = self._json_request(f"{version_url}/reports")
-        items = response.get("items", [])
-        if not isinstance(items, list):
-            raise BlackDuckExportError("Black Duck returned invalid report results.")
-        return [item for item in items if isinstance(item, dict)]
-
-    @staticmethod
-    def _report_href(report: dict[str, Any]) -> str | None:
-        metadata = report.get("_meta", {})
-        href = metadata.get("href") if isinstance(metadata, dict) else None
-        return href if isinstance(href, str) and href else None
-
     def create_cyclonedx_report(
         self, version_url: str, *, timeout: int, poll_interval: int
     ) -> str:
-        existing_reports = {
-            href
-            for report in self._reports(version_url)
-            if (href := self._report_href(report)) is not None
-        }
         report_body = json.dumps(CYCLONEDX_REPORT).encode("utf-8")
         _, headers = self._request(
             f"{version_url}/sbom-reports",
@@ -286,41 +268,22 @@ class BlackDuckClient:
             content_type=REPORT_MEDIA_TYPE,
         )
         location = headers.get("Location") or headers.get("location")
-        requested_report = self._trusted_url(location) if location else None
+        if not location:
+            raise BlackDuckExportError(
+                "Black Duck report creation returned no Location header."
+            )
+        requested_report = self._trusted_url(location)
 
         deadline = time.monotonic() + timeout
         while True:
-            candidates = []
-            for report in self._reports(version_url):
-                href = self._report_href(report)
-                if href is None:
-                    continue
-                trusted_href = self._trusted_url(href)
-                if requested_report:
-                    if trusted_href == requested_report:
-                        candidates.append((trusted_href, report))
-                elif (
-                    href not in existing_reports
-                    and trusted_href not in existing_reports
-                ):
-                    candidates.append((trusted_href, report))
-
-            if candidates:
-                report_url, report = max(
-                    candidates,
-                    key=lambda candidate: str(
-                        candidate[1].get("createdAt")
-                        or candidate[1].get("updatedAt")
-                        or candidate[0]
-                    ),
+            report = self._json_request(requested_report)
+            status = report.get("status")
+            if status == "COMPLETED":
+                return requested_report
+            if status in {"FAILED", "ERROR", "CANCELLED"}:
+                raise BlackDuckExportError(
+                    f"Black Duck CycloneDX report generation ended with {status}."
                 )
-                status = report.get("status")
-                if status == "COMPLETED":
-                    return report_url
-                if status in {"FAILED", "ERROR", "CANCELLED"}:
-                    raise BlackDuckExportError(
-                        f"Black Duck CycloneDX report generation ended with {status}."
-                    )
 
             if time.monotonic() >= deadline:
                 raise BlackDuckExportError(
