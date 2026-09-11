@@ -3,8 +3,10 @@
 The **Withdraw MCP Release** workflow removes an unintended public release. It
 does not modify `main` or change the version in `mcp-local/server.json`.
 
-The `DOCKERHUB_TOKEN` must have read, write, and delete access to
-`armlimited/arm-mcp`.
+The workflow uses the dedicated `DOCKERHUB_WITHDRAW_USERNAME` and
+`DOCKERHUB_WITHDRAW_SECRET` GitHub Actions secrets. Make them available to the
+`production` job. The withdrawal credential must have read, write, and delete
+access to `armlimited/arm-mcp`.
 
 For example, to withdraw `4.2.0` and restore `4.1.0`:
 

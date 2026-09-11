@@ -28,11 +28,21 @@ def test_validation_runs_before_production_approval() -> None:
     withdrawal_job = WORKFLOW.split("  withdraw:", maxsplit=1)[1]
 
     assert "environment:" not in validation_job
-    assert "DOCKERHUB_TOKEN" not in validation_job
+    assert "DOCKERHUB_" not in validation_job
     assert "### Withdrawal request" in validation_job
     assert "needs: validate" in withdrawal_job
     assert "environment: production" in withdrawal_job
-    assert "DOCKERHUB_TOKEN" in withdrawal_job
+    assert "DOCKERHUB_WITHDRAW_USERNAME" in withdrawal_job
+    assert "DOCKERHUB_WITHDRAW_SECRET" in withdrawal_job
+
+
+def test_withdrawal_uses_dedicated_dockerhub_credentials() -> None:
+    for secret in ("DOCKERHUB_WITHDRAW_USERNAME", "DOCKERHUB_WITHDRAW_SECRET"):
+        assert WORKFLOW.count("${{ secrets." + secret + " }}") == 2
+        assert '"${' + secret + '}"' in WORKFLOW
+        assert secret in RUNBOOK
+    assert "DOCKERHUB_USERNAME" not in WORKFLOW
+    assert "DOCKERHUB_TOKEN" not in WORKFLOW
 
 
 def test_latest_is_restored_before_release_tags_are_deleted() -> None:

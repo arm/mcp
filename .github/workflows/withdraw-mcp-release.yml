@@ -109,8 +109,8 @@ jobs:
       - name: Log in to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_WITHDRAW_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_WITHDRAW_SECRET }}
 
       - name: Restore latest
         shell: bash
@@ -129,8 +129,8 @@ jobs:
       - name: Delete withdrawn Docker tags
         shell: bash
         env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_WITHDRAW_USERNAME: ${{ secrets.DOCKERHUB_WITHDRAW_USERNAME }}
+          DOCKERHUB_WITHDRAW_SECRET: ${{ secrets.DOCKERHUB_WITHDRAW_SECRET }}
           WITHDRAW_VERSION: ${{ inputs.withdraw_version }}
         run: |
           set -euo pipefail
@@ -139,8 +139,8 @@ jobs:
               --request POST \
               --header 'Content-Type: application/json' \
               --data "$(jq -n \
-                --arg identifier "${DOCKERHUB_USERNAME}" \
-                --arg secret "${DOCKERHUB_TOKEN}" \
+                --arg identifier "${DOCKERHUB_WITHDRAW_USERNAME}" \
+                --arg secret "${DOCKERHUB_WITHDRAW_SECRET}" \
                 '{identifier: $identifier, secret: $secret}')" \
               https://hub.docker.com/v2/auth/token |
               jq -er '.access_token'
