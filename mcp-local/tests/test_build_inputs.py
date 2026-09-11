@@ -682,12 +682,11 @@ def test_trusted_release_reauthorizes_the_original_caller_and_fails_closed() -> 
     )[1].split("  record-dry-run:", maxsplit=1)[0]
     assert "- validate-release" in build_job
     assert "- production-gate" in build_job
-    assert (
-        "needs: publish-image"
-        in TRUSTED_RELEASE_WORKFLOW.split("  attest-image:", maxsplit=1)[1].split(
-            "  verify-provenance:", maxsplit=1
-        )[0]
-    )
+    attest_job = TRUSTED_RELEASE_WORKFLOW.split(
+        "  attest-image:", maxsplit=1
+    )[1].split("  verify-provenance:", maxsplit=1)[0]
+    assert "- validate-release" in attest_job
+    assert "- publish-image" in attest_job
     assert (
         "verify-provenance"
         in TRUSTED_RELEASE_WORKFLOW.split("  publish-release:", maxsplit=1)[1]
