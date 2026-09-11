@@ -146,8 +146,31 @@ jobs:
             echo "Manual dry runs build and validate the selected commit but never publish." >> "${GITHUB_STEP_SUMMARY}"
           fi
 
-  build-arch-images:
+  production-gate:
+    name: Approve production release
     needs: validate-release
+    if: ${{ needs.validate-release.outputs.mode == 'production' }}
+    runs-on: ubuntu-24.04
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - name: Record production approval
+        run: echo "Production release approved." >> "${GITHUB_STEP_SUMMARY}"
+
+  build-arch-images:
+    needs:
+      - validate-release
+      - production-gate
+    if: >-
+      ${{
+        always()
+        && needs.validate-release.result == 'success'
+        && (
+          needs.validate-release.outputs.mode == 'dry-run'
+          || needs.production-gate.result == 'success'
+        )
+      }}
     strategy:
       fail-fast: false
       matrix:

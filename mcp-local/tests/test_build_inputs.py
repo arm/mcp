@@ -623,7 +623,29 @@ def test_release_calls_have_distinct_authorization_permissions_and_secrets() -> 
     assert "secrets: inherit" not in IMAGE_WORKFLOW
     assert "secrets: inherit" not in TRUSTED_RELEASE_WORKFLOW
     assert "environment:" not in IMAGE_WORKFLOW
-    assert "environment:" not in TRUSTED_RELEASE_WORKFLOW
+
+
+def test_production_environment_approval_precedes_first_registry_push() -> None:
+    gate_job = TRUSTED_RELEASE_WORKFLOW.split(
+        "  production-gate:", maxsplit=1
+    )[1].split("  build-arch-images:", maxsplit=1)[0]
+    build_job = TRUSTED_RELEASE_WORKFLOW.split(
+        "  build-arch-images:", maxsplit=1
+    )[1].split("  record-dry-run:", maxsplit=1)[0]
+
+    assert "needs: validate-release" in gate_job
+    assert "outputs.mode == 'production'" in gate_job
+    assert "environment: production" in gate_job
+    assert "- production-gate" in build_job
+    assert "needs.production-gate.result == 'success'" in build_job
+    assert "needs.validate-release.outputs.mode == 'dry-run'" in build_job
+
+    gate_position = TRUSTED_RELEASE_WORKFLOW.index("  production-gate:")
+    first_dockerhub_login = TRUSTED_RELEASE_WORKFLOW.index("Log in to Docker Hub")
+    first_registry_push = TRUSTED_RELEASE_WORKFLOW.index(
+        "push: ${{ needs.validate-release.outputs.mode == 'production' }}"
+    )
+    assert gate_position < first_dockerhub_login < first_registry_push
 
 
 def test_trusted_release_reauthorizes_the_original_caller_and_fails_closed() -> None:
@@ -655,17 +677,17 @@ def test_trusted_release_reauthorizes_the_original_caller_and_fails_closed() -> 
             "  build-arch-images:", maxsplit=1
         )[0]
     )
+    build_job = TRUSTED_RELEASE_WORKFLOW.split(
+        "  build-arch-images:", maxsplit=1
+    )[1].split("  record-dry-run:", maxsplit=1)[0]
+    assert "- validate-release" in build_job
+    assert "- production-gate" in build_job
     assert (
-        "needs: validate-release"
-        in TRUSTED_RELEASE_WORKFLOW.split("  build-arch-images:", maxsplit=1)[1].split(
-            "  record-dry-run:", maxsplit=1
+        "needs: publish-image"
+        in TRUSTED_RELEASE_WORKFLOW.split("  attest-image:", maxsplit=1)[1].split(
+            "  verify-provenance:", maxsplit=1
         )[0]
     )
-    attest_image_job = TRUSTED_RELEASE_WORKFLOW.split(
-        "  attest-image:", maxsplit=1
-    )[1].split("  verify-provenance:", maxsplit=1)[0]
-    assert "- validate-release" in attest_image_job
-    assert "- publish-image" in attest_image_job
     assert (
         "verify-provenance"
         in TRUSTED_RELEASE_WORKFLOW.split("  publish-release:", maxsplit=1)[1]
