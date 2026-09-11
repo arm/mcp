@@ -8,6 +8,8 @@ on:
         required: true
         type: string
     secrets:
+      BLACKDUCKSCA_TOKEN:
+        required: true
       DOCKERHUB_USERNAME:
         required: false
       DOCKERHUB_TOKEN:
@@ -184,6 +186,7 @@ jobs:
       actions: read
       contents: read
       packages: read
+      security-events: write
     steps:
       - name: Checkout exact authorized source commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -310,6 +313,67 @@ jobs:
             --strace-package-version "${STRACE_PACKAGE_VERSION}" \
             --evidence-dir "${EVIDENCE_DIR}"
 
+      - name: Prepare validated runtime image for Black Duck
+        id: scan_image
+        shell: bash
+        env:
+          SOURCE_IMAGE: ${{ steps.runtime_image.outputs.image }}
+          SOURCE_SHA: ${{ needs.validate-release.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          scan_image="ghcr.io/${GITHUB_REPOSITORY_OWNER}/arm-mcp-runtime-scan:git-${SOURCE_SHA}-${{ matrix.tag }}"
+          docker image inspect "${SOURCE_IMAGE}" > /dev/null
+          docker tag "${SOURCE_IMAGE}" "${scan_image}"
+          echo "image=${scan_image}" >> "${GITHUB_OUTPUT}"
+
+      - name: Remove registry credentials before scanning
+        shell: bash
+        env:
+          RELEASE_MODE: ${{ needs.validate-release.outputs.mode }}
+        run: |
+          set -euo pipefail
+          docker logout ghcr.io
+          if [ "${RELEASE_MODE}" = "production" ]; then
+            docker logout
+          fi
+
+      - name: Black Duck scan validated runtime image
+        uses: ./.github/actions/blackduck-image-scan
+        with:
+          project_name: "Arm:MCP"
+          project_version: "mcp-runtime-container-${{ matrix.tag }}-1.0"
+          image_reference: ${{ steps.scan_image.outputs.image }}
+          platform: ${{ matrix.platform }}
+          artifact_suffix: mcp-runtime-${{ matrix.tag }}
+          blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}
+          blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+          distribution: "OPENSOURCE"
+
+      - name: Export Black Duck CycloneDX SBOM
+        shell: bash
+        env:
+          BLACKDUCK_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+          BLACKDUCK_URL: ${{ vars.BLACKDUCKSCA_URL }}
+          BLACKDUCK_PROJECT_VERSION: mcp-runtime-container-${{ matrix.tag }}-1.0
+          VERSION: ${{ needs.validate-release.outputs.version }}
+          ARCH_TAG: ${{ matrix.tag }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/export-blackduck-cyclonedx.py \
+            --blackduck-url "${BLACKDUCK_URL}" \
+            --project "Arm:MCP" \
+            --version "${BLACKDUCK_PROJECT_VERSION}" \
+            --timeout 14400 \
+            --output "${RUNNER_TEMP}/runtime-sbom/arm-mcp-${VERSION}-${ARCH_TAG}.cdx.json"
+
+      - name: Retain CycloneDX SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runtime-sbom-${{ matrix.tag }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/runtime-sbom/arm-mcp-${{ needs.validate-release.outputs.version }}-${{ matrix.tag }}.cdx.json
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Record validated image digest
         env:
           ARCH_TAG: ${{ matrix.tag }}
@@ -374,7 +438,8 @@ jobs:
             echo ""
             echo "- Version: \`${VERSION}\`"
             echo "- Source commit: \`${SOURCE_SHA}\`"
-            echo "- AMD64 and Arm64 builds and runtime egress validations succeeded."
+            echo "- AMD64 and Arm64 builds, runtime egress validations, Black Duck scans, and CycloneDX SBOM exports succeeded."
+            echo "- The architecture-specific SBOMs are retained as workflow artifacts."
             echo "- No image, manifest, attestation, tag, or release was published."
           } >> "${GITHUB_STEP_SUMMARY}"
 
@@ -474,18 +539,69 @@ jobs:
           echo "Resolved ${IMAGE_FQDN}@${created_digest}"
 
   attest-image:
-    name: Attest production image provenance
-    needs: publish-image
+    name: Attest production image provenance and SBOMs
+    needs:
+      - validate-release
+      - publish-image
     if: ${{ needs.publish-image.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: read
       id-token: write
       attestations: write
       artifact-metadata: write
     outputs:
       attestation-url: ${{ steps.attest.outputs.attestation-url }}
+      amd64_digest: ${{ steps.sbom-subjects.outputs.amd64_digest }}
+      arm64_digest: ${{ steps.sbom-subjects.outputs.arm64_digest }}
+      amd64_sbom_attestation_url: ${{ steps.attest-sbom-amd64.outputs.attestation-url }}
+      arm64_sbom_attestation_url: ${{ steps.attest-sbom-arm64.outputs.attestation-url }}
     steps:
+      - name: Download runtime CycloneDX SBOMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: runtime-sbom-*-${{ github.run_id }}
+          path: ${{ runner.temp }}/runtime-sboms
+          merge-multiple: true
+
+      - name: Download validated architecture image digests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: validated-image-digest-*-${{ github.run_id }}
+          path: ${{ runner.temp }}/validated-image-digests
+          merge-multiple: true
+
+      - name: Validate architecture SBOM attestation subjects
+        id: sbom-subjects
+        env:
+          DIGEST_DIR: ${{ runner.temp }}/validated-image-digests
+          SBOM_DIR: ${{ runner.temp }}/runtime-sboms
+          VERSION: ${{ needs.validate-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          for architecture in amd64 arm64; do
+            digest_file="${DIGEST_DIR}/validated-image-digest-${architecture}.txt"
+            sbom="${SBOM_DIR}/arm-mcp-${VERSION}-${architecture}.cdx.json"
+            if [ ! -s "${digest_file}" ]; then
+              echo "::error::Missing validated ${architecture} image digest."
+              exit 1
+            fi
+            digest="$(tr -d '\r\n' < "${digest_file}")"
+            if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::Invalid validated ${architecture} image digest: ${digest}"
+              exit 1
+            fi
+            if [ ! -s "${sbom}" ]; then
+              echo "::error::Missing ${architecture} CycloneDX SBOM."
+              exit 1
+            fi
+            jq -e \
+              '.bomFormat == "CycloneDX" and .specVersion == "1.6"' \
+              "${sbom}" > /dev/null
+            echo "${architecture}_digest=${digest}" >> "${GITHUB_OUTPUT}"
+          done
+
       - name: Validate final image digest
         env:
           DIGEST: ${{ needs.publish-image.outputs.digest }}
@@ -510,16 +626,43 @@ jobs:
           subject-digest: ${{ needs.publish-image.outputs.digest }}
           push-to-registry: true
 
-      - name: Validate attestation output
+      - name: Attach AMD64 CycloneDX SBOM to the image
+        id: attest-sbom-amd64
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE_FQDN }}
+          subject-digest: ${{ steps.sbom-subjects.outputs.amd64_digest }}
+          sbom-path: ${{ runner.temp }}/runtime-sboms/arm-mcp-${{ needs.validate-release.outputs.version }}-amd64.cdx.json
+          push-to-registry: true
+
+      - name: Attach ARM64 CycloneDX SBOM to the image
+        id: attest-sbom-arm64
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE_FQDN }}
+          subject-digest: ${{ steps.sbom-subjects.outputs.arm64_digest }}
+          sbom-path: ${{ runner.temp }}/runtime-sboms/arm-mcp-${{ needs.validate-release.outputs.version }}-arm64.cdx.json
+          push-to-registry: true
+
+      - name: Validate attestation outputs
         env:
           ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
+          AMD64_SBOM_ATTESTATION_URL: ${{ steps.attest-sbom-amd64.outputs.attestation-url }}
+          ARM64_SBOM_ATTESTATION_URL: ${{ steps.attest-sbom-arm64.outputs.attestation-url }}
         run: |
           set -euo pipefail
           if [ -z "${ATTESTATION_URL}" ]; then
             echo "::error::Attestation action did not return an attestation URL."
             exit 1
           fi
+          if [ -z "${AMD64_SBOM_ATTESTATION_URL}" ] \
+            || [ -z "${ARM64_SBOM_ATTESTATION_URL}" ]; then
+            echo "::error::SBOM attestation action did not return both attestation URLs."
+            exit 1
+          fi
           echo "Attestation: ${ATTESTATION_URL}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "AMD64 SBOM attestation: ${AMD64_SBOM_ATTESTATION_URL}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "ARM64 SBOM attestation: ${ARM64_SBOM_ATTESTATION_URL}" >> "${GITHUB_STEP_SUMMARY}"
 
   verify-provenance:
     needs:
@@ -567,6 +710,34 @@ jobs:
             --source-digest "${SOURCE_SHA}" \
             --bundle-from-oci
 
+      - name: Verify registry-attached architecture SBOMs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AMD64_DIGEST: ${{ needs.attest-image.outputs.amd64_digest }}
+          ARM64_DIGEST: ${{ needs.attest-image.outputs.arm64_digest }}
+          SOURCE_SHA: ${{ needs.validate-release.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          for architecture in amd64 arm64; do
+            if [ "${architecture}" = "amd64" ]; then
+              digest="${AMD64_DIGEST}"
+            else
+              digest="${ARM64_DIGEST}"
+            fi
+            if [[ ! "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::Missing ${architecture} SBOM attestation subject digest."
+              exit 1
+            fi
+            gh attestation verify \
+              "oci://${IMAGE_FQDN}@${digest}" \
+              --repo arm/mcp \
+              --signer-workflow arm/mcp/.github/workflows/trusted-mcp-release.yml \
+              --source-ref refs/heads/main \
+              --source-digest "${SOURCE_SHA}" \
+              --predicate-type https://cyclonedx.org/bom \
+              --bundle-from-oci
+          done
+
   publish-release:
     needs:
       - validate-release
@@ -582,8 +753,34 @@ jobs:
       }}
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: write
     steps:
+      - name: Download runtime CycloneDX SBOMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: runtime-sbom-*-${{ github.run_id }}
+          path: ${{ runner.temp }}/runtime-sboms
+          merge-multiple: true
+
+      - name: Validate runtime CycloneDX SBOMs
+        shell: bash
+        env:
+          SBOM_DIR: ${{ runner.temp }}/runtime-sboms
+          VERSION: ${{ needs.validate-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          for architecture in amd64 arm64; do
+            sbom="${SBOM_DIR}/arm-mcp-${VERSION}-${architecture}.cdx.json"
+            if [ ! -s "${sbom}" ]; then
+              echo "::error::Missing ${architecture} CycloneDX SBOM."
+              exit 1
+            fi
+            jq -e \
+              '.bomFormat == "CycloneDX" and .specVersion == "1.6"' \
+              "${sbom}" > /dev/null
+          done
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
@@ -609,9 +806,14 @@ jobs:
           SOURCE_SHA: ${{ needs.validate-release.outputs.source_sha }}
           DIGEST: ${{ needs.publish-image.outputs.digest }}
           ATTESTATION_URL: ${{ needs.attest-image.outputs.attestation-url }}
+          AMD64_SBOM_ATTESTATION_URL: ${{ needs.attest-image.outputs.amd64_sbom_attestation_url }}
+          ARM64_SBOM_ATTESTATION_URL: ${{ needs.attest-image.outputs.arm64_sbom_attestation_url }}
+          SBOM_DIR: ${{ runner.temp }}/runtime-sboms
         run: |
           set -euo pipefail
           notes_file="${RUNNER_TEMP}/release-notes.md"
+          amd64_sbom="${SBOM_DIR}/arm-mcp-${VERSION}-amd64.cdx.json"
+          arm64_sbom="${SBOM_DIR}/arm-mcp-${VERSION}-arm64.cdx.json"
           docs_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${SOURCE_SHA}/docs"
           verification_url="${docs_url}/provenance-verification.md"
           assurance_url="${docs_url}/slsa-build-level-3.md"
@@ -623,12 +825,17 @@ jobs:
               "${GITHUB_REPOSITORY}" "${SOURCE_SHA}"
             printf "Provenance: [attestation](%s) · [source-pinned verification instructions](%s)\n" \
               "${ATTESTATION_URL}" "${verification_url}"
+            printf "SBOM attestations: [AMD64](%s) · [Arm64](%s)\n" \
+              "${AMD64_SBOM_ATTESTATION_URL}" "${ARM64_SBOM_ATTESTATION_URL}"
             printf "SLSA Build Level 3: [how the trusted build meets the requirements](%s)\n" \
               "${assurance_url}"
+            printf "SBOMs: CycloneDX 1.6 JSON release assets for AMD64 and Arm64.\n"
           } > "${notes_file}"
           gh release create "v${VERSION}" \
             --repo "${GITHUB_REPOSITORY}" \
             --target "${SOURCE_SHA}" \
             --title "v${VERSION}" \
             --generate-notes \
-            --notes-file "${notes_file}"
+            --notes-file "${notes_file}" \
+            "${amd64_sbom}#CycloneDX SBOM (AMD64)" \
+            "${arm64_sbom}#CycloneDX SBOM (Arm64)"
