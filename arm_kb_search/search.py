@@ -57,9 +57,14 @@ TUTORIAL_INTENT_TOKENS = {
 }
 INSTALL_GUIDE_INTENT_TOKENS = {
     "download",
+    "guide",
     "install",
     "installation",
+    "instruction",
+    "instructions",
     "setup",
+    "step",
+    "steps",
 }
 SUPPORT_INTENT_TOKENS = {
     "available", "availability", "capable", "capabilities", "capability", "compatible",

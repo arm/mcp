@@ -40,6 +40,11 @@ def _docker_candidates():
     "query",
     (
         "How do I install Docker?",
+        "Docker installation guide",
+        "Docker install steps",
+        "Docker guide",
+        "Steps to install Docker",
+        "Docker installation instructions",
         "Set up Docker",
         "Download Docker",
     ),
