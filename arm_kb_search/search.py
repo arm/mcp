@@ -55,6 +55,12 @@ REFERENCE_ARCHITECTURE_INTENT_TOKENS = {
 TUTORIAL_INTENT_TOKENS = {
     "how", "install", "migration", "migrate", "port", "porting", "setup", "tutorial",
 }
+INSTALL_GUIDE_INTENT_TOKENS = {
+    "download",
+    "install",
+    "installation",
+    "setup",
+}
 SUPPORT_INTENT_TOKENS = {
     "available", "availability", "capable", "capabilities", "capability", "compatible",
     "compatibility", "device", "devices", "hardware", "processor", "processors", "server",
@@ -104,6 +110,13 @@ def salient_tokens(text: str) -> List[str]:
 
 def direct_intent_tokens(text: str) -> List[str]:
     return [token for token in tokenize_for_search(text) if token not in DIRECT_INTENT_STOPWORDS]
+
+
+def _has_install_guide_intent(query_tokens: set[str]) -> bool:
+    return bool(query_tokens & INSTALL_GUIDE_INTENT_TOKENS) or {
+        "set",
+        "up",
+    }.issubset(query_tokens)
 
 
 def _metadata_text(metadata: Dict[str, Any], fields: Iterable[str]) -> str:
@@ -375,6 +388,7 @@ def rerank_candidates(query: str, candidates: List[Dict[str, Any]]) -> List[Dict
     prefers_tuning_guide = bool(query_tokens & TUNING_INTENT_TOKENS)
     prefers_reference_architecture = bool(query_tokens & REFERENCE_ARCHITECTURE_INTENT_TOKENS)
     prefers_tutorial = bool(query_tokens & TUTORIAL_INTENT_TOKENS)
+    prefers_install_guide = _has_install_guide_intent(query_tokens)
 
     reranked: List[Dict[str, Any]] = []
     for candidate in candidates:
@@ -405,7 +419,11 @@ def rerank_candidates(query: str, candidates: List[Dict[str, Any]]) -> List[Dict
         heading_overlap = _overlap_ratio(scoring_query_tokens, heading_tokens)
         title_url_overlap = _overlap_ratio(scoring_query_tokens, title_url_tokens)
         url_overlap = _overlap_ratio(scoring_query_tokens, url_tokens | resolved_url_tokens)
-        if len(scoring_query_tokens) <= 3 and _is_learning_path_root_url(source_url):
+        if (
+            not prefers_install_guide
+            and len(scoring_query_tokens) <= 3
+            and _is_learning_path_root_url(source_url)
+        ):
             parent_learning_path_bonus = 0.85 if title_url_overlap >= 0.60 else 0.25
 
         entity_overlap = 0.0
@@ -456,8 +474,19 @@ def rerank_candidates(query: str, candidates: List[Dict[str, Any]]) -> List[Dict
             elif "brief" in doc_type:
                 doc_type_bonus -= 0.05
         if prefers_tutorial:
-            if doc_type in {"tutorial", "install guide", "learning path", "learning paths"}:
+            if doc_type in {
+                "tutorial",
+                "install guide",
+                "install guides",
+                "learning path",
+                "learning paths",
+            }:
                 doc_type_bonus += 0.10
+        if prefers_install_guide and doc_type in {
+            "install guide",
+            "install guides",
+        }:
+            doc_type_bonus += 0.30
         if len(scoring_query_tokens) <= 3:
             rerank_score = (
                 candidate.get("rrf_score", 0.0)
