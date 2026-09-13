@@ -66,6 +66,9 @@ INSTALL_GUIDE_INTENT_TOKENS = {
     "step",
     "steps",
 }
+INSTALL_GUIDE_INTENT_PHRASES = {
+    ("set", "up"),
+}
 SUPPORT_INTENT_TOKENS = {
     "available", "availability", "capable", "capabilities", "capability", "compatible",
     "compatibility", "device", "devices", "hardware", "processor", "processors", "server",
@@ -118,10 +121,9 @@ def direct_intent_tokens(text: str) -> List[str]:
 
 
 def _has_install_guide_intent(query_tokens: set[str]) -> bool:
-    return bool(query_tokens & INSTALL_GUIDE_INTENT_TOKENS) or {
-        "set",
-        "up",
-    }.issubset(query_tokens)
+    return bool(query_tokens & INSTALL_GUIDE_INTENT_TOKENS) or any(
+        query_tokens.issuperset(phrase) for phrase in INSTALL_GUIDE_INTENT_PHRASES
+    )
 
 
 def _metadata_text(metadata: Dict[str, Any], fields: Iterable[str]) -> str:
