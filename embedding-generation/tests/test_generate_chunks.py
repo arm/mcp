@@ -383,6 +383,7 @@ class TestDocumentChunkingAnchors:
             b"<ads-card class='multi-install-card' link='/install-guides/browsers/chrome/'>Chrome</ads-card>"
             b"<ads-card class='multi-install-card' link='/install-guides/browsers/chrome/#install'>Chrome</ads-card>"
             b"<ads-card class='multi-install-card' link='/install-guides/browsers/firefox/'>Firefox</ads-card>"
+            b"<ads-card class='multi-install-card' link='/install-guides/browsers/chrome/linux/'>Nested</ads-card>"
             b"<ads-card class='multi-install-card' link='/install-guides/docker/docker-engine/'>Docker</ads-card>"
             b"<ads-card class='multi-install-card' link='https://example.com/browser/'>External</ads-card>"
             b"</main>"

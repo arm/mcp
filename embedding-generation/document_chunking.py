@@ -167,7 +167,10 @@ def learn_install_guide_child_urls(source_url: str, html: str | bytes) -> list[s
         ):
             continue
         path = parsed.path.rstrip("/") + "/"
-        if path == source_path or not path.startswith(source_path):
+        if not path.startswith(source_path):
+            continue
+        relative_path = path[len(source_path) :].strip("/")
+        if not relative_path or "/" in relative_path:
             continue
         child_url = urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
         if child_url not in seen:
