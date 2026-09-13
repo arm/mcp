@@ -59,6 +59,7 @@ INSTALL_GUIDE_INTENT_TOKENS = {
     "download",
     "guide",
     "install",
+    "installing",
     "installation",
     "instruction",
     "instructions",
@@ -118,10 +119,11 @@ def direct_intent_tokens(text: str) -> List[str]:
 
 
 def _has_install_guide_intent(query_tokens: set[str]) -> bool:
-    return bool(query_tokens & INSTALL_GUIDE_INTENT_TOKENS) or {
-        "set",
-        "up",
-    }.issubset(query_tokens)
+    return (
+        bool(query_tokens & INSTALL_GUIDE_INTENT_TOKENS)
+        or {"set", "up"}.issubset(query_tokens)
+        or {"setting", "up"}.issubset(query_tokens)
+    )
 
 
 def _metadata_text(metadata: Dict[str, Any], fields: Iterable[str]) -> str:
