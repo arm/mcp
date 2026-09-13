@@ -27,6 +27,7 @@ from urllib.parse import urlparse
 
 from document_chunking import (
     chunk_parsed_document,
+    learn_install_guide_child_urls,
     learn_learning_path_step_urls,
     parse_document_content,
 )
@@ -375,6 +376,73 @@ class TestDocumentChunkingAnchors:
         ) == [
             "https://learn.arm.com/learning-paths/cross-platform/example/1-get-started/"
         ]
+
+    def test_learn_install_guide_child_urls_discovers_multi_install_cards(self):
+        html = (
+            b"<main>"
+            b"<ads-card class='multi-install-card' link='/install-guides/browsers/chrome/'>Chrome</ads-card>"
+            b"<ads-card class='multi-install-card' link='/install-guides/browsers/chrome/#install'>Chrome</ads-card>"
+            b"<ads-card class='multi-install-card' link='/install-guides/browsers/firefox/'>Firefox</ads-card>"
+            b"<ads-card class='multi-install-card' link='/install-guides/browsers/chrome/linux/'>Nested</ads-card>"
+            b"<ads-card class='multi-install-card' link='/install-guides/docker/docker-engine/'>Docker</ads-card>"
+            b"<ads-card class='multi-install-card' link='https://example.com/browser/'>External</ads-card>"
+            b"</main>"
+        )
+
+        assert learn_install_guide_child_urls(
+            "https://learn.arm.com/install-guides/browsers/",
+            html,
+        ) == [
+            "https://learn.arm.com/install-guides/browsers/chrome/",
+            "https://learn.arm.com/install-guides/browsers/firefox/",
+        ]
+
+    def test_create_chunks_for_source_includes_multi_page_install_guide_children(self, gc, monkeypatch):
+        parent_url = "https://learn.arm.com/install-guides/browsers/"
+        chrome_url = "https://learn.arm.com/install-guides/browsers/chrome/"
+        firefox_url = "https://learn.arm.com/install-guides/browsers/firefox/"
+        responses = {
+            parent_url: SimpleNamespace(
+                url=parent_url,
+                content=(
+                    b"<main><h1>Install a browser</h1>"
+                    b"<p>Select a browser to view its installation instructions.</p>"
+                    b"<ads-card class='multi-install-card' link='/install-guides/browsers/chrome/'>Chrome</ads-card>"
+                    b"<ads-card class='multi-install-card' link='/install-guides/browsers/firefox/'>Firefox</ads-card>"
+                    b"</main>"
+                ),
+                headers={"content-type": "text/html"},
+            ),
+            chrome_url: SimpleNamespace(
+                url=chrome_url,
+                content=b"<main><h1>Install Chrome</h1><p>Download and install Chrome on Windows on Arm.</p></main>",
+                headers={"content-type": "text/html"},
+            ),
+            firefox_url: SimpleNamespace(
+                url=firefox_url,
+                content=b"<main><h1>Install Firefox</h1><p>Download and install Firefox on Windows on Arm.</p></main>",
+                headers={"content-type": "text/html"},
+            ),
+        }
+        fetched_urls = []
+
+        def fake_fetch(url):
+            fetched_urls.append(url)
+            return responses[url]
+
+        monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
+
+        chunks = gc.create_chunks_for_source(
+            source_url=parent_url,
+            source_name="Install Guide - Browsers",
+            doc_type="Install Guide",
+            keywords_value="browsers; install",
+        )
+
+        assert fetched_urls == [parent_url, chrome_url, firefox_url]
+        chunk_urls = {chunk.url for chunk in chunks}
+        assert chrome_url in chunk_urls
+        assert firefox_url in chunk_urls
 
     def test_html_table_under_heading_is_returned_as_anchor_chunk(self):
         parsed = parse_document_content(

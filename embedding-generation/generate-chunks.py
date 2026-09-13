@@ -34,6 +34,7 @@ from document_chunking import (
     derive_product,
     derive_version,
     is_arm_developer_documentation_url,
+    learn_install_guide_child_urls,
     learn_learning_path_step_urls,
     normalize_source_url,
     parse_arm_documentation_api_json,
@@ -1010,12 +1011,16 @@ def create_chunks_for_source(
         return []
 
     sources_to_parse = [(normalized_source_url, response)]
-    for step_url in learn_learning_path_step_urls(
+    nested_urls = learn_learning_path_step_urls(
         normalized_source_url, response.content
-    ):
-        step_response = fetch_with_logging(source_to_fetch_url(step_url))
-        if step_response is not None:
-            sources_to_parse.append((step_url, step_response))
+    )
+    nested_urls.extend(
+        learn_install_guide_child_urls(normalized_source_url, response.content)
+    )
+    for nested_url in nested_urls:
+        nested_response = fetch_with_logging(source_to_fetch_url(nested_url))
+        if nested_response is not None:
+            sources_to_parse.append((nested_url, nested_response))
 
     keywords = parse_keywords(keywords_value, source_name)
     chunks = []
