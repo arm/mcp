@@ -72,6 +72,11 @@ Example Docs,CC4.0,Example Arm Guide,https://example.com/arm-guide,arm; migratio
 
 Use clear keywords that users might include in questions. The `URL` is also what retrieval eval uses for expected matches.
 
+For multi-page Learn install guides, add only the parent guide URL. The
+generator discovers direct child pages from the guide's selection cards,
+chunks each child through the standard document pipeline, and preserves the
+child's canonical URL in the generated metadata.
+
 ## Discover developer.arm.com Sources
 
 `discover-developer-arm-com-sources.py` searches developer.arm.com and appends any new relevant pages (currently SME-related guides, programmer's guides, and blog posts) to `vector-db-sources.csv`. Existing rows are never modified, so it is safe to re-run occasionally to pick up new content.
