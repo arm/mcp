@@ -107,6 +107,15 @@ def is_learn_learning_path_url(url: str) -> bool:
     )
 
 
+def is_learn_install_guide_url(url: str) -> bool:
+    parsed = urlparse(normalize_source_url(url))
+    return (
+        parsed.scheme in {"http", "https"}
+        and parsed.netloc.lower() == "learn.arm.com"
+        and parsed.path.startswith("/install-guides/")
+    )
+
+
 def learn_learning_path_step_urls(source_url: str, html: str | bytes) -> list[str]:
     source_url = normalize_source_url(source_url)
     if not is_learn_learning_path_url(source_url):
@@ -135,6 +144,37 @@ def learn_learning_path_step_urls(source_url: str, html: str | bytes) -> list[st
             step_urls.append(step_url)
 
     return step_urls
+
+
+def learn_install_guide_child_urls(source_url: str, html: str | bytes) -> list[str]:
+    """Return child pages selected by a Learn multi-page install guide."""
+    source_url = normalize_source_url(source_url)
+    if not is_learn_install_guide_url(source_url):
+        return []
+
+    source = urlparse(source_url)
+    source_path = source.path.rstrip("/") + "/"
+    soup = BeautifulSoup(html, "html.parser")
+    child_urls: list[str] = []
+    seen: set[str] = set()
+
+    for card in soup.find_all(class_="multi-install-card"):
+        candidate = normalize_source_url(urljoin(source_url, card.get("link") or ""))
+        parsed = urlparse(candidate)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or parsed.netloc.lower() != "learn.arm.com"
+        ):
+            continue
+        path = parsed.path.rstrip("/") + "/"
+        if path == source_path or not path.startswith(source_path):
+            continue
+        child_url = urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
+        if child_url not in seen:
+            seen.add(child_url)
+            child_urls.append(child_url)
+
+    return child_urls
 
 
 def is_arm_developer_documentation_url(url: str) -> bool:
