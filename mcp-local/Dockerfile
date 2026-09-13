@@ -15,7 +15,7 @@
 # syntax=docker/dockerfile:1.7
 
 # Keep these defaults synchronized with mcp-local/build-inputs.lock.json.
-ARG EMBEDDINGS_IMAGE=ghcr.io/arm/mcp-embedding-vectorstore@sha256:39efb679469542df45aac594f1366a0819bd983906c39c8cc260f2b7f4d80115
+ARG EMBEDDINGS_IMAGE=ghcr.io/arm/mcp-embedding-vectorstore@sha256:e77d4dba9b9976d6812f3c53e73f6a7e9a3a7055221988647bcb828ef8dc9514
 ARG MCP_BUILD_INPUTS_IMAGE=ghcr.io/arm/mcp-build-inputs@sha256:ab9e0862c3910ff9b45ab130562e8a87175f1c6987299625444a101245300a1c
 ARG UBUNTU_IMAGE=ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
 
