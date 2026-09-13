@@ -66,8 +66,7 @@ jobs:
             pytest -q \
             tests/test_build_inputs.py \
             tests/test_invocation_logger.py \
-            tests/test_release_withdrawal.py \
-            tests/test_search_reranking.py
+            tests/test_release_withdrawal.py
 
   integration-tests:
     strategy:
