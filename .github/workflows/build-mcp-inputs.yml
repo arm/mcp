@@ -44,7 +44,7 @@ jobs:
             platform: linux/arm64
             arch: arm64
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 180
+    timeout-minutes: 360 #setting it to maximum allowed time for a job to run, since the build and blackduck scan can take a long time
     permissions:
       actions: read
       contents: read

@@ -27,7 +27,7 @@ concurrency:
 jobs:
   acquire-and-publish-chunks:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 180
+    timeout-minutes: 360 #setting it to maximum allowed time for a job to run, since the build and blackduck scan can take a long time
     permissions:
       contents: read
       packages: write
@@ -163,7 +163,7 @@ jobs:
   generate-and-publish-vectorstore:
     needs: acquire-and-publish-chunks
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 180
+    timeout-minutes: 360 #setting it to maximum allowed time for a job to run, since the build and blackduck scan can take a long time
     permissions:
       actions: read
       contents: read

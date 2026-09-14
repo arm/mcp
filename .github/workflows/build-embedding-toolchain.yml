@@ -37,7 +37,7 @@ concurrency:
 jobs:
   build-toolchain:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 60
+    timeout-minutes: 360 #setting it to maximum allowed time for a job to run, since the build and blackduck scan can take a long time
     permissions:
       actions: read
       contents: read
