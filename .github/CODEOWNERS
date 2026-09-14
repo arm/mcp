@@ -2,6 +2,7 @@
 # Files not matched below remain reviewable by any authorized organization
 # member under the repository's normal branch rules.
 /.github/CODEOWNERS @arm/mcp-security-team
+/.github/actions/ @arm/mcp-security-team
 /.github/workflows/ @arm/mcp-security-team
 /.github/scripts/ @arm/mcp-security-team
 /mcp-local/Dockerfile @arm/mcp-security-team
