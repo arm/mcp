@@ -114,6 +114,9 @@ def load_existing_sources(csv_file):
         reader = csv.DictReader(file)
         for row in reader:
             url = row.get("URL", "").strip()
+            if url in known_source_urls:
+                print(f"[SKIPPED DUPLICATE SOURCE] {url}")
+                continue
             if url:
                 known_source_urls.add(url)
                 all_sources.append(
@@ -133,18 +136,42 @@ def load_existing_sources(csv_file):
 
 
 def register_source(
-    site_name, license_type, display_name, url, keywords, transcript_source_url=""
+    site_name,
+    license_type,
+    display_name,
+    url,
+    keywords,
+    transcript_source_url="",
+    update_existing=False,
 ):
     """
-    Register a new source URL. If the URL already exists, skip it.
+    Register a source URL, optionally refreshing metadata for an existing row.
     Returns True if the source was added, False if it was a duplicate.
     """
     global known_source_urls, all_sources
 
     # Normalize URL for comparison
     url = url.strip()
+    normalized_keywords = (
+        keywords if isinstance(keywords, str) else "; ".join(keywords)
+    )
 
     if url in known_source_urls:
+        if update_existing:
+            for source in all_sources:
+                if source["url"] != url:
+                    continue
+                source.update(
+                    {
+                        "site_name": site_name,
+                        "license_type": license_type,
+                        "display_name": display_name,
+                        "keywords": normalized_keywords,
+                    }
+                )
+                if transcript_source_url:
+                    source["transcript_source_url"] = transcript_source_url.strip()
+                break
         return False
 
     known_source_urls.add(url)
@@ -153,7 +180,7 @@ def register_source(
         "license_type": license_type,
         "display_name": display_name,
         "url": url,
-        "keywords": keywords if isinstance(keywords, str) else "; ".join(keywords),
+        "keywords": normalized_keywords,
         "transcript_source_url": (transcript_source_url or "").strip(),
     }
 
@@ -171,6 +198,30 @@ def register_source(
 
     print(f"[NEW SOURCE] {display_name}: {url}")
     return True
+
+
+def prune_stale_sources(site_name, discovered_urls, url_prefix):
+    """Remove managed source rows that disappeared from a complete live catalog."""
+    global known_source_urls, all_sources
+
+    discovered_urls = set(discovered_urls)
+    stale_urls = {
+        source["url"]
+        for source in all_sources
+        if source.get("site_name") == site_name
+        and source.get("url", "").startswith(url_prefix)
+        and source["url"] not in discovered_urls
+    }
+    if not stale_urls:
+        return []
+
+    all_sources = [
+        source for source in all_sources if source.get("url") not in stale_urls
+    ]
+    known_source_urls.difference_update(stale_urls)
+    for url in sorted(stale_urls):
+        print(f"[REMOVED STALE SOURCE] {url}")
+    return sorted(stale_urls)
 
 
 def save_sources_csv(csv_file):
@@ -311,7 +362,7 @@ def build_ecosystem_dashboard_entries():
     url = "https://www.arm.com/developer-hub/ecosystem-dashboard/"
     response = http_session.get(url, timeout=60)
     response.raise_for_status()
-    soup = BeautifulSoup(response.text, "html.parser")
+    soup = BeautifulSoup(response.content, "html.parser")
     rows = soup.find_all("tr", class_=["main-sw-row"])
     entries = {}
     for row in rows:
@@ -614,7 +665,7 @@ def processLearningPath(url, type, emit_chunks=True):
                 cross_platform_lps_dont_duplicate.append(url)
 
         response = http_session.get(url, timeout=60)
-        soup = BeautifulSoup(response.text, "html.parser")
+        soup = BeautifulSoup(response.content, "html.parser")
 
         # Get learning path title and keywords once for registration
         lp_title_elem = soup.find(id="learning-path-title")
@@ -634,6 +685,7 @@ def processLearningPath(url, type, emit_chunks=True):
                 display_name=f"Learning Path - {lp_title}",
                 url=url,
                 keywords=lp_keywords,
+                update_existing=True,
             )
 
         for link in soup.find_all(class_="inner-learning-path-navbar-element"):
@@ -666,20 +718,33 @@ def processLearningPath(url, type, emit_chunks=True):
 
     elif type == "Install Guide":
         igs_response = http_session.get(site_link + url, timeout=60)
-        igs_soup = BeautifulSoup(igs_response.text, "html.parser")
-        for ig_card in igs_soup.find_all(class_="tool-card"):
+        igs_soup = BeautifulSoup(igs_response.content, "html.parser")
+        install_guide_cards = igs_soup.find_all(class_="tool-card")
+        discovered_install_guide_urls = set()
+        catalog_complete = bool(install_guide_cards) and getattr(
+            igs_response, "ok", True
+        )
+        for ig_card in install_guide_cards:
             ig_rel_url = ig_card.get("link")
+            if not ig_rel_url:
+                catalog_complete = False
+                continue
             ig_url = site_link + ig_rel_url
 
             ig_response = http_session.get(ig_url, timeout=60)
-            ig_soup = BeautifulSoup(ig_response.text, "html.parser")
+            ig_soup = BeautifulSoup(ig_response.content, "html.parser")
+            if not getattr(ig_response, "ok", True):
+                catalog_complete = False
+                continue
 
             # obtain title of Install Guide
             ig_title_elem = ig_soup.find(id="install-guide-title")
             if not ig_title_elem:
+                catalog_complete = False
                 continue
             ig_title = ig_title_elem.get_text()
             title = "Install Guide - " + ig_title
+            discovered_install_guide_urls.add(ig_url)
 
             # Obtain keywords of learning path
             keywords = [ig_title, "install", "build", "download"]
@@ -691,33 +756,57 @@ def processLearningPath(url, type, emit_chunks=True):
                 display_name=title,
                 url=ig_url,
                 keywords=keywords,
+                update_existing=True,
             )
 
             # Processing to check for multi-install
             multi_install_guides = ig_soup.find_all(class_="multi-install-card")
             if multi_install_guides:
                 for guide in multi_install_guides:
-                    # Extend keywords
-                    keywords.append(
-                        guide.find(class_="multi-tool-selection-title").get_text(
-                            strip=True
-                        )
-                    )
-
-                for guide in multi_install_guides:
                     sub_ig_rel_url = guide.get("link")
-
-                    chunkizeLearningPath(sub_ig_rel_url, title, keywords)
+                    sub_title_elem = guide.find(class_="multi-tool-selection-title")
+                    if not sub_ig_rel_url or not sub_title_elem:
+                        catalog_complete = False
+                        continue
+                    sub_ig_title = sub_title_elem.get_text(strip=True)
+                    sub_title = "Install Guide - " + sub_ig_title
+                    sub_ig_url = site_link + sub_ig_rel_url
+                    discovered_install_guide_urls.add(sub_ig_url)
+                    sub_keywords = [
+                        sub_ig_title,
+                        ig_title,
+                        "install",
+                        "build",
+                        "download",
+                    ]
+                    register_source(
+                        site_name="Install Guides",
+                        license_type="CC4.0",
+                        display_name=sub_title,
+                        url=sub_ig_url,
+                        keywords=sub_keywords,
+                        update_existing=True,
+                    )
+                    chunkizeLearningPath(sub_ig_rel_url, sub_title, sub_keywords)
             # If not multi-install (most cases)
             else:
                 chunkizeLearningPath(ig_rel_url, title, keywords)
+
+        if catalog_complete:
+            prune_stale_sources(
+                "Install Guides",
+                discovered_install_guide_urls,
+                site_link + "/install-guides/",
+            )
+        else:
+            print("Install-guide catalog was incomplete; stale-source pruning skipped.")
 
 
 def createLearningPathChunks(emit_chunks=True):
     # Find all categories to iterate over
     learn_url = "https://learn.arm.com/"
     response = http_session.get(learn_url, timeout=60)
-    soup = BeautifulSoup(response.text, "html.parser")
+    soup = BeautifulSoup(response.content, "html.parser")
 
     # Process Install Guides separately (directly from /install-guides page)
     processLearningPath("/install-guides", "Install Guide", emit_chunks=emit_chunks)
@@ -737,7 +826,7 @@ def createLearningPathChunks(emit_chunks=True):
             cat_response = http_session.get(
                 learn_url.rstrip("/") + cat_rel_path, timeout=60
             )
-            cat_soup = BeautifulSoup(cat_response.text, "html.parser")
+            cat_soup = BeautifulSoup(cat_response.content, "html.parser")
             for lp_card in cat_soup.find_all(class_="path-card"):
                 lp_link = lp_card.get("link")
                 if lp_link is None:
@@ -802,6 +891,7 @@ def URLIsValidCheck(url):
         return True
     except requests.exceptions.HTTPError as http_err:
         print(f"HTTP error occurred: {http_err}")
+        os.makedirs("info", exist_ok=True)
         with open("info/errors.csv", "a", newline="") as csvfile:
             csv_writer = csv.writer(csvfile)
             csv_writer.writerow([url, str(http_err)])
@@ -815,12 +905,14 @@ def fetch_with_logging(url):
         return response
     except requests.exceptions.HTTPError as http_err:
         print(f"HTTP error occurred: {http_err}")
+        os.makedirs("info", exist_ok=True)
         with open("info/errors.csv", "a", newline="") as csvfile:
             csv_writer = csv.writer(csvfile)
             csv_writer.writerow([url, str(http_err)])
         return None
     except Exception as err:
         print(f"Other error occurred: {err}")
+        os.makedirs("info", exist_ok=True)
         with open("info/errors.csv", "a", newline="") as csvfile:
             csv_writer = csv.writer(csvfile)
             csv_writer.writerow([url, str(err)])
@@ -1219,6 +1311,10 @@ def main():
 
         # b) Ecosystem Dashboard
         createEcosystemDashboardChunks(emit_chunks=False)
+
+        # Persist discovery before chunking so newly registered sources are
+        # included in this acquisition run rather than the next one.
+        save_sources_csv(sources_file)
 
     # c) Intrinsics
     # createIntrinsicsDatabaseChunks()

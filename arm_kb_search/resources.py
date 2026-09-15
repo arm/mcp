@@ -16,7 +16,6 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 from usearch.index import Index
 
@@ -24,10 +23,14 @@ from .config import K_RESULTS
 from .loaders import load_metadata, load_usearch_index
 from .response import add_disclaimer_to_arm_results, add_utm_source_to_results
 from .search import (
+    LEXICAL_PREPASS_DEPTH,
+    ParentAwareBM25,
     build_bm25_index,
+    build_parent_index,
     deduplicate_urls,
     deduplication_candidate_count,
     hybrid_search,
+    normalize_query_for_search,
 )
 
 
@@ -36,10 +39,15 @@ class SearchResources:
     metadata: list[dict[str, Any]]
     embedding_model: SentenceTransformer
     usearch_index: Index | None
-    bm25_index: BM25Okapi | None
+    bm25_index: ParentAwareBM25 | None
     default_k: int = K_RESULTS
     include_disclaimers: bool = True
     utm_source: str | None = None
+    parent_index: dict[str, dict[str, Any]] | None = None
+
+    def __post_init__(self) -> None:
+        if self.parent_index is None:
+            self.parent_index = build_parent_index(self.metadata)
 
 
 def sentence_transformer_cache_folder() -> str | None:
@@ -110,6 +118,7 @@ def load_search_resources(
         default_k=default_k,
         include_disclaimers=include_disclaimers,
         utm_source=utm_source,
+        parent_index=build_parent_index(metadata),
     )
 
 
@@ -117,21 +126,38 @@ def search(
     query: str,
     resources: SearchResources,
     k: int | None = None,
+    include_debug: bool = False,
 ) -> list[dict[str, Any]]:
+    """Return the top ``k`` pages for ``query``; ``include_debug`` attaches the score breakdown."""
     resolved_k = k or resources.default_k
+    normalized_query = normalize_query_for_search(query)
+    if not normalized_query:
+        return []
     candidate_depth = max(resolved_k * 20, 100)
-    search_results = hybrid_search(
-        query,
-        resources.usearch_index,
-        resources.metadata,
-        resources.embedding_model,
-        resources.bm25_index,
-        k=deduplication_candidate_count(resolved_k),
-        candidate_depth=candidate_depth,
-    )
-    deduped = deduplicate_urls(search_results)[:resolved_k]
-    formatted = [
-        {
+
+    def ranked_candidates(pool_size: int) -> list[dict[str, Any]]:
+        return hybrid_search(
+            normalized_query,
+            resources.usearch_index,
+            resources.metadata,
+            resources.embedding_model,
+            resources.bm25_index,
+            k=pool_size,
+            candidate_depth=candidate_depth,
+            parent_index=resources.parent_index,
+        )
+
+    pool_size = deduplication_candidate_count(resolved_k)
+    search_results = ranked_candidates(pool_size)
+    deduped = deduplicate_urls(search_results)
+    if len(deduped) < resolved_k and len(search_results) >= pool_size:
+        # Page-level deduplication collapsed most of the pool; widen it once.
+        search_results = ranked_candidates(min(LEXICAL_PREPASS_DEPTH, pool_size * 4))
+        deduped = deduplicate_urls(search_results)
+    deduped = deduped[:resolved_k]
+    formatted = []
+    for rank, item in enumerate(deduped, start=1):
+        result = {
             "url": item["metadata"].get("url"),
             "snippet": item["metadata"].get("original_text", item["metadata"].get("content", "")),
             "title": item["metadata"].get("title", ""),
@@ -141,8 +167,18 @@ def search(
             "distance": item.get("distance"),
             "score": item.get("rerank_score", item.get("rrf_score")),
         }
-        for item in deduped
-    ]
+        if include_debug:
+            result["debug"] = {
+                **item.get("score_debug", {}),
+                "query_normalization": {
+                    "original": query,
+                    "normalized": normalized_query,
+                },
+                "result_rank": rank,
+                "returned_results": len(deduped),
+                "requested_results": resolved_k,
+            }
+        formatted.append(result)
     formatted = add_utm_source_to_results(formatted, resources.utm_source)
     if resources.include_disclaimers:
         return add_disclaimer_to_arm_results(formatted)

@@ -13,4 +13,8 @@
 # limitations under the License.
 
 DISTANCE_THRESHOLD = 1.1
+# Brute-force the dense search. The index is small enough (tens of thousands of
+# vectors) that exact search costs about 10 ms, and approximate search misses whole
+# clusters of near-duplicate chunks (measured parent recall@100 of 0.93-0.96).
+DENSE_SEARCH_EXACT = True
 K_RESULTS = 5

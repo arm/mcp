@@ -104,6 +104,24 @@ Educational Course,All rights reserved,Example Video,https://courses.edx.org/vid
 
 Leave the column empty for sources that are chunked from their primary `URL`.
 
+### Embedding window policy
+
+The vector-store builder uses lossless, tokenizer-aligned overlapping windows
+for documentation chunks that exceed the embedding model's input limit, so no
+text is silently truncated. Only the first window of a chunk carries the full
+text and lexical fields; later windows hold a compact reference to it, and the
+server resolves every hit back to that first window.
+
+Intrinsic records (developer.arm.com `#q=` pages) retain the existing raw
+embedding input and one vector per record, including the embedding model's
+existing truncation behavior. Their full descriptions remain available for
+lexical search and display. Intrinsic taxonomy enrichment and dedicated
+intrinsic ranking are deferred to a separate change.
+
+Each metadata row records `embedding_window_policy` as either
+`lossless_overlap` (documentation) or `legacy_single_vector` (intrinsics)
+for auditing. The lossless coverage guarantee applies to documentation.
+
 
 ## Test Locally
 
