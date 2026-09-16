@@ -108,9 +108,21 @@ NEGATIVE_SUPPORT_PATTERNS = tuple(
 )
 
 
+def _canonicalize_phrases(tokens: List[str]) -> List[str]:
+    """Canonicalize prose phrases shared by queries and document fields."""
+    canonical: List[str] = []
+    for token in tokens:
+        if token == "up" and canonical and canonical[-1] == "set":
+            canonical[-1] = "setup"
+        else:
+            canonical.append(token)
+    return canonical
+
+
 def tokenize_for_search(text: str) -> List[str]:
-    """Extract complete technical tokens and lowercase them."""
-    return [token.lower() for token in SEARCH_TOKEN_PATTERN.findall(text or "")]
+    """Extract technical tokens and apply shared phrase canonicalization."""
+    tokens = [token.lower() for token in SEARCH_TOKEN_PATTERN.findall(text or "")]
+    return _canonicalize_phrases(tokens)
 
 
 def _identifier_variants(
@@ -141,17 +153,6 @@ def _identifier_variants(
     return variants
 
 
-def _canonicalize_query_phrases(tokens: List[str]) -> List[str]:
-    """Treat the adjacent words 'set up' as 'setup'."""
-    canonical: List[str] = []
-    for token in tokens:
-        if token == "up" and canonical and canonical[-1] == "set":
-            canonical[-1] = "setup"
-        else:
-            canonical.append(token)
-    return canonical
-
-
 def normalize_query_for_search(query: str) -> str:
     """Expand technical identifiers while treating generic compounds as prose."""
     expanded_tokens: List[str] = []
@@ -168,7 +169,7 @@ def normalize_query_for_search(query: str) -> str:
             variants = variants[1:]
         expanded_tokens.extend(variants)
 
-    tokens = _canonicalize_query_phrases(expanded_tokens)
+    tokens = _canonicalize_phrases(expanded_tokens)
     return " ".join(dict.fromkeys(tokens))
 
 
@@ -483,13 +484,17 @@ def embedding_search(
     metadata: List[Dict],
     embedding_model: SentenceTransformer,
     k: int = K_RESULTS,
+    parent_index: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
-    """Search the USearch index with a text query."""
+    """Search the USearch index and return complete parent metadata."""
     if usearch_index is None:
         return []
+    if parent_index is None:
+        parent_index = build_parent_index(metadata)
     query_embedding = embedding_model.encode([query])[0]
     results: List[Dict[str, Any]] = []
-    raw_depth = min(len(metadata), max(k, k * 2))
+    depth_multiplier = 4 if DENSE_SEARCH_EXACT else 2
+    raw_depth = min(len(metadata), max(k, k * depth_multiplier))
     while raw_depth:
         matches = usearch_index.search(query_embedding, raw_depth, exact=DENSE_SEARCH_EXACT)
         if matches is None:
@@ -523,19 +528,23 @@ def embedding_search(
                     continue
                 if parent_key:
                     seen_parents.add(parent_key)
-                results.append(
-                    {
-                        "rank": len(results) + 1,
-                        "raw_rank": raw_rank,
-                        "distance": distance,
-                        "metadata": item_metadata,
-                    }
-                )
+                candidate = {
+                    "rank": len(results) + 1,
+                    "raw_rank": raw_rank,
+                    "distance": distance,
+                    "metadata": item_metadata,
+                }
+                _resolve_parent_representative(candidate, parent_index)
+                results.append(candidate)
                 if len(results) == k:
                     return results
 
             last_distance = float(distances[-1]) if len(distances) else DISTANCE_THRESHOLD
-            if raw_depth >= len(metadata) or last_distance >= DISTANCE_THRESHOLD:
+            if (
+                DENSE_SEARCH_EXACT
+                or raw_depth >= len(metadata)
+                or last_distance >= DISTANCE_THRESHOLD
+            ):
                 return results
             raw_depth = min(len(metadata), raw_depth * 2)
         except Exception as exc:
@@ -850,7 +859,14 @@ def hybrid_search(
         candidate_depth=max(candidate_depth, LEXICAL_PREPASS_DEPTH),
         bm25_scores=bm25_scores,
     )
-    dense_results = embedding_search(query, usearch_index, metadata, embedding_model, candidate_depth)
+    dense_results = embedding_search(
+        query,
+        usearch_index,
+        metadata,
+        embedding_model,
+        candidate_depth,
+        parent_index=parent_index,
+    )
     sparse_results = bm25_search(query, metadata, bm25_index, candidate_depth, scores=bm25_scores)
 
     candidates: Dict[str, Dict[str, Any]] = {}
@@ -864,8 +880,6 @@ def hybrid_search(
         }
 
     for result in dense_results:
-        # Capture the matching window before merging with a lexical parent.
-        _resolve_parent_representative(result, parent_index)
         candidate_key = _candidate_key(result)
         existing = candidates.get(candidate_key, {"metadata": result["metadata"], "rrf_score": 0.0})
         if "matched_window" in result:

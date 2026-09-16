@@ -515,6 +515,62 @@ class TestSourceTracking:
         assert result is False
         assert len(gc.all_sources) == 1
 
+    def test_register_source_empty_update_preserves_existing_keywords(self, gc):
+        """Discovery without tags must not erase known-good keywords."""
+        gc.register_source(
+            site_name="Learning Paths",
+            license_type="CC4.0",
+            display_name="Learning Path - Existing",
+            url="https://example.com/existing",
+            keywords=["Linux", "Docker"],
+        )
+
+        result = gc.register_source(
+            site_name="Learning Paths",
+            license_type="CC4.0",
+            display_name="Learning Path - Refreshed",
+            url="https://example.com/existing",
+            keywords=[],
+            update_existing=True,
+        )
+
+        assert result is False
+        assert gc.all_sources[0]["display_name"] == "Learning Path - Refreshed"
+        assert gc.all_sources[0]["keywords"] == "Linux; Docker"
+
+    def test_register_source_nonempty_update_refreshes_keywords(self, gc):
+        """Non-empty discovery metadata must continue to refresh keywords."""
+        gc.register_source(
+            site_name="Learning Paths",
+            license_type="CC4.0",
+            display_name="Learning Path - Existing",
+            url="https://example.com/existing",
+            keywords=["Linux"],
+        )
+
+        gc.register_source(
+            site_name="Learning Paths",
+            license_type="CC4.0",
+            display_name="Learning Path - Existing",
+            url="https://example.com/existing",
+            keywords=["Linux", "Docker"],
+            update_existing=True,
+        )
+
+        assert gc.all_sources[0]["keywords"] == "Linux; Docker"
+
+    def test_register_source_new_without_keywords_uses_title_fallback(self, gc):
+        """A new tagless page must still satisfy the CSV keyword invariant."""
+        gc.register_source(
+            site_name="Learning Paths",
+            license_type="CC4.0",
+            display_name="Learning Path - Tagless",
+            url="https://example.com/tagless",
+            keywords=[],
+        )
+
+        assert gc.all_sources[0]["keywords"] == "Learning Path - Tagless"
+
     def test_register_source_inserts_after_matching_site_group(self, gc):
         """Test that new sources stay grouped with existing sources from the same site."""
         gc.all_sources = [

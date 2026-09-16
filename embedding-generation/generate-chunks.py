@@ -154,7 +154,7 @@ def register_source(
     url = url.strip()
     normalized_keywords = (
         keywords if isinstance(keywords, str) else "; ".join(keywords)
-    )
+    ).strip()
 
     if url in known_source_urls:
         if update_existing:
@@ -166,9 +166,12 @@ def register_source(
                         "site_name": site_name,
                         "license_type": license_type,
                         "display_name": display_name,
-                        "keywords": normalized_keywords,
                     }
                 )
+                # Discovery metadata can be temporarily absent when a page has
+                # no ads-tag elements. Do not erase known-good lexical metadata.
+                if normalized_keywords:
+                    source["keywords"] = normalized_keywords
                 if transcript_source_url:
                     source["transcript_source_url"] = transcript_source_url.strip()
                 break
@@ -180,7 +183,9 @@ def register_source(
         "license_type": license_type,
         "display_name": display_name,
         "url": url,
-        "keywords": normalized_keywords,
+        # New sources must still satisfy the non-empty keyword invariant when
+        # discovery has no tags. The page title is the best available fallback.
+        "keywords": normalized_keywords or display_name.strip(),
         "transcript_source_url": (transcript_source_url or "").strip(),
     }
 

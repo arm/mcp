@@ -284,7 +284,9 @@ def _fit_embedding_text(
     window can tokenise differently at the seam. Retrying shorter prefixes
     guarantees the returned input actually fits. The caller verifies that
     overlapping fitted windows still cover the full parent body, so trimming
-    can never silently lose content.
+    can never silently lose content. This correctness-first fallback is linear
+    in the bounded model token limit; the pinned corpus currently fits without
+    invoking it, and each invocation is reported by ``prepare_embedding_records``.
     """
     def render(window: str) -> tuple[str, int]:
         embedding_text = f"{context}{separator}{window}"
