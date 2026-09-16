@@ -169,9 +169,12 @@ def register_source(
                     }
                 )
                 # Discovery metadata can be temporarily absent when a page has
-                # no ads-tag elements. Do not erase known-good lexical metadata.
+                # no ads-tag elements. Preserve known-good lexical metadata, or
+                # repair an existing blank value with the page title fallback.
                 if normalized_keywords:
                     source["keywords"] = normalized_keywords
+                elif not str(source.get("keywords") or "").strip():
+                    source["keywords"] = display_name.strip()
                 if transcript_source_url:
                     source["transcript_source_url"] = transcript_source_url.strip()
                 break

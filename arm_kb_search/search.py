@@ -153,6 +153,16 @@ def _identifier_variants(
     return variants
 
 
+def _is_generic_prose_compound(raw_token: str, variants: List[str]) -> bool:
+    """Return whether a separated compound contains only generic prose terms."""
+    return (
+        len(variants) > 1
+        and not CAMEL_CASE_BOUNDARY_PATTERN.search(raw_token)
+        and not re.search(r"[_+.0-9]", raw_token)
+        and set(variants[1:]) <= GENERIC_ENTITY_TOKENS
+    )
+
+
 def normalize_query_for_search(query: str) -> str:
     """Expand technical identifiers while treating generic compounds as prose."""
     expanded_tokens: List[str] = []
@@ -160,12 +170,7 @@ def normalize_query_for_search(query: str) -> str:
         variants = _identifier_variants(raw_token, include_compact=False)
         # Keep "pkg-config" for exact lexical matches. Generic phrases such
         # as "Arm-based" still expand to words without adding a product term.
-        if (
-            len(variants) > 1
-            and not CAMEL_CASE_BOUNDARY_PATTERN.search(raw_token)
-            and not re.search(r"[_+.0-9]", raw_token)
-            and set(variants[1:]) <= GENERIC_ENTITY_TOKENS
-        ):
+        if _is_generic_prose_compound(raw_token, variants):
             variants = variants[1:]
         expanded_tokens.extend(variants)
 
@@ -183,11 +188,14 @@ def _is_google_provider_query(query_tokens: set[str]) -> bool:
 
 def tokenize_identifier_variants_for_search(text: str) -> List[str]:
     """Keep exact technical tokens and add their safe boundary variants."""
-    return [
+    raw_tokens = SEARCH_TOKEN_PATTERN.findall(text or "")
+    variants = [
         variant
-        for raw_token in SEARCH_TOKEN_PATTERN.findall(text or "")
+        for raw_token in raw_tokens
         for variant in _identifier_variants(raw_token)
     ]
+    variants.extend(_canonicalize_phrases([token.lower() for token in raw_tokens]))
+    return list(dict.fromkeys(variants))
 
 
 def tokenize_url_for_search(text: str) -> List[str]:
@@ -397,8 +405,23 @@ class ParentAwareBM25:
 
 
 def _sparse_document_tokens(metadata: Dict[str, Any]) -> List[str]:
-    tokens = tokenize_for_search(metadata.get("search_text", ""))
+    search_text = metadata.get("search_text", "")
+    raw_search_tokens = SEARCH_TOKEN_PATTERN.findall(search_text or "")
+    tokens = _canonicalize_phrases([token.lower() for token in raw_search_tokens])
     seen_tokens = set(tokens)
+    # Queries split generic prose compounds such as "Arm-based" without using
+    # the raw compound as an entity. Add the same parts to BM25 documents while
+    # retaining their exact body token so both query spellings can match.
+    for raw_token in raw_search_tokens:
+        if "-" not in raw_token:
+            continue
+        variants = _identifier_variants(raw_token, include_compact=False)
+        if not _is_generic_prose_compound(raw_token, variants):
+            continue
+        for token in _canonicalize_phrases(variants[1:]):
+            if token not in seen_tokens:
+                tokens.append(token)
+                seen_tokens.add(token)
     identifier_text = _metadata_text(
         metadata,
         ("title", "heading", "heading_path", "keywords", "product", "url", "resolved_url"),
