@@ -143,7 +143,7 @@ def search(
             resources.embedding_model,
             resources.bm25_index,
             k=pool_size,
-            candidate_depth=candidate_depth,
+            candidate_depth=max(candidate_depth, pool_size),
             parent_index=resources.parent_index,
         )
 

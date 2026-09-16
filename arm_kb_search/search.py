@@ -64,6 +64,8 @@ TUTORIAL_INTENT_TOKENS = {
 INSTALL_INTENT_TOKENS = {
     "install", "installation", "setup",
 }
+# Acquisition adds these keywords to every install guide; they identify no product.
+GENERIC_INSTALL_GUIDE_KEYWORDS = {"build", "download"}
 SUPPORT_INTENT_TOKENS = {
     "available", "availability", "capable", "capabilities", "capability", "compatible",
     "compatibility", "device", "devices", "hardware", "processor", "processors", "server",
@@ -410,8 +412,9 @@ def _sparse_document_tokens(metadata: Dict[str, Any]) -> List[str]:
         for token in tokenize_for_search(" ".join((parsed.path, parsed.query, parsed.fragment))):
             if TOKEN_SPLIT_PATTERN.search(token):
                 compact_alias = TOKEN_SPLIT_PATTERN.sub("", token)
-                if compact_alias:
+                if compact_alias and compact_alias not in seen_tokens:
                     tokens.append(compact_alias)
+                    seen_tokens.add(compact_alias)
     return tokens
 
 
@@ -735,7 +738,7 @@ def rerank_candidates(
                 | url_tokens
                 | set(tokenize_for_search(_metadata_text(metadata, ("keywords", "product"))))
             )
-            if entity_query_tokens & guide_entity_tokens:
+            if entity_query_tokens & (guide_entity_tokens - GENERIC_INSTALL_GUIDE_KEYWORDS):
                 doc_type_bonus += 0.25
         if len(scoring_query_tokens) <= 3:
             scoring_profile = "short_query"
