@@ -16,7 +16,6 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 from usearch.index import Index
 
@@ -24,7 +23,9 @@ from .config import K_RESULTS
 from .loaders import load_metadata, load_usearch_index
 from .response import add_disclaimer_to_arm_results, add_utm_source_to_results
 from .search import (
+    ParentAwareBM25,
     build_bm25_index,
+    build_parent_index,
     deduplicate_urls,
     deduplication_candidate_count,
     hybrid_search,
@@ -36,10 +37,15 @@ class SearchResources:
     metadata: list[dict[str, Any]]
     embedding_model: SentenceTransformer
     usearch_index: Index | None
-    bm25_index: BM25Okapi | None
+    bm25_index: ParentAwareBM25 | None
     default_k: int = K_RESULTS
     include_disclaimers: bool = True
     utm_source: str | None = None
+    parent_index: dict[str, dict[str, Any]] | None = None
+
+    def __post_init__(self) -> None:
+        if self.parent_index is None:
+            self.parent_index = build_parent_index(self.metadata)
 
 
 def sentence_transformer_cache_folder() -> str | None:
@@ -101,6 +107,11 @@ def load_search_resources(
         usearch_index_path,
         embedding_dimension(embedding_model),
     )
+    if usearch_index is not None and len(usearch_index) != len(metadata):
+        raise ValueError(
+            "Vector index and metadata are incompatible: "
+            f"{len(usearch_index)} vectors for {len(metadata)} metadata rows"
+        )
     bm25_index = build_bm25_index(metadata)
     return SearchResources(
         metadata=metadata,
@@ -110,6 +121,7 @@ def load_search_resources(
         default_k=default_k,
         include_disclaimers=include_disclaimers,
         utm_source=utm_source,
+        parent_index=build_parent_index(metadata),
     )
 
 
@@ -128,6 +140,7 @@ def search(
         resources.bm25_index,
         k=deduplication_candidate_count(resolved_k),
         candidate_depth=candidate_depth,
+        parent_index=resources.parent_index,
     )
     deduped = deduplicate_urls(search_results)[:resolved_k]
     formatted = [

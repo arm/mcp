@@ -104,6 +104,21 @@ Educational Course,All rights reserved,Example Video,https://courses.edx.org/vid
 
 Leave the column empty for sources that are chunked from their primary `URL`.
 
+### Embedding window policy
+
+The vector-store builder keeps the pinned
+`sentence-transformers/all-MiniLM-L6-v2` model and creates consecutive,
+tokenizer-aligned windows with zero body-token overlap for documentation that
+does not fit its 256-token input limit.
+Every body character is represented by a window, while the title and heading
+path are repeated in every window to preserve local context.
+
+Window identifiers are deterministic and each row records its parent chunk,
+window number, character span, token count, policy, and configured overlap.
+Only the first window stores the full lexical and display metadata. Retrieval
+groups sibling-window matches and resolves them to that representative row, so
+the server returns the original document text and metadata rather than a child
+fragment.
 
 ## Test Locally
 

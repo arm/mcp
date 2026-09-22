@@ -20,7 +20,8 @@ FROM toolchain AS generation
 ENV INTRINSIC_CHUNKS_DIR=/chunks/intrinsic_chunks \
     YAML_DATA_DIR=/chunks/yaml_data \
     USEARCH_INDEX_FILENAME=/output/usearch_index.bin \
-    METADATA_FILENAME=/output/metadata.json
+    METADATA_FILENAME=/output/metadata.json \
+    VECTORSTORE_BUILD_MANIFEST_FILENAME=/output/vectorstore-build-manifest.json
 
 COPY --from=chunks \
     /embedding-data/intrinsic_chunks/ \
@@ -47,3 +48,6 @@ COPY --from=generation \
 COPY --from=generation \
     /output/usearch_index.bin \
     /embedding-data/usearch_index.bin
+COPY --from=generation \
+    /output/vectorstore-build-manifest.json \
+    /embedding-data/vectorstore-build-manifest.json

@@ -225,7 +225,7 @@ def _lexical_prepass_score(query: str, metadata: Dict[str, Any], bm25_score: flo
 def lexical_prepass_search(
     query: str,
     metadata: List[Dict],
-    bm25_index: Optional[BM25Okapi],
+    bm25_index: Optional["ParentAwareBM25"],
     k: int = PINNED_LEXICAL_CANDIDATES,
     candidate_depth: int = LEXICAL_PREPASS_DEPTH,
 ) -> List[Dict[str, Any]]:
@@ -252,11 +252,82 @@ def lexical_prepass_search(
     return pinned
 
 
-def build_bm25_index(metadata: List[Dict]) -> Optional[BM25Okapi]:
-    corpus = [tokenize_for_search(item.get("search_text", "")) for item in metadata]
+class ParentAwareBM25:
+    """Score one lexical document per parent in metadata index space."""
+
+    def __init__(
+        self,
+        corpus: List[List[str]],
+        metadata_indices: List[int],
+        metadata_count: int,
+    ):
+        self.index = BM25Okapi(corpus)
+        self.metadata_indices = np.asarray(metadata_indices, dtype=int)
+        self.metadata_count = metadata_count
+
+    def get_scores(self, tokens: List[str]) -> np.ndarray:
+        scores = np.zeros(self.metadata_count, dtype=float)
+        scores[self.metadata_indices] = self.index.get_scores(tokens)
+        return scores
+
+
+def _parent_chunk_key(metadata: Dict[str, Any]) -> str:
+    return str(metadata.get("parent_chunk_uuid") or metadata.get("chunk_uuid") or "")
+
+
+def _parent_representative_indices(metadata: List[Dict]) -> Dict[str, int]:
+    """Choose one row per parent, preferring the row that carries full metadata."""
+    representatives: Dict[str, int] = {}
+    for index, item in enumerate(metadata):
+        parent_key = _parent_chunk_key(item)
+        if not parent_key:
+            continue
+        existing_index = representatives.get(parent_key)
+        if existing_index is None or (
+            item.get("chunk_index", 1) == 1
+            and metadata[existing_index].get("chunk_index", 1) != 1
+        ):
+            representatives[parent_key] = index
+    return representatives
+
+
+def build_bm25_index(metadata: List[Dict]) -> Optional[ParentAwareBM25]:
+    representatives = _parent_representative_indices(metadata)
+    ungrouped = [
+        index for index, item in enumerate(metadata) if not _parent_chunk_key(item)
+    ]
+    metadata_indices = sorted([*ungrouped, *representatives.values()])
+    corpus = [
+        tokenize_for_search(metadata[index].get("search_text", ""))
+        for index in metadata_indices
+    ]
     if not any(corpus):
         return None
-    return BM25Okapi(corpus)
+    return ParentAwareBM25(corpus, metadata_indices, len(metadata))
+
+
+def build_parent_index(metadata: List[Dict]) -> Dict[str, Dict[str, Any]]:
+    """Map window parent identifiers to rows carrying original text and metadata."""
+    return {
+        parent_key: metadata[index]
+        for parent_key, index in _parent_representative_indices(metadata).items()
+    }
+
+
+def _resolve_parent_representative(
+    candidate: Dict[str, Any],
+    parent_index: Dict[str, Dict[str, Any]],
+) -> None:
+    metadata = candidate["metadata"]
+    representative = parent_index.get(_parent_chunk_key(metadata))
+    if representative is None or representative is metadata:
+        return
+    candidate["matched_window"] = {
+        "chunk_uuid": metadata.get("chunk_uuid"),
+        "chunk_index": metadata.get("chunk_index"),
+        "chunk_count": metadata.get("chunk_count"),
+    }
+    candidate["metadata"] = representative
 
 
 def embedding_search(
@@ -265,51 +336,82 @@ def embedding_search(
     metadata: List[Dict],
     embedding_model: SentenceTransformer,
     k: int = K_RESULTS,
+    parent_index: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
-    """Search the USearch index with a text query."""
+    """Search vectors, collapse child windows, and return complete parent rows."""
     if usearch_index is None:
         return []
+    if parent_index is None:
+        parent_index = build_parent_index(metadata)
     query_embedding = embedding_model.encode([query])[0]
-    matches = usearch_index.search(query_embedding, k)
     results: List[Dict[str, Any]] = []
-    if matches is None:
-        return results
-
-    try:
-        labels = getattr(matches, "keys", None)
-        distances = getattr(matches, "distances", None)
-        if labels is None or distances is None:
-            if isinstance(matches, tuple) and len(matches) == 2:
-                labels, distances = matches
-            elif isinstance(matches, dict):
-                labels = matches.get("labels", matches.get("indices"))
-                distances = matches.get("distances")
-        if labels is None or distances is None:
+    raw_depth = min(len(metadata), max(k, k * 4))
+    while raw_depth:
+        matches = usearch_index.search(query_embedding, raw_depth)
+        if matches is None:
             return results
 
-        labels = np.atleast_1d(labels)
-        distances = np.atleast_1d(distances)
-        for rank, (idx, dist) in enumerate(zip(labels, distances), start=1):
-            if idx == -1:
-                continue
-            distance = float(dist)
-            if distance < DISTANCE_THRESHOLD:
-                results.append(
-                    {
-                        "rank": rank,
-                        "distance": distance,
-                        "metadata": metadata[int(idx)],
-                    }
-                )
-    except Exception as exc:
-        print(f"Error processing dense matches: {exc}")
+        try:
+            labels = getattr(matches, "keys", None)
+            distances = getattr(matches, "distances", None)
+            if labels is None or distances is None:
+                if isinstance(matches, tuple) and len(matches) == 2:
+                    labels, distances = matches
+                elif isinstance(matches, dict):
+                    labels = matches.get("labels", matches.get("indices"))
+                    distances = matches.get("distances")
+            if labels is None or distances is None:
+                return results
+
+            labels = np.atleast_1d(labels)
+            distances = np.atleast_1d(distances)
+            results = []
+            seen_parents: set[str] = set()
+            for raw_rank, (idx, dist) in enumerate(
+                zip(labels, distances),
+                start=1,
+            ):
+                if idx == -1:
+                    continue
+                distance = float(dist)
+                if distance >= DISTANCE_THRESHOLD:
+                    break
+                item_metadata = metadata[int(idx)]
+                parent_key = _parent_chunk_key(item_metadata)
+                if parent_key and parent_key in seen_parents:
+                    continue
+                if parent_key:
+                    seen_parents.add(parent_key)
+                candidate = {
+                    "rank": len(results) + 1,
+                    "raw_rank": raw_rank,
+                    "distance": distance,
+                    "metadata": item_metadata,
+                }
+                _resolve_parent_representative(candidate, parent_index)
+                results.append(candidate)
+                if len(results) == k:
+                    return results
+
+            last_distance = (
+                float(distances[-1]) if len(distances) else DISTANCE_THRESHOLD
+            )
+            if (
+                raw_depth >= len(metadata)
+                or last_distance >= DISTANCE_THRESHOLD
+            ):
+                return results
+            raw_depth = min(len(metadata), raw_depth * 2)
+        except Exception as exc:
+            print(f"Error processing dense matches: {exc}")
+            return results
     return results
 
 
 def bm25_search(
     query: str,
     metadata: List[Dict],
-    bm25_index: Optional[BM25Okapi],
+    bm25_index: Optional[ParentAwareBM25],
     k: int = K_RESULTS,
 ) -> List[Dict[str, Any]]:
     if bm25_index is None:
@@ -502,7 +604,7 @@ def rerank_candidates(query: str, candidates: List[Dict[str, Any]]) -> List[Dict
 
 def _candidate_key(result: Dict[str, Any]) -> str:
     metadata = result.get("metadata", {})
-    chunk_uuid = metadata.get("chunk_uuid")
+    chunk_uuid = metadata.get("parent_chunk_uuid") or metadata.get("chunk_uuid")
     if not chunk_uuid:
         url = metadata.get("url") or metadata.get("resolved_url") or "<unknown url>"
         raise ValueError(f"Search metadata missing required chunk_uuid for {url}")
@@ -518,9 +620,10 @@ def hybrid_search(
     usearch_index: Optional[Index],
     metadata: List[Dict],
     embedding_model: SentenceTransformer,
-    bm25_index: Optional[BM25Okapi],
+    bm25_index: Optional[ParentAwareBM25],
     k: int = K_RESULTS,
     candidate_depth: Optional[int] = None,
+    parent_index: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     candidate_depth = candidate_depth or max(k * 20, 100)
     lexical_results = lexical_prepass_search(
@@ -530,7 +633,14 @@ def hybrid_search(
         k=max(k * 3, PINNED_LEXICAL_CANDIDATES),
         candidate_depth=max(candidate_depth, LEXICAL_PREPASS_DEPTH),
     )
-    dense_results = embedding_search(query, usearch_index, metadata, embedding_model, candidate_depth)
+    dense_results = embedding_search(
+        query,
+        usearch_index,
+        metadata,
+        embedding_model,
+        candidate_depth,
+        parent_index=parent_index,
+    )
     sparse_results = bm25_search(query, metadata, bm25_index, candidate_depth)
 
     candidates: Dict[str, Dict[str, Any]] = {}
