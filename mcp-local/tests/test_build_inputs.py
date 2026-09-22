@@ -894,6 +894,82 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
     assert "push-to-registry: true" in TOOLCHAIN_WORKFLOW
 
 
+def test_input_images_export_and_attach_blackduck_cyclonedx_sboms() -> None:
+    assert "id-token: write" in INPUT_WORKFLOW
+    assert "attestations: write" in INPUT_WORKFLOW
+    assert "artifact-metadata: write" in INPUT_WORKFLOW
+    assert "Export Black Duck CycloneDX SBOM" in INPUT_WORKFLOW
+    assert (
+        "BLACKDUCK_PROJECT_VERSION: "
+        "mcp-build-inputs-container-${{ matrix.arch }}-1.0" in INPUT_WORKFLOW
+    )
+    assert "export-blackduck-cyclonedx.py" in INPUT_WORKFLOW
+    assert "--timeout 14400" in INPUT_WORKFLOW
+    assert "Retain Black Duck CycloneDX SBOM" in INPUT_WORKFLOW
+    assert (
+        "mcp-build-inputs-sbom-${{ matrix.arch }}-${{ github.run_id }}"
+        in INPUT_WORKFLOW
+    )
+    assert "if-no-files-found: error" in INPUT_WORKFLOW
+
+    attestation = INPUT_WORKFLOW.split(
+        "Attach Black Duck CycloneDX SBOM to the published input image",
+        maxsplit=1,
+    )[1].split("Validate input-image SBOM attestation", maxsplit=1)[0]
+    assert "if: ${{ env.PUBLISH_IMAGES == 'true' }}" in attestation
+    assert "uses: actions/attest@" in attestation
+    assert "subject-name: ${{ env.IMAGE }}" in attestation
+    assert "subject-digest: ${{ steps.publish.outputs.digest }}" in attestation
+    assert "sbom-path:" in attestation
+    assert "push-to-registry: true" in attestation
+    assert INPUT_WORKFLOW.index(
+        "Secure Container scan architecture input image before publication"
+    ) < INPUT_WORKFLOW.index("Export Black Duck CycloneDX SBOM")
+    assert INPUT_WORKFLOW.index("Export Black Duck CycloneDX SBOM") < (
+        INPUT_WORKFLOW.index("Retain Black Duck CycloneDX SBOM")
+    )
+    assert INPUT_WORKFLOW.index("Verify published image matches scanned candidate") < (
+        INPUT_WORKFLOW.index(
+            "Attach Black Duck CycloneDX SBOM to the published input image"
+        )
+    )
+
+
+def test_embedding_toolchain_exports_and_attaches_blackduck_cyclonedx_sbom() -> None:
+    assert "Export Black Duck CycloneDX SBOM" in TOOLCHAIN_WORKFLOW
+    assert (
+        "BLACKDUCK_PROJECT_VERSION: mcp-embedding-generator-container-1.0"
+        in TOOLCHAIN_WORKFLOW
+    )
+    assert "export-blackduck-cyclonedx.py" in TOOLCHAIN_WORKFLOW
+    assert "--timeout 14400" in TOOLCHAIN_WORKFLOW
+    assert "Retain Black Duck CycloneDX SBOM" in TOOLCHAIN_WORKFLOW
+    assert (
+        "embedding-toolchain-sbom-arm64-${{ github.run_id }}"
+        in TOOLCHAIN_WORKFLOW
+    )
+    assert "if-no-files-found: error" in TOOLCHAIN_WORKFLOW
+
+    attestation = TOOLCHAIN_WORKFLOW.split(
+        "Attach Black Duck CycloneDX SBOM to the published toolchain image",
+        maxsplit=1,
+    )[1].split("Verify published GHCR package is private", maxsplit=1)[0]
+    assert "if: ${{ env.PUBLISH_IMAGE == 'true' }}" in attestation
+    assert "uses: actions/attest@" in attestation
+    assert "subject-name: ${{ env.IMAGE }}" in attestation
+    assert "subject-digest: ${{ steps.publish.outputs.digest }}" in attestation
+    assert "sbom-path:" in attestation
+    assert "push-to-registry: true" in attestation
+    assert TOOLCHAIN_WORKFLOW.index(
+        "Secure Container scan toolchain image before publication"
+    ) < TOOLCHAIN_WORKFLOW.index("Export Black Duck CycloneDX SBOM")
+    assert TOOLCHAIN_WORKFLOW.index("Publish scanned toolchain image") < (
+        TOOLCHAIN_WORKFLOW.index(
+            "Attach Black Duck CycloneDX SBOM to the published toolchain image"
+        )
+    )
+
+
 def test_container_scan_uses_explicit_codeql_sarif_upload() -> None:
     upload_step = BLACKDUCK_IMAGE_SCAN_ACTION.split(
         "    - name: Upload Black Duck SARIF", maxsplit=1

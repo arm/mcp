@@ -88,6 +88,29 @@ jobs:
           blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
           distribution: "INTERNAL"
 
+      - name: Export Black Duck CycloneDX SBOM
+        shell: bash
+        env:
+          BLACKDUCK_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}
+          BLACKDUCK_URL: ${{ vars.BLACKDUCKSCA_URL }}
+          BLACKDUCK_PROJECT_VERSION: mcp-embedding-generator-container-1.0
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/export-blackduck-cyclonedx.py \
+            --blackduck-url "${BLACKDUCK_URL}" \
+            --project "Arm:MCP" \
+            --version "${BLACKDUCK_PROJECT_VERSION}" \
+            --timeout 14400 \
+            --output "${RUNNER_TEMP}/embedding-toolchain-sbom/mcp-embedding-generator-${GITHUB_SHA}-arm64.cdx.json"
+
+      - name: Retain Black Duck CycloneDX SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: embedding-toolchain-sbom-arm64-${{ github.run_id }}
+          path: ${{ runner.temp }}/embedding-toolchain-sbom/mcp-embedding-generator-${{ github.sha }}-arm64.cdx.json
+          if-no-files-found: error
+          retention-days: 10
+
       - name: Log in to GHCR for publication
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
@@ -124,6 +147,16 @@ jobs:
           subject-digest: ${{ steps.publish.outputs.digest }}
           push-to-registry: true
 
+      - name: Attach Black Duck CycloneDX SBOM to the published toolchain image
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
+        id: attest-sbom
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.publish.outputs.digest }}
+          sbom-path: ${{ runner.temp }}/embedding-toolchain-sbom/mcp-embedding-generator-${{ github.sha }}-arm64.cdx.json
+          push-to-registry: true
+
       - name: Verify published GHCR package is private
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
         env:
@@ -136,10 +169,15 @@ jobs:
           DIGEST: ${{ steps.publish.outputs.digest }}
           TAG: ${{ env.IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
           ATTESTATION_URL: ${{ steps.attest.outputs.attestation-url }}
+          SBOM_ATTESTATION_URL: ${{ steps.attest-sbom.outputs.attestation-url }}
         run: |
           set -euo pipefail
           if [[ -z "${ATTESTATION_URL}" ]]; then
             echo "::error::Attestation action did not return an attestation URL."
+            exit 1
+          fi
+          if [[ -z "${SBOM_ATTESTATION_URL}" ]]; then
+            echo "::error::SBOM attestation action did not return an attestation URL."
             exit 1
           fi
 
@@ -149,6 +187,7 @@ jobs:
             echo "- Tag: \`${TAG}\`"
             echo "- Immutable reference: \`${IMAGE}@${DIGEST}\`"
             echo "- Attestation: [view provenance](${ATTESTATION_URL})"
+            echo "- SBOM attestation: [view CycloneDX SBOM](${SBOM_ATTESTATION_URL})"
           } >> "${GITHUB_STEP_SUMMARY}"
 
   propose-toolchain-pin:
