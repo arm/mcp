@@ -907,7 +907,7 @@ def test_container_scan_uses_explicit_codeql_sarif_upload() -> None:
     assert "!= ''" in upload_step
     assert "github_token:" not in BLACKDUCK_IMAGE_SCAN_ACTION
     assert (
-        "blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL,HIGH'"
+        "blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'"
         in BLACKDUCK_IMAGE_SCAN_ACTION
     )
     assert "--detect.timeout=14400" in BLACKDUCK_IMAGE_SCAN_ACTION
