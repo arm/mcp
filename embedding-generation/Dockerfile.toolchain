@@ -17,10 +17,63 @@
 # These platform-specific manifests make the current toolchain image an
 # explicitly ARM64 build. Update both digests deliberately when upgrading.
 ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.9.2@sha256:387eb4de25210101cc2f53ce74ee9c9d60da4618a7aff8c41b9c8d472cc783da
-ARG PYTHON_IMAGE=docker.io/library/python:3.13-slim@sha256:800ac3fc34cb04346a5669cc677cb4d65e23be59e1b64a1efa60fe4b230263ff
+ARG PYTHON_IMAGE=docker.io/library/python:3.13-slim@sha256:e2a5fce94bd761967528a12f16d707c2613e1522f3f2d77fa45766f45962547f
+ARG PYTHON_VERSION=3.13.15
+ARG PYTHON_SHA256=1e66a7945a48390ee4c2a4268a0e4185884059a13c4aab6d148aa208deea4a76
+ARG EXPAT_VERSION=2.8.4
+ARG EXPAT_TAG=R_2_8_4
+ARG EXPAT_SHA256=b8ece2437692dad44d851c4532723390a5a330990007706be9c8d2b90d294f36
 
 FROM ${UV_IMAGE} AS uv
-FROM ${PYTHON_IMAGE} AS builder
+
+# Python 3.13.15 contains Expat 2.8.2. Rebuild its Expat-backed extension
+# modules with the security fixes in Expat 2.8.4 until the official Python
+# image contains that release. Both source archives are verified by digest.
+FROM ${PYTHON_IMAGE} AS python-expat-builder
+ARG PYTHON_VERSION
+ARG PYTHON_SHA256
+ARG EXPAT_VERSION
+ARG EXPAT_TAG
+ARG EXPAT_SHA256
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        curl \
+        gcc \
+        libc6-dev \
+        make \
+        xz-utils \
+    ; \
+    rm -rf /var/lib/apt/lists/*; \
+    curl --fail --location --show-error \
+        "https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz" \
+        --output /tmp/python.tar.xz; \
+    echo "${PYTHON_SHA256} */tmp/python.tar.xz" | sha256sum --check; \
+    mkdir -p /usr/src/python; \
+    tar --extract --directory /usr/src/python --strip-components=1 \
+        --file /tmp/python.tar.xz; \
+    rm /tmp/python.tar.xz; \
+    sed -i \
+        -e "s/expected_libexpat_tag=.*/expected_libexpat_tag=\"${EXPAT_TAG}\"/" \
+        -e "s/expected_libexpat_version=.*/expected_libexpat_version=\"${EXPAT_VERSION}\"/" \
+        -e "s/expected_libexpat_sha256=.*/expected_libexpat_sha256=\"${EXPAT_SHA256}\"/" \
+        /usr/src/python/Modules/expat/refresh.sh; \
+    /usr/src/python/Modules/expat/refresh.sh; \
+    cd /usr/src/python; \
+    ./configure --enable-shared; \
+    make -j "$(nproc)" sharedmods; \
+    mkdir /patched-python-modules; \
+    cp build/lib.*/pyexpat*.so /patched-python-modules/; \
+    cp build/lib.*/_elementtree*.so /patched-python-modules/; \
+    strip --strip-unneeded /patched-python-modules/*.so
+
+FROM ${PYTHON_IMAGE} AS python-runtime
+
+COPY --from=python-expat-builder /patched-python-modules/ \
+    /usr/local/lib/python3.13/lib-dynload/
+RUN python -c "import pyexpat, sys, xml.etree.ElementTree as ET; assert sys.version_info[:3] == (3, 13, 15); assert pyexpat.version_info == (2, 8, 4); ET.fromstring('<root/>')"
+
+FROM python-runtime AS builder
 
 ENV PATH="/embedding-data/.venv/bin:${PATH}" \
     UV_PYTHON_DOWNLOADS=never
@@ -46,7 +99,7 @@ ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1
 RUN --network=none python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('/embedding-data/embedding-model', local_files_only=True, trust_remote_code=False)"
 
-FROM ${PYTHON_IMAGE} AS toolchain
+FROM python-runtime AS toolchain
 
 ENV PATH="/embedding-data/.venv/bin:${PATH}" \
     HF_HUB_OFFLINE=1 \

@@ -40,6 +40,9 @@ INPUT_WORKFLOW = (
 TOOLCHAIN_WORKFLOW = (
     REPOSITORY / ".github/workflows/build-embedding-toolchain.yml"
 ).read_text()
+TOOLCHAIN_DOCKERFILE = (
+    REPOSITORY / "embedding-generation/Dockerfile.toolchain"
+).read_text()
 BLACKDUCK_IMAGE_SCAN_ACTION = (
     REPOSITORY / ".github/actions/blackduck-image-scan/action.yml"
 ).read_text()
@@ -892,6 +895,18 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
     assert "subject-name: ${{ env.IMAGE }}" in TOOLCHAIN_WORKFLOW
     assert "subject-digest: ${{ steps.publish.outputs.digest }}" in TOOLCHAIN_WORKFLOW
     assert "push-to-registry: true" in TOOLCHAIN_WORKFLOW
+
+
+def test_embedding_toolchain_uses_fixed_python_and_expat_versions() -> None:
+    assert "ARG PYTHON_VERSION=3.13.15" in TOOLCHAIN_DOCKERFILE
+    assert "ARG EXPAT_VERSION=2.8.4" in TOOLCHAIN_DOCKERFILE
+    assert (
+        "ARG EXPAT_SHA256="
+        "b8ece2437692dad44d851c4532723390a5a330990007706be9c8d2b90d294f36"
+        in TOOLCHAIN_DOCKERFILE
+    )
+    assert "assert sys.version_info[:3] == (3, 13, 15)" in TOOLCHAIN_DOCKERFILE
+    assert "assert pyexpat.version_info == (2, 8, 4)" in TOOLCHAIN_DOCKERFILE
 
 
 def test_input_images_export_and_attach_blackduck_cyclonedx_sboms() -> None:
