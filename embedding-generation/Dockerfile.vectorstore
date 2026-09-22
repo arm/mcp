@@ -34,8 +34,7 @@ WORKDIR /output
 
 RUN --network=none \
     python /embedding-data/local_vectorstore_creation.py \
-        --model-path /embedding-data/embedding-model \
-    && rm -f embeddings_*.txt
+        --model-path /embedding-data/embedding-model
 
 FROM scratch AS vectorstore
 

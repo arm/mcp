@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import argparse
-import datetime
 import glob
 import json
 import os
@@ -540,11 +539,6 @@ def parse_args() -> argparse.Namespace:
         help="Path to the embedding model created by acquire-model.py.",
     )
     parser.add_argument(
-        "--skip-embeddings-text",
-        action="store_true",
-        help="Do not write the optional plain-text embedding matrix.",
-    )
-    parser.add_argument(
         "--window-overlap-tokens",
         type=int,
         default=EMBEDDING_WINDOW_OVERLAP_TOKENS,
@@ -588,12 +582,6 @@ def main():
 
     # Create embeddings
     embeddings = create_embeddings(contents, model)
-
-    if not args.skip_embeddings_text:
-        print("Saving embeddings to file")
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"embeddings_{timestamp}.txt"
-        np.savetxt(filename, embeddings)
 
     # Create USearch index
     print("Creating USearch index")
