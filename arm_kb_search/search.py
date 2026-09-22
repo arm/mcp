@@ -205,17 +205,37 @@ def _is_generic_prose_compound(raw_token: str) -> bool:
     )
 
 
-def normalize_query_for_search(query: str) -> str:
+def normalize_query_for_search(
+    query: str,
+    bm25_vocabulary: Optional[set[str]] = None,
+) -> str:
     """Expand technical identifiers while treating generic compounds as prose."""
+    vocabulary = bm25_vocabulary or set()
     expanded_tokens: List[str] = []
     for raw_token in SEARCH_TOKEN_PATTERN.findall(query or ""):
         if _is_generic_prose_compound(raw_token):
             variants = _identifier_parts(raw_token, min_part_length=2)
+        elif CAMEL_CASE_BOUNDARY_PATTERN.search(raw_token):
+            token = raw_token.lower()
+            parts = [
+                part
+                for part in _identifier_parts(raw_token, min_part_length=2)
+                if not _is_unsafe_identifier_part(part)
+            ]
+            if (
+                token not in vocabulary
+                and len(parts) >= 2
+                and all(part in vocabulary for part in parts)
+            ):
+                variants = [token, *parts]
+            else:
+                variants = [token]
         else:
             variants = _identifier_variants(raw_token, include_compact=False)
         expanded_tokens.extend(variants)
 
     return " ".join(dict.fromkeys(expanded_tokens))
+
 
 def tokenize_identifier_variants_for_search(text: str) -> List[str]:
     """Expand only tokens with strong technical-identifier structure."""
@@ -227,12 +247,13 @@ def tokenize_identifier_variants_for_search(text: str) -> List[str]:
 
 
 def tokenize_url_for_search(text: str) -> List[str]:
-    """Apply conservative identifier expansion to URL content."""
-    return [
-        variant
-        for raw_token in SEARCH_TOKEN_PATTERN.findall(text or "")
-        for variant in _identifier_variants(raw_token)
-    ]
+    """Split separators in URL content while retaining each original token."""
+    tokens: List[str] = []
+    for token in tokenize_for_search(text):
+        tokens.append(token)
+        if TOKEN_SPLIT_PATTERN.search(token):
+            tokens.extend(part for part in TOKEN_SPLIT_PATTERN.split(token) if part)
+    return list(dict.fromkeys(tokens))
 
 
 def tokenize_url_content_for_search(text: str) -> List[str]:
@@ -323,7 +344,6 @@ def _support_evidence_score(query_tokens: set[str], text_tokens: set[str], text:
     if _has_negative_support_evidence(text):
         score += 0.25
     return score
-
 
 
 def _lexical_exactness_score(query: str, metadata: Dict[str, Any]) -> float:
@@ -448,11 +468,13 @@ def _sparse_document_tokens(metadata: Dict[str, Any]) -> List[str]:
                 seen_tokens.add(token)
     return tokens
 
+
 def build_bm25_index(metadata: List[Dict]) -> Optional[BM25Okapi]:
     corpus = [_sparse_document_tokens(item) for item in metadata]
     if not any(corpus):
         return None
     return BM25Okapi(corpus)
+
 
 def embedding_search(
     query: str,
@@ -540,6 +562,7 @@ def bm25_search(
             }
         )
     return results
+
 
 def _overlap_ratio(query_tokens: set[str], document_tokens: set[str]) -> float:
     if not query_tokens:
@@ -798,6 +821,7 @@ def rerank_candidates(
 
     return sorted(reranked, key=lambda item: item["rerank_score"], reverse=True)
 
+
 def _candidate_key(result: Dict[str, Any]) -> str:
     metadata = result.get("metadata", {})
     chunk_uuid = metadata.get("chunk_uuid")
@@ -820,7 +844,8 @@ def hybrid_search(
     k: int = K_RESULTS,
     candidate_depth: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    lexical_query = normalize_query_for_search(query)
+    bm25_vocabulary = set(getattr(bm25_index, "idf", {}) or {})
+    lexical_query = normalize_query_for_search(query, bm25_vocabulary)
     if not lexical_query:
         return []
 
@@ -881,6 +906,7 @@ def hybrid_search(
 
     combined = rerank_candidates(lexical_query, list(candidates.values()))
     return combined[:k]
+
 
 def deduplicate_urls(
     results: List[Dict[str, Any]],

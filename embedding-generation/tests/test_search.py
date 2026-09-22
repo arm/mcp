@@ -65,6 +65,61 @@ def test_identifier_expansion_rejects_unsafe_generic_pieces():
     assert search.normalize_query_for_search("Arm-based server") == "arm based server"
 
 
+def test_camel_case_query_expansion_uses_bm25_vocabulary():
+    compact_products = (
+        "JavaScript",
+        "PostgreSQL",
+        "TensorFlow",
+        "WordPress",
+        "macOS",
+        "OpenSSL",
+    )
+    metadata = [
+        {"title": product, "search_text": product}
+        for product in compact_products
+    ]
+    metadata.extend(
+        [
+            {"title": "Google Chrome", "search_text": "Google Chrome"},
+            {"title": "HTTP Server", "search_text": "HTTP Server"},
+        ]
+    )
+    bm25_index = search.build_bm25_index(metadata)
+    assert bm25_index is not None
+    vocabulary = set(bm25_index.idf)
+
+    for product in compact_products:
+        assert search.normalize_query_for_search(product, vocabulary) == product.lower()
+
+    assert search.normalize_query_for_search(
+        "GoogleChrome", vocabulary
+    ) == "googlechrome google chrome"
+    assert search.normalize_query_for_search(
+        "HTTPServer", vocabulary
+    ) == "httpserver http server"
+
+
+def test_url_tokenization_splits_path_separators_but_not_hostname():
+    tokens = set(
+        search.tokenize_url_content_for_search(
+            "https://docs.example.com/install-guides/learning-paths/"
+            "google-chrome/7-zip"
+        )
+    )
+
+    assert {
+        "install",
+        "guides",
+        "learning",
+        "paths",
+        "google",
+        "chrome",
+        "7",
+        "zip",
+    } <= tokens
+    assert not {"docs", "example", "com"} & tokens
+
+
 def test_dense_search_receives_original_query(monkeypatch):
     captured_queries = []
 

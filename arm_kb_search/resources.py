@@ -29,7 +29,7 @@ from .search import (
     deduplicate_urls,
     deduplication_candidate_count,
     hybrid_search,
-    normalize_query_for_search,
+    tokenize_for_search,
 )
 
 
@@ -121,8 +121,7 @@ def search(
     k: int | None = None,
 ) -> list[dict[str, Any]]:
     resolved_k = k or resources.default_k
-    normalized_query = normalize_query_for_search(query)
-    if not normalized_query:
+    if not tokenize_for_search(query):
         return []
 
     candidate_depth = max(resolved_k * 20, 100)
