@@ -24,10 +24,12 @@ from .config import K_RESULTS
 from .loaders import load_metadata, load_usearch_index
 from .response import add_disclaimer_to_arm_results, add_utm_source_to_results
 from .search import (
+    LEXICAL_PREPASS_DEPTH,
     build_bm25_index,
     deduplicate_urls,
     deduplication_candidate_count,
     hybrid_search,
+    normalize_query_for_search,
 )
 
 
@@ -119,21 +121,40 @@ def search(
     k: int | None = None,
 ) -> list[dict[str, Any]]:
     resolved_k = k or resources.default_k
+    normalized_query = normalize_query_for_search(query)
+    if not normalized_query:
+        return []
+
     candidate_depth = max(resolved_k * 20, 100)
-    search_results = hybrid_search(
-        query,
-        resources.usearch_index,
-        resources.metadata,
-        resources.embedding_model,
-        resources.bm25_index,
-        k=deduplication_candidate_count(resolved_k),
-        candidate_depth=candidate_depth,
-    )
-    deduped = deduplicate_urls(search_results)[:resolved_k]
+
+    def ranked_candidates(pool_size: int) -> list[dict[str, Any]]:
+        return hybrid_search(
+            query,
+            resources.usearch_index,
+            resources.metadata,
+            resources.embedding_model,
+            resources.bm25_index,
+            k=pool_size,
+            candidate_depth=max(candidate_depth, pool_size),
+        )
+
+    pool_size = deduplication_candidate_count(resolved_k)
+    search_results = ranked_candidates(pool_size)
+    deduped = deduplicate_urls(search_results)
+    if len(deduped) < resolved_k and len(search_results) >= pool_size:
+        search_results = ranked_candidates(
+            min(LEXICAL_PREPASS_DEPTH, pool_size * 4)
+        )
+        deduped = deduplicate_urls(search_results)
+    deduped = deduped[:resolved_k]
+
     formatted = [
         {
             "url": item["metadata"].get("url"),
-            "snippet": item["metadata"].get("original_text", item["metadata"].get("content", "")),
+            "snippet": item["metadata"].get(
+                "original_text",
+                item["metadata"].get("content", ""),
+            ),
             "title": item["metadata"].get("title", ""),
             "heading": item["metadata"].get("heading", ""),
             "doc_type": item["metadata"].get("doc_type", ""),
