@@ -120,6 +120,23 @@ def test_url_tokenization_splits_path_separators_but_not_hostname():
     assert not {"docs", "example", "com"} & tokens
 
 
+def test_lexical_exactness_ignores_url_hostname():
+    matching_host = {
+        "url": "https://docs.example.com/install-guides/linux",
+        "resolved_url": "https://docs.example.com/install-guides/linux",
+    }
+    different_host = {
+        "url": "https://other.example.com/install-guides/linux",
+        "resolved_url": "https://other.example.com/install-guides/linux",
+    }
+
+    assert search._lexical_exactness_score(
+        "docs.example.com linux", matching_host
+    ) == search._lexical_exactness_score(
+        "docs.example.com linux", different_host
+    )
+
+
 def test_dense_search_receives_original_query(monkeypatch):
     captured_queries = []
 

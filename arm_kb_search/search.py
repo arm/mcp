@@ -362,8 +362,17 @@ def _lexical_exactness_score(query: str, metadata: Dict[str, Any]) -> float:
         (("search_text",), 0.20),
     )
     for fields, weight in field_weights:
-        field_text = _metadata_text(metadata, fields)
-        field_tokens = set(tokenize_for_search(field_text))
+        if fields == ("url", "resolved_url"):
+            field_tokens = {
+                token
+                for field in fields
+                for token in tokenize_url_content_for_search(
+                    str(metadata.get(field, ""))
+                )
+            }
+        else:
+            field_text = _metadata_text(metadata, fields)
+            field_tokens = set(tokenize_for_search(field_text))
         if not field_tokens:
             continue
         denominator = len(salient_query_tokens) or len(query_tokens)
