@@ -222,19 +222,6 @@ def _lexical_prepass_score(query: str, metadata: Dict[str, Any], bm25_score: flo
     return sparse_score + weighted_overlap + phrase_bonus + support_bonus
 
 
-def lexical_prepass_search(
-    query: str,
-    metadata: List[Dict],
-    bm25_index: Optional[BM25Okapi],
-    k: int = PINNED_LEXICAL_CANDIDATES,
-    candidate_depth: int = LEXICAL_PREPASS_DEPTH,
-) -> List[Dict[str, Any]]:
-    """Return high-exactness lexical candidates before dense retrieval is merged."""
-    prepass_depth = max(k, candidate_depth)
-    candidates = bm25_search(query, metadata, bm25_index, prepass_depth)
-    return _rank_lexical_candidates(query, candidates, k)
-
-
 def _rank_lexical_candidates(
     query: str,
     candidates: List[Dict[str, Any]],
