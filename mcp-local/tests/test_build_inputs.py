@@ -1,3 +1,17 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 from pathlib import Path
 import re
@@ -25,6 +39,18 @@ INPUT_WORKFLOW = (
 ).read_text()
 TOOLCHAIN_WORKFLOW = (
     REPOSITORY / ".github/workflows/build-embedding-toolchain.yml"
+).read_text()
+TOOLCHAIN_DOCKERFILE = (
+    REPOSITORY / "embedding-generation/Dockerfile.toolchain"
+).read_text()
+BLACKDUCK_IMAGE_SCAN_ACTION = (
+    REPOSITORY / ".github/actions/blackduck-image-scan/action.yml"
+).read_text()
+BLACKDUCK_SOURCE_SCAN_WORKFLOW = (
+    REPOSITORY / ".github/workflows/black-duck-security-scan-ci.yml"
+).read_text()
+BLACKDUCK_SBOM_EXPORT_SCRIPT = (
+    REPOSITORY / ".github/scripts/export-blackduck-cyclonedx.py"
 ).read_text()
 PIN_PROMOTION_SCRIPT = (
     REPOSITORY / ".github/scripts/propose-pin-pr.sh"
@@ -257,6 +283,136 @@ def test_release_requires_runtime_egress_validation_for_both_architectures() -> 
     assert "needs.build-arch-images.result == 'success'" in TRUSTED_RELEASE_WORKFLOW
 
 
+def test_release_scans_validated_runtime_images_in_all_modes() -> None:
+    build_job = TRUSTED_RELEASE_WORKFLOW.split(
+        "  build-arch-images:", maxsplit=1
+    )[1].split("  record-dry-run:", maxsplit=1)[0]
+    scan_steps = build_job.split(
+        "Prepare validated runtime image for Black Duck", maxsplit=1
+    )[1].split("Record validated image digest", maxsplit=1)[0]
+
+    assert "security-events: write" in build_job
+    assert "platform: linux/amd64" in build_job
+    assert "platform: linux/arm64" in build_job
+    assert "Prepare validated runtime image for Black Duck" in build_job
+    assert "SOURCE_IMAGE: ${{ steps.runtime_image.outputs.image }}" in build_job
+    assert "Remove registry credentials before scanning" in build_job
+    assert "docker logout ghcr.io" in build_job
+    assert "uses: ./.github/actions/blackduck-image-scan" in build_job
+    assert 'project_name: "Arm:MCP"' in build_job
+    assert (
+        'project_version: "mcp-runtime-container-${{ matrix.tag }}-1.0"'
+        in build_job
+    )
+    assert "Define isolated Black Duck project version" not in build_job
+    assert "platform: ${{ matrix.platform }}" in build_job
+    assert "blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}" in build_job
+    assert (
+        "if: ${{ needs.validate-release.outputs.mode == 'production' }}"
+        not in scan_steps
+    )
+    assert build_job.index("Black Duck scan validated runtime image") < build_job.index(
+        "Record validated image digest"
+    )
+
+
+def test_release_exports_cyclonedx_sboms_and_attaches_them_to_release() -> None:
+    build_job = TRUSTED_RELEASE_WORKFLOW.split(
+        "  build-arch-images:", maxsplit=1
+    )[1].split("  record-dry-run:", maxsplit=1)[0]
+    publish_release_job = TRUSTED_RELEASE_WORKFLOW.split(
+        "  publish-release:", maxsplit=1
+    )[1]
+
+    assert '"reportFormat": "JSON"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert '"reportType": "SBOM"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert '"sbomType": "CYCLONEDX_16"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert '"specification": "CycloneDX-1.6"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert "/api/tokens/authenticate" in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert "/sbom-reports" in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert "/download.zip" in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert 'self._json_request(requested_report)' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert 'f"{version_url}/reports"' not in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert "report creation returned no Location header" in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert 'accept: str = "*/*"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert "accept=REPORT_MEDIA_TYPE" not in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert 'report.get("bomFormat") == "CycloneDX"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert 'report.get("specVersion") == "1.6"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+
+    assert "Export Black Duck CycloneDX SBOM" in build_job
+    assert "BLACKDUCK_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}" in build_job
+    assert (
+        "BLACKDUCK_PROJECT_VERSION: "
+        "mcp-runtime-container-${{ matrix.tag }}-1.0" in build_job
+    )
+    assert "export-blackduck-cyclonedx.py" in build_job
+    assert "--timeout 14400" in build_job
+    assert "Retain CycloneDX SBOM" in build_job
+    assert "runtime-sbom-${{ matrix.tag }}-${{ github.run_id }}" in build_job
+    assert "if-no-files-found: error" in build_job
+    assert build_job.index("Black Duck scan validated runtime image") < build_job.index(
+        "Export Black Duck CycloneDX SBOM"
+    )
+    assert build_job.index("Export Black Duck CycloneDX SBOM") < build_job.index(
+        "Retain CycloneDX SBOM"
+    )
+
+    assert "actions: read" in publish_release_job
+    assert "Download runtime CycloneDX SBOMs" in publish_release_job
+    assert "pattern: runtime-sbom-*-${{ github.run_id }}" in publish_release_job
+    assert "Validate runtime CycloneDX SBOMs" in publish_release_job
+    assert (
+        '.bomFormat == "CycloneDX" and .specVersion == "1.6"'
+        in publish_release_job
+    )
+    assert '"${amd64_sbom}#CycloneDX SBOM (AMD64)"' in publish_release_job
+    assert '"${arm64_sbom}#CycloneDX SBOM (Arm64)"' in publish_release_job
+    assert publish_release_job.index("Validate runtime CycloneDX SBOMs") < (
+        publish_release_job.index("gh release create")
+    )
+
+
+def test_source_scan_exports_cyclonedx_sbom_for_full_scans_only() -> None:
+    full_scan_section = BLACKDUCK_SOURCE_SCAN_WORKFLOW.split(
+        "      - name: Black Duck SCA scan", maxsplit=1
+    )[1].split("      - name: Black Duck SCA PR Scan", maxsplit=1)[0]
+    pr_scan_section = BLACKDUCK_SOURCE_SCAN_WORKFLOW.split(
+        "      - name: Black Duck SCA PR Scan", maxsplit=1
+    )[1]
+
+    assert "Export Black Duck CycloneDX SBOM" in full_scan_section
+    assert "id: source-sbom-export" in full_scan_section
+    assert "continue-on-error: true" in full_scan_section
+    assert "export-blackduck-cyclonedx.py" in full_scan_section
+    assert '--project "${DETECT_PROJECT_NAME}"' in full_scan_section
+    assert '--version "${DETECT_PROJECT_VERSION_NAME}"' in full_scan_section
+    assert "--timeout 14400" in full_scan_section
+    assert "steps.black-duck-full-scan.outcome == 'success'" in full_scan_section
+    assert "steps.source-sbom-export.outcome == 'success'" in full_scan_section
+    assert full_scan_section.count("!cancelled()") >= 3
+    assert "Retain Black Duck source CycloneDX SBOM" in full_scan_section
+    assert "blackduck-source-sbom-${{ github.run_id }}" in full_scan_section
+    assert "if-no-files-found: error" in full_scan_section
+    assert "retention-days: 10" in full_scan_section
+    assert "hashFiles('blackduck-results.sarif') != ''" in full_scan_section
+    assert (
+        "blackducksca_reports_sarif_severities: 'Critical,High,Medium,Low'"
+        in full_scan_section
+    )
+    assert "blackducksca_reports_sarif_groupSCAIssues: false" in full_scan_section
+    assert "Retain Black Duck source SARIF" in full_scan_section
+    assert "blackduck-source-sarif-${{ github.run_id }}" in full_scan_section
+    assert "if-no-files-found: warn" in full_scan_section
+    assert "Write Black Duck source scan summary" in full_scan_section
+    assert 'SCAN_STATUS}" == "8"' in full_scan_section
+    assert 'scan_result="policy violation"' in full_scan_section
+    assert "Report Black Duck source policy violation" in full_scan_section
+    assert "Report Black Duck source scan failure" in full_scan_section
+    assert "steps.black-duck-full-scan.outputs.status == '8'" in full_scan_section
+    assert "steps.black-duck-full-scan.outputs.status != '8'" in full_scan_section
+    assert "Export Black Duck CycloneDX SBOM" not in pr_scan_section
+
+
 def test_release_manifest_uses_the_validated_architecture_digests() -> None:
     publish_step = TRUSTED_RELEASE_WORKFLOW.split(
         "- name: Publish multi-architecture release from validated digests",
@@ -306,6 +462,9 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
     attest_image_job = TRUSTED_RELEASE_WORKFLOW.split(
         "  attest-image:", maxsplit=1
     )[1].split("  verify-provenance:", maxsplit=1)[0]
+    verify_attestations_job = TRUSTED_RELEASE_WORKFLOW.split(
+        "  verify-provenance:", maxsplit=1
+    )[1].split("  publish-release:", maxsplit=1)[0]
     assert (
         "IMAGE_FQDN: docker.io/armlimited/arm-mcp"
         in TRUSTED_RELEASE_WORKFLOW
@@ -325,23 +484,31 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
         in TRUSTED_RELEASE_WORKFLOW
     )
     assert "runs-on: ubuntu-24.04" in attest_image_job
+    assert "actions: read" in attest_image_job
     assert "id-token: write" in attest_image_job
     assert "attestations: write" in attest_image_job
     assert "artifact-metadata: write" in attest_image_job
     assert "packages: write" not in attest_image_job
     assert "environment:" not in attest_image_job
-    assert "uses: actions/attest@" in attest_image_job
+    assert attest_image_job.count("uses: actions/attest@") == 3
     assert "subject-name: ${{ env.IMAGE_FQDN }}" in attest_image_job
     assert (
         "subject-digest: ${{ needs.publish-image.outputs.digest }}"
         in attest_image_job
     )
     assert "push-to-registry: true" in attest_image_job
-    assert "Validate attestation output" in attest_image_job
+    assert "Validate attestation outputs" in attest_image_job
+    assert "Attach AMD64 CycloneDX SBOM to the image" in attest_image_job
+    assert "Attach ARM64 CycloneDX SBOM to the image" in attest_image_job
+    assert attest_image_job.count("sbom-path:") == 2
+    assert "steps.sbom-subjects.outputs.amd64_digest" in attest_image_job
+    assert "steps.sbom-subjects.outputs.arm64_digest" in attest_image_job
     assert "verify-provenance:" in TRUSTED_RELEASE_WORKFLOW
     assert "attestations: read" in TRUSTED_RELEASE_WORKFLOW
-    assert TRUSTED_RELEASE_WORKFLOW.count("gh attestation verify") == 2
+    assert TRUSTED_RELEASE_WORKFLOW.count("gh attestation verify") == 3
     assert "--bundle-from-oci" in TRUSTED_RELEASE_WORKFLOW
+    assert "Verify registry-attached architecture SBOMs" in verify_attestations_job
+    assert "--predicate-type https://cyclonedx.org/bom" in verify_attestations_job
     assert (
         "arm/mcp/.github/workflows/trusted-mcp-release.yml"
         in TRUSTED_RELEASE_WORKFLOW
@@ -357,6 +524,7 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
     assert '--repo "${GITHUB_REPOSITORY}"' in publish_release_job
     assert "Immutable digest:" in TRUSTED_RELEASE_WORKFLOW
     assert "verification instructions" in TRUSTED_RELEASE_WORKFLOW
+    assert "SBOM attestations:" in TRUSTED_RELEASE_WORKFLOW
     assert "SLSA Build Level 3:" in TRUSTED_RELEASE_WORKFLOW
     assert (
         "blob/main/docs/provenance-verification.md"
@@ -427,10 +595,11 @@ def test_release_calls_have_distinct_authorization_permissions_and_secrets() -> 
     assert "actions: read" in dry_run_call
     assert "contents: write" in dry_run_call
     assert "packages: read" in dry_run_call
+    assert "security-events: write" in dry_run_call
     assert "id-token: write" in dry_run_call
     assert "attestations: write" in dry_run_call
     assert "artifact-metadata: write" in dry_run_call
-    assert "secrets:" not in dry_run_call
+    assert "BLACKDUCKSCA_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}" in dry_run_call
     for forbidden in (
         "DOCKERHUB_USERNAME",
         "DOCKERHUB_TOKEN",
@@ -453,6 +622,7 @@ def test_release_calls_have_distinct_authorization_permissions_and_secrets() -> 
 
     assert "DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}" in production_call
     assert "DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}" in production_call
+    assert "BLACKDUCKSCA_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}" in production_call
     assert "secrets: inherit" not in IMAGE_WORKFLOW
     assert "secrets: inherit" not in TRUSTED_RELEASE_WORKFLOW
     assert "environment:" not in IMAGE_WORKFLOW
@@ -515,12 +685,11 @@ def test_trusted_release_reauthorizes_the_original_caller_and_fails_closed() -> 
     )[1].split("  record-dry-run:", maxsplit=1)[0]
     assert "- validate-release" in build_job
     assert "- production-gate" in build_job
-    assert (
-        "needs: publish-image"
-        in TRUSTED_RELEASE_WORKFLOW.split("  attest-image:", maxsplit=1)[1].split(
-            "  verify-provenance:", maxsplit=1
-        )[0]
-    )
+    attest_job = TRUSTED_RELEASE_WORKFLOW.split(
+        "  attest-image:", maxsplit=1
+    )[1].split("  verify-provenance:", maxsplit=1)[0]
+    assert "- validate-release" in attest_job
+    assert "- publish-image" in attest_job
     assert (
         "verify-provenance"
         in TRUSTED_RELEASE_WORKFLOW.split("  publish-release:", maxsplit=1)[1]
@@ -528,17 +697,22 @@ def test_trusted_release_reauthorizes_the_original_caller_and_fails_closed() -> 
 
 
 def test_production_release_actions_are_immutably_pinned() -> None:
-    external_actions = re.findall(
+    referenced_actions = re.findall(
         r"^\s*uses:\s+([^\s#]+)", TRUSTED_RELEASE_WORKFLOW, re.MULTILINE
     )
+    external_actions = [
+        action for action in referenced_actions if not action.startswith("./")
+    ]
     assert external_actions
     assert all(
         re.fullmatch(r"[^@]+@[0-9a-f]{40}", action) for action in external_actions
     )
+    assert "./.github/actions/blackduck-image-scan" in referenced_actions
 
 
 def test_codeowners_covers_release_sensitive_workflows_and_inputs() -> None:
     for protected_path in (
+        "/.github/actions/",
         "/.github/workflows/",
         "/.github/scripts/",
         "/mcp-local/Dockerfile ",
@@ -714,6 +888,127 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
     assert "automation/pin-embedding-generator" in TOOLCHAIN_WORKFLOW
     assert "cancel-in-progress: false" in TOOLCHAIN_WORKFLOW
     assert "gh pr merge" not in TOOLCHAIN_WORKFLOW
+    assert "id-token: write" in TOOLCHAIN_WORKFLOW
+    assert "attestations: write" in TOOLCHAIN_WORKFLOW
+    assert "artifact-metadata: write" in TOOLCHAIN_WORKFLOW
+    assert "uses: actions/attest@" in TOOLCHAIN_WORKFLOW
+    assert "subject-name: ${{ env.IMAGE }}" in TOOLCHAIN_WORKFLOW
+    assert "subject-digest: ${{ steps.publish.outputs.digest }}" in TOOLCHAIN_WORKFLOW
+    assert "push-to-registry: true" in TOOLCHAIN_WORKFLOW
+
+
+def test_embedding_toolchain_uses_fixed_python_and_expat_versions() -> None:
+    assert "ARG PYTHON_VERSION=3.13.15" in TOOLCHAIN_DOCKERFILE
+    assert "ARG EXPAT_VERSION=2.8.4" in TOOLCHAIN_DOCKERFILE
+    assert (
+        "ARG EXPAT_SHA256="
+        "b8ece2437692dad44d851c4532723390a5a330990007706be9c8d2b90d294f36"
+        in TOOLCHAIN_DOCKERFILE
+    )
+    assert "assert sys.version_info[:3] == (3, 13, 15)" in TOOLCHAIN_DOCKERFILE
+    assert "assert pyexpat.version_info == (2, 8, 4)" in TOOLCHAIN_DOCKERFILE
+
+
+def test_input_images_export_and_attach_blackduck_cyclonedx_sboms() -> None:
+    assert "id-token: write" in INPUT_WORKFLOW
+    assert "attestations: write" in INPUT_WORKFLOW
+    assert "artifact-metadata: write" in INPUT_WORKFLOW
+    assert "Export Black Duck CycloneDX SBOM" in INPUT_WORKFLOW
+    assert (
+        "BLACKDUCK_PROJECT_VERSION: "
+        "mcp-build-inputs-container-${{ matrix.arch }}-1.0" in INPUT_WORKFLOW
+    )
+    assert "export-blackduck-cyclonedx.py" in INPUT_WORKFLOW
+    assert "--timeout 14400" in INPUT_WORKFLOW
+    assert "Retain Black Duck CycloneDX SBOM" in INPUT_WORKFLOW
+    assert (
+        "mcp-build-inputs-sbom-${{ matrix.arch }}-${{ github.run_id }}"
+        in INPUT_WORKFLOW
+    )
+    assert "if-no-files-found: error" in INPUT_WORKFLOW
+
+    attestation = INPUT_WORKFLOW.split(
+        "Attach Black Duck CycloneDX SBOM to the published input image",
+        maxsplit=1,
+    )[1].split("Validate input-image SBOM attestation", maxsplit=1)[0]
+    assert "if: ${{ env.PUBLISH_IMAGES == 'true' }}" in attestation
+    assert "uses: actions/attest@" in attestation
+    assert "subject-name: ${{ env.IMAGE }}" in attestation
+    assert "subject-digest: ${{ steps.publish.outputs.digest }}" in attestation
+    assert "sbom-path:" in attestation
+    assert "push-to-registry: true" in attestation
+    assert INPUT_WORKFLOW.index(
+        "Secure Container scan architecture input image before publication"
+    ) < INPUT_WORKFLOW.index("Export Black Duck CycloneDX SBOM")
+    assert INPUT_WORKFLOW.index("Export Black Duck CycloneDX SBOM") < (
+        INPUT_WORKFLOW.index("Retain Black Duck CycloneDX SBOM")
+    )
+    assert INPUT_WORKFLOW.index("Verify published image matches scanned candidate") < (
+        INPUT_WORKFLOW.index(
+            "Attach Black Duck CycloneDX SBOM to the published input image"
+        )
+    )
+
+
+def test_embedding_toolchain_exports_and_attaches_blackduck_cyclonedx_sbom() -> None:
+    assert "Export Black Duck CycloneDX SBOM" in TOOLCHAIN_WORKFLOW
+    assert (
+        "BLACKDUCK_PROJECT_VERSION: mcp-embedding-generator-container-1.0"
+        in TOOLCHAIN_WORKFLOW
+    )
+    assert "export-blackduck-cyclonedx.py" in TOOLCHAIN_WORKFLOW
+    assert "--timeout 14400" in TOOLCHAIN_WORKFLOW
+    assert "Retain Black Duck CycloneDX SBOM" in TOOLCHAIN_WORKFLOW
+    assert (
+        "embedding-toolchain-sbom-arm64-${{ github.run_id }}"
+        in TOOLCHAIN_WORKFLOW
+    )
+    assert "if-no-files-found: error" in TOOLCHAIN_WORKFLOW
+
+    attestation = TOOLCHAIN_WORKFLOW.split(
+        "Attach Black Duck CycloneDX SBOM to the published toolchain image",
+        maxsplit=1,
+    )[1].split("Verify published GHCR package is private", maxsplit=1)[0]
+    assert "if: ${{ env.PUBLISH_IMAGE == 'true' }}" in attestation
+    assert "uses: actions/attest@" in attestation
+    assert "subject-name: ${{ env.IMAGE }}" in attestation
+    assert "subject-digest: ${{ steps.publish.outputs.digest }}" in attestation
+    assert "sbom-path:" in attestation
+    assert "push-to-registry: true" in attestation
+    assert TOOLCHAIN_WORKFLOW.index(
+        "Secure Container scan toolchain image before publication"
+    ) < TOOLCHAIN_WORKFLOW.index("Export Black Duck CycloneDX SBOM")
+    assert TOOLCHAIN_WORKFLOW.index("Publish scanned toolchain image") < (
+        TOOLCHAIN_WORKFLOW.index(
+            "Attach Black Duck CycloneDX SBOM to the published toolchain image"
+        )
+    )
+
+
+def test_container_scan_uses_explicit_codeql_sarif_upload() -> None:
+    upload_step = BLACKDUCK_IMAGE_SCAN_ACTION.split(
+        "    - name: Upload Black Duck SARIF", maxsplit=1
+    )[1].split("    - name: Remove Secure Container scan archive", maxsplit=1)[0]
+
+    assert "blackducksca_upload_sarif_report: false" in BLACKDUCK_IMAGE_SCAN_ACTION
+    assert "uses: github/codeql-action/upload-sarif@" in upload_step
+    assert "!cancelled()" in upload_step
+    assert "hashFiles(format(" in upload_step
+    assert "inputs.artifact_suffix" in upload_step
+    assert "!= ''" in upload_step
+    assert "github_token:" not in BLACKDUCK_IMAGE_SCAN_ACTION
+    assert (
+        "blackducksca_scan_failure_severities: 'BLOCKER,CRITICAL'"
+        in BLACKDUCK_IMAGE_SCAN_ACTION
+    )
+    assert "--detect.timeout=14400" in BLACKDUCK_IMAGE_SCAN_ACTION
+    assert "--detect.blackduck.scan.timeout=" not in BLACKDUCK_IMAGE_SCAN_ACTION
+    assert (
+        "--detect.blackduck.scan.wait.for.results.timeout="
+        not in BLACKDUCK_IMAGE_SCAN_ACTION
+    )
+    assert "mark_build_status: 'failure'" in BLACKDUCK_IMAGE_SCAN_ACTION
+    assert "Report Black Duck policy violation" in BLACKDUCK_IMAGE_SCAN_ACTION
 
 
 def test_embedding_toolchain_pin_updater_changes_only_generator_input() -> None:
