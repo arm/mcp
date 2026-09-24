@@ -721,18 +721,23 @@ def processLearningPath(url, type, emit_chunks=True):
                 if not child_title:
                     continue
 
+                child_display_name = "Install Guide - " + child_title
+                child_keywords = [
+                    child_title,
+                    ig_title,
+                    "install",
+                    "build",
+                    "download",
+                ]
                 register_source(
                     site_name="Install Guides",
                     license_type="CC4.0",
-                    display_name="Install Guide - " + child_title,
+                    display_name=child_display_name,
                     url=child_url,
-                    keywords=[
-                        child_title,
-                        ig_title,
-                        "install",
-                        "build",
-                        "download",
-                    ],
+                    keywords=child_keywords,
+                )
+                chunkizeLearningPath(
+                    sub_ig_rel_url, child_display_name, child_keywords
                 )
 
             # If not multi-install (most cases)

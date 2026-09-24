@@ -534,8 +534,8 @@ class TestSourceTracking:
         assert gc.all_sources[0]["display_name"] == "Test Display"
         assert gc.all_sources[0]["keywords"] == "test"
 
-    def test_valid_child_is_added(self, gc, monkeypatch):
-        """A listed child with a valid page is added as its own source."""
+    def test_valid_child_is_added_and_emitted_when_enabled(self, gc, monkeypatch):
+        """A valid child is registered and emitted when chunking is enabled."""
         prefix = "https://learn.arm.com/install-guides/"
         listing_url = "https://learn.arm.com/install-guides"
         docker_url = f"{prefix}docker/"
@@ -556,14 +556,50 @@ class TestSourceTracking:
             "get",
             lambda url, timeout: responses[url],
         )
+        fetched_urls = []
 
-        gc.processLearningPath("/install-guides", "Install Guide", emit_chunks=False)
+        def fake_fetch(url):
+            fetched_urls.append(url)
+            return None
+
+        monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
+
+        gc.processLearningPath("/install-guides", "Install Guide", emit_chunks=True)
 
         child_source = next(
             source for source in gc.all_sources if source["url"] == child_url
         )
         assert child_source["display_name"] == "Install Guide - Docker Engine"
         assert child_source["keywords"].startswith("Docker Engine; Docker;")
+        assert fetched_urls == [
+            "https://raw.githubusercontent.com/ArmDeveloperEcosystem/"
+            "arm-learning-paths/refs/heads/production/content/"
+            "install-guides/docker/docker-engine.md"
+        ]
+
+    def test_invalid_child_titles_are_rejected(self, gc, monkeypatch):
+        """Unavailable or malformed child pages do not produce a title."""
+        child_url = "https://learn.arm.com/install-guides/docker/docker-engine/"
+
+        monkeypatch.setattr(
+            gc.http_session,
+            "get",
+            lambda url, timeout: _html_response("", ok=False, status_code=404),
+        )
+        assert gc.get_install_guide_title(child_url) is None
+
+        def raise_request_exception(url, timeout):
+            raise gc.requests.exceptions.RequestException("network failure")
+
+        monkeypatch.setattr(gc.http_session, "get", raise_request_exception)
+        assert gc.get_install_guide_title(child_url) is None
+
+        monkeypatch.setattr(
+            gc.http_session,
+            "get",
+            lambda url, timeout: _html_response("<html></html>"),
+        )
+        assert gc.get_install_guide_title(child_url) is None
 
     def test_register_source_inserts_after_matching_site_group(self, gc):
         """Test that new sources stay grouped with existing sources from the same site."""
