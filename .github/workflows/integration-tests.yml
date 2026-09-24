@@ -60,6 +60,14 @@ jobs:
           version: "0.10.2"
           enable-cache: false
 
+      - uses: ./.github/actions/setup-mcp-publisher
+
+      - name: Validate MCP Registry metadata
+        run: mcp-publisher validate mcp-local/server.json
+
+      - name: Test MCP Registry publication policy
+        run: python3 -m unittest discover -s tests -p "test_mcp_registry.py"
+
       - name: Run unit tests
         run: |
           uv run --directory mcp-local --locked --only-group test \

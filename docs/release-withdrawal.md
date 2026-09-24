@@ -21,13 +21,17 @@ gh workflow run withdraw-mcp-release.yml \
 
 Before requesting production approval, the workflow validates the versions,
 releases, and image digests and records them in the run summary. After approval,
-it moves `latest` to the fallback image, deletes the version and
+it moves `latest` to the fallback image, hides the withdrawn version in the
+official MCP Registry, deletes the version and
 architecture-specific Docker tags, and marks the fallback GitHub release as
 latest. It retains the Git tag and marks the GitHub release as withdrawn while
 preserving its original notes.
 
 The workflow can be rerun if an earlier attempt only completed some of these
-steps.
+steps. Registry status changes use GitHub OIDC. Versions never published to the
+official registry are skipped. Already-hidden versions are safe to retry.
+Update the separate Docker MCP Catalog entry if it points to the withdrawn
+release; see [catalog maintenance](mcp-catalogs.md).
 
 Leave `main` at the withdrawn version; that version is used and must not be
 republished. Choose the next version according to the reason for the withdrawal.

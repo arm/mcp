@@ -1,0 +1,17 @@
+name: Set up MCP publisher
+description: Install the pinned, checksum-verified official publisher on Linux AMD64
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        install_dir="${RUNNER_TEMP}/mcp-publisher"
+        mkdir -p "${install_dir}"
+        curl --fail --silent --show-error --location --retry 3 \
+          https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz \
+          --output "${install_dir}/publisher.tar.gz"
+        echo 'a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc  publisher.tar.gz' \
+          | (cd "${install_dir}" && sha256sum --check --strict)
+        tar -xzf "${install_dir}/publisher.tar.gz" -C "${install_dir}" mcp-publisher
+        echo "${install_dir}" >> "${GITHUB_PATH}"

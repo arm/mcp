@@ -336,6 +336,12 @@ embedding, use the normal release procedure:
    verifies their provenance, and publishes the image tags and GitHub Release.
 5. Verify the release using the digest and commit recorded in the GitHub Release
    and the [provenance verification guide](docs/provenance-verification.md).
+6. Complete the production approval for **Publish MCP Registry** and verify its
+   successful publication summary. Registry publication uses the manifest from
+   the exact released commit and does not rebuild the image.
+7. Complete the [catalog update checklist](docs/mcp-catalogs.md), including the
+   separate Docker MCP Catalog update. Track an outstanding upstream review;
+   image publication alone does not complete catalog maintenance.
 
 For a dry run, start **Build MCP Image** with `release_action=dry-run`. Confirm
 that both architectures and both runtime-egress checks pass, and that the

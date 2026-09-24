@@ -839,3 +839,18 @@ jobs:
             --notes-file "${notes_file}" \
             "${amd64_sbom}#CycloneDX SBOM (AMD64)" \
             "${arm64_sbom}#CycloneDX SBOM (Arm64)"
+
+  publish-mcp-registry:
+    needs:
+      - validate-release
+      - publish-release
+    if: ${{ needs.publish-release.result == 'success' && needs.validate-release.outputs.mode == 'production' }}
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
+      id-token: write
+    uses: ./.github/workflows/publish-mcp-registry.yml
+    with:
+      version: ${{ needs.validate-release.outputs.version }}
+      source_sha: ${{ needs.validate-release.outputs.source_sha }}

@@ -102,7 +102,15 @@ jobs:
     environment: production
     permissions:
       contents: write
+      id-token: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-mcp-publisher
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
 
@@ -125,6 +133,13 @@ jobs:
             docker buildx imagetools inspect "${IMAGE_FQDN}:latest" \
               --format '{{json .Manifest}}' | jq -er '.digest'
           )" = "${RESTORE_DIGEST}"
+
+      - name: Withdraw official MCP Registry version
+        env:
+          WITHDRAW_VERSION: ${{ inputs.withdraw_version }}
+        run: |
+          mcp-publisher login github-oidc
+          python3 .github/scripts/mcp_registry.py withdraw --version "${WITHDRAW_VERSION}"
 
       - name: Delete withdrawn Docker tags
         shell: bash
