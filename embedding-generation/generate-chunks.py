@@ -173,6 +173,23 @@ def register_source(
     return True
 
 
+def get_install_guide_title(url):
+    """Return the title for a valid install-guide page, otherwise None."""
+    try:
+        response = http_session.get(url, timeout=60)
+    except requests.exceptions.RequestException as err:
+        print(f"[INSTALL GUIDE FETCH FAILED] {url}: {err}")
+        return None
+
+    if not response.ok:
+        return None
+
+    title = BeautifulSoup(response.text, "html.parser").find(
+        id="ads-masthead-title"
+    )
+    return title.get_text(strip=True) if title else None
+
+
 def save_sources_csv(csv_file):
     """
     Write all sources (existing + new) to vector-db-sources.csv.
@@ -695,21 +712,31 @@ def processLearningPath(url, type, emit_chunks=True):
 
             # Processing to check for multi-install
             multi_install_guides = ig_soup.find_all(class_="multi-install-card")
-            if multi_install_guides:
-                for guide in multi_install_guides:
-                    # Extend keywords
-                    keywords.append(
-                        guide.find(class_="multi-tool-selection-title").get_text(
-                            strip=True
-                        )
-                    )
+            for guide in multi_install_guides:
+                sub_ig_rel_url = guide.get("link")
+                if not sub_ig_rel_url:
+                    continue
+                child_url = site_link + sub_ig_rel_url
+                child_title = get_install_guide_title(child_url)
+                if not child_title:
+                    continue
 
-                for guide in multi_install_guides:
-                    sub_ig_rel_url = guide.get("link")
+                register_source(
+                    site_name="Install Guides",
+                    license_type="CC4.0",
+                    display_name="Install Guide - " + child_title,
+                    url=child_url,
+                    keywords=[
+                        child_title,
+                        ig_title,
+                        "install",
+                        "build",
+                        "download",
+                    ],
+                )
 
-                    chunkizeLearningPath(sub_ig_rel_url, title, keywords)
             # If not multi-install (most cases)
-            else:
+            if not multi_install_guides:
                 chunkizeLearningPath(ig_rel_url, title, keywords)
 
 
@@ -1219,6 +1246,10 @@ def main():
 
         # b) Ecosystem Dashboard
         createEcosystemDashboardChunks(emit_chunks=False)
+
+        # Persist discovery before chunking so newly registered sources are
+        # included in this acquisition run rather than the next one.
+        save_sources_csv(sources_file)
 
     # c) Intrinsics
     # createIntrinsicsDatabaseChunks()

@@ -50,6 +50,22 @@ def _fixture_bytes(name):
     return (FIXTURE_DIR / name).read_bytes()
 
 
+def _html_response(html, ok=True, status_code=200):
+    return SimpleNamespace(
+        ok=ok,
+        status_code=status_code,
+        text=html,
+        content=html.encode("utf-8"),
+    )
+
+
+def _install_listing(urls):
+    return "".join(
+        f'<div class="tool-card" link="{urlparse(url).path}"></div>'
+        for url in sorted(urls)
+    )
+
+
 class TestChunkClass:
     """Tests for the Chunk class."""
 
@@ -514,6 +530,40 @@ class TestSourceTracking:
 
         assert result is False
         assert len(gc.all_sources) == 1
+        assert gc.all_sources[0]["site_name"] == "Test Site"
+        assert gc.all_sources[0]["display_name"] == "Test Display"
+        assert gc.all_sources[0]["keywords"] == "test"
+
+    def test_valid_child_is_added(self, gc, monkeypatch):
+        """A listed child with a valid page is added as its own source."""
+        prefix = "https://learn.arm.com/install-guides/"
+        listing_url = "https://learn.arm.com/install-guides"
+        docker_url = f"{prefix}docker/"
+        child_url = f"{docker_url}docker-engine/"
+        responses = {
+            listing_url: _html_response(_install_listing({docker_url})),
+            docker_url: _html_response(
+                '<h1 id="install-guide-title">Docker</h1>'
+                '<div class="multi-install-card" '
+                'link="/install-guides/docker/docker-engine/"></div>'
+            ),
+            child_url: _html_response(
+                '<h1 id="ads-masthead-title"><span>Docker Engine</span></h1>'
+            ),
+        }
+        monkeypatch.setattr(
+            gc.http_session,
+            "get",
+            lambda url, timeout: responses[url],
+        )
+
+        gc.processLearningPath("/install-guides", "Install Guide", emit_chunks=False)
+
+        child_source = next(
+            source for source in gc.all_sources if source["url"] == child_url
+        )
+        assert child_source["display_name"] == "Install Guide - Docker Engine"
+        assert child_source["keywords"].startswith("Docker Engine; Docker;")
 
     def test_register_source_inserts_after_matching_site_group(self, gc):
         """Test that new sources stay grouped with existing sources from the same site."""
