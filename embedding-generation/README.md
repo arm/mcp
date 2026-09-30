@@ -142,3 +142,44 @@ uv run --locked pytest
 ```
 
 To check a new document, add or update a question in `eval_questions.json` with the document URL in `expected_urls`, then run the wrapper. Review `Hit@1`, `Hit@3`, `Hit@5`, `MRR`, and any printed misses before committing the CSV change.
+
+## Ecosystem Dashboard adapter
+
+`ecosystem_dashboard.py` converts Linux and Windows on Arm dashboard Markdown
+into documents for the shared chunker. It does not fetch files: the caller supplies
+the Markdown text, platform (`linux` or `windows`) from the source directory,
+public dashboard package URL, and commit-pinned Markdown source URL. Production
+ingestion still uses HTML until acquisition is connected in a follow-up change:
+
+```python
+from ecosystem_dashboard import parse_ecosystem_package
+from document_chunking import chunk_parsed_document
+
+parsed = parse_ecosystem_package(
+    markdown_text,
+    platform="linux",  # Use "windows" for content/windows/ packages.
+    source_url=dashboard_package_url,
+    resolved_url=raw_markdown_url,
+)
+chunks = chunk_parsed_document(parsed, "Ecosystem Dashboard", keywords)
+```
+
+The adapter puts name, platform context, description, category, and vendor first,
+followed by support status, minimum/recommended versions and dates, recommendation
+rationale, caveats, alternatives, and labeled resource links. Markdown body content
+uses the shared parser. Relative links resolve against the source file, while all
+chunks retain the dashboard URL without source-only heading fragments.
+
+Missing optional values are omitted; missing support is unknown, not unsupported.
+Version spelling is preserved (`3.10` stays `3.10`). Invalid frontmatter, missing
+names, or invalid types in consumed fields raise `ValueError` with the source URL.
+Maintenance fields under `optional_hidden_info` and unrecognized fields are not
+included. Tests use pinned source fixtures and synthetic edge cases offline.
+
+The output schema is unchanged. Explicitly empty `product` and `version` suppress
+heuristic inference: product taxonomy is not yet agreed, and minimum/recommended
+versions are separate facts in the content. Other parsers retain inference unless
+they provide explicit values. Keyword discovery, GitHub acquisition, URL/slug
+mapping, platform/edition metadata propagation, and switching production ingestion
+are left to the integration change. `doc_type` remains `Ecosystem Dashboard` for
+both platforms; this adapter does not implement filtering or catalog deduplication.

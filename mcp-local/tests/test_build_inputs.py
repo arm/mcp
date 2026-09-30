@@ -876,6 +876,7 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
         "Dockerfile.toolchain",
         "acquire-model.py",
         "document_chunking.py",
+        "ecosystem_dashboard.py",
         "embedding-model.lock.json",
         "generate-chunks.py",
         "local_vectorstore_creation.py",

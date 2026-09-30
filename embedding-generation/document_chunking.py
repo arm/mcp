@@ -87,6 +87,9 @@ class ParsedDocument:
     display_title: str
     content_type: str
     sections: list[Section]
+    # None permits inference; an empty string explicitly suppresses it.
+    product: str | None = None
+    version: str | None = None
 
 
 def normalize_source_url(url: str) -> str:
@@ -296,13 +299,19 @@ def is_boilerplate_line(line: str) -> bool:
     return any(pattern.match(line) for pattern in BOILERPLATE_LINE_PATTERNS)
 
 
-def strip_frontmatter(markdown: str) -> str:
+def split_frontmatter(markdown: str) -> tuple[str | None, str]:
+    """Separate YAML text from the body without interpreting source metadata."""
     markdown = markdown.lstrip("\ufeff")
-    if markdown.startswith("---"):
-        end = markdown.find("\n---", 3)
-        if end != -1:
-            return markdown[end + 4 :].lstrip()
-    return markdown
+    match = re.match(
+        r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|$)", markdown, re.DOTALL
+    )
+    if match:
+        return match.group(1), markdown[match.end() :].lstrip()
+    return None, markdown
+
+
+def strip_frontmatter(markdown: str) -> str:
+    return split_frontmatter(markdown)[1]
 
 
 def normalize_heading_path(title: str, heading_path: list[str]) -> list[str]:
@@ -1111,11 +1120,17 @@ def chunk_parsed_document(
     overlap_tokens: int = 50,
 ) -> list[dict[str, str]]:
     chunks: list[dict[str, str]] = []
-    product = derive_product(
-        parsed_document.display_title, parsed_document.source_url, doc_type, keywords
+    product = (
+        parsed_document.product
+        if parsed_document.product is not None
+        else derive_product(
+            parsed_document.display_title, parsed_document.source_url, doc_type, keywords
+        )
     )
-    version = derive_version(
-        parsed_document.display_title, parsed_document.resolved_url
+    version = (
+        parsed_document.version
+        if parsed_document.version is not None
+        else derive_version(parsed_document.display_title, parsed_document.resolved_url)
     )
     for section in parsed_document.sections:
         heading_path = normalize_heading_path(
