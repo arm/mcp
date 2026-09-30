@@ -39,6 +39,20 @@ jobs:
       DETECT_PROJECT_VERSION_NAME: "mcp-source-1.0"
 
     steps:
+      - name: Require an internal promotion for fork pull requests
+        if: >-
+          ${{
+            github.event_name == 'pull_request'
+            && github.event.pull_request.head.repo.full_name != github.repository
+          }}
+        run: |
+          message="Fork pull requests cannot run credentialed Black Duck checks. "
+          message+="Use the Promote reviewed fork pull request workflow, then "
+          message+="review and merge the internal pull request it creates. "
+          message+="Do not merge this source pull request."
+          echo "::error title=Merge the promoted internal pull request::${message}"
+          exit 1
+
       - name: Checkout source
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       
@@ -181,7 +195,11 @@ jobs:
           
       - name: Black Duck SCA PR Scan
         id: black-duck-pr-scan
-        if: ${{ github.event_name == 'pull_request' }}
+        if: >-
+          ${{
+            github.event_name == 'pull_request'
+            && github.event.pull_request.head.repo.full_name == github.repository
+          }}
         uses: blackduck-inc/black-duck-security-scan@152247222aa9cd38124acd5c0cf60f4db71adc3f # v2.11.0
         with:
           blackducksca_url: ${{ vars.BLACKDUCKSCA_URL }}

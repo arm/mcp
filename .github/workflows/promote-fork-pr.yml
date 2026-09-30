@@ -1,0 +1,83 @@
+name: Promote reviewed fork pull request
+
+run-name: >-
+  Promote fork PR #${{
+    github.event.pull_request.number || inputs.pull_request_number
+  }}
+
+on:
+  # This privileged workflow always uses its definition and helper from main.
+  # It never checks out or executes the fork's contents.
+  pull_request_target:
+    branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pull_request_number:
+        description: Fork pull request number reviewed by a maintainer
+        required: true
+        type: number
+      reviewed_sha:
+        description: Full fork head SHA that the maintainer reviewed
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: >-
+    promote-fork-pr-${{
+      github.event.pull_request.number || inputs.pull_request_number
+    }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: >-
+      ${{
+        github.repository == 'arm/mcp'
+        && (
+          github.event_name == 'workflow_dispatch'
+          || !github.event.pull_request.draft
+        )
+        && (
+          github.event_name == 'workflow_dispatch'
+          || github.event.pull_request.head.repo.full_name != github.repository
+        )
+      }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted promotion helper
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Create least-privilege promotion token
+        id: promotion-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.FORK_PROMOTION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.FORK_PROMOTION_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-metadata: read
+          permission-pull-requests: write
+          # Required when the reviewed commit changes a workflow file.
+          permission-workflows: write
+
+      - name: Promote exact reviewed fork revision
+        env:
+          GH_TOKEN: ${{ steps.promotion-token.outputs.token }}
+          PROMOTION_MODE: ${{ github.event_name == 'workflow_dispatch' && 'manual' || 'auto' }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || inputs.pull_request_number }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || inputs.reviewed_sha }}
+          PROMOTED_BY: ${{ github.actor }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/promote-fork-pr.py \
+            --mode "${PROMOTION_MODE}" \
+            --pull-number "${PULL_REQUEST_NUMBER}" \
+            --expected-sha "${EXPECTED_SHA}" \
+            --actor "${PROMOTED_BY}"
