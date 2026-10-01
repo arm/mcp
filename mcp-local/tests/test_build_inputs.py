@@ -505,7 +505,7 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
     assert "steps.sbom-subjects.outputs.arm64_digest" in attest_image_job
     assert "verify-provenance:" in TRUSTED_RELEASE_WORKFLOW
     assert "attestations: read" in TRUSTED_RELEASE_WORKFLOW
-    assert TRUSTED_RELEASE_WORKFLOW.count("gh attestation verify") == 3
+    assert verify_attestations_job.count("gh attestation verify") == 3
     assert "--bundle-from-oci" in TRUSTED_RELEASE_WORKFLOW
     assert "Verify registry-attached architecture SBOMs" in verify_attestations_job
     assert "--predicate-type https://cyclonedx.org/bom" in verify_attestations_job
