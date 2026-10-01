@@ -204,13 +204,57 @@ def test_closing_source_pr_uses_the_pull_request_endpoint() -> None:
         def __init__(self) -> None:
             self.request: tuple[str, dict] | None = None
 
+        def get(self, path: str) -> dict:
+            assert path == "/repos/arm/mcp/pulls/185"
+            return source_pr()
+
         def patch(self, path: str, payload: dict) -> None:
             self.request = (path, payload)
 
     api = RecordingApi()
-    PROMOTION.close_source_pr(api, "arm/mcp", 185)
+    assert PROMOTION.close_source_pr(api, "arm/mcp", 185, SHA)
 
     assert api.request == ("/repos/arm/mcp/pulls/185", {"state": "closed"})
+
+
+def test_source_pr_remains_open_when_a_new_revision_arrives() -> None:
+    class UpdatedSourceApi:
+        def get(self, _path: str) -> dict:
+            return source_pr(sha="b" * 40)
+
+        def patch(self, _path: str, _payload: dict) -> None:
+            pytest.fail("an updated source pull request must not be closed")
+
+    assert not PROMOTION.close_source_pr(UpdatedSourceApi(), "arm/mcp", 185, SHA)
+
+
+@pytest.mark.parametrize(
+    "file",
+    [
+        {"filename": ".github/workflows/untrusted.yml"},
+        {
+            "filename": "docs/renamed-workflow.yml",
+            "previous_filename": ".github/workflows/untrusted.yml",
+        },
+    ],
+)
+def test_workflow_file_changes_are_rejected(file: dict) -> None:
+    class FilesApi:
+        def get(self, path: str, query: dict) -> list[dict]:
+            assert path == "/repos/arm/mcp/pulls/185/files"
+            assert query == {"per_page": 100, "page": 1}
+            return [file]
+
+    with pytest.raises(RuntimeError, match="privileged workflow files"):
+        PROMOTION.ensure_no_workflow_file_changes(FilesApi(), "arm/mcp", 185)
+
+
+def test_non_workflow_file_changes_can_be_promoted() -> None:
+    class FilesApi:
+        def get(self, _path: str, _query: dict) -> list[dict]:
+            return [{"filename": "src/example.py"}]
+
+    PROMOTION.ensure_no_workflow_file_changes(FilesApi(), "arm/mcp", 185)
 
 
 @pytest.mark.parametrize("mode", ["auto", "manual"])
@@ -232,6 +276,9 @@ def test_source_pr_is_closed_after_internal_pr_is_created(
     )
     monkeypatch.setattr(PROMOTION, "GitHubApi", lambda *_args: SourceApi())
     monkeypatch.setattr(PROMOTION, "collaborator_permission", lambda *_args: "write")
+    monkeypatch.setattr(
+        PROMOTION, "ensure_no_workflow_file_changes", lambda *_args: None
+    )
     monkeypatch.setattr(
         PROMOTION, "ensure_ref", lambda *_args: calls.append("ensure-ref")
     )

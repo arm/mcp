@@ -32,6 +32,7 @@ from urllib.request import Request, urlopen
 ALLOWED_REPOSITORY = "arm/mcp"
 BASE_BRANCH = "main"
 TRUSTED_PERMISSIONS = {"write", "maintain", "admin"}
+WORKFLOW_DIRECTORY = ".github/workflows/"
 SHA_PATTERN = re.compile(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}")
 LOGIN_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?")
 
@@ -181,7 +182,7 @@ def ensure_ref(api: GitHubApi, repository: str, branch: str, sha: str) -> None:
         existing_sha = str((existing.get("object") or {}).get("sha", ""))
         if existing_sha != sha:
             raise RuntimeError(
-                f"existing immutable promotion branch {branch} points to "
+                f"existing promotion branch {branch} points to "
                 f"{existing_sha}, not {sha}"
             )
         return
@@ -192,7 +193,7 @@ def ensure_ref(api: GitHubApi, repository: str, branch: str, sha: str) -> None:
             {"ref": f"refs/heads/{branch}", "sha": sha},
         )
     except ApiError as error:
-        # A concurrent run may have created the same immutable ref.
+        # A concurrent run may have created the same SHA-addressed ref.
         if error.status != 422:
             raise
         existing = api.get(ref_path)
@@ -212,6 +213,31 @@ def paginated_get(
         if len(batch) < 100:
             return items
         page += 1
+
+
+def ensure_no_workflow_file_changes(
+    api: GitHubApi, repository: str, pull_number: int
+) -> None:
+    files = paginated_get(
+        api,
+        f"/repos/{repository}/pulls/{pull_number}/files",
+        {},
+    )
+    workflow_paths = sorted(
+        {
+            path
+            for file in files
+            for path in (file.get("filename"), file.get("previous_filename"))
+            if isinstance(path, str) and path.startswith(WORKFLOW_DIRECTORY)
+        }
+    )
+    if workflow_paths:
+        paths = ", ".join(workflow_paths)
+        raise RuntimeError(
+            f"pull request #{pull_number} changes privileged workflow files: "
+            f"{paths}. Workflow changes from forks must be recreated on a "
+            "trusted internal branch"
+        )
 
 
 def find_internal_pr(
@@ -262,8 +288,9 @@ def create_internal_pr(
             f"- Promotion mode: `{mode}`",
             f"- Promoted by: `@{actor}`",
             "",
-            "The internal branch is immutable. A changed fork head requires a "
-            "new promotion.",
+            "The required Black Duck guard accepts this branch only while its "
+            "head remains at the reviewed commit. A changed fork head requires "
+            "a new promotion.",
         ]
     )
     return api.post(
@@ -308,12 +335,20 @@ def comment_on_source_pr(
 
 
 def close_source_pr(
-    api: GitHubApi, repository: str, source_pull_number: int
-) -> None:
+    api: GitHubApi,
+    repository: str,
+    source_pull_number: int,
+    source_sha: str,
+) -> bool:
+    latest = api.get(f"/repos/{repository}/pulls/{source_pull_number}")
+    latest_sha = str(((latest.get("head") or {}).get("sha", ""))).lower()
+    if latest.get("state") != "open" or latest_sha != source_sha.lower():
+        return False
     api.patch(
         f"/repos/{repository}/pulls/{source_pull_number}",
         {"state": "closed"},
     )
+    return True
 
 
 def write_output(name: str, value: str) -> None:
@@ -389,6 +424,7 @@ def main() -> int:
                 f"manual promoter @{args.actor} does not have write-level access"
             )
 
+    ensure_no_workflow_file_changes(api, repository, args.pull_number)
     branch = promotion_branch(
         args.mode, source["author"], args.pull_number, source["sha"]
     )
@@ -410,7 +446,9 @@ def main() -> int:
         source["sha"],
         internal_url,
     )
-    close_source_pr(api, repository, args.pull_number)
+    source_closed = close_source_pr(
+        api, repository, args.pull_number, source["sha"]
+    )
 
     write_output("promoted", "true")
     write_output("branch", branch)
@@ -424,6 +462,12 @@ def main() -> int:
             f"- Internal branch: `{branch}`",
             f"- Internal pull request: {internal_url}",
             f"- Mode: `{args.mode}`",
+            "- Source pull request: "
+            + (
+                "`closed`"
+                if source_closed
+                else "`left open because its state or head changed`"
+            ),
         ]
     )
     return 0

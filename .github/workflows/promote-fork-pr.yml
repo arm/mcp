@@ -64,8 +64,6 @@ jobs:
           permission-contents: write
           permission-metadata: read
           permission-pull-requests: write
-          # Required when the reviewed commit changes a workflow file.
-          permission-workflows: write
 
       - name: Promote exact reviewed fork revision
         env:

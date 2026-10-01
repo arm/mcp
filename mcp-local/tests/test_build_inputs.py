@@ -433,8 +433,10 @@ def test_fork_pr_promotion_keeps_credentials_away_from_fork_code() -> None:
     assert "actions/create-github-app-token@" in FORK_PROMOTION_WORKFLOW
     assert "permission-contents: write" in FORK_PROMOTION_WORKFLOW
     assert "permission-pull-requests: write" in FORK_PROMOTION_WORKFLOW
+    assert "permission-workflows:" not in FORK_PROMOTION_WORKFLOW
     assert "FORK_PROMOTION_APP_PRIVATE_KEY" in FORK_PROMOTION_WORKFLOW
     assert "actions/checkout" not in FORK_PROMOTION_SCRIPT
+    assert 'WORKFLOW_DIRECTORY = ".github/workflows/"' in FORK_PROMOTION_SCRIPT
     assert "external-contributions/pr-" in FORK_PROMOTION_SCRIPT
     assert "trusted-fork-{username}/pr-" in FORK_PROMOTION_SCRIPT
     assert "gh pr merge" not in FORK_PROMOTION_WORKFLOW
@@ -450,6 +452,17 @@ def test_fork_pr_promotion_keeps_credentials_away_from_fork_code() -> None:
     )
     assert "Do not merge this source pull request" in fork_guard
     assert "exit 1" in fork_guard
+
+    pin_guard = BLACKDUCK_SOURCE_SCAN_WORKFLOW.split(
+        "      - name: Verify promoted branch remains pinned to its reviewed commit",
+        maxsplit=1,
+    )[1].split("      - name: Checkout source", maxsplit=1)[0]
+    assert "external-contributions/" in pin_guard
+    assert "trusted-fork-" in pin_guard
+    assert 'expected_sha="${PROMOTED_REF##*-}"' in pin_guard
+    assert '"${ACTUAL_SHA,,}" != "${expected_sha,,}"' in pin_guard
+    assert "Promoted branch moved" in pin_guard
+    assert "exit 1" in pin_guard
 
     pr_scan_section = BLACKDUCK_SOURCE_SCAN_WORKFLOW.split(
         "      - name: Black Duck SCA PR Scan", maxsplit=1
