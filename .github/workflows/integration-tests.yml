@@ -66,7 +66,8 @@ jobs:
             pytest -q \
             tests/test_build_inputs.py \
             tests/test_invocation_logger.py \
-            tests/test_release_withdrawal.py
+            tests/test_release_withdrawal.py \
+            tests/test_server_skills.py
 
   integration-tests:
     strategy:
@@ -95,6 +96,8 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+        with:
+          driver: docker
 
       - name: Log in to GHCR for locked build inputs
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
@@ -103,16 +106,29 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
+      # Acquire the branch's dependency graph separately from the offline final
+      # build. Release builds still consume only reviewed, digest-pinned bundles.
+      - name: Acquire branch build inputs
+        run: |
+          uv run --directory mcp-local --locked --only-group acquisition \
+            python scripts/stage-build-inputs.py --arch ${{ matrix.platform == 'linux/arm64' && 'arm64' || 'amd64' }}
+
+      - name: Build branch input bundle
+        run: |
+          docker buildx build \
+            --platform ${{ matrix.platform }} --network none \
+            -f mcp-local/Dockerfile.inputs -t arm-mcp-inputs:test \
+            --load mcp-local
+
       - name: Build MCP Docker image
         run: |
           docker buildx build \
             --platform ${{ matrix.platform }} \
             --network none \
             -f mcp-local/Dockerfile \
+            --build-arg MCP_BUILD_INPUTS_IMAGE=arm-mcp-inputs:test \
             -t arm-mcp:latest \
             --output type=docker \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
             .
 
       - name: Run integration tests

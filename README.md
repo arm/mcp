@@ -3,7 +3,7 @@
 
 # Arm MCP Server
 
-An [MCP](https://modelcontextprotocol.io/) server providing AI assistants with tools and knowledge for Arm architecture development, migration, and optimization.
+An [MCP](https://modelcontextprotocol.io/) server providing Arm knowledge-base search and skills for command-line development, migration, and optimization.
 
 ## Using the Arm MCP Server
 
@@ -13,12 +13,23 @@ If your goal is to migrate an application from x86 to Arm as quickly as possible
 
 ## Features
 
-This MCP server equips AI assistants with specialized tools for Arm development:
+The server exposes one MCP tool, **`knowledge_base_search`**, for semantic search
+across Arm documentation, learning resources, intrinsics, and software compatibility.
 
-- **Knowledge Base Search**: Semantic search across Arm documentation, learning resources, intrinsics, and software compatibility information
-- **Code Migration Analysis**: Scan codebases for Arm compatibility using [migrate-ease](https://github.com/migrate-ease/migrate-ease) (supports C++, Python, Go, JavaScript, Java)
-- **Container Architecture Inspection**: Check Docker image architecture support using integrated [Skopeo](https://github.com/containers/skopeo) and check-image tools.
-- **Assembly Performance Analysis**: Analyze assembly code performance using LLVM-MCA
+Three bundled Agent Skills guide the assistant in running commands through its
+own shell:
+
+| Skill | CLI workflow | Replaces MCP tools |
+| --- | --- | --- |
+| `arm-container-inspect` | Skopeo or Docker Buildx image/platform inspection | `check_image`, `skopeo` |
+| `arm-migration-scan` | migrate-ease scans for C/C++, Python, Go, JavaScript, Java | `migrate_ease_scan` |
+| `arm-assembly-analyze` | LLVM MCA assembly throughput/resource analysis | `mca` |
+
+Skills are served as standard MCP resources (`skill://<name>/SKILL.md`) with
+file manifests and as same-named MCP prompts. See
+[skill delivery and client compatibility](docs/skills.md) for loading them or
+installing them locally. The Docker image retains the CLI binaries; the skills
+show how to invoke them with `docker run --entrypoint` without starting the server.
 
 ## Pre-Built Image
 
@@ -28,6 +39,7 @@ If you would prefer to use a pre-built, multi-arch image, the official image can
 
 - Docker with Buildx support
 - An MCP-compatible AI assistant client (e.g. GitHub Copilot, Kiro CLI, Codex CLI, Claude Code, etc)
+- Client-side shell/terminal access for the CLI skills; knowledge-base search does not require it
 
 ## Quick Start
 
@@ -40,7 +52,8 @@ docker buildx build -f mcp-local/Dockerfile -t armlimited/arm-mcp . --load
 ```
 
 This builds for the Docker host's native architecture. The release workflow is
-responsible for explicit multi-architecture builds.
+responsible for explicit multi-architecture builds. If dependencies changed and
+the pinned input bundle is stale, follow the [branch build instructions](CONTRIBUTING.md#building-with-changed-python-dependencies) first.
 
 ### 2. Configure Your MCP Client
 
@@ -120,7 +133,7 @@ Add to `~/.kiro/settings/mcp.json`:
 
 #### Gemini CLI
 
-It is recommended to use a project-local configuration file to ensure the relevant workspace is mounted.
+A project-local configuration file can keep invocation logs with the project.
 
 Add to `.gemini/settings.json` in your project root:
 
@@ -157,7 +170,9 @@ args = [
 ]
 ```
 
-**Note**: Replace `/path/to/your/workspace` with the actual path to your project directory that you want the MCP server to access.
+**Note**: The `/workspace` mount is optional and used for invocation/error logs.
+Knowledge-base search and skill delivery do not read project source. CLI scans
+use a separate shell invocation and workspace mount as shown in each skill.
 
 ### 3. Restart Your MCP Client
 
@@ -196,7 +211,8 @@ docker run --rm -it --entrypoint /bin/bash armlimited/arm-mcp
 
 ### Common Issues
 
-- **Timeout errors during migration scans**: Increase the `timeout` value in your MCP client configuration (e.g., `"timeout": 120000` for 2 minutes)
+- **Timeout errors during migration scans**: Increase the client shell command timeout; scans no longer run as MCP tool calls.
+- **Removed tool errors**: Reload the server tool list and use the corresponding skill resource or prompt.
 - **Empty workspace**: Ensure your volume mount path is correct and the directory exists
 - **Architecture mismatches**: Confirm that the local image matches the Docker host's native architecture; use the release workflow for explicit cross-platform builds.
 

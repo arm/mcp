@@ -10,3 +10,7 @@
 !mcp-local/utils/**
 !arm_kb_search/
 !arm_kb_search/**
+!mcp-local/skill_catalog.py
+!mcp-local/skills/
+!mcp-local/skills/**
+!mcp-local/uv.lock

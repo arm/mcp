@@ -171,8 +171,8 @@ def test_dockerfile_consumes_only_staged_third_party_inputs() -> None:
 
 
 def test_final_builds_do_not_acquire_inputs_live() -> None:
+    assert "stage-build-inputs.py" not in TRUSTED_RELEASE_WORKFLOW
     for workflow in (TRUSTED_RELEASE_WORKFLOW, INTEGRATION_WORKFLOW):
-        assert "stage-build-inputs.py" not in workflow
         assert "packages: read" in workflow
         assert "Log in to GHCR for locked build inputs" in workflow
     assert "python -m pip install --upgrade pip" not in INTEGRATION_WORKFLOW

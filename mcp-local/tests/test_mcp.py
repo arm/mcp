@@ -15,6 +15,7 @@
 import json
 import constants
 import os
+import subprocess
 import time
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
@@ -114,7 +115,7 @@ def test_mcp_stdio_transport_responds(platform):
     with (
         DockerContainer(image)
         .with_volume_mapping(str(repo_root), "/workspace")
-        .with_kwargs(stdin_open=True, tty=False)
+        .with_kwargs(stdin_open=True, tty=False, network_mode="none")
     ) as container:
         wait_for_logs(container, "Starting MCP server", timeout=60)
         socket_wrapper = container.get_wrapped_container().attach_socket(
@@ -131,7 +132,7 @@ def test_mcp_stdio_transport_responds(platform):
         assert "result" in response, "Test Failed: MCP initialize response missing result field."
         assert "serverInfo" in response["result"], "Test Failed: MCP initialize response missing serverInfo field."
         raw_socket.sendall(
-            _encode_mcp_message({"jsonrpc": "2.0", "method": "initialized", "params": {}})
+            _encode_mcp_message({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
         )
 
         def _read_response(expected_id: int, timeout: float = 10.0) -> dict:
@@ -149,8 +150,7 @@ def test_mcp_stdio_transport_responds(platform):
         )
         tools = _read_response(8)["result"]["tools"]
         tool_names = {tool["name"] for tool in tools}
-        assert "apx_recipe_run" not in tool_names
-        assert "sysreport_instructions" not in tool_names
+        assert tool_names == {"knowledge_base_search"}
         knowledge_search = next(
             tool for tool in tools if tool["name"] == "knowledge_base_search"
         )
@@ -167,20 +167,31 @@ def test_mcp_stdio_transport_responds(platform):
 
         print("\n***Test Passed: arm-mcp container initialized and ran successfully")
 
-        #Check Image Tool Test
-        raw_socket.sendall(_encode_mcp_message(constants.CHECK_IMAGE_REQUEST))
-        check_image_response = _read_response(2, timeout=60)
-        assert check_image_response.get("result")["structuredContent"] == constants.EXPECTED_CHECK_IMAGE_RESPONSE, "Test Failed: MCP check_image tool failed: content mismatch. Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_IMAGE_RESPONSE,indent=2), json.dumps(check_image_response.get("result")["structuredContent"],indent=2))
-        print("\n***Test Passed: MCP check_image tool succeeded")
-
-        #Check Skopeo Tool Test
-        raw_socket.sendall(_encode_mcp_message(constants.CHECK_SKOPEO_REQUEST))
-        check_skopeo_response = _read_response(3, timeout=60)
-        actual_os = json.loads(check_skopeo_response.get("result")["structuredContent"]["stdout"]).get("Os")
-        actual_status = check_skopeo_response.get("result")["structuredContent"].get("status")
-        assert actual_os == json.loads(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["stdout"]).get("Os"), "Test Failed: MCP check_skopeo tool failed: Os mismatch. Expected: {}, Received: {}".format(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["Os"], actual_os)
-        assert actual_status == constants.EXPECTED_CHECK_SKOPEO_RESPONSE["status"], "Test Failed: MCP check_skopeo tool failed: Status mismatch. Expected: {}, Received: {}".format(constants.EXPECTED_CHECK_SKOPEO_RESPONSE["status"], actual_status)
-        print("\n***Test Passed: MCP check_skopeo tool succeeded")
+        # Skills are available through both standard resource and prompt APIs.
+        raw_socket.sendall(_encode_mcp_message(
+            {"jsonrpc": "2.0", "id": 9, "method": "resources/list", "params": {}}
+        ))
+        resources = _read_response(9)["result"]["resources"]
+        skill_uris = {r["uri"] for r in resources if r["uri"].endswith("/SKILL.md")}
+        names = {"arm-container-inspect", "arm-migration-scan", "arm-assembly-analyze"}
+        assert skill_uris == {f"skill://{name}/SKILL.md" for name in names}
+        raw_socket.sendall(_encode_mcp_message(
+            {"jsonrpc": "2.0", "id": 10, "method": "prompts/list", "params": {}}
+        ))
+        assert {p["name"] for p in _read_response(10)["result"]["prompts"]} == names
+        for offset, name in enumerate(sorted(names)):
+            request_id = 20 + offset * 2
+            raw_socket.sendall(_encode_mcp_message({
+                "jsonrpc": "2.0", "id": request_id, "method": "resources/read",
+                "params": {"uri": f"skill://{name}/SKILL.md"},
+            }))
+            document = _read_response(request_id)["result"]["contents"][0]["text"]
+            assert document.startswith("---\n")
+            raw_socket.sendall(_encode_mcp_message({
+                "jsonrpc": "2.0", "id": request_id + 1, "method": "prompts/get",
+                "params": {"name": name},
+            }))
+            assert _read_response(request_id + 1)["result"]["messages"][0]["content"]["text"] == document
 
         #Check NGINX Query Test
         raw_socket.sendall(_encode_mcp_message(constants.CHECK_NGINX_REQUEST))
@@ -191,34 +202,34 @@ def test_mcp_stdio_transport_responds(platform):
         assert expected_nginx_urls & actual_nginx_urls, "Test Failed: MCP check_nginx tool failed: content mismatch., Expected one of: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_NGINX_RESPONSE,indent=2), json.dumps(check_nginx_response.get("result")["structuredContent"],indent=2))
         print("\n***Test Passed: MCP check_nginx tool succeeded")
 
-        #Check Migrate Ease Tool Test
-        raw_socket.sendall(_encode_mcp_message(constants.CHECK_MIGRATE_EASE_TOOL_REQUEST))
-        check_migrate_ease_tool_response = _read_response(5, timeout=60)
-        # Assert only the status field to avoid mismatches due to dynamic fields.
-        migrate_ease_content = check_migrate_ease_tool_response.get("result")[
-            "structuredContent"
-        ]
-        assert (
-            migrate_ease_content["status"]
-            == constants.EXPECTED_CHECK_MIGRATE_EASE_TOOL_RESPONSE_STATUS
-        ), (
-            "Test Failed: MCP check_migrate_ease_tool tool failed: status "
-            "mismatch. Expected: {}, Received: {}\nFull response: {}".format(
-                constants.EXPECTED_CHECK_MIGRATE_EASE_TOOL_RESPONSE_STATUS,
-                migrate_ease_content["status"],
-                json.dumps(migrate_ease_content, indent=2),
-            )
-        )
-        print("\n***Test Passed: MCP check_migrate_ease_tool tool succeeded")
+def test_bundled_clis_run_without_mcp(tmp_path):
+    image = os.getenv("MCP_IMAGE", constants.MCP_DOCKER_IMAGE)
+    source = tmp_path / "source"
+    reports = tmp_path / "reports"
+    source.mkdir()
+    reports.mkdir()
+    (source / "example.cpp").write_text("#include <immintrin.h>\n")
+    (source / "loop.s").write_text("add x1, x1, x2\n")
 
-        #Check MCA Tool Test - works only on platform=linux/arm64
-        if platform == constants.DEFAULT_PLATFORM:
-            raw_socket.sendall(_encode_mcp_message(constants.CHECK_MCA_TOOL_REQUEST))
-            check_mca_response = _read_response(6, timeout=60)
-            assert check_mca_response.get("result")["structuredContent"]["status"] == constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS, "Test Failed: MCP mca tool failed: status mismatch.Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS,indent=2), json.dumps(check_mca_response.get("result")["structuredContent"]["status"],indent=2))
-            print("\n***Test Passed: MCP mca tool succeeded")
-        else:
-            print("\n***Test NA: MCP mca tool is not supported on this platform: {}".format(platform))
+    def run(executable, *arguments):
+        return subprocess.run(
+            ["docker", "run", "--rm", "--network", "none",
+             "--mount", f"type=bind,src={source},dst=/workspace,readonly",
+             "--mount", f"type=bind,src={reports},dst=/results",
+             "--entrypoint", executable, image, *arguments],
+            check=True, capture_output=True, text=True, timeout=120,
+        )
+
+    run("skopeo", "--version")
+    for language in ("cpp", "python", "go", "js", "java"):
+        run(f"migrate-ease-{language}", "--help")
+    run("migrate-ease-cpp", "--march", "armv8-a", "--output", "/results/cpp.json", "/workspace")
+    report = json.loads((reports / "cpp.json").read_text())
+    assert report["issues"], "The x86-only include should produce a migration finding"
+    analysis = run("llvm-mca", "--mtriple=aarch64", "--mcpu=neoverse-n1", "/workspace/loop.s")
+    assert "Iterations:" in analysis.stdout
+    assert "Block RThroughput:" in analysis.stdout
+
 
 if __name__ == "__main__":
     pytest.main([__file__])

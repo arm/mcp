@@ -16,7 +16,7 @@ Write for OSS maintainers, developer-relations teams, and CNCF-style community a
 
 1. Treat the current repository as the target unless the user supplies a GitHub URL.
 2. If a URL is supplied, clone it into an empty workspace or an `arm-enablement-target/` subdirectory.
-3. Prefer scanning the local target mounted at MCP `/workspace`. Use the scanner's `git_repo` input only for an initial report-only scan when the current workspace is unrelated to the target and there are no local or uncommitted changes to assess. Never use `git_repo` to validate fixes; mount the changed checkout at `/workspace` and omit `git_repo`.
+3. Scan the actual local checkout through the shell, including uncommitted changes. For Docker CLI scans mount that checkout read-only at `/workspace`. Use a remote clone only for an initial assessment; validate fixes against the changed local checkout.
 4. Default to report-only mode. Create only the two report files unless the user explicitly asks to apply fixes.
 5. If fixes are requested, make the smallest necessary source changes, update the report, and rerun affected checks. Do not commit unless the user asks.
 6. Record the repository URL, current commit, assessment mode, host architecture, and date.
@@ -25,25 +25,25 @@ Write for OSS maintainers, developer-relations teams, and CNCF-style community a
 
 Before assessing the project:
 
-1. Confirm that the configured `arm-mcp` server exposes `migrate_ease_scan`, `knowledge_base_search`, `check_image`, `skopeo`, and `mca` as applicable.
-2. Treat these as MCP tools, not command-line programs. Do not search for similarly named executables on `PATH`.
-3. Confirm that the target checkout visible to Codex is the same checkout mounted at `/workspace` in the Arm MCP container. Compare a distinctive file or the repository root listing.
-4. If the server or workspace mapping is unavailable, stop and report the exact configuration problem. Point to the [Arm MCP installation guide](https://github.com/arm/mcp/blob/main/agent-integrations/agent-install-instructions.md); do not fabricate scan results.
+1. Confirm that `arm-mcp` exposes `knowledge_base_search`.
+2. Load `arm-migration-scan`, `arm-container-inspect`, and `arm-assembly-analyze` from `skill://<name>/SKILL.md` resources or the same-named MCP prompts. If unavailable, install these bundled skills using the [installation guide](https://github.com/arm/mcp/blob/main/agent-integrations/agent-install-instructions.md).
+3. Run their commands through the client shell, using installed CLIs or Docker entrypoint overrides. Confirm that any CLI container mount points to the checkout being assessed.
+4. Report unavailable dependencies or workspace mapping problems and affected checks; do not fabricate results.
 
-Maintain an audit record for every Arm MCP call: UTC timestamp, tool, relevant arguments, purpose, result summary, and duration when available. If duration is unavailable, state that it was not captured.
+Maintain an audit record for every MCP call and CLI execution: UTC timestamp, tool, relevant arguments, purpose, result summary, and duration when available. If duration is unavailable, state that it was not captured.
 
 ## Assess Arm Readiness
 
-1. Inspect manifests and source extensions to identify all primary languages. Supported `migrate_ease_scan` scanners are `cpp`, `python`, `go`, `js`, and `java`; scan each architecture-relevant supported component in a mixed-language repository.
+1. Inspect manifests and source extensions to identify all primary languages. Supported migrate-ease scanners are `cpp`, `python`, `go`, `js`, and `java`; scan each architecture-relevant supported component in a mixed-language repository.
 2. If no scanner supports a primary language, do not substitute an unrelated scanner or imply that the scan passed. Record the unsupported-language limitation, inspect architecture-sensitive source/build/container/CI paths manually, and rely on cross-build or native Arm evidence. Scan any supported components separately and label unvalidated areas as deferred.
-3. Run `migrate_ease_scan` against the target with `arch=armv8-a` by default. Use `armv8.6-a+sve2` only when that newer target is relevant to the user's request. Capture each file, line, category, finding, and proposed fix. Treat the scanner as the primary compatibility signal for supported languages and use manual searches only to add context.
+3. Follow arm-migration-scan to run the language CLI against the target with `--march armv8-a` by default. Use `armv8.6-a+sve2` only when that newer target is relevant to the user's request. Capture each file, line, category, finding, and proposed fix. Treat the scanner as the primary compatibility signal for supported languages and use manual searches only to add context.
 4. Inspect build and release entry points, including Makefiles, shell scripts, CMake, Dockerfiles, package scripts, and CI workflows. Read branches using `uname -m`, `ARCH`, `TARGETARCH`, `GOARCH`, `CPUTYPE`, hard-coded `amd64` downloads, or architecture-specific flags. Check shell scope and switch fallthrough semantics manually.
-5. Inventory images from Dockerfiles, Compose files, Kubernetes manifests, and CI. Call `check_image` for each relevant image tag. For digest pins, call `skopeo` with raw manifest output and determine whether the digest is a manifest list or a single-platform image.
+5. Inventory images from Dockerfiles, Compose files, Kubernetes manifests, and CI. Follow arm-container-inspect for each relevant image tag. For digest pins, run `skopeo inspect --raw` from the shell and determine whether the digest is a manifest list or a single-platform image.
 6. Review direct runtime/build dependencies and architecture-sensitive packages. Group related dependencies and use `knowledge_base_search` only where Arm-specific compatibility or version guidance would affect the verdict or remediation plan; do not query every transitive dependency. If no relevant KB result is returned, record `No Arm-specific KB result`, do not infer incompatibility, and use upstream documentation, published artifacts, or native validation as evidence. Mark the item unverified when no stronger evidence is available.
-7. If assembly or SIMD intrinsics exist, identify architecture guards. Use `mca` for representative supported assembly and `knowledge_base_search` for appropriate NEON, SVE, or SVE2 guidance. Never invent performance gains.
+7. If assembly or SIMD intrinsics exist, identify architecture guards. Follow arm-assembly-analyze to run `llvm-mca` for representative supported assembly and `knowledge_base_search` for appropriate NEON, SVE, or SVE2 guidance. Never invent performance gains.
 8. Build and test using the project's documented commands. Cross-compile when supported, then inspect produced binaries with `file` or the platform equivalent.
 9. When an authorized native Arm host is available, run a native build and relevant tests there. Record the host CPU/OS and exact commands. Use `knowledge_base_search` when system details or setup/fallback guidance are needed. Use the dedicated Performix MCP server only when performance evidence is relevant and access is configured.
-10. If fixes were requested, apply them, rerun tests, and rerun `migrate_ease_scan` against the changed `/workspace` checkout. Do not label a finding resolved without evidence from the repeated check.
+10. If fixes were requested, apply them, rerun tests, and rerun the migrate-ease CLI against the changed `/workspace` checkout. Do not label a finding resolved without evidence from the repeated check.
 
 Avoid these errors:
 

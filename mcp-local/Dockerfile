@@ -42,6 +42,12 @@ RUN --network=none apt-get install -y --no-download --no-install-recommends \
 WORKDIR /app
 RUN --network=none python3 -m venv "$VIRTUAL_ENV"
 
+# Refuse stale input bundles: the installed dependency graph must match this branch.
+COPY mcp-local/uv.lock /tmp/source-uv.lock
+COPY --from=mcp-inputs /mcp-build-inputs/metadata/uv.lock /tmp/bundle-uv.lock
+RUN --network=none python3 -c "from pathlib import Path; assert Path('/tmp/source-uv.lock').read_bytes() == Path('/tmp/bundle-uv.lock').read_bytes(), 'Dependency bundle is stale: rebuild and promote the MCP input bundle for this uv.lock'" && \
+    rm /tmp/source-uv.lock /tmp/bundle-uv.lock
+
 # The requirements file and wheelhouse come from the same immutable input
 # bundle. Network access is disabled for installation.
 COPY --from=mcp-inputs /mcp-build-inputs/metadata/requirements.lock /tmp/requirements.lock
@@ -83,7 +89,8 @@ COPY --from=embeddings /embedding-data/usearch_index.bin /app/data/usearch_index
 
 COPY mcp-local/utils/ /app/utils/
 COPY arm_kb_search/ /app/arm_kb_search/
-COPY mcp-local/server.py /app/server.py
+COPY mcp-local/server.py mcp-local/skill_catalog.py /app/
+COPY mcp-local/skills/ /app/skills/
 
 FROM ${UBUNTU_IMAGE} AS runtime
 

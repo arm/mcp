@@ -5,16 +5,16 @@
 description: Scan a project and migrate to Arm architecture
 ---
 
-Before starting, verify that the `arm-mcp` MCP server is installed and available. If you don't have access to the arm-mcp tools (skopeo, check_image, knowledge_base_search, migrate_ease_scan, mca), refer to the [MCP Server Installation Guide](https://github.com/arm/mcp/blob/main/agent-integrations/agent-install-instructions.md) to install it on codex.
+Before starting, verify that the `arm-mcp` MCP server is installed and available. If you don't have access to the arm-mcp knowledge_base_search tool and CLI skill resources/prompts, refer to the [MCP Server Installation Guide](https://github.com/arm/mcp/blob/main/agent-integrations/agent-install-instructions.md) to install it on codex.
 
-Your goal is to migrate a codebase from x86 to Arm. Use the mcp server tools to help you with this. Check for x86-specific dependencies (such as build flags, intrinsics, and libraries) and change them to Arm architecture equivalents, ensuring compatibility and optimizing performance. Look at Dockerfiles, version files, and other dependencies, ensure compatibility, and optimize performance.
+Your goal is to migrate a codebase from x86 to Arm. Use knowledge_base_search for documentation, and load the arm-container-inspect, arm-migration-scan, and arm-assembly-analyze skills from MCP resources or same-named prompts. If the client cannot load either, install the bundled skills as described in the installation guide. Execute their commands through your shell. Check for x86-specific dependencies (such as build flags, intrinsics, and libraries) and change them to Arm architecture equivalents, ensuring compatibility and optimizing performance. Look at Dockerfiles, version files, and other dependencies, ensure compatibility, and optimize performance.
 
 Steps to follow:
-* Look in all Dockerfiles and use the check_image and/or skopeo tools to verify Arm compatibility, changing the base image if necessary.
+* Look in all Dockerfiles and follow arm-container-inspect to run Skopeo or Docker Buildx from the shell to verify Arm compatibility, changing the base image if necessary.
 * Look at the packages installed by the Dockerfile and send each package to the knowledge_base_search tool to check each package for Arm compatibility. If a package isn't compatible, change it to a compatible version. When invoking the tool, explicitly ask "Is [package] compatible with Arm architecture?" where [package] is the name of the package.
 * Look at the contents of any requirements.txt files line-by-line and send each line to the knowledge_base_search tool to check each package for Arm compatibility. If a package isn't compatible, change it to a compatible version. When invoking the tool, explicitly ask "Is [package] compatible with Arm architecture?" where [package] is the name of the package.
 * Look at the codebase that you have access to, and determine what the language used is.
-* Run the migrate_ease_scan tool on the codebase, using the appropriate language scanner based on what language the codebase uses, and apply the suggested changes. Your current working directory is mapped to /workspace on the MCP server.
+* Follow arm-migration-scan to run the appropriate migrate-ease language CLI against the actual local checkout and review its findings before applying changes. Mount that checkout read-only for a Docker CLI scan and retain reports in a separate output directory.
 * OPTIONAL: If you have access to build tools, rebuild the project for Arm, if you're running on an Arm-based runner. Fix any compilation errors.
 * OPTIONAL: If you have access to any benchmarks or integration tests for the codebase, run these and report the timing improvements to the user.
 

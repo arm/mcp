@@ -43,7 +43,15 @@ args = [
 ]
 ```
 
-Replace `/path/to/your/workspace` with the absolute path to the project you want the MCP server to access.
+The `/workspace` mount is optional and stores MCP invocation/error logs. CLI scans
+run through the client shell with their own workspace mount.
+
+## Load the CLI skills
+
+The only MCP tool is `knowledge_base_search`. Load the server resources or prompts
+`arm-container-inspect`, `arm-migration-scan`, and `arm-assembly-analyze` before
+using the corresponding CLI workflow. See [client compatibility and local skill
+installation](../docs/skills.md). Shell access is required to execute commands.
 
 ## Install the Arm Enablement Skill for Codex
 
@@ -60,4 +68,5 @@ Start or restart Codex in the project you want to assess. Use `/skills` to confi
 $arm-enablement Assess this repository for Arm readiness and generate the Markdown and PDF report.
 ```
 
-The project opened in Codex must be the same project mounted at `/workspace` in the Arm MCP server configuration.
+When using Docker for CLI scans, mount the project opened in the agent at
+`/workspace` in that CLI invocation. The MCP server mount is only for logs.

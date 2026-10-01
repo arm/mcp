@@ -53,11 +53,19 @@ MCP_REQUESTS = [
     {
         "jsonrpc": "2.0",
         "id": 3,
-        "method": "tools/call",
-        "params": {
-            "name": "migrate_ease_scan",
-            "arguments": {"scanner": "java"},
-        },
+        "method": "tools/list",
+        "params": {},
+    },
+    {
+        "jsonrpc": "2.0", "id": 4, "method": "resources/list", "params": {},
+    },
+    {
+        "jsonrpc": "2.0", "id": 5, "method": "resources/read",
+        "params": {"uri": "skill://arm-migration-scan/SKILL.md"},
+    },
+    {
+        "jsonrpc": "2.0", "id": 6, "method": "prompts/get",
+        "params": {"name": "arm-migration-scan"},
     },
 ]
 
@@ -313,13 +321,22 @@ def validate_mcp_responses(stdout: str, platform: str) -> list[str]:
     knowledge = _structured(responses.get(2, {}))
     if not isinstance(knowledge, dict) or not knowledge.get("result"):
         failures.append("embedded knowledge-base search returned no results")
-    migration = _structured(responses.get(3, {}))
-    if not isinstance(migration, dict) or migration.get("status") != "success":
-        failures.append("bundled migrate-ease Java scan did not succeed")
-    if platform == "linux/arm64":
-        mca = _structured(responses.get(4, {}))
-        if not isinstance(mca, dict) or mca.get("status") != "ok":
-            failures.append("bundled llvm-mca analysis did not succeed")
+    tools = responses.get(3, {}).get("result", {}).get("tools", [])
+    if {tool["name"] for tool in tools} != {"knowledge_base_search"}:
+        failures.append("server must expose only knowledge_base_search")
+    resources = responses.get(4, {}).get("result", {}).get("resources", [])
+    expected = {
+        f"skill://{name}/SKILL.md"
+        for name in ("arm-migration-scan", "arm-container-inspect", "arm-assembly-analyze")
+    }
+    if not expected <= {resource["uri"] for resource in resources}:
+        failures.append("bundled skill resources are missing")
+    contents = responses.get(5, {}).get("result", {}).get("contents", [])
+    messages = responses.get(6, {}).get("result", {}).get("messages", [])
+    if not contents or not contents[0].get("text"):
+        failures.append("bundled skill resource could not be read")
+    elif not messages or messages[0].get("content", {}).get("text") != contents[0]["text"]:
+        failures.append("skill prompt does not match its resource")
     return failures
 
 
@@ -343,23 +360,9 @@ def main() -> int:
 
     requests = list(MCP_REQUESTS)
     flows = [
-        "initialize",
-        "knowledge_base_search",
-        "migrate_ease_scan",
+        "initialize", "knowledge_base_search", "tools/list",
+        "resources/list", "resources/read", "prompts/get",
     ]
-    if args.platform == "linux/arm64":
-        requests.append(
-            {
-                "jsonrpc": "2.0",
-                "id": 4,
-                "method": "tools/call",
-                "params": {
-                    "name": "mca",
-                    "arguments": {"input_path": "/workspace/tests/sum_test.s"},
-                },
-            }
-        )
-        flows.append("mca")
 
     runtime_command = _trace_command(
         args, tracer_dir, ["python", "-u", "server.py"]

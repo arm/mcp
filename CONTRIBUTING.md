@@ -6,7 +6,9 @@ reproducible build inputs, and the reviewed release workflows.
 ## Repository Structure
 
 - **`mcp-local/`**: The MCP server implementation
-  - `server.py`: Main FastMCP server with tool definitions
+  - `server.py`: FastMCP server with knowledge-base search and skill registration
+  - `skills/`: Canonical CLI Agent Skills, also served as MCP resources and prompts
+  - `skill_catalog.py`: FastMCP skill provider and prompt registration
   - `utils/`: Helper modules for each tool
   - `data/`: Pre-built knowledge base (embeddings and metadata)
   - `Dockerfile`: Multi-stage Docker build
@@ -111,8 +113,33 @@ docker buildx build \
 ```
 
 The local build defaults to the Docker host's native architecture. GitHub
-Actions performs the same GHCR login and explicitly builds both release
-architectures without running the acquisition script.
+Release builds perform the same GHCR login and explicitly build both release
+architectures from promoted inputs. PR integration builds acquire a temporary
+input bundle for the branch before running the final build offline.
+
+### Building with Changed Python Dependencies
+
+A change to `mcp-local/uv.lock` needs a matching input bundle. The final build
+fails early if the pinned bundle contains a different lock. For a branch build
+on a Linux host with Docker and uv 0.10.2, stage and build an unpublished bundle
+first (choose `arm64` or `amd64` for the host):
+
+```bash
+uv run --directory mcp-local --locked --only-group acquisition \
+  python scripts/stage-build-inputs.py --arch arm64
+docker buildx build --builder default --network none \
+  -f mcp-local/Dockerfile.inputs -t arm-mcp-inputs:local --load mcp-local
+docker buildx build --builder default --network none \
+  --build-arg MCP_BUILD_INPUTS_IMAGE=arm-mcp-inputs:local \
+  -f mcp-local/Dockerfile -t arm-mcp:local --load .
+```
+
+The default Docker builder can consume the locally loaded input image. The
+acquisition script requires Linux; macOS developers can use the PR integration
+runners or a Linux development host. PR integration tests build this temporary
+bundle for each architecture without publishing it. For release, run the existing
+**Build MCP Input Bundle** publication/promotion workflow and review its digest
+update before building the release. Do not replace a digest pin with a mutable tag.
 
 ### Testing a Local MCP Image
 
@@ -162,9 +189,8 @@ Docker's host-captured standard-error channel and persisted only after the
 container exits; the image under test receives no writable evidence mount. The
 workflow pins the Ubuntu package version, verifies the installed version, and
 records it in both `runtime-egress-evidence.json` and the workflow summary. The
-test exercises MCP startup, the embedded knowledge/vector search, a local
-migrate-ease scan, and (on Arm64) local llvm-mca
-analysis. Any non-loopback IPv4 or IPv6 `connect`, `sendto`, `sendmsg`, or
+test exercises MCP startup, the embedded knowledge/vector search, the single-tool
+catalog, and skill resource/prompt listing and retrieval. Any non-loopback IPv4 or IPv6 `connect`, `sendto`, `sendmsg`, or
 `sendmmsg` destination fails the gate.
 The production image sets `FASTMCP_CHECK_FOR_UPDATES=off` so FastMCP does not
 contact PyPI during server startup; dependency updates remain a build/release
@@ -235,7 +261,9 @@ uv --version
 uv lock --directory mcp-local --upgrade-package PACKAGE_NAME
 ```
 
-Review and commit the `pyproject.toml` and `uv.lock` changes. During input
+Review and commit the `pyproject.toml` and `uv.lock` changes. Rebuild and promote
+the input bundle before a release: the final Docker build verifies its bundled
+lock matches the source lock and rejects stale dependencies. During input
 acquisition, pinned uv exports a pip-compatible hashed lock from `uv.lock`.
 That generated file is used to download the AMD64 and Arm64 wheelhouses and is
 preserved as `metadata/requirements.lock` in the immutable GHCR input artifact;
