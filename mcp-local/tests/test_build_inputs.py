@@ -506,6 +506,13 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
     assert "verify-provenance:" in TRUSTED_RELEASE_WORKFLOW
     assert "attestations: read" in TRUSTED_RELEASE_WORKFLOW
     assert verify_attestations_job.count("gh attestation verify") == 3
+    assert publish_release_job.count("gh attestation download") == 1
+    assert publish_release_job.count("gh attestation verify") == 1
+    assert '--bundle "${provenance}"' in publish_release_job
+    assert (
+        '"${provenance}#Signed container provenance (Sigstore bundle)"'
+        in publish_release_job
+    )
     assert "--bundle-from-oci" in TRUSTED_RELEASE_WORKFLOW
     assert "Verify registry-attached architecture SBOMs" in verify_attestations_job
     assert "--predicate-type https://cyclonedx.org/bom" in verify_attestations_job
