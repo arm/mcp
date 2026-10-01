@@ -41,10 +41,10 @@ The Black Duck check intentionally fails on the original fork pull request.
 After linking the promoted internal pull request in a comment, the promotion
 workflow closes the source pull request automatically if its head still matches
 the promoted SHA. If a newer revision arrives while promotion is running, the
-source stays open so its queued run can promote that revision. Review and merge
-the internal pull request instead. If the contributor needs to submit another
-revision, reopen the source pull request or create a new one; the revision must
-then be promoted again.
+source stays open or is immediately reopened so its queued run can promote that
+revision. Review and merge the internal pull request instead. If the contributor
+needs to submit another revision, reopen the source pull request or create a new
+one; the revision must then be promoted again.
 
 ## GitHub App configuration
 

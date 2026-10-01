@@ -348,7 +348,18 @@ def close_source_pr(
         f"/repos/{repository}/pulls/{source_pull_number}",
         {"state": "closed"},
     )
-    return True
+    # GitHub cannot make the state update conditional on the head SHA. Re-read
+    # after closing and recover if a synchronize update won that race.
+    closed = api.get(f"/repos/{repository}/pulls/{source_pull_number}")
+    closed_sha = str(((closed.get("head") or {}).get("sha", ""))).lower()
+    if closed_sha != source_sha.lower():
+        if closed.get("state") == "closed":
+            api.patch(
+                f"/repos/{repository}/pulls/{source_pull_number}",
+                {"state": "open"},
+            )
+        return False
+    return closed.get("state") == "closed"
 
 
 def write_output(name: str, value: str) -> None:

@@ -202,19 +202,25 @@ def test_missing_collaborator_is_treated_as_external() -> None:
 def test_closing_source_pr_uses_the_pull_request_endpoint() -> None:
     class RecordingApi:
         def __init__(self) -> None:
-            self.request: tuple[str, dict] | None = None
+            self.requests: list[tuple[str, dict]] = []
+            self.closed = False
 
         def get(self, path: str) -> dict:
             assert path == "/repos/arm/mcp/pulls/185"
-            return source_pr()
+            pull = source_pr()
+            pull["state"] = "closed" if self.closed else "open"
+            return pull
 
         def patch(self, path: str, payload: dict) -> None:
-            self.request = (path, payload)
+            self.requests.append((path, payload))
+            self.closed = payload["state"] == "closed"
 
     api = RecordingApi()
     assert PROMOTION.close_source_pr(api, "arm/mcp", 185, SHA)
 
-    assert api.request == ("/repos/arm/mcp/pulls/185", {"state": "closed"})
+    assert api.requests == [
+        ("/repos/arm/mcp/pulls/185", {"state": "closed"})
+    ]
 
 
 def test_source_pr_remains_open_when_a_new_revision_arrives() -> None:
@@ -226,6 +232,32 @@ def test_source_pr_remains_open_when_a_new_revision_arrives() -> None:
             pytest.fail("an updated source pull request must not be closed")
 
     assert not PROMOTION.close_source_pr(UpdatedSourceApi(), "arm/mcp", 185, SHA)
+
+
+def test_source_pr_is_reopened_when_revision_races_the_close() -> None:
+    class RacingSourceApi:
+        def __init__(self) -> None:
+            self.get_count = 0
+            self.requests: list[tuple[str, dict]] = []
+
+        def get(self, path: str) -> dict:
+            assert path == "/repos/arm/mcp/pulls/185"
+            self.get_count += 1
+            if self.get_count == 1:
+                return source_pr()
+            pull = source_pr(sha="b" * 40)
+            pull["state"] = "closed"
+            return pull
+
+        def patch(self, path: str, payload: dict) -> None:
+            self.requests.append((path, payload))
+
+    api = RacingSourceApi()
+    assert not PROMOTION.close_source_pr(api, "arm/mcp", 185, SHA)
+    assert api.requests == [
+        ("/repos/arm/mcp/pulls/185", {"state": "closed"}),
+        ("/repos/arm/mcp/pulls/185", {"state": "open"}),
+    ]
 
 
 @pytest.mark.parametrize(
