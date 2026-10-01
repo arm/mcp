@@ -40,7 +40,7 @@ jobs:
 
     steps:
       - name: Checkout source
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
       
       - name: Show Black Duck target
         run: |
@@ -87,7 +87,7 @@ jobs:
 
       - name: Upload Black Duck SARIF
         if: ${{ !cancelled() && github.event_name != 'pull_request' && hashFiles('blackduck-results.sarif') != '' }}
-        uses: github/codeql-action/upload-sarif@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: blackduck-results.sarif
 
