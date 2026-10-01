@@ -302,11 +302,16 @@ def is_boilerplate_line(line: str) -> bool:
 def split_frontmatter(markdown: str) -> tuple[str | None, str]:
     """Separate YAML text from the body without interpreting source metadata."""
     markdown = markdown.lstrip("\ufeff")
-    match = re.match(
-        r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|$)", markdown, re.DOTALL
-    )
-    if match:
-        return match.group(1), markdown[match.end() :].lstrip()
+    lines = markdown.splitlines(keepends=True)
+    # Frontmatter must start on the first line, allowing LF or CRLF line endings.
+    if not lines or not re.fullmatch(r"---[ \t]*\r?\n", lines[0]):
+        return None, markdown
+    # Stop at the first closing delimiter, even for an empty block, so later
+    # Markdown horizontal rules cannot cause body content to be swallowed.
+    for index, line in enumerate(lines[1:], start=1):
+        if re.fullmatch(r"---[ \t]*(?:\r?\n)?", line):
+            frontmatter = "".join(lines[1:index]).removesuffix("\n").removesuffix("\r")
+            return frontmatter, "".join(lines[index + 1 :]).lstrip()
     return None, markdown
 
 

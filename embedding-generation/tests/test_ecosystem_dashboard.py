@@ -56,7 +56,10 @@ def test_commercial_package_preserves_vendor_date_and_deduplicates_homepage():
     assert "intelligent storage firewall" in content
     assert "Vendor: Bloombase" in content
     assert "Available on Arm since: 2021/03/10" in content
-    assert "https://supportal.bloombase.com" in content
+    assert (
+        "[Official documentation](https://supportal.bloombase.com)"
+        in content.splitlines()
+    )
     assert (
         content.count("[Product page](https://www.bloombase.com/products/storesafe)")
         == 1
