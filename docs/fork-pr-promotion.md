@@ -29,7 +29,11 @@ The workflow rejects draft pull requests, stale SHAs, closed pull requests,
 non-fork pull requests, pull requests that do not target `arm/mcp:main`, and
 changes to files under `.github/workflows/` (including renames and deletions).
 Workflow changes from forks must be recreated by a maintainer on a trusted
-internal branch and reviewed through that separate path.
+internal branch and reviewed through that separate path. Promotion also fails
+closed when GitHub's changed-file listing reaches its 3,000-file limit; split
+such a contribution into smaller pull requests. The source head is revalidated
+after file inspection so a concurrent update cannot promote the earlier SHA
+using the newer revision's file list.
 For automatic promotion, the user whose event opened or updated the pull
 request must also have write-level access; an untrusted user cannot update a
 trusted author's fork branch and cause an automatic promotion.

@@ -437,6 +437,7 @@ def test_fork_pr_promotion_keeps_credentials_away_from_fork_code() -> None:
     assert "FORK_PROMOTION_APP_PRIVATE_KEY" in FORK_PROMOTION_WORKFLOW
     assert "actions/checkout" not in FORK_PROMOTION_SCRIPT
     assert 'WORKFLOW_DIRECTORY = ".github/workflows/"' in FORK_PROMOTION_SCRIPT
+    assert "MAX_PULL_REQUEST_FILES = 3_000" in FORK_PROMOTION_SCRIPT
     assert "external-contributions/pr-" in FORK_PROMOTION_SCRIPT
     assert "trusted-fork-{username}/pr-" in FORK_PROMOTION_SCRIPT
     assert "gh pr merge" not in FORK_PROMOTION_WORKFLOW

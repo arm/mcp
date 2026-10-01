@@ -33,6 +33,7 @@ ALLOWED_REPOSITORY = "arm/mcp"
 BASE_BRANCH = "main"
 TRUSTED_PERMISSIONS = {"write", "maintain", "admin"}
 WORKFLOW_DIRECTORY = ".github/workflows/"
+MAX_PULL_REQUEST_FILES = 3_000
 SHA_PATTERN = re.compile(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}")
 LOGIN_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?")
 
@@ -223,6 +224,12 @@ def ensure_no_workflow_file_changes(
         f"/repos/{repository}/pulls/{pull_number}/files",
         {},
     )
+    if len(files) >= MAX_PULL_REQUEST_FILES:
+        raise RuntimeError(
+            f"pull request #{pull_number} has at least "
+            f"{MAX_PULL_REQUEST_FILES:,} changed files, so GitHub may have "
+            "truncated the file list. Split the contribution before promotion"
+        )
     workflow_paths = sorted(
         {
             path
@@ -436,6 +443,13 @@ def main() -> int:
             )
 
     ensure_no_workflow_file_changes(api, repository, args.pull_number)
+    # The files endpoint describes the PR's current head rather than accepting
+    # an immutable SHA. Re-read after inspection and fail if a synchronize
+    # update raced validation, before creating any repository ref.
+    latest_pull = api.get(f"/repos/{repository}/pulls/{args.pull_number}")
+    validate_source_pr(
+        latest_pull, repository, args.pull_number, source["sha"]
+    )
     branch = promotion_branch(
         args.mode, source["author"], args.pull_number, source["sha"]
     )

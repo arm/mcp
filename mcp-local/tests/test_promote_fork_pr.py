@@ -289,6 +289,58 @@ def test_non_workflow_file_changes_can_be_promoted() -> None:
     PROMOTION.ensure_no_workflow_file_changes(FilesApi(), "arm/mcp", 185)
 
 
+def test_truncated_pull_request_file_list_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        PROMOTION,
+        "paginated_get",
+        lambda *_args: [
+            {"filename": f"src/generated-{index}.py"}
+            for index in range(PROMOTION.MAX_PULL_REQUEST_FILES)
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match="truncated the file list"):
+        PROMOTION.ensure_no_workflow_file_changes(object(), "arm/mcp", 185)
+
+
+def test_source_head_is_revalidated_after_file_inspection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class UpdatingSourceApi:
+        def __init__(self) -> None:
+            self.get_count = 0
+
+        def get(self, path: str) -> dict:
+            assert path == "/repos/arm/mcp/pulls/185"
+            self.get_count += 1
+            return source_pr(sha=SHA if self.get_count == 1 else "b" * 40)
+
+    monkeypatch.setattr(
+        PROMOTION,
+        "parse_args",
+        lambda: SimpleNamespace(
+            mode="auto", pull_number=185, expected_sha=SHA, actor="trusted-user"
+        ),
+    )
+    monkeypatch.setattr(PROMOTION, "GitHubApi", lambda *_args: UpdatingSourceApi())
+    monkeypatch.setattr(PROMOTION, "collaborator_permission", lambda *_args: "write")
+    monkeypatch.setattr(
+        PROMOTION, "ensure_no_workflow_file_changes", lambda *_args: None
+    )
+    monkeypatch.setattr(
+        PROMOTION,
+        "ensure_ref",
+        lambda *_args: pytest.fail("a changed source head must not create a ref"),
+    )
+    monkeypatch.setenv("GITHUB_REPOSITORY", "arm/mcp")
+    monkeypatch.setenv("GH_TOKEN", "test-token")
+
+    with pytest.raises(ValueError, match="head changed"):
+        PROMOTION.main()
+
+
 @pytest.mark.parametrize("mode", ["auto", "manual"])
 def test_source_pr_is_closed_after_internal_pr_is_created(
     monkeypatch: pytest.MonkeyPatch,
