@@ -164,6 +164,11 @@ parsed = parse_ecosystem_package(
 chunks = chunk_parsed_document(parsed, "Ecosystem Dashboard", keywords)
 ```
 
+For the upstream field layout, see the
+[open-source](https://github.com/ArmDeveloperEcosystem/ecosystem-dashboard-for-arm/blob/main/archetypes/opensource_packages/index.md)
+and [commercial](https://github.com/ArmDeveloperEcosystem/ecosystem-dashboard-for-arm/blob/main/archetypes/commercial_packages/index.md)
+package templates.
+
 The adapter puts name, platform context, description, category, and vendor first,
 followed by support status, minimum/recommended versions and dates, recommendation
 rationale, caveats, alternatives, and labeled resource links. Markdown body content
