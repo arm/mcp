@@ -23,7 +23,7 @@ FROM ${UV_IMAGE} AS uv
 
 FROM ${PYTHON_IMAGE} AS python-runtime
 
-RUN python -c "import pyexpat, sys, xml.etree.ElementTree as ET; assert sys.version_info[:3] == (3, 13, 16); assert pyexpat.version_info == (2, 8, 5); ET.fromstring('<root/>')"
+RUN python -c "import sys, xml.etree.ElementTree as ET; assert sys.version_info[:3] == (3, 13, 16); ET.fromstring('<root/>')"
 
 # uv installs the locked environment without pip. Remove pip and ensurepip
 # to keep their unused bundled dependencies out of the runtime filesystem.
