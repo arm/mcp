@@ -25,10 +25,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse
 
+import pytest
+
 from document_chunking import (
     chunk_parsed_document,
     learn_learning_path_step_urls,
     parse_document_content,
+    split_frontmatter,
+    strip_frontmatter,
 )
 
 FIXTURE_DIR = Path(__file__).parent
@@ -152,6 +156,25 @@ class TestChunkClass:
         )
 
         assert chunk.keywords == ""
+
+
+class TestMarkdownFrontmatter:
+    @pytest.mark.parametrize(
+        "opening",
+        ["---\n---\n", "\ufeff---\r\n---\r\n"],
+    )
+    def test_empty_frontmatter_preserves_body_with_later_horizontal_rule(self, opening):
+        body = "# Title\n\nIntroduction.\n\n---\n\nMore content."
+        markdown = opening + body
+
+        assert split_frontmatter(markdown) == ("", body)
+        assert strip_frontmatter(markdown) == body
+
+    def test_unclosed_frontmatter_is_left_unchanged(self):
+        markdown = "---\nname: Example\n---not a delimiter\n# Title"
+
+        assert split_frontmatter(markdown) == (None, markdown)
+        assert strip_frontmatter(markdown) == markdown
 
 
 class TestDocumentChunkingAnchors:
