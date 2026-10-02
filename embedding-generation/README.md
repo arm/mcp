@@ -23,7 +23,7 @@ The toolchain image:
 2. Acquires the sentence-transformer revision recorded in `embedding-model.lock.json`.
 3. Confirms that the saved model loads with networking disabled.
 4. Copies the locked environment, local model, and generation scripts into the
-   final image without including the `uv` package manager.
+   final image without `uv`, `pip`, or `ensurepip` and its bundled pip wheel.
 
 When a file baked into the toolchain changes on `main`, including its
 Dockerfile, Python or model locks, acquisition code, or generation scripts,
