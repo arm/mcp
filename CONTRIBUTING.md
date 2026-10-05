@@ -398,3 +398,64 @@ When contributing:
 
 **Note:**
 Images tagged `latest` and semantic version tags (e.g., `2.3.0`) should be treated as the **prod** environment, while dated tags (`YYYY-MM-DD-<run_number>`, e.g., `2026-05-31-123`) should be treated as the **stage** environment. The **dev** environment refers only to locally built images created by individual developers.
+
+
+## Retrieval evaluations
+
+The existing `embedding-generation/evaluate_retrieval.py` is the single runner:
+
+- Every PR runs all questions in `evals/smoke.json` against the candidate MCP
+  image's pinned corpus. Every case must retrieve an accepted source in its top
+  five results. This step is part of Integration Tests; repository administrators
+  must keep that check required in the branch ruleset.
+- The existing Sunday embedding workflow runs `evals/benchmark.json` against
+  the newly generated corpus and retains a JSON report. Retrieval misses do not
+  fail the benchmark; execution errors do. Its promotion PR still runs smoke.
+
+Use the [local commands](embedding-generation/README.md#test-locally) to run a
+suite, specific IDs, or `--changed-since upstream/main`. For a source addition,
+rebuild the corpus before evaluating; an old deployed/pinned corpus cannot
+verify ingestion of that source.
+
+### Adding questions and accepted URLs
+
+Add coverage to the benchmark when introducing a source or materially changing
+its content. Use a stable new ID and the existing topic/intent fields. Describe
+one realistic developer need with accurate premises; avoid copied titles,
+keyword stuffing, and duplicate intents. Preserve existing IDs when editing.
+
+Inspect the source content independently of its retrieval score. Each accepted
+URL should support the question's central need; alternatives are independently
+acceptable sources, not arbitrary pages that appeared in a run. Preserve exact
+resource/version/platform identity and meaningful URL selectors. Review newly
+found alternatives on their content before adding them. Do not broaden a label
+or change a question simply to turn a miss into a pass.
+
+Source keywords must truthfully describe the source and natural developer
+vocabulary. Do not copy evaluation questions into metadata or add misleading
+terms to improve individual scores. Existing smoke and benchmark matching rules
+are documented with the runner; a change to those rules requires explicit review
+and a fresh baseline.
+
+### Investigating misses
+
+Record the question ID, candidate corpus/code identity, expected and returned
+URLs, rank, and any execution error. Check that the expected content was
+actually ingested, inspect retrieved passages, and distinguish incorrect labels,
+missing content, ranking misses, and execution failures. Compare with a report
+using unchanged questions and rules before claiming a retrieval regression.
+
+Smoke regressions, execution failures, broken ingestion, and demonstrated
+regressions caused by the contribution require investigation before merge.
+A valid new benchmark miss may be linked follow-up work when the limitation is
+outside the contribution's scope and the contribution does not claim to fix it.
+Keep that miss visible. Full-benchmark review uses introduced regressions on
+comparable inputs, not a 100% score requirement or an arbitrary threshold.
+
+### Promoting a question into smoke
+
+Propose promotion separately for a critical, representative user need. Review
+the accepted sources, confirm repeatable success on supported CI targets, and
+explain why the case warrants blocking merges. Retain benchmark coverage and
+record the related benchmark/smoke IDs in the PR. Promotion is reviewed, never
+automatic after one successful run. The smoke suite should change infrequently.

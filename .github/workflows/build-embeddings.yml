@@ -250,6 +250,48 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.title=Arm MCP embeddings
 
+      - name: Set up evaluation Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Set up locked evaluation environment
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: '0.9.2'
+          enable-cache: false
+
+      - name: Run full retrieval benchmark on candidate corpus
+        timeout-minutes: 30
+        env:
+          HF_HUB_OFFLINE: '1'
+          TRANSFORMERS_OFFLINE: '1'
+          CANDIDATE_IMAGE: ${{ env.VECTORSTORE_IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          corpus="${RUNNER_TEMP}/benchmark-corpus"
+          mkdir -p "$corpus" "${RUNNER_TEMP}/retrieval-benchmark"
+          # The scratch image contains data only; never attempt to start it.
+          container="$(docker create "$CANDIDATE_IMAGE" /unused)"
+          trap 'docker rm -f "$container" >/dev/null' EXIT
+          docker cp "$container:/embedding-data/." "$corpus/"
+          export EVAL_TARGET="$(docker image inspect --format '{{.Id}}' "$CANDIDATE_IMAGE")"
+          uv run --directory embedding-generation --locked python evaluate_retrieval.py \
+            --suite benchmark --top-k 5 \
+            --metadata-path "$corpus/metadata.json" \
+            --index-path "$corpus/usearch_index.bin" \
+            --model-path "$corpus/embedding-model" \
+            --output "${RUNNER_TEMP}/retrieval-benchmark/benchmark.json"
+
+      - name: Retain weekly retrieval benchmark
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: retrieval-benchmark
+          path: ${{ runner.temp }}/retrieval-benchmark/benchmark.json
+          retention-days: 90
+          if-no-files-found: warn
+
       - name: Remove GHCR credentials before scanning
         run: docker logout ghcr.io
 

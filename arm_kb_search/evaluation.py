@@ -18,8 +18,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlparse, urlunparse
-
+from urllib.parse import parse_qsl, urlparse, urlunparse
 
 EvalRow = dict[str, object]
 RetrieveUrls = Callable[[str, int], list[str | None]]
@@ -117,7 +116,34 @@ def url_without_anchor(url: str | None) -> str | None:
     return url_base(url)
 
 
-def evaluate_retrieval(eval_rows: list[EvalRow], retrieve_urls: RetrieveUrls, top_k: int) -> EvaluationResult:
+def suite_url_matches(actual: str | None, expected: str, suite: str) -> bool:
+    """Preserve the smoke page/child policy and benchmark resource identity."""
+    if not actual:
+        return False
+    left, right = urlparse(actual.strip()), urlparse(expected.strip())
+    if (left.scheme.lower(), left.netloc.lower()) != (right.scheme.lower(), right.netloc.lower()):
+        return False
+    left_path, right_path = left.path.rstrip("/") or "/", right.path.rstrip("/") or "/"
+    if suite == "smoke":
+        return left_path == right_path or left_path.startswith(right_path.rstrip("/") + "/")
+    if suite != "benchmark":
+        raise ValueError(f"Unknown evaluation suite: {suite}")
+
+    def query(value: str) -> list[tuple[str, str]]:
+        return sorted((key, val) for key, val in parse_qsl(value, keep_blank_values=True)
+                      if not key.lower().startswith("utm_"))
+
+    return (left_path, left.params, query(left.query), left.fragment) == (
+        right_path, right.params, query(right.query), right.fragment
+    )
+
+
+def evaluate_retrieval(
+    eval_rows: list[EvalRow], retrieve_urls: RetrieveUrls, top_k: int,
+    url_matcher: Callable[[str | None, str], bool] | None = None,
+) -> EvaluationResult:
+    if top_k < 1:
+        raise ValueError("top_k must be positive")
     hits_at_1 = 0
     hits_at_3 = 0
     hits_at_5 = 0
@@ -142,7 +168,9 @@ def evaluate_retrieval(eval_rows: list[EvalRow], retrieve_urls: RetrieveUrls, to
         expected = {url_base(url) for url in expected_urls}
         match_rank = None
         for index, url in enumerate(ranked_urls, start=1):
-            if url_base(url) in expected:
+            matched = (any(url_matcher(url, target) for target in expected_urls)
+                       if url_matcher else url_base(url) in expected)
+            if matched:
                 match_rank = index
                 break
 

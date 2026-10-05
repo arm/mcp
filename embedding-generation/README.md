@@ -85,7 +85,7 @@ pip install playwright && playwright install chromium
 python discover-developer-arm-com-sources.py vector-db-sources.csv
 ```
 
-Review the printed `[NEW SOURCE]` lines, add a question with the new URL in `expected_urls` to `eval_questions.json` for each one, then commit the updated CSV. The production build chunks the new rows automatically — `generate-chunks.py` already handles developer.arm.com documentation and community blog URLs found in the CSV.
+Review the printed `[NEW SOURCE]` lines, add a question with the new URL in `expected_urls` to `../evals/benchmark.json` for each one, then commit the updated CSV. The production build chunks the new rows automatically — `generate-chunks.py` already handles developer.arm.com documentation and community blog URLs found in the CSV.
 
 ### Transcript-backed sources
 
@@ -115,24 +115,87 @@ uv sync --locked
 
 Python 3.13 is required.
 
-Run the full local question eval:
+One evaluator runs the stable smoke suite on every PR and the full benchmark in
+the existing Sunday embedding refresh. The suites are `../evals/smoke.json` and
+`../evals/benchmark.json`; the old `eval_questions.json` is historical input.
+
+To rebuild the local corpus and run the benchmark:
 
 ```sh
 uv run --locked ./run-question-eval.sh
+uv run --locked ./run-question-eval.sh --changed-since upstream/main --output reports/changed.json
 ```
 
-That command copies intrinsic chunks from the embedding base image if needed,
-regenerates chunks, acquires the revision in `embedding-model.lock.json`, rebuilds
-the local USearch index from that local model, and runs `evaluate_retrieval.py`
-without model network access.
+The wrapper copies intrinsic chunks if needed, regenerates chunks, acquires the
+locked model, rebuilds the index, and invokes the same evaluator. It accepts
+`--suite`, repeatable `--id`, `--changed-since`, `--output`, and `--baseline`.
+`--eval FILE` remains available for a custom question file. A relative report
+path is relative to this directory. Use a new output filename for each run.
 
-Useful options:
+To evaluate an existing local corpus without rebuilding it:
 
 ```sh
-uv run --locked ./run-question-eval.sh --refresh-intrinsic-chunks
-uv run --locked ./run-question-eval.sh --eval eval_questions.json --top-k 5
-SKIP_DISCOVERY=1 uv run --locked ./run-question-eval.sh
+uv run --locked python evaluate_retrieval.py --suite smoke \
+  --model-path .cache/embedding-model --output reports/smoke.json
+uv run --locked python evaluate_retrieval.py --suite benchmark \
+  --model-path .cache/embedding-model --output reports/benchmark.json
+uv run --locked python evaluate_retrieval.py --suite benchmark --id B001 --id B002 \
+  --model-path .cache/embedding-model
+uv run --locked python evaluate_retrieval.py --suite benchmark --changed-since upstream/main \
+  --model-path .cache/embedding-model
+uv run --locked python evaluate_retrieval.py --suite benchmark \
+  --model-path .cache/embedding-model --baseline reports/benchmark.json \
+  --output reports/benchmark-next.json
 ```
+
+`--changed-since` compares parsed records by ID against the branch merge base,
+including uncommitted additions/edits. Removed IDs are reported. Formatting and
+record ordering do not select questions. Invalid refs and unknown IDs fail;
+no changed questions is an explicit no-op. Fetch the base branch/history first.
+This filter selects changed questions, not every question affected by a changed
+source, embedding model, or ranking algorithm. Run the full benchmark for those
+changes. ID selection and changed-since selection are mutually exclusive.
+
+Default depth is five. Smoke requires every selected question to retrieve an
+accepted source within that depth (exit 1 for a miss). Benchmark misses are
+report-only (exit 0). Invalid data, model/index failures, and query errors fail
+both modes (exit 2). PR checks always use the whole smoke suite at depth five;
+a local subset run does not certify the full suite. Hit@3/5 is unavailable when
+the requested depth is lower than its cutoff. MRR is truncated at that depth.
+
+Matching preserves the existing suite policies:
+
+- Smoke accepts the expected page or a child path, ignoring query strings,
+  fragments, and trailing slashes. A sibling path or different origin does not
+  match. This is a useful-resource coverage check, not exact section coverage.
+- Benchmark preserves meaningful query parameters, fragments, platform paths,
+  and package/intrinsic selectors. Only tracking `utm_*` parameters, query-pair
+  order, host/scheme case, and trailing slashes are normalized.
+
+Console output and the GitHub Actions Summary show tables with overall pass
+percentage and retrieval metrics, followed by intent and topic pass percentages.
+The benchmark does not print individual misses. Download the JSON artifact for
+per-question ranks/URLs/errors and category metrics. Reports record the Git
+revision and `EVAL_TARGET` image reference when available; they do not hash the
+model, corpus, or source files.
+Errors are separate from misses and contribute zero to headline rates.
+Benchmark comparisons show metric deltas and regressed/recovered IDs for the
+same question IDs, question text, accepted URLs, matching rules, and depth, with
+no execution errors. Metrics are recalculated from the stored ranks, so older
+reports remain usable without relying on cached metrics or fingerprints.
+Changed questions or accepted URLs need a fresh baseline. No supplied baseline
+means no regression claim.
+
+PR smoke reports are retained as `retrieval-smoke-*` Actions artifacts. Weekly
+reports are retained for 90 days as `retrieval-benchmark`; download two reports
+for an explicit comparison. The weekly job evaluates the newly built vectorstore,
+not the previously released corpus. It also runs during manual pipeline dry runs.
+The published scratch vectorstore is copied from a stopped container and
+searched using the locked evaluation environment; no second runner is involved.
+
+New sources need a rebuilt local corpus: building the MCP image alone uses its
+pinned embedding artifact. See [contribution guidance](../CONTRIBUTING.md#retrieval-evaluations)
+for source-label rules, miss investigation, and smoke promotion.
 
 Run lint and tests with:
 
@@ -140,5 +203,3 @@ Run lint and tests with:
 uv run --locked ruff check .
 uv run --locked pytest
 ```
-
-To check a new document, add or update a question in `eval_questions.json` with the document URL in `expected_urls`, then run the wrapper. Review `Hit@1`, `Hit@3`, `Hit@5`, `MRR`, and any printed misses before committing the CSV change.

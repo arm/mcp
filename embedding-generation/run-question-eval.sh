@@ -5,7 +5,8 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$script_dir"
 
 sources_file="vector-db-sources.csv"
-eval_file="eval_questions.json"
+eval_file=""
+eval_args=(--suite benchmark)
 top_k="5"
 python_bin="${PYTHON:-python3}"
 embedding_base_image="${EMBEDDING_BASE_IMAGE:-armlimited/arm-mcp:mcp-embedding-base}"
@@ -21,7 +22,12 @@ Build the local vector store from vector-db-sources.csv and run retrieval eval.
 
 Options:
   --sources FILE                 CSV to chunk (default: vector-db-sources.csv)
-  --eval FILE                    Eval questions JSON (default: eval_questions.json)
+  --suite NAME                   smoke or benchmark (default: benchmark)
+  --eval FILE                    Override the suite JSON
+  --id ID                        Select a question (repeatable)
+  --changed-since REF            Select questions added/edited on this branch
+  --output FILE                  Save a new JSON report
+  --baseline FILE                Compare with a previous compatible report
   --top-k N                      Number of search results to evaluate (default: 5)
   --refresh-intrinsic-chunks     Re-copy intrinsic chunks from the embedding base image
   --skip-intrinsic-copy          Use the existing intrinsic_chunks directory as-is
@@ -56,6 +62,11 @@ while [[ $# -gt 0 ]]; do
       eval_file="$2"
       shift 2
       ;;
+    --suite|--id|--changed-since|--output|--baseline)
+      require_value "$@"
+      eval_args+=("$1" "$2")
+      shift 2
+      ;;
     --top-k)
       require_value "$@"
       top_k="$2"
@@ -86,7 +97,7 @@ if [[ ! -f "$sources_file" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$eval_file" ]]; then
+if [[ -n "$eval_file" && ! -f "$eval_file" ]]; then
   echo "Eval questions file not found: $eval_file" >&2
   exit 1
 fi
@@ -122,9 +133,13 @@ HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
   "$python_bin" local_vectorstore_creation.py \
     --model-path "$embedding_model_dir"
 
-echo "Evaluating retrieval questions from $eval_file"
+if [[ -n "$eval_file" ]]; then
+  eval_args+=(--eval-path "$eval_file")
+fi
+
+echo "Evaluating retrieval questions"
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
   "$python_bin" evaluate_retrieval.py \
-    --eval-path "$eval_file" \
     --model-path "$embedding_model_dir" \
-    --top-k "$top_k"
+    --top-k "$top_k" \
+    "${eval_args[@]}"
