@@ -71,6 +71,23 @@ class EvaluationResult:
     misses: list[RetrievalMiss]
     errors: list[RetrievalError]
 
+    @classmethod
+    def from_cases(cls, cases: list[EvaluationCaseResult]) -> EvaluationResult:
+        return cls(
+            total=len(cases),
+            hits_at_1=sum(case.hit_at_1 for case in cases),
+            hits_at_3=sum(case.hit_at_3 for case in cases),
+            hits_at_5=sum(case.hit_at_5 for case in cases),
+            reciprocal_ranks=[
+                0 if case.match_rank is None else 1 / case.match_rank for case in cases
+            ],
+            cases=cases,
+            misses=[RetrievalMiss(case.question, case.expected_urls, case.ranked_urls)
+                    for case in cases if case.match_rank is None],
+            errors=[RetrievalError(case.question, case.error)
+                    for case in cases if case.error is not None],
+        )
+
     @property
     def hit_at_1(self) -> float:
         return self.hits_at_1 / self.total if self.total else 0
@@ -86,6 +103,21 @@ class EvaluationResult:
     @property
     def mrr(self) -> float:
         return sum(self.reciprocal_ranks) / self.total if self.total else 0
+
+    def summary(self, top_k: int) -> dict:
+        """Summarize live or saved cases with unavailable cutoffs left unscored."""
+        return {
+            "total": self.total,
+            "hits": self.total - len(self.misses),
+            "misses": len(self.misses) - len(self.errors),
+            "errors": len(self.errors),
+            "mrr": self.mrr if self.total else None,
+            **{
+                f"hit_at_{k}": getattr(self, f"hit_at_{k}")
+                if self.total and top_k >= k else None
+                for k in (1, 3, 5)
+            },
+        }
 
 
 def load_eval_rows(eval_path: Path) -> list[EvalRow]:
@@ -144,13 +176,7 @@ def evaluate_retrieval(
 ) -> EvaluationResult:
     if top_k < 1:
         raise ValueError("top_k must be positive")
-    hits_at_1 = 0
-    hits_at_3 = 0
-    hits_at_5 = 0
-    reciprocal_ranks = []
     cases = []
-    misses = []
-    errors = []
 
     for row in eval_rows:
         question_id = str(row.get("id") or row["question"])
@@ -163,9 +189,8 @@ def evaluate_retrieval(
         except Exception as exc:
             ranked_urls = []
             error = str(exc)
-            errors.append(RetrievalError(question=question, error=error))
 
-        expected = {url_base(url) for url in expected_urls}
+        expected = {url_base(url) for url in expected_urls} if not url_matcher else set()
         match_rank = None
         for index, url in enumerate(ranked_urls, start=1):
             matched = (any(url_matcher(url, target) for target in expected_urls)
@@ -174,14 +199,7 @@ def evaluate_retrieval(
                 match_rank = index
                 break
 
-        if match_rank == 1:
-            hits_at_1 += 1
-        if match_rank is not None and match_rank <= 3:
-            hits_at_3 += 1
-        if match_rank is not None and match_rank <= 5:
-            hits_at_5 += 1
         reciprocal_rank = 0 if match_rank is None else 1 / match_rank
-        reciprocal_ranks.append(reciprocal_rank)
         cases.append(
             EvaluationCaseResult(
                 question_id=question_id,
@@ -194,25 +212,7 @@ def evaluate_retrieval(
             )
         )
 
-        if match_rank is None:
-            misses.append(
-                RetrievalMiss(
-                    question=question,
-                    expected_urls=expected_urls,
-                    ranked_urls=ranked_urls,
-                )
-            )
-
-    return EvaluationResult(
-        total=len(eval_rows),
-        hits_at_1=hits_at_1,
-        hits_at_3=hits_at_3,
-        hits_at_5=hits_at_5,
-        reciprocal_ranks=reciprocal_ranks,
-        cases=cases,
-        misses=misses,
-        errors=errors,
-    )
+    return EvaluationResult.from_cases(cases)
 
 
 def print_evaluation(result: EvaluationResult, label: str | None = None) -> None:

@@ -409,20 +409,27 @@ The existing `embedding-generation/evaluate_retrieval.py` is the single runner:
   five results. This step is part of Integration Tests; repository administrators
   must keep that check required in the branch ruleset.
 - The existing Sunday embedding workflow runs `evals/benchmark.json` against
-  the newly generated corpus and retains a JSON report. Retrieval misses do not
-  fail the benchmark; execution errors do. Its promotion PR still runs smoke.
+  the newly generated corpus and retains a JSON report. Its summary compares
+  overall, topic, and intent metrics with the previous completed benchmark on
+  the same branch when compatible. All benchmark steps are report-only;
+  execution failures are visibly reported but do not block publication.
+  Corpus build and security failures still block publication, and its promotion
+  PR still runs smoke.
 
 Use the [local commands](embedding-generation/README.md#test-locally) to run a
-suite, specific IDs, or `--changed-since upstream/main`. For a source addition,
+full suite or specific question IDs. For a source addition,
 rebuild the corpus before evaluating; an old deployed/pinned corpus cannot
 verify ingestion of that source.
 
 ### Adding questions and accepted URLs
 
-Add coverage to the benchmark when introducing a source or materially changing
-its content. Use a stable new ID and the existing topic/intent fields. Describe
-one realistic developer need with accurate premises; avoid copied titles,
-keyword stuffing, and duplicate intents. Preserve existing IDs when editing.
+Keep the checked-in smoke and benchmark questions, accepted URLs, and matching
+rules fixed while improving retrieval. Use a separate JSON file with
+`--eval-path` for proposed source coverage or a holdout set. Additions to the
+fixed suites require a separate reviewed dataset change and a fresh baseline.
+For proposed questions, use stable IDs and the existing topic/intent fields.
+Describe one realistic developer need with accurate premises; avoid copied
+titles, keyword stuffing, and duplicate intents.
 
 Inspect the source content independently of its retrieval score. Each accepted
 URL should support the question's central need; alternatives are independently
@@ -451,6 +458,13 @@ A valid new benchmark miss may be linked follow-up work when the limitation is
 outside the contribution's scope and the contribution does not claim to fix it.
 Keep that miss visible. Full-benchmark review uses introduced regressions on
 comparable inputs, not a 100% score requirement or an arbitrary threshold.
+
+If a source moves or an anchor becomes stale, verify the replacement against
+the source content, including its section, version, and intrinsic identity.
+Propose the correction separately with the old/new URLs and supporting evidence;
+preserve the question ID and intent. After review, establish a fresh baseline.
+A label correction is not a retrieval improvement. A valid label with a ranking
+miss stays unchanged and becomes retrieval work.
 
 ### Promoting a question into smoke
 

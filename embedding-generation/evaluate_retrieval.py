@@ -18,6 +18,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from arm_kb_search import load_search_resources, search  # noqa: E402
 from arm_kb_search.evaluation import (  # noqa: E402
+    EvaluationCaseResult,
+    EvaluationResult,
     evaluate_retrieval,
     load_eval_rows,
     suite_url_matches,
@@ -74,89 +76,117 @@ def git(*args):
     ).stdout.strip()
 
 
-def select_rows(rows, eval_path, ids=None, changed_since=None):
-    if ids:
-        unknown = set(ids) - {row["id"] for row in rows}
-        if unknown:
-            raise ValueError(f"Unknown question IDs: {', '.join(sorted(unknown))}")
-        return [row for row in rows if row["id"] in ids], []
-    if not changed_since:
-        return rows, []
-    base = git("merge-base", changed_since, "HEAD")
-    relative = eval_path.resolve().relative_to(REPO_ROOT.resolve()).as_posix()
-    previous = (
-        validate_rows(json.loads(git("show", f"{base}:{relative}")))
-        if git("ls-tree", "--name-only", base, "--", relative)
-        else []
-    )
-    old = {row["id"]: row for row in previous}
-    removed = sorted(old.keys() - {row["id"] for row in rows})
-    return [row for row in rows if old.get(row["id"]) != row], removed
-
-
 def summarize(cases, top_k):
-    total = len(cases)
-    errors = sum(case["error"] is not None for case in cases)
-    ranks = [case["match_rank"] for case in cases if case["match_rank"] is not None]
-    summary = {
-        "total": total,
-        "hits": len(ranks),
-        "misses": total - len(ranks) - errors,
-        "errors": errors,
-        "mrr": sum(1 / rank for rank in ranks) / total if total else None,
+    return EvaluationResult.from_cases(
+        [EvaluationCaseResult(**case) for case in cases]
+    ).summary(top_k)
+
+
+def group_summaries(rows, cases, top_k):
+    by_id = {case["question_id"]: case for case in cases}
+    return {
+        f"by_{field}": {
+            group: summarize(
+                [by_id[row["id"]] for row in rows if row.get(field) == group], top_k
+            )
+            for group in sorted({row[field] for row in rows if field in row})
+        }
+        for field in ("area", "topic", "intent")
     }
-    for k in (1, 3, 5):
-        summary[f"hit_at_{k}"] = (
-            sum(rank <= k for rank in ranks) / total if total and top_k >= k else None
-        )
-    return summary
 
 
 def format_summary(report):
     """Render aggregate results for the terminal and GitHub Actions summary."""
 
+    if report["status"] == "error":
+        return (
+            f"## {report['suite'].title()} unavailable\n\n"
+            "The evaluation did not complete successfully. "
+            "See the job log or JSON report for details.\n"
+        )
+
     def percent(value):
         return f"{value:.2%}" if value is not None else "—"
 
-    def row(label, counts):
-        label = label.replace("|", "\\|").replace("\n", " ").replace("\r", " ")
-        rate = counts["hits"] / counts["total"] if counts["total"] else None
-        return f"| {label} | {counts['total']} | {counts['hits']} | {percent(rate)} |"
+    def pass_rate(counts):
+        return counts["hits"] / counts["total"] if counts["total"] else None
+
+    def compared(before, current, rate=True):
+        display = percent if rate else lambda value: f"{value:.3f}"
+        values = [
+            display(value) if value is not None else "—" for value in (before, current)
+        ]
+        change = "—"
+        if before is not None and current is not None:
+            delta = current - before
+            change = f"{delta * 100:+.2f} pp" if rate else f"{delta:+.3f}"
+        return " | ".join([*values, change])
 
     summary = report["summary"]
-    metrics = " | ".join(percent(summary[f"hit_at_{k}"]) for k in (1, 3, 5))
-    mrr = f"{summary['mrr']:.3f}" if summary["mrr"] is not None else "—"
+    previous = (report.get("comparison") or {}).get("previous")
     lines = [
         f"## {report['suite'].title()} results",
         "",
-        "| Suite | Questions | Passed | Pass rate | Hit@1 | Hit@3 | Hit@5 | MRR |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
-        row(report["suite"].title(), summary) + f" {metrics} | {mrr} |",
-        "",
         f"Pass = an accepted source retrieved within the top {report['top_k']} results.",
+        "",
     ]
-    if summary["errors"]:
+    if previous:
+        before = previous["summary"]
         lines += [
+            f"Questions: {summary['total']}.",
             "",
-            f"**Query errors: {summary['errors']}. These count as unsuccessful in the rates above.**",
+            "| Metric | Previous | Current | Change |",
+            "| --- | ---: | ---: | ---: |",
+            f"| Pass rate | {compared(pass_rate(before), pass_rate(summary))} |",
+            *(
+                f"| Hit@{k} | {compared(before[f'hit_at_{k}'], summary[f'hit_at_{k}'])} |"
+                for k in (1, 3, 5)
+            ),
+            f"| MRR | {compared(before['mrr'], summary['mrr'], rate=False)} |",
         ]
-    comparison = report.get("comparison")
-    if comparison:
+    else:
+        metrics = " | ".join(percent(summary[f"hit_at_{k}"]) for k in (1, 3, 5))
+        mrr = f"{summary['mrr']:.3f}" if summary["mrr"] is not None else "—"
+        lines += [
+            "| Suite | Questions | Passed | Pass rate | Hit@1 | Hit@3 | Hit@5 | MRR |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            f"| {report['suite'].title()} | {summary['total']} | {summary['hits']} | {percent(pass_rate(summary))} | {metrics} | {mrr} |",
+        ]
+    if report.get("comparison_note") or (
+        report["suite"] == "benchmark" and not previous
+    ):
         lines += [
             "",
-            f"Baseline comparison: {len(comparison['regressions'])} regressions, {len(comparison['recoveries'])} recoveries.",
+            report.get(
+                "comparison_note",
+                "Comparison unavailable: no previous report was supplied.",
+            ),
         ]
     for field in ("intent", "topic"):
         groups = report.get(f"by_{field}", {})
         if groups:
+            columns = (
+                "Previous pass % | Current pass % | Change"
+                if previous
+                else "Passed | Pass rate"
+            )
             lines += [
                 "",
                 f"### By {field}",
                 "",
-                f"| {field.title()} | Questions | Passed | Pass rate |",
-                "| --- | ---: | ---: | ---: |",
-                *(row(label, counts) for label, counts in sorted(groups.items())),
+                f"| {field.title()} | Questions | {columns} |",
+                "| --- | ---: | ---: | ---: |" + (" ---: |" if previous else ""),
             ]
+            for label, counts in sorted(groups.items()):
+                values = (
+                    compared(
+                        pass_rate(previous[f"by_{field}"][label]), pass_rate(counts)
+                    )
+                    if previous
+                    else f"{counts['hits']} | {percent(pass_rate(counts))}"
+                )
+                label = label.replace("|", "\\|").replace("\n", " ").replace("\r", " ")
+                lines.append(f"| {label} | {counts['total']} | {values} |")
     return "\n".join(lines) + "\n"
 
 
@@ -192,6 +222,7 @@ def load_baseline(path, rows, suite, top_k):
             raise ValueError("Baseline contains a query error or invalid rank")
     # Recompute aggregates instead of validating redundant cached metrics.
     previous["summary"] = summarize(previous["cases"], top_k)
+    previous.update(group_summaries(rows, previous["cases"], top_k))
     return previous
 
 
@@ -199,21 +230,24 @@ def evaluate(args):
     if args.top_k < 1:
         raise ValueError("--top-k must be positive")
     rows = validate_rows(load_eval_rows(args.eval_path))
-    selected, removed = select_rows(rows, args.eval_path, args.ids, args.changed_since)
+    selected = rows
+    if args.ids:
+        unknown = set(args.ids) - {row["id"] for row in rows}
+        if unknown:
+            raise ValueError(f"Unknown question IDs: {', '.join(sorted(unknown))}")
+        selected = [row for row in rows if row["id"] in args.ids]
     print(
         f"{args.suite}: selected {len(selected)}/{len(rows)} questions; top-k={args.top_k}"
     )
-    if removed:
-        print(f"Removed IDs: {', '.join(removed)}")
-    report = {
-        "suite_total": len(rows),
-        "removed_ids": removed,
-        "status": "no_changed_questions",
-    }
-    if not selected:
-        print("No changed questions; retrieval was not started.")
-        return report
-    previous = load_baseline(args.baseline, selected, args.suite, args.top_k)
+    report = {"suite_total": len(rows)}
+    try:
+        previous = load_baseline(args.baseline, selected, args.suite, args.top_k)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        print(f"Baseline not used: {exc}", file=sys.stderr)
+        previous = None
+        report["comparison_note"] = (
+            "Comparison unavailable: the previous report is missing, invalid, or incompatible."
+        )
     resources = load_search_resources(
         metadata_path=str(args.metadata_path),
         usearch_index_path=str(args.index_path),
@@ -249,22 +283,9 @@ def evaluate(args):
     report.update(
         status="error" if result.errors else "complete",
         cases=cases,
-        summary=summarize(cases, args.top_k),
+        summary=result.summary(args.top_k),
     )
-    for field in ("area", "topic", "intent"):
-        groups = sorted({row[field] for row in selected if field in row})
-        if groups:
-            report[f"by_{field}"] = {
-                group: summarize(
-                    [
-                        case
-                        for row, case in zip(selected, cases)
-                        if row.get(field) == group
-                    ],
-                    args.top_k,
-                )
-                for group in groups
-            }
+    report.update(group_summaries(selected, cases, args.top_k))
     if previous and not result.errors:
         before = {
             c["question_id"] for c in previous["cases"] if c["match_rank"] is not None
@@ -273,6 +294,9 @@ def evaluate(args):
         report["comparison"] = {
             "baseline": str(args.baseline),
             "baseline_target": previous.get("target"),
+            "previous": {
+                key: previous[key] for key in ("summary", "by_topic", "by_intent")
+            },
             "regressions": sorted(before - after),
             "recoveries": sorted(after - before),
             "delta": {
@@ -294,16 +318,11 @@ def main(argv=None):
     )
     parser.add_argument("--model-path", type=Path, required=True)
     parser.add_argument("--top-k", type=int, default=5)
-    selection = parser.add_mutually_exclusive_group()
-    selection.add_argument(
+    parser.add_argument(
         "--id",
         dest="ids",
         action="append",
         help="Select an ID; repeat for multiple questions",
-    )
-    selection.add_argument(
-        "--changed-since",
-        help="Select added/edited questions since the merge base with REF",
     )
     parser.add_argument("--output", type=Path, help="Write a new JSON report")
     parser.add_argument(
@@ -343,14 +362,14 @@ def main(argv=None):
                 json.dumps(report, indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )
-        if "summary" in report:
+        if "summary" in report or report["status"] == "error":
             summary_text = format_summary(report)
             print(summary_text)
             if summary_path := os.environ.get("GITHUB_STEP_SUMMARY"):
                 with open(summary_path, "a", encoding="utf-8") as summary_file:
                     summary_file.write(summary_text + "\n")
             if args.suite == "smoke":
-                for case in report["cases"]:
+                for case in report.get("cases", []):
                     if case["match_rank"] is None:
                         print(
                             f"{case['question_id']}: {case['error'] or 'MISS'}; expected={case['expected_urls']}; got={case['ranked_urls']}"

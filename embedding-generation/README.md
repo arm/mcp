@@ -85,7 +85,7 @@ pip install playwright && playwright install chromium
 python discover-developer-arm-com-sources.py vector-db-sources.csv
 ```
 
-Review the printed `[NEW SOURCE]` lines, add a question with the new URL in `expected_urls` to `../evals/benchmark.json` for each one, then commit the updated CSV. The production build chunks the new rows automatically — `generate-chunks.py` already handles developer.arm.com documentation and community blog URLs found in the CSV.
+Review the printed `[NEW SOURCE]` lines and draft coverage questions in a separate evaluation JSON file, then commit the updated CSV. Keep the checked-in evaluation suites fixed during retrieval improvements; suite additions follow the [review process](../CONTRIBUTING.md#adding-questions-and-accepted-urls). The production build chunks the new rows automatically — `generate-chunks.py` already handles developer.arm.com documentation and community blog URLs found in the CSV.
 
 ### Transcript-backed sources
 
@@ -118,17 +118,20 @@ Python 3.13 is required.
 One evaluator runs the stable smoke suite on every PR and the full benchmark in
 the existing Sunday embedding refresh. The suites are `../evals/smoke.json` and
 `../evals/benchmark.json`; the old `eval_questions.json` is historical input.
+Keep these suites fixed during retrieval improvements. Separate question sets,
+including holdouts, use the same runner with `--eval-path FILE`. Dataset changes
+or verified stale-label corrections require separate review and a fresh baseline.
 
 To rebuild the local corpus and run the benchmark:
 
 ```sh
 uv run --locked ./run-question-eval.sh
-uv run --locked ./run-question-eval.sh --changed-since upstream/main --output reports/changed.json
+uv run --locked ./run-question-eval.sh --id B001 --id B002 --output reports/selected.json
 ```
 
 The wrapper copies intrinsic chunks if needed, regenerates chunks, acquires the
 locked model, rebuilds the index, and invokes the same evaluator. It accepts
-`--suite`, repeatable `--id`, `--changed-since`, `--output`, and `--baseline`.
+`--suite`, repeatable `--id`, `--output`, and `--baseline`.
 `--eval FILE` remains available for a custom question file. A relative report
 path is relative to this directory. Use a new output filename for each run.
 
@@ -141,20 +144,14 @@ uv run --locked python evaluate_retrieval.py --suite benchmark \
   --model-path .cache/embedding-model --output reports/benchmark.json
 uv run --locked python evaluate_retrieval.py --suite benchmark --id B001 --id B002 \
   --model-path .cache/embedding-model
-uv run --locked python evaluate_retrieval.py --suite benchmark --changed-since upstream/main \
-  --model-path .cache/embedding-model
 uv run --locked python evaluate_retrieval.py --suite benchmark \
   --model-path .cache/embedding-model --baseline reports/benchmark.json \
   --output reports/benchmark-next.json
 ```
 
-`--changed-since` compares parsed records by ID against the branch merge base,
-including uncommitted additions/edits. Removed IDs are reported. Formatting and
-record ordering do not select questions. Invalid refs and unknown IDs fail;
-no changed questions is an explicit no-op. Fetch the base branch/history first.
-This filter selects changed questions, not every question affected by a changed
-source, embedding model, or ranking algorithm. Run the full benchmark for those
-changes. ID selection and changed-since selection are mutually exclusive.
+Repeat `--id` to select questions for a focused investigation; unknown IDs fail.
+Omit `--id` to run the full suite. Changes to sources, the embedding model, or
+the ranking algorithm need the full benchmark to check for broader regressions.
 
 Default depth is five. Smoke requires every selected question to retrieve an
 accepted source within that depth (exit 1 for a miss). Benchmark misses are
@@ -162,6 +159,9 @@ report-only (exit 0). Invalid data, model/index failures, and query errors fail
 both modes (exit 2). PR checks always use the whole smoke suite at depth five;
 a local subset run does not certify the full suite. Hit@3/5 is unavailable when
 the requested depth is lower than its cutoff. MRR is truncated at that depth.
+The weekly workflow treats all benchmark steps as report-only: a benchmark
+failure is shown as unavailable and does not block image publication. Corpus
+build failures and security checks still block publication.
 
 Matching preserves the existing suite policies:
 
@@ -172,24 +172,34 @@ Matching preserves the existing suite policies:
   and package/intrinsic selectors. Only tracking `utm_*` parameters, query-pair
   order, host/scheme case, and trailing slashes are normalized.
 
+Smoke and benchmark scores measure different criteria and are not directly
+comparable. Promotion to smoke explicitly adopts its page/child matching policy.
+
 Console output and the GitHub Actions Summary show tables with overall pass
 percentage and retrieval metrics, followed by intent and topic pass percentages.
 The benchmark does not print individual misses. Download the JSON artifact for
 per-question ranks/URLs/errors and category metrics. Reports record the Git
 revision and `EVAL_TARGET` image reference when available; they do not hash the
 model, corpus, or source files.
-Errors are separate from misses and contribute zero to headline rates.
-Benchmark comparisons show metric deltas and regressed/recovered IDs for the
-same question IDs, question text, accepted URLs, matching rules, and depth, with
-no execution errors. Metrics are recalculated from the stored ranks, so older
-reports remain usable without relying on cached metrics or fingerprints.
-Changed questions or accepted URLs need a fresh baseline. No supplied baseline
-means no regression claim.
+Runs with execution errors show an unavailable message instead of score tables.
+With a compatible baseline, the tables show previous/current results and changes
+overall, by topic, and by intent. Rate changes are percentage points; MRR changes
+are numeric differences. Individual regressions/recoveries remain in JSON only.
+Comparisons require the same question IDs, question text, accepted URLs, matching
+rules, and depth, with no execution errors. Metrics are recalculated from stored
+ranks, using the current topic/intent labels for both runs. A missing, invalid,
+or incompatible baseline leaves current results visible with an explanation
+that comparison is unavailable.
 
 PR smoke reports are retained as `retrieval-smoke-*` Actions artifacts. Weekly
-reports are retained for 90 days as `retrieval-benchmark`; download two reports
-for an explicit comparison. The weekly job evaluates the newly built vectorstore,
-not the previously released corpus. It also runs during manual pipeline dry runs.
+reports are retained as `retrieval-benchmark` (90 days requested, subject to
+repository retention limits). The weekly job checks the latest 20 successful
+runs of the same workflow and branch for the most recent completed benchmark
+report, skipping missing artifacts and failed evaluations. It uses that report
+automatically as the baseline and links its run in the Actions Summary. The
+first run, or an incompatible baseline, shows current results only.
+The weekly job evaluates the newly built vectorstore, not the previously
+released corpus. It also runs during manual pipeline dry runs.
 The published scratch vectorstore is copied from a stopped container and
 searched using the locked evaluation environment; no second runner is involved.
 

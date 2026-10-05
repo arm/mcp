@@ -25,7 +25,6 @@ Options:
   --suite NAME                   smoke or benchmark (default: benchmark)
   --eval FILE                    Override the suite JSON
   --id ID                        Select a question (repeatable)
-  --changed-since REF            Select questions added/edited on this branch
   --output FILE                  Save a new JSON report
   --baseline FILE                Compare with a previous compatible report
   --top-k N                      Number of search results to evaluate (default: 5)
@@ -62,7 +61,7 @@ while [[ $# -gt 0 ]]; do
       eval_file="$2"
       shift 2
       ;;
-    --suite|--id|--changed-since|--output|--baseline)
+    --suite|--id|--output|--baseline)
       require_value "$@"
       eval_args+=("$1" "$2")
       shift 2

@@ -1,10 +1,10 @@
 """Cover PR smoke checks, benchmark reports, and contributor selection."""
 
 import json
-import subprocess
 from types import SimpleNamespace
 
 import pytest
+from arm_kb_search.evaluation import evaluate_retrieval
 
 import evaluate_retrieval as runner
 
@@ -75,7 +75,7 @@ def test_benchmark_misses_produce_json_and_clean_tables(
 @pytest.mark.parametrize("suite", ["smoke", "benchmark"])
 @pytest.mark.parametrize("operation", ["load_search_resources", "search"])
 def test_setup_and_query_errors_fail_both_suites(
-    inputs, tmp_path, monkeypatch, suite, operation
+    inputs, tmp_path, monkeypatch, capsys, suite, operation
 ):
     def fail(*args, **kwargs):
         raise RuntimeError("model unavailable")
@@ -84,6 +84,10 @@ def test_setup_and_query_errors_fail_both_suites(
     output = tmp_path / "error.json"
     assert runner.main([*inputs[2], "--suite", suite, "--output", str(output)]) == 2
     assert json.loads(output.read_text())["status"] == "error"
+    if suite == "benchmark":
+        printed = capsys.readouterr().out
+        assert "Benchmark unavailable" in printed
+        assert "| Benchmark |" not in printed
 
 
 def test_empty_corpus_cannot_pass_benchmark(inputs, monkeypatch):
@@ -95,9 +99,46 @@ def test_empty_corpus_cannot_pass_benchmark(inputs, monkeypatch):
     assert runner.main([*inputs[2], "--suite", "benchmark"]) == 2
 
 
-def test_baseline_reports_regression_and_recovery(inputs, monkeypatch, tmp_path):
+@pytest.mark.parametrize("depth", [1, 5])
+def test_shared_metrics_count_ranks_misses_and_errors(depth):
+    rows = [
+        {"question": str(rank), "expected_urls": ["https://example.com/hit"]}
+        for rank in (1, 3, 5, 0, -1)
+    ]
+
+    def retrieve(question, k):
+        rank = int(question)
+        if rank == -1:
+            raise RuntimeError("query failed")
+        return ["https://example.com/miss"] * (rank - 1) + (
+            ["https://example.com/hit"] if rank else []
+        )
+
+    result = evaluate_retrieval(rows, retrieve, depth)
+    summary = result.summary(depth)
+    assert (
+        summary["total"],
+        summary["hits"],
+        summary["misses"],
+        summary["errors"],
+    ) == (5, 1 if depth == 1 else 3, 3 if depth == 1 else 1, 1)
+    assert summary["hit_at_1"] == result.hit_at_1 == 0.2
+    assert summary["mrr"] == pytest.approx(0.2 if depth == 1 else 0.3066666667)
+    assert summary["mrr"] == result.mrr
+    assert summary["hit_at_3"] == (None if depth == 1 else 0.4)
+    assert summary["hit_at_5"] == (None if depth == 1 else 0.6)
+
+
+def test_baseline_reports_regression_and_recovery(
+    inputs, monkeypatch, tmp_path, capsys
+):
     before, after = tmp_path / "before.json", tmp_path / "after.json"
     assert runner.main([*inputs[2], "--output", str(before)]) == 0
+    saved = json.loads(before.read_text())
+    for case in saved["cases"]:
+        case["reciprocal_rank"] = 999  # Baseline metrics must come from ranks.
+    before.write_text(json.dumps(saved))
+    capsys.readouterr()
     monkeypatch.setattr(
         runner, "search", lambda *a, **kw: [{"url": "https://example.com/Q2"}]
     )
@@ -109,33 +150,34 @@ def test_baseline_reports_regression_and_recovery(inputs, monkeypatch, tmp_path)
     assert comparison["regressions"] == ["Q1"]
     assert comparison["recoveries"] == ["Q2"]
     assert comparison["delta"]["hit_at_5"] == 0
+    printed = capsys.readouterr().out
+    assert "| Metric | Previous | Current | Change |" in printed
+    assert "| Pass rate | 50.00% | 50.00% | +0.00 pp |" in printed
+    assert "| MRR | 0.500 | 0.500 | +0.000 |" in printed
+    assert "| setup | 1 | 100.00% | 0.00% | -100.00 pp |" in printed
+    assert "| reference | 1 | 0.00% | 100.00% | +100.00 pp |" in printed
+    assert "| cloud | 2 | 50.00% | 50.00% | +0.00 pp |" in printed
+    assert all(value not in printed for value in ("Q1", "Q2", "https://", "MISS"))
 
 
-def test_changed_since_selects_only_new_and_edited_questions(
-    inputs, tmp_path, monkeypatch
+@pytest.mark.parametrize("baseline", ["missing", "changed", "invalid"])
+def test_unavailable_baseline_still_reports_current_results(
+    inputs, tmp_path, capsys, baseline
 ):
-    rows, path, args = inputs
-
-    def git(*args):
-        subprocess.run(
-            ["git", "-C", str(tmp_path), *args], check=True, capture_output=True
-        )
-
-    git("init", "-b", "main")
-    git("config", "user.name", "Test")
-    git("config", "user.email", "test@example.com")
-    git("add", "suite.json")
-    git("commit", "-m", "base")
-    git("checkout", "-b", "feature")
-    monkeypatch.setattr(runner, "REPO_ROOT", tmp_path)
-    unchanged = tmp_path / "unchanged.json"
+    before, after = tmp_path / "before.json", tmp_path / "after.json"
+    if baseline != "missing":
+        assert runner.main([*inputs[2], "--output", str(before)]) == 0
+        if baseline == "changed":
+            inputs[0][0]["question"] = "edited question"
+            inputs[1].write_text(json.dumps(inputs[0]))
+        else:
+            before.write_text("{}")
+    capsys.readouterr()
     assert (
-        runner.main([*args, "--changed-since", "main", "--output", str(unchanged)]) == 0
+        runner.main([*inputs[2], "--baseline", str(before), "--output", str(after)])
+        == 0
     )
-    assert json.loads(unchanged.read_text())["status"] == "no_changed_questions"
-    rows[0]["question"] = "edited question"
-    path.write_text(json.dumps([*rows, {**rows[1], "id": "Q3"}]))
-    output = tmp_path / "changed.json"
-    assert runner.main([*args, "--changed-since", "main", "--output", str(output)]) == 0
-    report = json.loads(output.read_text())
-    assert [case["question_id"] for case in report["cases"]] == ["Q1", "Q3"]
+    report = json.loads(after.read_text())
+    assert report["summary"]["total"] == 2
+    assert "comparison" not in report
+    assert "Comparison unavailable" in capsys.readouterr().out
