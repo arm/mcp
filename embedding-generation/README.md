@@ -85,7 +85,7 @@ pip install playwright && playwright install chromium
 python discover-developer-arm-com-sources.py vector-db-sources.csv
 ```
 
-Review the printed `[NEW SOURCE]` lines and draft coverage questions in a separate evaluation JSON file, then commit the updated CSV. Keep the checked-in evaluation suites fixed during retrieval improvements; suite additions follow the [review process](../CONTRIBUTING.md#adding-questions-and-accepted-urls). The production build chunks the new rows automatically — `generate-chunks.py` already handles developer.arm.com documentation and community blog URLs found in the CSV.
+Review the printed `[NEW SOURCE]` lines and commit the updated CSV. Propose benchmark coverage in a separate reviewed dataset change, following the [review process](../CONTRIBUTING.md#adding-questions-and-accepted-urls). Keep the checked-in evaluation suites fixed during retrieval improvements. The production build chunks the new rows automatically — `generate-chunks.py` already handles developer.arm.com documentation and community blog URLs found in the CSV.
 
 ### Transcript-backed sources
 
@@ -117,23 +117,23 @@ Python 3.13 is required.
 
 One evaluator runs the stable smoke suite on every PR and the full benchmark in
 the existing Sunday embedding refresh. The suites are `../evals/smoke.json` and
-`../evals/benchmark.json`; the old `eval_questions.json` is historical input.
-Keep these suites fixed during retrieval improvements. Separate question sets,
-including holdouts, use the same runner with `--eval-path FILE`. Dataset changes
-or verified stale-label corrections require separate review and a fresh baseline.
+`../evals/benchmark.json`. Select either checked-in suite with `--suite`.
+Keep these suites fixed during retrieval improvements. Each question
+requires a unique, nonempty `id`, a `question`, and a nonempty `expected_urls` list.
+Dataset changes or verified stale-label corrections require separate review and
+a fresh baseline.
 
 To rebuild the local corpus and run the benchmark:
 
 ```sh
 uv run --locked ./run-question-eval.sh
-uv run --locked ./run-question-eval.sh --id B001 --id B002 --output reports/selected.json
 ```
 
 The wrapper copies intrinsic chunks if needed, regenerates chunks, acquires the
 locked model, rebuilds the index, and invokes the same evaluator. It accepts
-`--suite`, repeatable `--id`, `--output`, and `--baseline`.
-`--eval FILE` remains available for a custom question file. A relative report
-path is relative to this directory. Use a new output filename for each run.
+`--suite`, `--output`, and `--baseline`.
+A relative report path is relative to this directory. Use a new output filename
+for each run.
 
 To evaluate an existing local corpus without rebuilding it:
 
@@ -142,23 +142,21 @@ uv run --locked python evaluate_retrieval.py --suite smoke \
   --model-path .cache/embedding-model --output reports/smoke.json
 uv run --locked python evaluate_retrieval.py --suite benchmark \
   --model-path .cache/embedding-model --output reports/benchmark.json
-uv run --locked python evaluate_retrieval.py --suite benchmark --id B001 --id B002 \
-  --model-path .cache/embedding-model
 uv run --locked python evaluate_retrieval.py --suite benchmark \
   --model-path .cache/embedding-model --baseline reports/benchmark.json \
   --output reports/benchmark-next.json
 ```
 
-Repeat `--id` to select questions for a focused investigation; unknown IDs fail.
-Omit `--id` to run the full suite. Changes to sources, the embedding model, or
-the ranking algorithm need the full benchmark to check for broader regressions.
+Every run evaluates the full selected suite. Changes to sources, the embedding
+model, or the ranking algorithm need the full benchmark to check for broader
+regressions.
 
-Default depth is five. Smoke requires every selected question to retrieve an
+Default depth is five. Smoke requires every question to retrieve an
 accepted source within that depth (exit 1 for a miss). Benchmark misses are
 report-only (exit 0). Invalid data, model/index failures, and query errors fail
-both modes (exit 2). PR checks always use the whole smoke suite at depth five;
-a local subset run does not certify the full suite. Hit@3/5 is unavailable when
-the requested depth is lower than its cutoff. MRR is truncated at that depth.
+both modes (exit 2). PR checks always use the whole smoke suite at depth five.
+Hit@3/5 is unavailable when the requested depth is lower than its cutoff. MRR is
+truncated at that depth.
 The weekly workflow treats all benchmark steps as report-only: a benchmark
 failure is shown as unavailable and does not block image publication. Corpus
 build failures and security checks still block publication.
@@ -191,7 +189,10 @@ ranks, using the current topic/intent labels for both runs. A missing, invalid,
 or incompatible baseline leaves current results visible with an explanation
 that comparison is unavailable.
 
-PR smoke reports are retained as `retrieval-smoke-*` Actions artifacts. Weekly
+PR smoke runs through `mcp-local/tests/test_retrieval_smoke.py` alongside the
+existing MCP integration tests. It invokes the shared evaluator inside the
+candidate image with networking disabled. Reports are retained as
+`retrieval-smoke-*` Actions artifacts. Weekly
 reports are retained as `retrieval-benchmark` (90 days requested, subject to
 repository retention limits). The weekly job checks the latest 20 successful
 runs of the same workflow and branch for the most recent completed benchmark

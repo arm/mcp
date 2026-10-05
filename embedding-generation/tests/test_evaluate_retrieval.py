@@ -1,4 +1,4 @@
-"""Cover PR smoke checks, benchmark reports, and contributor selection."""
+"""Cover full-suite smoke checks, benchmark reports, and comparisons."""
 
 import json
 from types import SimpleNamespace
@@ -21,8 +21,12 @@ def inputs(tmp_path, monkeypatch):
         }
         for key, intent in [("Q1", "setup"), ("Q2", "reference")]
     ]
-    path = tmp_path / "suite.json"
-    path.write_text(json.dumps(rows))
+    suites = tmp_path / "evals"
+    suites.mkdir()
+    for suite in ("smoke", "benchmark"):
+        (suites / f"{suite}.json").write_text(json.dumps(rows))
+    path = suites / "benchmark.json"
+    monkeypatch.setattr(runner, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(
         runner,
         "load_search_resources",
@@ -32,21 +36,25 @@ def inputs(tmp_path, monkeypatch):
     monkeypatch.setattr(
         runner, "search", lambda *a, **kw: [{"url": "https://example.com/Q1"}]
     )
-    return rows, path, ["--eval-path", str(path), "--model-path", str(tmp_path)]
+    return rows, path, ["--model-path", str(tmp_path)]
 
 
-@pytest.mark.parametrize("selected,exit_code", [([], 1), (["--id", "Q1"], 0)])
-def test_smoke_gate_and_id_selection(inputs, tmp_path, selected, exit_code):
+@pytest.mark.parametrize("all_match,exit_code", [(False, 1), (True, 0)])
+def test_smoke_gate_requires_all_questions(
+    inputs, tmp_path, monkeypatch, all_match, exit_code
+):
+    if all_match:
+        answers = {row["question"]: row["expected_urls"][0] for row in inputs[0]}
+        monkeypatch.setattr(
+            runner, "search", lambda question, *a, **kw: [{"url": answers[question]}]
+        )
     output = tmp_path / "smoke.json"
     assert (
-        runner.main(
-            [*inputs[2], "--suite", "smoke", *selected, "--output", str(output)]
-        )
+        runner.main([*inputs[2], "--suite", "smoke", "--output", str(output)])
         == exit_code
     )
     report = json.loads(output.read_text())
-    expected_ids = ["Q1"] if selected else ["Q1", "Q2"]
-    assert [case["question_id"] for case in report["cases"]] == expected_ids
+    assert [case["question_id"] for case in report["cases"]] == ["Q1", "Q2"]
     assert report["summary"]["misses"] == exit_code
 
 

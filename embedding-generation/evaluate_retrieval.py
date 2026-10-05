@@ -41,8 +41,6 @@ def validate_rows(rows):
     for row in rows:
         if not isinstance(row, dict):
             raise ValueError("Each evaluation question must be an object")
-        # Legacy --eval-path files used question text as their identity.
-        row.setdefault("id", row.get("question"))
         if any(
             not isinstance(row.get(key), str) or not row[key].strip()
             for key in ("id", "question")
@@ -229,19 +227,12 @@ def load_baseline(path, rows, suite, top_k):
 def evaluate(args):
     if args.top_k < 1:
         raise ValueError("--top-k must be positive")
-    rows = validate_rows(load_eval_rows(args.eval_path))
-    selected = rows
-    if args.ids:
-        unknown = set(args.ids) - {row["id"] for row in rows}
-        if unknown:
-            raise ValueError(f"Unknown question IDs: {', '.join(sorted(unknown))}")
-        selected = [row for row in rows if row["id"] in args.ids]
-    print(
-        f"{args.suite}: selected {len(selected)}/{len(rows)} questions; top-k={args.top_k}"
-    )
+    eval_path = REPO_ROOT / "evals" / f"{args.suite}.json"
+    rows = validate_rows(load_eval_rows(eval_path))
+    print(f"{args.suite}: {len(rows)} questions; top-k={args.top_k}")
     report = {"suite_total": len(rows)}
     try:
-        previous = load_baseline(args.baseline, selected, args.suite, args.top_k)
+        previous = load_baseline(args.baseline, rows, args.suite, args.top_k)
     except (OSError, ValueError, KeyError, TypeError) as exc:
         print(f"Baseline not used: {exc}", file=sys.stderr)
         previous = None
@@ -272,7 +263,7 @@ def evaluate(args):
         return [item["url"] for item in results]
 
     result = evaluate_retrieval(
-        selected,
+        rows,
         retrieve_urls,
         args.top_k,
         url_matcher=lambda actual, expected: suite_url_matches(
@@ -285,7 +276,7 @@ def evaluate(args):
         cases=cases,
         summary=result.summary(args.top_k),
     )
-    report.update(group_summaries(selected, cases, args.top_k))
+    report.update(group_summaries(rows, cases, args.top_k))
     if previous and not result.errors:
         before = {
             c["question_id"] for c in previous["cases"] if c["match_rank"] is not None
@@ -313,23 +304,13 @@ def main(argv=None):
     parser.add_argument("--suite", choices=("smoke", "benchmark"), default="benchmark")
     parser.add_argument("--index-path", type=Path, default=Path("usearch_index.bin"))
     parser.add_argument("--metadata-path", type=Path, default=Path("metadata.json"))
-    parser.add_argument(
-        "--eval-path", type=Path, help="Override the selected suite's JSON file"
-    )
     parser.add_argument("--model-path", type=Path, required=True)
     parser.add_argument("--top-k", type=int, default=5)
-    parser.add_argument(
-        "--id",
-        dest="ids",
-        action="append",
-        help="Select an ID; repeat for multiple questions",
-    )
     parser.add_argument("--output", type=Path, help="Write a new JSON report")
     parser.add_argument(
         "--baseline", type=Path, help="Compare with a compatible JSON report"
     )
     args = parser.parse_args(argv)
-    args.eval_path = args.eval_path or REPO_ROOT / "evals" / f"{args.suite}.json"
     if args.output and args.output.exists():
         print(
             f"Output already exists; choose a new report path: {args.output}",

@@ -259,7 +259,7 @@ def main():
     )
     if new_rows:
         print(
-            "Next: add questions with expected URLs for the new sources to evals/benchmark.json."
+            "Next: propose benchmark questions for the new sources in a separate reviewed dataset change."
         )
 
 

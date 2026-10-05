@@ -115,25 +115,13 @@ jobs:
             --cache-to type=gha,mode=max \
             .
 
-      - name: Run retrieval smoke suite
-        timeout-minutes: 15
+      - name: Run integration tests
+        env:
+          MCP_IMAGE: arm-mcp:latest
         run: |
-          mkdir -p "${RUNNER_TEMP}/retrieval-smoke"
-          touch "${GITHUB_STEP_SUMMARY}"
-          docker run --rm --network none \
-            --entrypoint python \
-            -e GITHUB_SHA \
-            -e GITHUB_STEP_SUMMARY=/evaluation-summary.md \
-            -e EVAL_TARGET="$(docker image inspect --format '{{.Id}}' arm-mcp:latest)" \
-            -v "${GITHUB_STEP_SUMMARY}:/evaluation-summary.md" \
-            -v "${GITHUB_WORKSPACE}:/evaluation:ro" \
-            -v "${RUNNER_TEMP}/retrieval-smoke:/results" \
-            arm-mcp:latest /evaluation/embedding-generation/evaluate_retrieval.py \
-            --suite smoke --top-k 5 \
-            --metadata-path /app/data/metadata.json \
-            --index-path /app/data/usearch_index.bin \
-            --model-path /app/embedding-model \
-            --output /results/smoke.json
+          uv run --directory mcp-local --locked --only-group test \
+            pytest -s tests/test_mcp.py tests/test_retrieval_smoke.py \
+            --platform ${{ matrix.platform }}
 
       - name: Retain retrieval smoke results
         if: ${{ always() }}
@@ -143,10 +131,3 @@ jobs:
           path: ${{ runner.temp }}/retrieval-smoke/smoke.json
           retention-days: 30
           if-no-files-found: warn
-
-      - name: Run integration tests
-        env:
-          MCP_IMAGE: arm-mcp:latest
-        run: |
-          uv run --directory mcp-local --locked --only-group test \
-            pytest -s tests/test_mcp.py --platform ${{ matrix.platform }}

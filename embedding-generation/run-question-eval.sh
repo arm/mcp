@@ -5,7 +5,6 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$script_dir"
 
 sources_file="vector-db-sources.csv"
-eval_file=""
 eval_args=(--suite benchmark)
 top_k="5"
 python_bin="${PYTHON:-python3}"
@@ -23,8 +22,6 @@ Build the local vector store from vector-db-sources.csv and run retrieval eval.
 Options:
   --sources FILE                 CSV to chunk (default: vector-db-sources.csv)
   --suite NAME                   smoke or benchmark (default: benchmark)
-  --eval FILE                    Override the suite JSON
-  --id ID                        Select a question (repeatable)
   --output FILE                  Save a new JSON report
   --baseline FILE                Compare with a previous compatible report
   --top-k N                      Number of search results to evaluate (default: 5)
@@ -56,12 +53,7 @@ while [[ $# -gt 0 ]]; do
       sources_file="$2"
       shift 2
       ;;
-    --eval)
-      require_value "$@"
-      eval_file="$2"
-      shift 2
-      ;;
-    --suite|--id|--output|--baseline)
+    --suite|--output|--baseline)
       require_value "$@"
       eval_args+=("$1" "$2")
       shift 2
@@ -96,11 +88,6 @@ if [[ ! -f "$sources_file" ]]; then
   exit 1
 fi
 
-if [[ -n "$eval_file" && ! -f "$eval_file" ]]; then
-  echo "Eval questions file not found: $eval_file" >&2
-  exit 1
-fi
-
 if [[ "$skip_intrinsic_copy" -eq 0 ]]; then
   if [[ "$refresh_intrinsic_chunks" -eq 1 ]]; then
     rm -rf intrinsic_chunks
@@ -131,10 +118,6 @@ echo "Creating local vector store"
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
   "$python_bin" local_vectorstore_creation.py \
     --model-path "$embedding_model_dir"
-
-if [[ -n "$eval_file" ]]; then
-  eval_args+=(--eval-path "$eval_file")
-fi
 
 echo "Evaluating retrieval questions"
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \

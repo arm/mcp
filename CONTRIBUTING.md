@@ -37,8 +37,9 @@ minimum supported Python version.
 ### Testing Steps
 
 - Run the test script with
-  `uv run --locked --only-group test pytest -s tests/test_mcp.py`
-- Check if following 2 docker containers have started - **mcp server** & **testcontainer**
+  `uv run --locked --only-group test pytest -s tests/test_mcp.py tests/test_retrieval_smoke.py`
+- The tests start the MCP server and a separate offline retrieval container.
+  The retrieval test runs all 50 smoke questions through the shared evaluator.
 - All tests should pass without any errors. Warnings can be ignored.
 
 ## Reproducible MCP Build Inputs
@@ -406,7 +407,7 @@ The existing `embedding-generation/evaluate_retrieval.py` is the single runner:
 
 - Every PR runs all questions in `evals/smoke.json` against the candidate MCP
   image's pinned corpus. Every case must retrieve an accepted source in its top
-  five results. This step is part of Integration Tests; repository administrators
+  five results. This pytest test is part of Integration Tests; repository administrators
   must keep that check required in the branch ruleset.
 - The existing Sunday embedding workflow runs `evals/benchmark.json` against
   the newly generated corpus and retains a JSON report. Its summary compares
@@ -417,16 +418,15 @@ The existing `embedding-generation/evaluate_retrieval.py` is the single runner:
   PR still runs smoke.
 
 Use the [local commands](embedding-generation/README.md#test-locally) to run a
-full suite or specific question IDs. For a source addition,
+full smoke or benchmark suite. For a source addition,
 rebuild the corpus before evaluating; an old deployed/pinned corpus cannot
 verify ingestion of that source.
 
 ### Adding questions and accepted URLs
 
 Keep the checked-in smoke and benchmark questions, accepted URLs, and matching
-rules fixed while improving retrieval. Use a separate JSON file with
-`--eval-path` for proposed source coverage or a holdout set. Additions to the
-fixed suites require a separate reviewed dataset change and a fresh baseline.
+rules fixed while improving retrieval. Additions to these suites require a
+separate reviewed dataset change and a fresh baseline.
 For proposed questions, use stable IDs and the existing topic/intent fields.
 Describe one realistic developer need with accurate premises; avoid copied
 titles, keyword stuffing, and duplicate intents.
