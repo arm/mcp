@@ -116,7 +116,7 @@ uv sync --locked
 Python 3.13 is required.
 
 One evaluator runs the stable smoke suite on every PR and the full benchmark in
-the existing Sunday embedding refresh. The suites are `../evals/smoke.json` and
+the existing recurring embedding refresh. The suites are `../evals/smoke.json` and
 `../evals/benchmark.json`. Select either checked-in suite with `--suite`.
 Keep these suites fixed during retrieval improvements. Each question
 requires a unique, nonempty `id`, a `question`, and a nonempty `expected_urls` list.
@@ -147,66 +147,29 @@ uv run --locked python evaluate_retrieval.py --suite benchmark \
   --output reports/benchmark-next.json
 ```
 
-Every run evaluates the full selected suite. Changes to sources, the embedding
-model, or the ranking algorithm need the full benchmark to check for broader
-regressions.
+Every run evaluates the full selected suite. PR smoke runs all 50 questions
+alongside the MCP integration tests against the candidate image. Every question
+must retrieve an accepted source in the top five results; a miss or execution
+error fails the required integration check and blocks merging.
 
-Default depth is five. Smoke requires every question to retrieve an
-accepted source within that depth (exit 1 for a miss). Benchmark misses are
-report-only (exit 0). Invalid data, model/index failures, and query errors fail
-both modes (exit 2). PR checks always use the whole smoke suite at depth five.
-Hit@3/5 is unavailable when the requested depth is lower than its cutoff. MRR is
-truncated at that depth.
-The weekly workflow treats all benchmark steps as report-only: a benchmark
-failure is shown as unavailable and does not block image publication. Corpus
-build failures and security checks still block publication.
+The recurring embedding workflow runs all 400 benchmark questions against the
+newly built corpus. Benchmark scores and evaluation failures are reported without
+blocking publication. Corpus build failures and security failures still block it.
 
-Matching preserves the existing suite policies:
+Smoke accepts the expected page or a child path on the same origin, ignoring
+query strings and fragments. Benchmark uses stricter matching that preserves
+meaningful query parameters, fragments, and resource paths while ignoring
+`utm_*` tracking parameters. The two suites' scores are not directly comparable.
 
-- Smoke accepts the expected page or a child path, ignoring query strings,
-  fragments, and trailing slashes. A sibling path or different origin does not
-  match. This is a useful-resource coverage check, not exact section coverage.
-- Benchmark preserves meaningful query parameters, fragments, platform paths,
-  and package/intrinsic selectors. Only tracking `utm_*` parameters, query-pair
-  order, host/scheme case, and trailing slashes are normalized.
-
-Smoke and benchmark scores measure different criteria and are not directly
-comparable. Promotion to smoke explicitly adopts its page/child matching policy.
-
-Console output and the GitHub Actions Summary show tables with overall pass
-percentage and retrieval metrics, followed by intent and topic pass percentages.
-The benchmark does not print individual misses. Download the JSON artifact for
-per-question ranks/URLs/errors and category metrics. Reports record the Git
-revision and `EVAL_TARGET` image reference when available; they do not hash the
-model, corpus, or source files.
-Runs with execution errors show an unavailable message instead of score tables.
-With a compatible baseline, the tables show previous/current results and changes
-overall, by topic, and by intent. Rate changes are percentage points; MRR changes
-are numeric differences. Individual regressions/recoveries remain in JSON only.
-Comparisons require the same question IDs, question text, accepted URLs, matching
-rules, and depth, with no execution errors. Metrics are recalculated from stored
-ranks, using the current topic/intent labels for both runs. A missing, invalid,
-or incompatible baseline leaves current results visible with an explanation
-that comparison is unavailable.
-
-PR smoke runs through `mcp-local/tests/test_retrieval_smoke.py` alongside the
-existing MCP integration tests. It invokes the shared evaluator inside the
-candidate image with networking disabled. Reports are retained as
-`retrieval-smoke-*` Actions artifacts. Weekly
-reports are retained as `retrieval-benchmark` (90 days requested, subject to
-repository retention limits). The weekly job checks the latest 20 successful
-runs of the same workflow and branch for the most recent completed benchmark
-report, skipping missing artifacts and failed evaluations. It uses that report
-automatically as the baseline and links its run in the Actions Summary. The
-first run, or an incompatible baseline, shows current results only.
-The weekly job evaluates the newly built vectorstore, not the previously
-released corpus. It also runs during manual pipeline dry runs.
-The published scratch vectorstore is copied from a stopped container and
-searched using the locked evaluation environment; no second runner is involved.
+View aggregate results in the terminal or GitHub Actions Summary. Download
+`retrieval-smoke-*` or `retrieval-benchmark` Actions artifacts for individual
+question results. The recurring job compares against a compatible benchmark
+report from the latest successful run of the same workflow and branch. If that
+report is unavailable or incompatible, it shows current results only.
 
 New sources need a rebuilt local corpus: building the MCP image alone uses its
 pinned embedding artifact. See [contribution guidance](../CONTRIBUTING.md#retrieval-evaluations)
-for source-label rules, miss investigation, and smoke promotion.
+for source-label rules and miss investigation.
 
 Run lint and tests with:
 

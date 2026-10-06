@@ -409,10 +409,11 @@ The existing `embedding-generation/evaluate_retrieval.py` is the single runner:
   image's pinned corpus. Every case must retrieve an accepted source in its top
   five results. This pytest test is part of Integration Tests; repository administrators
   must keep that check required in the branch ruleset.
-- The existing Sunday embedding workflow runs `evals/benchmark.json` against
+- The existing recurring embedding workflow runs `evals/benchmark.json` against
   the newly generated corpus and retains a JSON report. Its summary compares
-  overall, topic, and intent metrics with the previous completed benchmark on
-  the same branch when compatible. All benchmark steps are report-only;
+  overall, topic, and intent metrics with the benchmark from the latest
+  successful run on the same branch, when available and compatible.
+  All benchmark steps are report-only;
   execution failures are visibly reported but do not block publication.
   Corpus build and security failures still block publication, and its promotion
   PR still runs smoke.
@@ -465,11 +466,3 @@ Propose the correction separately with the old/new URLs and supporting evidence;
 preserve the question ID and intent. After review, establish a fresh baseline.
 A label correction is not a retrieval improvement. A valid label with a ranking
 miss stays unchanged and becomes retrieval work.
-
-### Promoting a question into smoke
-
-Propose promotion separately for a critical, representative user need. Review
-the accepted sources, confirm repeatable success on supported CI targets, and
-explain why the case warrants blocking merges. Retain benchmark coverage and
-record the related benchmark/smoke IDs in the PR. Promotion is reviewed, never
-automatic after one successful run. The smoke suite should change infrequently.

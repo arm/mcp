@@ -263,7 +263,7 @@ jobs:
           version: '0.9.2'
           enable-cache: false
 
-      - name: Find previous benchmark report on this branch
+      - name: Find benchmark report from latest successful run
         continue-on-error: true
         timeout-minutes: 2
         env:
@@ -271,18 +271,16 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          runs="$(gh run list --workflow build-embeddings.yml --branch "$GITHUB_REF_NAME" \
-            --status success --limit 20 --json databaseId --jq '.[].databaseId')"
-          for run in $runs; do
-            [[ "$run" == "$GITHUB_RUN_ID" ]] && continue
+          run="$(gh run list --workflow build-embeddings.yml --branch "$GITHUB_REF_NAME" \
+            --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          if [[ -n "$run" && "$run" != "$GITHUB_RUN_ID" ]]; then
             destination="${RUNNER_TEMP}/retrieval-previous/$run"
             if gh run download "$run" --name retrieval-benchmark --dir "$destination" && \
               jq -e '.status == "complete"' "$destination/benchmark.json" >/dev/null; then
               cp "$destination/benchmark.json" "${RUNNER_TEMP}/benchmark-baseline.json"
               echo "Previous benchmark: https://github.com/${GH_REPO}/actions/runs/$run" >> "$GITHUB_STEP_SUMMARY"
-              break
             fi
-          done
+          fi
 
       - name: Run full retrieval benchmark on candidate corpus
         id: benchmark

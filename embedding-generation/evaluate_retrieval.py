@@ -1,4 +1,4 @@
-"""One retrieval evaluator for PR smoke checks and weekly benchmarks."""
+"""Retrieval evaluator for PR smoke checks and weekly benchmarks."""
 
 from __future__ import annotations
 
@@ -27,11 +27,10 @@ from arm_kb_search.evaluation import (  # noqa: E402
 
 
 def valid_url(value):
-    return (
-        isinstance(value, str)
-        and urlparse(value).scheme in ("http", "https")
-        and bool(urlparse(value).netloc)
-    )
+    if not isinstance(value, str):
+        return False
+    parsed = urlparse(value)
+    return parsed.scheme in ("http", "https") and bool(parsed.netloc)
 
 
 def validate_rows(rows):
@@ -230,7 +229,7 @@ def evaluate(args):
     eval_path = REPO_ROOT / "evals" / f"{args.suite}.json"
     rows = validate_rows(load_eval_rows(eval_path))
     print(f"{args.suite}: {len(rows)} questions; top-k={args.top_k}")
-    report = {"suite_total": len(rows)}
+    report = {}
     try:
         previous = load_baseline(args.baseline, rows, args.suite, args.top_k)
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -343,18 +342,17 @@ def main(argv=None):
                 json.dumps(report, indent=2, ensure_ascii=False) + "\n",
                 encoding="utf-8",
             )
-        if "summary" in report or report["status"] == "error":
-            summary_text = format_summary(report)
-            print(summary_text)
-            if summary_path := os.environ.get("GITHUB_STEP_SUMMARY"):
-                with open(summary_path, "a", encoding="utf-8") as summary_file:
-                    summary_file.write(summary_text + "\n")
-            if args.suite == "smoke":
-                for case in report.get("cases", []):
-                    if case["match_rank"] is None:
-                        print(
-                            f"{case['question_id']}: {case['error'] or 'MISS'}; expected={case['expected_urls']}; got={case['ranked_urls']}"
-                        )
+        summary_text = format_summary(report)
+        print(summary_text)
+        if summary_path := os.environ.get("GITHUB_STEP_SUMMARY"):
+            with open(summary_path, "a", encoding="utf-8") as summary_file:
+                summary_file.write(summary_text + "\n")
+        if args.suite == "smoke":
+            for case in report.get("cases", []):
+                if case["match_rank"] is None:
+                    print(
+                        f"{case['question_id']}: {case['error'] or 'MISS'}; expected={case['expected_urls']}; got={case['ranked_urls']}"
+                    )
     except OSError as exc:
         print(f"Could not write report: {exc}", file=sys.stderr)
         return 2
