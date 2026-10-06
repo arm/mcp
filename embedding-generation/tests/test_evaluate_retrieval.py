@@ -4,7 +4,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from arm_kb_search.evaluation import evaluate_retrieval
+from arm_kb_search.evaluation import evaluate_retrieval, suite_url_matches
 
 import evaluate_retrieval as runner
 
@@ -37,6 +37,23 @@ def inputs(tmp_path, monkeypatch):
         runner, "search", lambda *a, **kw: [{"url": "https://example.com/Q1"}]
     )
     return rows, path, ["--model-path", str(tmp_path)]
+
+
+@pytest.mark.parametrize(
+    "suite,actual,expected,matches",
+    [
+        ("smoke", "https://example.com/docs/install", "https://example.com/docs", True),
+        (
+            "benchmark",
+            "https://example.com/docs#troubleshooting",
+            "https://example.com/docs#setup",
+            False,
+        ),
+    ],
+    ids=["smoke-accepts-child-page", "benchmark-rejects-different-section"],
+)
+def test_suite_url_matching(suite, actual, expected, matches):
+    assert suite_url_matches(actual, expected, suite) is matches
 
 
 @pytest.mark.parametrize("all_match,exit_code", [(False, 1), (True, 0)])
