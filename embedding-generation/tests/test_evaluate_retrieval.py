@@ -15,6 +15,7 @@ def inputs(tmp_path, monkeypatch):
         {
             "id": key,
             "question": f"question {key}",
+            "area": "cloud",
             "topic": "cloud",
             "intent": intent,
             "expected_urls": [f"https://example.com/{key}"],
@@ -37,6 +38,24 @@ def inputs(tmp_path, monkeypatch):
         runner, "search", lambda *a, **kw: [{"url": "https://example.com/Q1"}]
     )
     return rows, path, ["--model-path", str(tmp_path)]
+
+
+@pytest.mark.parametrize("suite", ["smoke", "benchmark"])
+def test_checked_in_suites_have_required_fields(suite):
+    rows = runner.load_eval_rows(runner.REPO_ROOT / "evals" / f"{suite}.json")
+    runner.validate_rows(rows, suite)
+
+
+@pytest.mark.parametrize(
+    "suite,field", [("smoke", "area"), ("benchmark", "topic"), ("benchmark", "intent")]
+)
+def test_missing_category_fails_validation(inputs, tmp_path, suite, field):
+    rows, path, args = inputs
+    rows[0].pop(field)
+    (path.parent / f"{suite}.json").write_text(json.dumps(rows))
+    output = tmp_path / "invalid.json"
+    assert runner.main([*args, "--suite", suite, "--output", str(output)]) == 2
+    assert f"invalid {field}" in json.loads(output.read_text())["error"]
 
 
 @pytest.mark.parametrize(
@@ -185,7 +204,9 @@ def test_baseline_reports_regression_and_recovery(
     assert all(value not in printed for value in ("Q1", "Q2", "https://", "MISS"))
 
 
-@pytest.mark.parametrize("baseline", ["missing", "changed", "invalid"])
+@pytest.mark.parametrize(
+    "baseline", ["missing", "changed", "invalid", "area", "topic", "intent", "legacy"]
+)
 def test_unavailable_baseline_still_reports_current_results(
     inputs, tmp_path, capsys, baseline
 ):
@@ -195,6 +216,13 @@ def test_unavailable_baseline_still_reports_current_results(
         if baseline == "changed":
             inputs[0][0]["question"] = "edited question"
             inputs[1].write_text(json.dumps(inputs[0]))
+        elif baseline in ("area", "topic", "intent"):
+            inputs[0][0][baseline] = "changed-category"
+            inputs[1].write_text(json.dumps(inputs[0]))
+        elif baseline == "legacy":
+            saved = json.loads(before.read_text())
+            saved.pop("categories", None)
+            before.write_text(json.dumps(saved))
         else:
             before.write_text("{}")
     capsys.readouterr()

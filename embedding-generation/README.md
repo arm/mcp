@@ -120,6 +120,7 @@ the existing recurring embedding refresh. The suites are `../evals/smoke.json` a
 `../evals/benchmark.json`. Select either checked-in suite with `--suite`.
 Keep these suites fixed during retrieval improvements. Each question
 requires a unique, nonempty `id`, a `question`, and a nonempty `expected_urls` list.
+Smoke questions also require `area`; benchmark questions require `topic` and `intent`.
 Dataset changes or verified stale-label corrections require separate review and
 a fresh baseline.
 
@@ -165,7 +166,9 @@ View aggregate results in the terminal or GitHub Actions Summary. Download
 `retrieval-smoke-*` or `retrieval-benchmark` Actions artifacts for individual
 question results. The recurring job compares against a compatible benchmark
 report from the latest successful run of the same workflow and branch. If that
-report is unavailable or incompatible, it shows current results only.
+report is unavailable or incompatible, it shows current results only. Comparisons
+require unchanged category labels. Older reports without saved category labels
+cannot be used as baselines; the next completed report establishes a new baseline.
 
 New sources need a rebuilt local corpus: building the MCP image alone uses its
 pinned embedding artifact. See [contribution guidance](../CONTRIBUTING.md#retrieval-evaluations)

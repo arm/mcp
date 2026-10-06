@@ -33,9 +33,10 @@ def valid_url(value):
     return parsed.scheme in ("http", "https") and bool(parsed.netloc)
 
 
-def validate_rows(rows):
+def validate_rows(rows, suite):
     if not isinstance(rows, list) or not rows:
         raise ValueError("Evaluation suite must be a nonempty JSON array")
+    required_categories = ("area",) if suite == "smoke" else ("topic", "intent")
     seen = set()
     for row in rows:
         if not isinstance(row, dict):
@@ -60,11 +61,20 @@ def validate_rows(rows):
         if len(urls) != len(set(urls)):
             raise ValueError(f"{row['id']}: duplicate expected URL")
         for field in ("area", "topic", "intent"):
-            if field in row and (
-                not isinstance(row[field], str) or not row[field].strip()
+            if (field in required_categories or field in row) and (
+                not isinstance(row.get(field), str) or not row[field].strip()
             ):
                 raise ValueError(f"{row['id']}: invalid {field}")
     return rows
+
+
+def category_labels(rows):
+    return {
+        row["id"]: {
+            field: row[field] for field in ("area", "topic", "intent") if field in row
+        }
+        for row in rows
+    }
 
 
 def git(*args):
@@ -211,6 +221,8 @@ def load_baseline(path, rows, suite, top_k):
         raise ValueError(
             "Baseline must contain the same questions and accepted sources"
         )
+    if previous.get("categories") != category_labels(rows):
+        raise ValueError("Baseline must contain the same category labels")
     for case in previous["cases"]:
         rank = case["match_rank"]
         if case["error"] is not None or (
@@ -227,9 +239,9 @@ def evaluate(args):
     if args.top_k < 1:
         raise ValueError("--top-k must be positive")
     eval_path = REPO_ROOT / "evals" / f"{args.suite}.json"
-    rows = validate_rows(load_eval_rows(eval_path))
+    rows = validate_rows(load_eval_rows(eval_path), args.suite)
     print(f"{args.suite}: {len(rows)} questions; top-k={args.top_k}")
-    report = {}
+    report = {"categories": category_labels(rows)}
     try:
         previous = load_baseline(args.baseline, rows, args.suite, args.top_k)
     except (OSError, ValueError, KeyError, TypeError) as exc:
