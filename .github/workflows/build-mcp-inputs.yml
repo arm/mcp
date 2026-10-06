@@ -63,7 +63,7 @@ jobs:
           python-version: "3.12"
 
       - name: Set up locked uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           version: "0.10.2"
           enable-cache: false
@@ -93,7 +93,7 @@ jobs:
         run: bash .github/scripts/verify-ghcr-package-private.sh "${PACKAGE_NAME}" --allow-missing
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       # This is the only network-capable input phase. Every byte published in
       # the artifact is checked against a dependency or build-input lock.
@@ -101,7 +101,7 @@ jobs:
         run: mcp-local/.venv/bin/python mcp-local/scripts/stage-build-inputs.py --arch ${{ matrix.arch }}
 
       - name: Build architecture input image locally
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: mcp-local
           file: mcp-local/Dockerfile.inputs
@@ -181,7 +181,7 @@ jobs:
       - name: Publish scanned architecture input image with provenance
         if: ${{ env.PUBLISH_IMAGES == 'true' }}
         id: publish
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: mcp-local
           file: mcp-local/Dockerfile.inputs
@@ -292,7 +292,7 @@ jobs:
           password: ${{ github.token }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Publish multi-architecture index
         run: |
