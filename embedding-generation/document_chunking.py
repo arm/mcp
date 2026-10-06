@@ -271,6 +271,9 @@ def extract_html_links(tag, base_url: str) -> list[Link]:
 
 
 def link_text_with_urls(text: str, links: list[Link]) -> str:
+    # Markdown links already retain absolute URLs; HTML text and relative links
+    # may still need their resolved destinations appended.
+    links = [link for link in links if link.url not in text]
     if not links:
         return text
     link_evidence = " ".join(f"{link.text} {link.url}" for link in links)

@@ -454,6 +454,32 @@ class TestDocumentChunkingAnchors:
         )
         assert "MacBook Air (2025) | 2025 | M4" in devices_chunks[0]["content"]
 
+    @pytest.mark.parametrize("include_relative_link", [False, True])
+    def test_absolute_markdown_links_are_not_repeated(self, include_relative_link):
+        absolute_url = "https://learn.arm.com/install-guides/dotnet/"
+        markdown = f"# Example\n\n[Arm guide]({absolute_url})"
+        if include_relative_link:
+            markdown += " and [Related guide](/related/)."
+        parsed = parse_document_content(
+            source_url="https://learn.arm.com/example/",
+            resolved_url="https://learn.arm.com/example/",
+            response_content=markdown.encode(),
+            content_type="text/markdown",
+            fallback_title="Example",
+        )
+
+        chunks = chunk_parsed_document(parsed, doc_type="Documentation", keywords=[])
+        content = chunks[0]["content"]
+        assert f"[Arm guide]({absolute_url})" in content
+        assert content.count(absolute_url) == 1
+        if include_relative_link:
+            assert (
+                "Linked references: Related guide https://learn.arm.com/related/"
+                in content
+            )
+        else:
+            assert "Linked references:" not in content
+
     def test_markdown_links_stay_on_source_chunk_as_link_evidence(self):
         parsed = parse_document_content(
             source_url="https://learn.arm.com/example/",
