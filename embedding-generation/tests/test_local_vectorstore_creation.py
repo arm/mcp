@@ -71,3 +71,33 @@ def test_vectorstore_serialization_preserves_dashboard_scope(tmp_path, monkeypat
     )
     assert metadata[0]["product"] == metadata[0]["version"] == ""
     assert metadata[1]["platform"] == metadata[1]["edition"] == ""
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("renamed", [False, True])
+def test_chunk_order_ignores_file_order_and_generated_ids(
+    tmp_path, monkeypatch, reverse, renamed
+):
+    intrinsic_dir = tmp_path / "intrinsic_chunks"
+    yaml_dir = tmp_path / "yaml_data"
+    intrinsic_dir.mkdir()
+    yaml_dir.mkdir()
+    monkeypatch.setenv("INTRINSIC_CHUNKS_DIR", str(intrinsic_dir))
+    monkeypatch.setenv("YAML_DATA_DIR", str(yaml_dir))
+    fixtures = [
+        (intrinsic_dir, "https://example.com/z", "intrinsic"),
+        (yaml_dir, "https://example.com/a", "alpha"),
+        (yaml_dir, "https://example.com/a", "beta"),
+        (yaml_dir, "https://example.com/b", "gamma"),
+    ]
+    for position, (directory, url, content) in enumerate(fixtures):
+        identifier = f"new-{9 - position}" if renamed else f"old-{position}"
+        chunk = {"uuid": identifier, "url": url, "title": "Reference", "content": content}
+        (directory / f"chunk_{identifier}.yaml").write_text(json.dumps(chunk))
+    original_glob = vectorstore.glob.glob
+    monkeypatch.setattr(
+        vectorstore.glob, "glob",
+        lambda pattern: sorted(original_glob(pattern), reverse=reverse),
+    )
+    chunks = load_local_yaml_files()
+    assert [chunk["content"] for chunk in chunks] == ["intrinsic", "alpha", "beta", "gamma"]
