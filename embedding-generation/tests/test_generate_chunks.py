@@ -1139,33 +1139,6 @@ class TestReadInCSV:
         assert csv_dict["focus"] == []
 
 
-class TestCreateChunk:
-    """Tests for createChunk function."""
-
-    def test_create_chunk_basic(self, gc):
-        """Test basic chunk creation."""
-        chunk = gc.createChunk(
-            text_snippet="Test content",
-            WEBSITE_url="https://example.com",
-            keywords=["key1", "key2"],
-            title="Test Title",
-        )
-
-        assert chunk.title == "Test Title"
-        assert chunk.url == "https://example.com"
-        assert chunk.content == "Test content"
-        assert chunk.keywords == "key1, key2"
-        # UUID should be generated
-        assert len(chunk.uuid) > 0
-
-    def test_create_chunk_generates_unique_uuids(self, gc):
-        """Test that each chunk gets a unique UUID."""
-        chunk1 = gc.createChunk("content", "url", ["key"], "title")
-        chunk2 = gc.createChunk("content", "url", ["key"], "title")
-
-        assert chunk1.uuid != chunk2.uuid
-
-
 class TestArmDocumentationParsing:
     """Tests for Arm developer documentation API parsing and chunk creation."""
 

@@ -90,6 +90,8 @@ class ParsedDocument:
     # None permits inference; an empty string explicitly suppresses it.
     product: str | None = None
     version: str | None = None
+    platform: str = ""
+    edition: str = ""
 
 
 def normalize_source_url(url: str) -> str:
@@ -1161,6 +1163,8 @@ def chunk_parsed_document(
                     "product": product,
                     "version": version,
                     "content_type": parsed_document.content_type,
+                    "platform": parsed_document.platform,
+                    "edition": parsed_document.edition,
                     "content": build_chunk_text(
                         parsed_document.display_title, heading_path, chunk_body
                     ),

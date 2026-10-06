@@ -1,4 +1,4 @@
-name: Embedding Generation Unit Tests
+name: Knowledge Base Unit Tests
 
 on:
   workflow_dispatch:
@@ -6,7 +6,10 @@ on:
     branches: [main]
     paths:
       - 'embedding-generation/**'
-      - '.github/workflows/embedding-unit-tests.yml'
+      - 'arm_kb_search/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - '.github/workflows/knowledge-base-unit-tests.yml'
   pull_request:
     branches: [main]
 
@@ -14,6 +17,7 @@ permissions:
   contents: read
 
 jobs:
+  # Preserve the existing required status-check name.
   embedding-unit-tests:
     runs-on: ubuntu-latest
     defaults:
@@ -43,4 +47,4 @@ jobs:
         run: uv run --locked ruff check .
 
       - name: Run unit tests
-        run: uv run --locked python -m pytest tests/ -v --tb=short
+        run: PYTHONPATH=.. uv run --locked python -m pytest tests/ ../tests/ -v --tb=short
