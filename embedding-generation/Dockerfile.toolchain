@@ -69,5 +69,5 @@ WORKDIR /embedding-data
 # environment, local model, and generation programs, but no package manager.
 COPY --from=builder /embedding-data/.venv /embedding-data/.venv
 COPY --from=builder /embedding-data/embedding-model /embedding-data/embedding-model
-COPY document_chunking.py generate-chunks.py local_vectorstore_creation.py \
+COPY document_chunking.py ecosystem_dashboard.py generate-chunks.py local_vectorstore_creation.py \
     embedding-model.lock.json ./
