@@ -29,7 +29,9 @@ import pytest
 
 from document_chunking import (
     chunk_parsed_document,
+    extract_markdown_links,
     learn_learning_path_step_urls,
+    link_text_with_urls,
     parse_document_content,
     split_frontmatter,
     strip_frontmatter,
@@ -37,6 +39,15 @@ from document_chunking import (
 
 FIXTURE_DIR = Path(__file__).parent
 SAMPLE_PPTX_FIXTURE = "sample_course_slides.pptx"
+
+
+def test_relative_link_evidence_is_retained_when_url_prefix_is_embedded():
+    text = "[Home](/) [Guide](https://learn.arm.com/guide)"
+    links = extract_markdown_links(text, "https://learn.arm.com/example/")
+
+    result = link_text_with_urls(text, links)
+
+    assert result == text + "\n\nLinked references: Home https://learn.arm.com/"
 
 
 def _arm_api_response(title, html):

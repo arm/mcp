@@ -280,7 +280,7 @@ def parse_catalog(archive: bytes, revision: str) -> dict[str, list[DashboardPack
                 if not slug:
                     raise ValueError(f"{path}: package name produces an empty slug")
                 document.source_url = (
-                    f"{DASHBOARD_URL}/{platform}?{urlencode({'package': slug})}"
+                    f"{DASHBOARD_URL}/{platform}?{urlencode({'package': slug}, safe='%')}"
                 )
                 document.edition = edition
                 if edition:
@@ -295,7 +295,7 @@ def parse_catalog(archive: bytes, revision: str) -> dict[str, list[DashboardPack
                         metadata.get("category", ""),
                         metadata.get("vendor", ""),
                     )
-                    if value.strip()
+                    if value.strip() and value.strip().lower() not in ("null", "~")
                 )
                 catalog.setdefault(document.source_url, []).append(
                     DashboardPackage(document, keywords)

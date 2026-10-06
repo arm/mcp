@@ -54,6 +54,35 @@ def test_dashboard_slug_matches_hugo_examples(name, slug):
     assert package_slug(name) == slug
 
 
+@pytest.mark.parametrize(
+    "name,encoded_slug",
+    [("Café", "caf%C3%A9"), ("Xerces-C++", "xerces-c%2B%2B")],
+)
+def test_catalog_package_urls_encode_once(name, encoded_slug):
+    package = f"---\nname: {name}\n---\n"
+    catalog = parse_catalog(archive({LINUX: package, WINDOWS: package}), REVISION)
+
+    assert set(catalog) == {
+        f"{DASHBOARD_URL}/{platform}?package={encoded_slug}"
+        for platform in ("linux", "windows")
+    }
+
+
+@pytest.mark.parametrize("sentinel", ["null", "~", "NULL", '" Null "'])
+def test_catalog_keywords_exclude_null_metadata(sentinel):
+    package = (
+        f"---\nname: Example\ncategory: {sentinel}\nvendor: {sentinel}\n---\n"
+    )
+    catalog = parse_catalog(archive({LINUX: package, WINDOWS: package}), REVISION)
+
+    assert catalog[f"{DASHBOARD_URL}/linux?package=example"][0].keywords == [
+        "Example", "linux", "open-source"
+    ]
+    assert catalog[f"{DASHBOARD_URL}/windows?package=example"][0].keywords == [
+        "Example", "windows"
+    ]
+
+
 def test_commit_resolved_once_and_all_sources_share_revision():
     session = Mock()
     session.get.side_effect = [
