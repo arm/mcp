@@ -238,7 +238,7 @@ def load_baseline(path, rows, suite, top_k):
 def evaluate(args):
     if args.top_k < 1:
         raise ValueError("--top-k must be positive")
-    eval_path = REPO_ROOT / "evals" / f"{args.suite}.json"
+    eval_path = args.eval_path or REPO_ROOT / "evals" / f"{args.suite}.json"
     rows = validate_rows(load_eval_rows(eval_path), args.suite)
     print(f"{args.suite}: {len(rows)} questions; top-k={args.top_k}")
     report = {"categories": category_labels(rows)}
@@ -313,6 +313,11 @@ def evaluate(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", choices=("smoke", "benchmark"), default="benchmark")
+    parser.add_argument(
+        "--eval-path",
+        type=Path,
+        help="Use a custom question JSON file with the selected suite's rules",
+    )
     parser.add_argument("--index-path", type=Path, default=Path("usearch_index.bin"))
     parser.add_argument("--metadata-path", type=Path, default=Path("metadata.json"))
     parser.add_argument("--model-path", type=Path, required=True)
