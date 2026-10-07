@@ -41,7 +41,6 @@ dependencies = [
     { name = "numpy" },
     { name = "pypdf" },
     { name = "pyyaml" },
-    { name = "rank-bm25" },
     { name = "requests" },
     { name = "sentence-transformers" },
     { name = "torch", version = "2.14.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
@@ -53,6 +52,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "pytest" },
+    { name = "rank-bm25" },
     { name = "ruff" },
 ]
 
@@ -63,7 +63,6 @@ requires-dist = [
     { name = "numpy" },
     { name = "pypdf" },
     { name = "pyyaml" },
-    { name = "rank-bm25" },
     { name = "requests" },
     { name = "sentence-transformers", specifier = ">=5.4" },
     { name = "torch", marker = "sys_platform != 'linux'", specifier = "==2.14.0" },
@@ -75,6 +74,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "pytest" },
+    { name = "rank-bm25" },
     { name = "ruff" },
 ]
 
