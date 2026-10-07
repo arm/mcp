@@ -132,9 +132,9 @@ uv run --locked ./run-question-eval.sh
 
 The wrapper copies intrinsic chunks if needed, regenerates chunks, acquires the
 locked model, rebuilds the index, and invokes the same evaluator. It accepts
-`--suite`, `--output`, and `--baseline`.
-A relative report path is relative to this directory. Use a new output filename
-for each run.
+`--suite`, `--eval-path`, `--output`, and `--baseline`.
+Relative paths passed to the wrapper are relative to this directory. Use a new
+output filename for each run.
 
 To evaluate an existing local corpus without rebuilding it:
 
@@ -148,14 +148,35 @@ uv run --locked python evaluate_retrieval.py --suite benchmark \
   --output reports/benchmark-next.json
 ```
 
-Every run evaluates the full selected suite. PR smoke runs all 50 questions
-alongside the MCP integration tests against the candidate image. Every question
+For local experiments, pass `--eval-path` to use a custom question file without
+editing the checked-in datasets. It must meet the selected suite's validation
+requirements; `--suite` still controls URL matching and pass/fail behavior:
+
+```sh
+uv run --locked python evaluate_retrieval.py --suite benchmark \
+  --eval-path /path/to/questions.json --model-path .cache/embedding-model \
+  --output reports/local.json
+```
+
+Every run evaluates all questions in the selected file. PR smoke runs all 50
+questions alongside the MCP integration tests against the candidate image. Every question
 must retrieve an accepted source in the top five results; a miss or execution
 error fails the required integration check and blocks merging.
 
-The recurring embedding workflow runs all 400 benchmark questions against the
-newly built corpus. Benchmark scores and evaluation failures are reported without
-blocking publication. Corpus build failures and security failures still block it.
+The recurring embedding workflow runs all 400 benchmark questions in a separate
+job with read-only permissions. It evaluates the published candidate by digest,
+or the same saved image in a dry run, after verifying its original image ID.
+Evaluation runs without networking in the digest-pinned generator image, using
+the candidate's model, metadata, and index. Code and corpus mounts are read-only;
+only reports and temporary files are writable. No dependencies are installed in
+the benchmark job. Benchmark scores and failures are reported without blocking
+publication. Corpus build failures and security failures still block it.
+
+The generator image must include the locked evaluation dependencies, including
+`rank-bm25`. After this dependency change lands, rebuild the generator and merge
+its reviewed `pipeline-inputs.lock.json` pin update using the existing toolchain
+workflow. Until that pin is promoted, benchmarks report unavailable; they do not
+install missing packages at runtime.
 
 Smoke accepts the expected page or a child path on the same origin, ignoring
 query strings and fragments. Benchmark uses stricter matching that preserves

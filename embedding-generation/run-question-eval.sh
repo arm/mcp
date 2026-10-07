@@ -22,6 +22,7 @@ Build the local vector store from vector-db-sources.csv and run retrieval eval.
 Options:
   --sources FILE                 CSV to chunk (default: vector-db-sources.csv)
   --suite NAME                   smoke or benchmark (default: benchmark)
+  --eval-path FILE               Custom question JSON file (default: selected suite)
   --output FILE                  Save a new JSON report
   --baseline FILE                Compare with a previous compatible report
   --top-k N                      Number of search results to evaluate (default: 5)
@@ -53,7 +54,7 @@ while [[ $# -gt 0 ]]; do
       sources_file="$2"
       shift 2
       ;;
-    --suite|--output|--baseline)
+    --suite|--eval-path|--output|--baseline)
       require_value "$@"
       eval_args+=("$1" "$2")
       shift 2

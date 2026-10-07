@@ -75,6 +75,43 @@ def test_suite_url_matching(suite, actual, expected, matches):
     assert suite_url_matches(actual, expected, suite) is matches
 
 
+@pytest.mark.parametrize(
+    "suite,expected_url,hits,exit_code",
+    [
+        ("smoke", "https://example.com", 1, 0),
+        ("benchmark", "https://example.com", 0, 0),
+        ("smoke", "https://example.com/missing", 0, 1),
+        ("benchmark", "https://example.com/Q1", 1, 0),
+    ],
+)
+def test_custom_eval_path_preserves_suite_behavior(
+    inputs, tmp_path, suite, expected_url, hits, exit_code
+):
+    custom = tmp_path / "local questions.json"
+    custom.write_text(
+        json.dumps([{**inputs[0][0], "id": "LOCAL", "expected_urls": [expected_url]}])
+    )
+    output = tmp_path / "custom-report.json"
+    assert (
+        runner.main(
+            [
+                *inputs[2],
+                "--suite",
+                suite,
+                "--eval-path",
+                str(custom),
+                "--output",
+                str(output),
+            ]
+        )
+        == exit_code
+    )
+    report = json.loads(output.read_text())
+    assert [case["question_id"] for case in report["cases"]] == ["LOCAL"]
+    assert report["summary"]["hits"] == hits
+    assert report["policy"] == f"{suite}-v1"
+
+
 @pytest.mark.parametrize("all_match,exit_code", [(False, 1), (True, 0)])
 def test_smoke_gate_requires_all_questions(
     inputs, tmp_path, monkeypatch, all_match, exit_code
