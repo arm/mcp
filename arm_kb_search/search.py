@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, Iterable, List, Optional
 import re
-from urllib.parse import urlparse
+from typing import Any, Dict, Iterable, List, Optional
+from urllib.parse import urldefrag, urlparse
 
 import numpy as np
 from rank_bm25 import BM25Okapi
@@ -23,10 +23,11 @@ from usearch.index import Index
 
 from .config import DISTANCE_THRESHOLD, K_RESULTS
 
-
 SEARCH_TOKEN_PATTERN = re.compile(r"[a-z0-9][a-z0-9_\-+.]*", re.IGNORECASE)
 TOKEN_SPLIT_PATTERN = re.compile(r"[_\-+.]+")
 RRF_K = 60
+SEMANTIC_PAGE_WEIGHT = 0.20
+INSTALL_GUIDE_BONUS = 0.30
 LEXICAL_PREPASS_DEPTH = 400
 PINNED_LEXICAL_CANDIDATES = 20
 DEDUPLICATION_CANDIDATE_MULTIPLIER = 10
@@ -38,6 +39,11 @@ SEARCH_STOPWORDS = {
     "system", "systems", "the", "to", "what", "which", "with", "ampere", "arm", "benchmark",
     "benchmarking", "benchmarked", "benchmarks", "brief", "cloud", "config", "configure", "guide",
     "options", "performance", "processor", "processors", "reference", "setup", "tutorial",
+}
+INSTALL_INTENT_TOKENS = {"install", "installing", "installation"}
+INSTALL_CONTEXT_TOKENS = {
+    "my", "your", "our", "me", "please", "instance", "instances",
+    *INSTALL_INTENT_TOKENS,
 }
 DIRECT_INTENT_STOPWORDS = {
     "a", "an", "and", "are", "as", "be", "both", "by", "can", "do", "does", "for", "from",
@@ -104,6 +110,22 @@ def salient_tokens(text: str) -> List[str]:
 
 def direct_intent_tokens(text: str) -> List[str]:
     return [token for token in tokenize_for_search(text) if token not in DIRECT_INTENT_STOPWORDS]
+
+
+def normalize_query(query: str) -> str:
+    """Use the documented name for common AWS CLI command/package spellings."""
+    return re.sub(r"\baws[-_]?cli\b", "aws cli", query, flags=re.IGNORECASE)
+
+
+def is_navigation_only(metadata: Dict[str, Any]) -> bool:
+    """Reject contribution footers without discarding substantive Next Steps."""
+    text = metadata.get("original_text") or metadata.get("content") or ""
+    if text.startswith("Document Title:"):
+        text = text.partition("\n\n")[2]
+    lines = {line.strip().casefold() for line in text.splitlines() if line.strip()}
+    return bool(lines) and lines <= {
+        "log an issue", "fork and edit", "discuss on discord",
+    }
 
 
 def _metadata_text(metadata: Dict[str, Any], fields: Iterable[str]) -> str:
@@ -365,6 +387,9 @@ def rerank_candidates(query: str, candidates: List[Dict[str, Any]]) -> List[Dict
     if not query_tokens:
         return candidates
     salient_query_tokens = set(salient_tokens(query))
+    installation_query = bool(query_tokens & INSTALL_INTENT_TOKENS)
+    if installation_query:
+        salient_query_tokens -= INSTALL_CONTEXT_TOKENS
     direct_query_terms = direct_intent_tokens(query)
     direct_query_tokens = set(direct_query_terms)
     scoring_query_tokens = direct_query_tokens or salient_query_tokens or query_tokens
@@ -375,6 +400,8 @@ def rerank_candidates(query: str, candidates: List[Dict[str, Any]]) -> List[Dict
     reranked: List[Dict[str, Any]] = []
     for candidate in candidates:
         metadata = candidate["metadata"]
+        if is_navigation_only(metadata):
+            continue
         full_text_tokens = set(tokenize_for_search(metadata.get("search_text", "")))
         title_text = _metadata_text(metadata, ("title",))
         heading_text = _metadata_text(metadata, ("heading", "heading_path"))
@@ -385,6 +412,7 @@ def rerank_candidates(query: str, candidates: List[Dict[str, Any]]) -> List[Dict
         resolved_url_tokens = set(tokenize_url_for_search(metadata.get("resolved_url", "")))
         title_url_tokens = title_tokens | url_tokens | resolved_url_tokens
         doc_type = (metadata.get("doc_type", "") or "").strip().lower()
+        doc_type = {"install guides": "install guide", "learning paths": "learning path"}.get(doc_type, doc_type)
         source_url = metadata.get("url", "") or ""
         provider_doc_bonus = 0.0
         if (query_tokens & PROVIDER_DOCUMENTATION_TOKENS) and doc_type in {"google cloud documentation"}:
@@ -452,46 +480,40 @@ def rerank_candidates(query: str, candidates: List[Dict[str, Any]]) -> List[Dict
             elif "brief" in doc_type:
                 doc_type_bonus -= 0.05
         if prefers_tutorial:
-            if doc_type in {"tutorial", "install guide", "learning path", "learning paths"}:
+            if doc_type in {"tutorial", "install guide", "learning path"}:
                 doc_type_bonus += 0.10
-        if len(scoring_query_tokens) <= 3:
-            rerank_score = (
-                candidate.get("rrf_score", 0.0)
-                + (0.16 * body_overlap)
-                + (0.16 * title_overlap)
-                + (0.08 * heading_overlap)
-                + (0.12 * entity_overlap)
-                + (0.15 * dense_bonus)
-                + (0.12 * sparse_bonus)
-                + (0.25 * lexical_prepass_bonus)
-                + direct_match_bonus
-                + support_evidence_bonus
-                + provider_doc_bonus
-                + parent_learning_path_bonus
-                + doc_type_bonus
-                - shallow_overlap_penalty
-            )
+        if "install" in query_tokens and doc_type == "install guide":
+            doc_type_bonus += INSTALL_GUIDE_BONUS
+        # Preserve direct-name matching for short queries, but don't let the
+        # wording of an installation question outweigh its subject. Both paths share
+        # the same evidence terms and a single score calculation.
+        short_query = len(scoring_query_tokens) <= 3
+        if short_query:
+            overlaps = (body_overlap, title_overlap, heading_overlap)
+            field_weights = (0.16, 0.16, 0.08)
         else:
-            full_query_body_overlap = len(query_tokens & full_text_tokens) / len(query_tokens)
-            full_query_title_overlap = len(query_tokens & title_tokens) / len(query_tokens)
-            full_query_heading_overlap = len(query_tokens & heading_tokens) / len(query_tokens)
-            exact_entity_bonus = 0.0
-            if salient_query_tokens and (salient_query_tokens & title_url_tokens):
-                exact_entity_bonus = 0.18
-            rerank_score = (
-                candidate.get("rrf_score", 0.0)
-                + (0.35 * full_query_body_overlap)
-                + (0.20 * full_query_title_overlap)
-                + (0.15 * full_query_heading_overlap)
-                + (0.20 * entity_overlap)
-                + (0.15 * dense_bonus)
-                + (0.15 * sparse_bonus)
-                + (0.35 * lexical_prepass_bonus)
-                + support_evidence_bonus
-                + provider_doc_bonus
-                + exact_entity_bonus
-                + doc_type_bonus
-            )
+            overlaps = tuple(len(query_tokens & tokens) / len(query_tokens)
+                             for tokens in (full_text_tokens, title_tokens, heading_tokens))
+            if installation_query:
+                overlaps = tuple(
+                    (overlap + _overlap_ratio(salient_query_tokens or query_tokens, tokens)) / 2
+                    for overlap, tokens in zip(overlaps, (full_text_tokens, title_tokens, heading_tokens))
+                )
+            field_weights = (0.35, 0.20, 0.15)
+        exact_entity_bonus = 0.18 if salient_query_tokens & title_url_tokens else 0.0
+        rerank_score = (
+            candidate.get("rrf_score", 0.0)
+            + sum(weight * overlap for weight, overlap in zip(field_weights, overlaps))
+            + ((0.12 if short_query else 0.20) * entity_overlap)
+            + (0.15 * dense_bonus)
+            + ((0.12 if short_query else 0.15) * sparse_bonus)
+            + ((0.25 if short_query else 0.35) * lexical_prepass_bonus)
+            + support_evidence_bonus
+            + provider_doc_bonus
+            + doc_type_bonus
+            + (direct_match_bonus + parent_learning_path_bonus - shallow_overlap_penalty
+               if short_query else exact_entity_bonus)
+        )
         reranked.append({**candidate, "rerank_score": rerank_score})
     return sorted(reranked, key=lambda item: item["rerank_score"], reverse=True)
 
@@ -518,6 +540,7 @@ def hybrid_search(
     k: int = K_RESULTS,
     candidate_depth: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
+    query = normalize_query(query)
     candidate_depth = candidate_depth or max(k * 20, 100)
     lexical_limit = max(k * 3, PINNED_LEXICAL_CANDIDATES)
     bm25_depth = max(candidate_depth, LEXICAL_PREPASS_DEPTH, lexical_limit)
@@ -564,18 +587,48 @@ def hybrid_search(
         candidates[candidate_key] = existing
 
     combined = rerank_candidates(query, list(candidates.values()))
-    return combined[:k]
+    return fuse_semantic_page_ranks(combined)[:k]
+
+
+def fuse_semantic_page_ranks(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Give strong semantic pages a bounded vote in the final page ordering.
+
+    Use reciprocal ranks without a smoothing constant: agreement far down two
+    rankings must not overpower a strong result near the top of either ranking.
+    Preserve the hybrid-selected passage for each page, including its anchor.
+    """
+    pages = deduplicate_urls(results)
+    semantic_pages = deduplicate_urls(sorted(
+        (item for item in results if item.get("distance") is not None),
+        key=lambda item: item["distance"],
+    ))
+    if not semantic_pages:
+        return pages
+    semantic_ranks = {
+        urldefrag(item["metadata"]["url"])[0].rstrip("/"): rank
+        for rank, item in enumerate(semantic_pages, 1)
+    }
+    fused = []
+    for rank, item in enumerate(pages, 1):
+        page = urldefrag(item["metadata"]["url"])[0].rstrip("/")
+        semantic_rank = semantic_ranks.get(page)
+        score = (1 - SEMANTIC_PAGE_WEIGHT) / rank
+        if semantic_rank is not None:
+            score += SEMANTIC_PAGE_WEIGHT / semantic_rank
+        fused.append({**item, "rerank_score": score})
+    return sorted(fused, key=lambda item: item["rerank_score"], reverse=True)
 
 
 def deduplicate_urls(results: List[Dict[str, Any]], max_chunks_per_url: int = 1) -> List[Dict[str, Any]]:
-    """Keep the highest-ranked chunk for each URL by default."""
+    """Keep the best chunk per page; anchors must not crowd out other pages."""
     seen_counts: Dict[str, int] = {}
     deduplicated_results = []
     for item in results:
         url = item["metadata"].get("url")
         if not url:
             continue
-        seen_counts[url] = seen_counts.get(url, 0) + 1
-        if seen_counts[url] <= max_chunks_per_url:
+        page_url = urldefrag(url)[0].rstrip("/")
+        seen_counts[page_url] = seen_counts.get(page_url, 0) + 1
+        if seen_counts[page_url] <= max_chunks_per_url:
             deduplicated_results.append(item)
     return deduplicated_results

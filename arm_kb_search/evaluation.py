@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
-
 EvalRow = dict[str, object]
 RetrieveUrls = Callable[[str, int], list[str | None]]
 
@@ -142,7 +141,14 @@ def evaluate_retrieval(eval_rows: list[EvalRow], retrieve_urls: RetrieveUrls, to
         expected = {url_base(url) for url in expected_urls}
         match_rank = None
         for index, url in enumerate(ranked_urls, start=1):
-            if url_base(url) in expected:
+            actual = url_base(url)
+            # Exact-page grading remains the default. Some manual expectations
+            # explicitly accept any child page, but never siblings or other hosts.
+            child_match = bool(row.get("match_children", False)) and actual is not None and any(
+                target is not None and actual.startswith(target.rstrip("/") + "/")
+                for target in expected
+            )
+            if actual in expected or child_match:
                 match_rank = index
                 break
 
