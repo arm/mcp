@@ -163,17 +163,9 @@ questions alongside the MCP integration tests against the candidate image. Every
 must retrieve an accepted source in the top five results; a miss or execution
 error fails the required integration check and blocks merging.
 
-The recurring embedding workflow runs all 408 benchmark questions in a separate
-job with read-only permissions. It evaluates the published candidate by digest,
-or the same saved image in a dry run, after verifying its original image ID.
-Evaluation runs without networking in the digest-pinned generator image, using
-the candidate's model, metadata, and index. Code and corpus mounts are read-only;
-only reports and temporary files are writable. No dependencies are installed in
-the benchmark job. Benchmark scores and failures are reported without blocking
-publication. Corpus build failures and security failures still block it.
-
-The pinned generator image must include all locked evaluation dependencies;
-the benchmark does not install packages at runtime.
+The recurring embedding workflow runs all 408 benchmark questions against the
+newly built corpus. Benchmark scores and evaluation failures are reported without
+blocking publication. Corpus build failures and security failures still block it.
 
 Smoke accepts the expected page or a child path on the same origin, ignoring
 query strings and fragments. Benchmark uses stricter matching that preserves

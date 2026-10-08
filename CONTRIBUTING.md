@@ -410,10 +410,7 @@ The existing `embedding-generation/evaluate_retrieval.py` is the single runner:
   five results. This pytest test is part of Integration Tests; repository administrators
   must keep that check required in the branch ruleset.
 - The existing recurring embedding workflow runs `evals/benchmark.json` against
-  the exact candidate corpus in a separate job with read-only permissions and
-  retains a JSON report. Evaluation runs offline in the digest-pinned generator
-  image with its locked dependencies; publication and promotion do not depend
-  on benchmark success. Its summary compares
+  the newly generated corpus and retains a JSON report. Its summary compares
   overall, topic, and intent metrics with the benchmark from the latest
   successful run on the same branch, when available and compatible.
   All benchmark steps are report-only;

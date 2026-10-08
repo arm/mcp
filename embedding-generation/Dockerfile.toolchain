@@ -55,7 +55,7 @@ RUN HF_HOME=/tmp/huggingface python acquire-model.py \
 # Confirm the saved model can be loaded without consulting any remote service.
 ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1
-RUN --network=none python -c "import rank_bm25; from sentence_transformers import SentenceTransformer; SentenceTransformer('/embedding-data/embedding-model', local_files_only=True, trust_remote_code=False)"
+RUN --network=none python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('/embedding-data/embedding-model', local_files_only=True, trust_remote_code=False)"
 
 FROM python-runtime AS toolchain
 
