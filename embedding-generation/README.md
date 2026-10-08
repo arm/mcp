@@ -172,11 +172,8 @@ only reports and temporary files are writable. No dependencies are installed in
 the benchmark job. Benchmark scores and failures are reported without blocking
 publication. Corpus build failures and security failures still block it.
 
-The generator image must include the locked evaluation dependencies, including
-`rank-bm25`. After this dependency change lands, rebuild the generator and merge
-its reviewed `pipeline-inputs.lock.json` pin update using the existing toolchain
-workflow. Until that pin is promoted, benchmarks report unavailable; they do not
-install missing packages at runtime.
+The pinned generator image must include all locked evaluation dependencies;
+the benchmark does not install packages at runtime.
 
 Smoke accepts the expected page or a child path on the same origin, ignoring
 query strings and fragments. Benchmark uses stricter matching that preserves
