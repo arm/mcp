@@ -163,7 +163,7 @@ questions alongside the MCP integration tests against the candidate image. Every
 must retrieve an accepted source in the top five results; a miss or execution
 error fails the required integration check and blocks merging.
 
-The recurring embedding workflow runs all 400 benchmark questions in a separate
+The recurring embedding workflow runs all 408 benchmark questions in a separate
 job with read-only permissions. It evaluates the published candidate by digest,
 or the same saved image in a dry run, after verifying its original image ID.
 Evaluation runs without networking in the digest-pinned generator image, using

@@ -172,8 +172,7 @@
     "area": "intrinsics",
     "question": "How do I port C++ code that uses SSE2 intrinsics to Arm64 with sse2neon?",
     "expected_urls": [
-      "https://learn.arm.com/learning-paths/cross-platform/intrinsics/",
-      "https://github.com/DLTcollab/sse2neon/blob/master/README.md"
+      "https://learn.arm.com/learning-paths/cross-platform/intrinsics/"
     ]
   },
   {

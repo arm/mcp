@@ -662,7 +662,7 @@
     "intent": "reference",
     "question": "Where does Arm’s Ubuntu Server compatibility entry link to the native Arm server download?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=ubuntu-server"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=ubuntu-server"
     ]
   },
   {
@@ -671,7 +671,7 @@
     "intent": "reference",
     "question": "Where can I inspect the Arm ecosystem dashboard’s MongoDB validation record to see whether its Arm64 checks include database operations as well as binary checks?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=mongodb"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=mongodb"
     ]
   },
   {
@@ -3471,7 +3471,7 @@
     "intent": "reference",
     "question": "Can I use CMake to build and run a project on an Arm Linux machine?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=cmake"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=cmake"
     ]
   },
   {
@@ -3480,7 +3480,7 @@
     "intent": "reference",
     "question": "Can I set up local Git repositories on an Arm Linux machine?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=git"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=git"
     ]
   },
   {
@@ -3489,7 +3489,7 @@
     "intent": "reference",
     "question": "Is zlib available for C development on Arm Linux?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=zlib"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=zlib"
     ]
   },
   {
@@ -3498,7 +3498,7 @@
     "intent": "reference",
     "question": "Can I run Python 3.11 on Ubuntu Arm64?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=python"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=python"
     ]
   },
   {
@@ -3507,7 +3507,7 @@
     "intent": "reference",
     "question": "Can I use NumPy for array calculations on an Arm Linux machine?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=numpy"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=numpy"
     ]
   },
   {
@@ -3516,7 +3516,7 @@
     "intent": "conceptual",
     "question": "I'm evaluating SciPy for an Arm Linux deployment. What compatibility testing has been done?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=scipy"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=scipy"
     ]
   },
   {
@@ -3525,7 +3525,7 @@
     "intent": "reference",
     "question": "Can I use OpenSSL to generate certificates on Arm Linux?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=openssl"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=openssl"
     ]
   },
   {
@@ -3534,7 +3534,7 @@
     "intent": "reference",
     "question": "Can I generate a test video with FFmpeg and inspect it with ffprobe on Arm Linux?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=ffmpeg"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=ffmpeg"
     ]
   },
   {
@@ -3543,7 +3543,7 @@
     "intent": "reference",
     "question": "Where can I check whether Redis has been tested on Arm Linux?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=redis"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=redis"
     ]
   },
   {
@@ -3552,7 +3552,7 @@
     "intent": "reference",
     "question": "Can I create a SQLite database on Arm Linux?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=sqlite"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=sqlite"
     ]
   },
   {
@@ -3561,7 +3561,7 @@
     "intent": "reference",
     "question": "Does Memcached work on Arm Linux for basic cache reads and writes?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=memcached"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=memcached"
     ]
   },
   {
@@ -3570,7 +3570,7 @@
     "intent": "reference",
     "question": "Has NGINX been tested on Ubuntu Arm64?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=nginx"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=nginx"
     ]
   },
   {
@@ -3579,7 +3579,7 @@
     "intent": "reference",
     "question": "Can I validate a HAProxy configuration on Arm Linux before starting the service?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=haproxy"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=haproxy"
     ]
   },
   {
@@ -3588,7 +3588,7 @@
     "intent": "setup",
     "question": "Where can I get curl for an Arm Linux machine?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=curl"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=curl"
     ]
   },
   {
@@ -3597,7 +3597,79 @@
     "intent": "reference",
     "question": "I'm considering Prometheus on Arm Linux. Are there compatibility test results I can check?",
     "expected_urls": [
-      "https://www.arm.com/developer-hub/ecosystem-dashboard/?package=prometheus"
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=prometheus"
+    ]
+  },
+  {
+    "id": "B401",
+    "topic": "simd-matrix-extensions",
+    "intent": "reference",
+    "question": "How do I check if SME or SME2 is supported?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/SME-and-SME2/If-SME-and-SME2-are-supported?lang=en"
+    ]
+  },
+  {
+    "id": "B402",
+    "topic": "performance",
+    "intent": "troubleshooting",
+    "question": "If Arm Performix reports insufficient PMU counters, why does that matter for recipe metrics and what should I do about profiling tools, virtual machines, or bare metal runs?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110163/latest/Known-issues-and-limitations/Resolve-insufficient-PMU-counters-error/What-you-can-do?lang=en"
+    ]
+  },
+  {
+    "id": "B403",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "Can you give me a quick explanation of SME and SME2?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109974/0100/What-is-SME-SME2-?lang=en"
+    ]
+  },
+  {
+    "id": "B404",
+    "topic": "simd-matrix-extensions",
+    "intent": "reference",
+    "question": "Can you show me a minimal SME assembly example?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109974/0100/Basic-SME-example/Assembly-code?lang=en"
+    ]
+  },
+  {
+    "id": "B405",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "Can you give me a beginner-friendly introduction to Arm SME?",
+    "expected_urls": [
+      "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/arm-scalable-matrix-extension-introduction#blog-title"
+    ]
+  },
+  {
+    "id": "B406",
+    "topic": "simd-matrix-extensions",
+    "intent": "reference",
+    "question": "Which SME ZA tile instructions should I learn?",
+    "expected_urls": [
+      "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/arm-scalable-matrix-extension-introduction-p2#blog-title"
+    ]
+  },
+  {
+    "id": "B408",
+    "topic": "cloud-server",
+    "intent": "setup",
+    "question": "What are the main deployment steps in the reference architecture for running an ELK stack on Google Tau T2A?",
+    "expected_urls": [
+      "https://amperecomputing.com/reference-architecture/deploying-an-elk-stack-on-google-tau-t2a"
+    ]
+  },
+  {
+    "id": "B409",
+    "topic": "cloud-server",
+    "intent": "reference",
+    "question": "What does the Azure Dpsv5 workload brief say about running AI inference workloads on Ampere-based virtual machines?",
+    "expected_urls": [
+      "https://amperecomputing.com/briefs/ai-inference-on-azure-brief"
     ]
   }
 ]
