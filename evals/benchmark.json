@@ -12,7 +12,7 @@
     "id": "B002",
     "topic": "cloud-server",
     "intent": "setup",
-    "question": "In the Azure portal, how do I choose the VM architecture and size for the Cobalt 100 machine used in the MySQL walkthrough?",
+    "question": "I want to create an Azure Cobalt 100 VM for MySQL. How do I select the appropriate VM architecture and machine family in the Azure portal?",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mysql-azure/create-instance/#create-an-arm-based-azure-virtual-machine"
     ]
@@ -66,7 +66,7 @@
     "id": "B008",
     "topic": "cloud-server",
     "intent": "troubleshooting",
-    "question": "In the HTTP-only Keycloak learning setup on Cobalt 100, the admin console shows HTTPS required. What configuration does the walkthrough change to unblock this lab?",
+    "question": "My HTTP-only Keycloak test deployment on Cobalt 100 shows HTTPS required when I open the admin console. How can I make this test setup work over HTTP?",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/servers-and-cloud-computing/keycloak-cobalt/keycloak_deployment_azure_cobalt100/#troubleshoot-https-required-error"
     ]
@@ -84,7 +84,7 @@
     "id": "B010",
     "topic": "cloud-server",
     "intent": "troubleshooting",
-    "question": "A repeated DevStack deployment on my Cobalt 100 test VM fails to start services after an earlier install. Which stale DevStack and etcd files does the guide tell me to remove before retrying?",
+    "question": "Services fail to start when I retry a DevStack deployment on my Cobalt 100 test VM after an earlier installation. What should I check from the previous installation?",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/servers-and-cloud-computing/openstack-on-azure/devtstack-deployment/#clean-previous-setup"
     ]
@@ -390,7 +390,7 @@
     "id": "B044",
     "topic": "containers-kubernetes-ci",
     "intent": "setup",
-    "question": "Which repository secrets does the Docker Build Cloud GitHub Actions example need, including when I have a Docker ID but no organization?",
+    "question": "I want to use Docker Build Cloud from GitHub Actions with my personal Docker account. Which credentials and repository secrets do I need if I do not belong to an organization?",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/cross-platform/docker-build-cloud/actions/#set-up-secrets"
     ]
@@ -417,7 +417,7 @@
     "id": "B047",
     "topic": "containers-kubernetes-ci",
     "intent": "troubleshooting",
-    "question": "On my Axion build agent, docker buildx reports permission denied after I manually install the Arm64 plugin. Which two permission checks does the installation guide suggest?",
+    "question": "After manually installing the Arm64 Docker Buildx plugin, invoking it fails with permission denied. What should I check?",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/servers-and-cloud-computing/buildkite-gcp/installation/#download-docker-buildx"
     ]
@@ -534,7 +534,7 @@
     "id": "B060",
     "topic": "containers-kubernetes-ci",
     "intent": "troubleshooting",
-    "question": "After fetching credentials for my Arm GKE cluster on Ubuntu, gcloud reports that gke-gcloud-auth-plugin was not found or is not executable. What dependency does the guide install?",
+    "question": "After fetching credentials for my Arm GKE cluster on Ubuntu, gcloud reports that gke-gcloud-auth-plugin was not found or is not executable. How can I resolve this?",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/servers-and-cloud-computing/gke/cluster_deployment/#view-the-gke-cluster"
     ]
@@ -552,7 +552,7 @@
     "id": "B062",
     "topic": "containers-kubernetes-ci",
     "intent": "troubleshooting",
-    "question": "My Docker Engine installation on Linux cannot create a Buildx cloud builder because its plugin lacks cloud support. How does the guide update the Arm64 plugin and retry?",
+    "question": "My Arm64 Linux host uses Docker Engine, but its Buildx plugin lacks cloud-builder support. How do I enable Docker Build Cloud?",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/cross-platform/docker-build-cloud/cloud/#additional-steps-for-docker-engine-linux"
     ]
@@ -606,7 +606,7 @@
     "id": "B068",
     "topic": "compatibility",
     "intent": "troubleshooting",
-    "question": "The Performix AppImage on Ubuntu 22.04 will not start because its FUSE 2 library is missing, although FUSE 3 is installed. Which compatibility library does the guide require?",
+    "question": "The Performix AppImage fails because its FUSE 2 library is missing on Ubuntu 22.04, which has FUSE 3 installed. What should I install?",
     "expected_urls": [
       "https://developer.arm.com/documentation/110163/latest/Known-issues-and-limitations/AppImage-compatibility-on-Ubuntu?lang=en"
     ]
@@ -642,7 +642,7 @@
     "id": "B072",
     "topic": "compatibility",
     "intent": "comparison",
-    "question": "For a Graviton bare-metal deployment, how does the AWS OS table distinguish FreeBSD 13.5 from 14.2, and does either entry remove the device-hotplug caveat?",
+    "question": "I am choosing between FreeBSD 13.5 and 14.2 for a Graviton bare-metal deployment. How do their bare-metal support and device-hotplug limitations compare?",
     "expected_urls": [
       "https://github.com/aws/aws-graviton-getting-started/blob/main/os.md"
     ]
@@ -858,7 +858,7 @@
     "id": "B096",
     "topic": "ai-ml",
     "intent": "troubleshooting",
-    "question": "The Cortex-M33 ExecuTorch runner on i.MX 93 gets a BUS FAULT on its first load_method call. Which SDK linker-script fix addresses this documented failure?",
+    "question": "The ExecuTorch runner on the i.MX 93 Cortex-M33 bus-faults on its first load_method call. Is there a known cause or workaround?",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/observing-ethos-u-on-nxp/9-build-executorch-runner-for-cm33/#apply-required-sdk-patches"
     ]
@@ -921,7 +921,7 @@
     "id": "B103",
     "topic": "ai-ml",
     "intent": "optimization",
-    "question": "How do I convert a Keras model to the FP16-weight LiteRT variant used in the KleidiAI tutorial to evaluate lower-precision inference?",
+    "question": "How do I convert a Keras model to LiteRT with FP16 weights so I can evaluate lower-precision inference with KleidiAI?",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/litert-sme/2-build-model/#post-training-quantization-options"
     ]
@@ -1038,7 +1038,7 @@
     "id": "B116",
     "topic": "embedded-bare-metal-rtos",
     "intent": "optimization",
-    "question": "While configuring the Keil MDK RTX example, where do I select the documented compiler optimization level for higher-performance code?",
+    "question": "Where can I configure the compiler optimization level for my RTX project in Keil MDK?",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cmsis_rtx/create/#compiler-optimization-options"
     ]
@@ -1137,7 +1137,7 @@
     "id": "B127",
     "topic": "embedded-bare-metal-rtos",
     "intent": "troubleshooting",
-    "question": "In my CMSIS-DSP Q15 noise-suppression prototype, squared-magnitude energy values collapse to zero. What intermediate precision does the example use to address this?",
+    "question": "In my CMSIS-DSP Q15 noise-suppression prototype, squared-magnitude energy values collapse to zero. How can I preserve precision in this calculation?",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cmsisdsp-dev-with-python/how-to-6/#subnoise"
     ]
@@ -1200,7 +1200,7 @@
     "id": "B134",
     "topic": "embedded-bare-metal-rtos",
     "intent": "reference",
-    "question": "Which secure physical timer registers does the bare-metal example use to set the timer period and enable or disable it?",
+    "question": "Which AArch64 secure physical timer registers control the timer period and enable or disable the timer?",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/bare-metal/event-driven2/#generic-timer"
     ]
@@ -1281,7 +1281,7 @@
     "id": "B143",
     "topic": "automotive",
     "intent": "troubleshooting",
-    "question": "The automotive reference-stack build in my Multipass VM fails from lack of memory. What swap-space setup does the development tutorial recommend?",
+    "question": "The automotive software-stack build in my Multipass VM fails because it runs out of memory. What can I change in the VM to get the build to complete?",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/automotive/system76-auto/setup/#create-swap-space"
     ]
@@ -2289,7 +2289,7 @@
     "id": "B255",
     "topic": "simd-matrix-extensions",
     "intent": "optimization",
-    "question": "What loop-level changes does Arm’s optimized SVE2 MATCH search example use to increase throughput when scanning long arrays?",
+    "question": "I use SVE2 MATCH to search long arrays. What loop-level changes should I try to improve throughput?",
     "expected_urls": [
       "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sve2-match/sve2-match-search/#3-optimized-sve2-match-implementation"
     ]
@@ -2730,7 +2730,7 @@
     "id": "B304",
     "topic": "ai-ml",
     "intent": "setup",
-    "question": "How can I build a keyword spotting system that converts microphone audio into spectrogram or MFCC features for classification with a convolutional neural network?",
+    "question": "For keyword spotting with a CNN, how should I turn microphone audio into input features?",
     "expected_urls": [
       "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@ec75d375250c40d4b806c2ad03f6fdff"
     ]
@@ -2739,7 +2739,7 @@
     "id": "B305",
     "topic": "ai-ml",
     "intent": "optimization",
-    "question": "How can I train a Mixture of Experts model to achieve both high prediction accuracy and balanced expert utilization by alternating between expert specialization and routing optimization?",
+    "question": "How can I train a Mixture of Experts model to balance prediction accuracy with more even use of its experts?",
     "expected_urls": [
       "https://github.com/arm-education/Advanced-AI-Mixture-of-Experts/blob/main/Part-5-Routing-and-Load-Balancing-Improved/Part-5-Routing-and-Load-Balancing-Improved_AC_Ed.ipynb"
     ]
@@ -2756,17 +2756,17 @@
   {
     "id": "B307",
     "topic": "ai-ml",
-    "intent": "optimization",
-    "question": "How can I improve CPU inference performance for generative AI models on Arm by combining quantization, pruning, matrix multiplication optimizations, SIMD extensions such as NEON, SVE, I8MM and SME, and KleidiAI micro-kernels?",
+    "intent": "troubleshooting",
+    "question": "My quantized LLM runs slowly in llama.cpp on an Arm CPU. How can I check whether it is using optimized Arm kernels?",
     "expected_urls": [
-      "https://github.com/arm-education/AI-on-Arm/blob/main/slides/chapter4.pptx"
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/llama_cpp_streamline/4_analyze_token_prefill_decode/#analyze-the-data-with-streamline"
     ]
   },
   {
     "id": "B308",
     "topic": "ai-ml",
     "intent": "optimization",
-    "question": "How can I automatically choose the optimal quantization bit-width for each neural network layer to balance model accuracy, memory footprint, and inference efficiency on edge hardware?",
+    "question": "How can I search for per-layer quantization bit widths that trade off model loss against estimated model size?",
     "expected_urls": [
       "https://github.com/arm-education/Advanced-AI-Hardware-Software-Co-Design/blob/main/lab2.ipynb"
     ]
@@ -2990,8 +2990,8 @@
   {
     "id": "B333",
     "topic": "ai-ml",
-    "intent": "optimization",
-    "question": "How can I design a convolutional neural network for image classification that learns features directly from raw images while balancing accuracy with computational efficiency for embedded deployment?",
+    "intent": "conceptual",
+    "question": "In a CNN image classifier, how do convolution and pooling settings determine the sizes of the intermediate feature maps?",
     "expected_urls": [
       "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@5e3ac498a032482a9ddc5f1f4d3ddec3"
     ]
@@ -3009,9 +3009,9 @@
     "id": "B335",
     "topic": "ai-ml",
     "intent": "comparison",
-    "question": "How do I choose or optimize a deep learning model for TinyML when I need to balance inference accuracy against memory usage and computational cost on a microcontroller?",
+    "question": "I’m learning TinyML. How should I compare candidate models when RAM usage and inference latency matter as much as accuracy?",
     "expected_urls": [
-      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@ca3a0116b39c43debef04085e63da5ce"
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/edge/software-edge-impulse/#review-model-performance"
     ]
   },
   {
@@ -3027,7 +3027,7 @@
     "id": "B337",
     "topic": "ai-ml",
     "intent": "optimization",
-    "question": "How can I quantize a TensorFlow model with TensorFlow Lite and verify the improvements in memory usage, inference latency, and energy consumption on an STM32 microcontroller using STM32Cube.AI?",
+    "question": "I'm quantizing a TensorFlow model for an STM32 microcontroller. How can I use TensorFlow Lite and STM32Cube.AI to compare memory use and inference time before and after quantization?",
     "expected_urls": [
       "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@22b73d7ee4e94d738ae8dcf58697c7c6"
     ]
@@ -3036,7 +3036,7 @@
     "id": "B338",
     "topic": "ai-ml",
     "intent": "optimization",
-    "question": "How can I optimize generative AI inference on Arm by combining Neon SIMD, PyTorch, quantization, and llama.cpp to reduce model size and improve latency on resource-constrained devices like Raspberry Pi?",
+    "question": "When running a quantized language model with llama.cpp on an Arm CPU, how can I compare its inference speed and output with the full-precision model?",
     "expected_urls": [
       "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@64c996e199754717816958a107c5b4a6"
     ]
@@ -3081,7 +3081,7 @@
     "id": "B343",
     "topic": "cloud-server",
     "intent": "conceptual",
-    "question": "How should I plan the software stack for deploying or porting an application to an Arm Neoverse cloud platform, including firmware, Linux, hypervisors, middleware, cloud-native tooling, platform discovery, and security considerations?",
+    "question": "What should I check when choosing a Linux distribution for an application on an Arm Neoverse platform?",
     "expected_urls": [
       "https://github.com/arm-education/Introduction-to-Cloud-Compute-on-Arm/blob/main/Part%202%20-%20The%20Software%20Stack.md"
     ]
@@ -3090,7 +3090,7 @@
     "id": "B344",
     "topic": "cloud-server",
     "intent": "optimization",
-    "question": "How do I plan, migrate, deploy, benchmark, and optimize a cloud application on Arm Neoverse, including choosing components, selecting the right platform, and tuning performance for workloads such as web hosting, video transcoding, or AI model serving?",
+    "question": "I’m moving a containerized web service from x86 to Graviton. What should I check before deployment, and how should I compare performance?",
     "expected_urls": [
       "https://github.com/arm-education/Introduction-to-Cloud-Compute-on-Arm/blob/main/Part%203%20-%20Arm%20Neoverse%20Software%20and%20System%20Design.md"
     ]
