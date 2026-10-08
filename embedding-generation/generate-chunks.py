@@ -20,7 +20,6 @@ import os
 import re
 import sys
 import uuid
-from urllib.parse import parse_qs, urlparse
 
 import requests
 import yaml
@@ -31,8 +30,6 @@ from urllib3.util.retry import Retry
 from document_chunking import (
     arm_service_url_to_developer_url,
     chunk_parsed_document,
-    derive_product,
-    derive_version,
     is_arm_developer_documentation_url,
     learn_learning_path_step_urls,
     normalize_source_url,
@@ -40,6 +37,7 @@ from document_chunking import (
     parse_document_content,
     source_to_fetch_url,
 )
+from ecosystem_dashboard import acquire_catalog
 
 
 # Create a session with retry logic for resilient HTTP requests
@@ -80,8 +78,7 @@ chunk_index = 1
 # Global var to prevent duplication entries from cross platform learning paths
 cross_platform_lps_dont_duplicate = []
 
-# Cache the ecosystem dashboard page so package entries do not re-fetch the same
-# multi-megabyte HTML document for every source row.
+# Reuse one validated source revision for dashboard discovery and chunking.
 ecosystem_dashboard_entries = None
 
 # Global tracking for vector-db-sources.csv
@@ -184,9 +181,7 @@ def get_install_guide_title(url):
     if not response.ok:
         return None
 
-    title = BeautifulSoup(response.text, "html.parser").find(
-        id="ads-masthead-title"
-    )
+    title = BeautifulSoup(response.text, "html.parser").find(id="ads-masthead-title")
     return title.get_text(strip=True) if title else None
 
 
@@ -236,6 +231,8 @@ class Chunk:
         version="",
         resolved_url="",
         content_type="",
+        platform="",
+        edition="",
     ):
         self.title = title
         self.url = url
@@ -248,6 +245,8 @@ class Chunk:
         self.version = version
         self.resolved_url = resolved_url
         self.content_type = content_type
+        self.platform = platform
+        self.edition = edition
 
         # Translate keyword list into comma-separated string, and add similar words to keywords.
         self.keywords = self.formatKeywords(keywords)
@@ -271,6 +270,8 @@ class Chunk:
             "version": self.version,
             "resolved_url": self.resolved_url,
             "content_type": self.content_type,
+            "platform": self.platform,
+            "edition": self.edition,
         }
 
     def __repr__(self):
@@ -278,162 +279,91 @@ class Chunk:
 
 
 def build_ecosystem_dashboard_entries():
-    """Load and cache package-level snippets from the ecosystem dashboard."""
+    """Acquire and validate the dashboard once per run."""
     global ecosystem_dashboard_entries
-    if ecosystem_dashboard_entries is not None:
-        return ecosystem_dashboard_entries
-
-    def create_text_snippet(main_row):
-        package_name = main_row.get("data-title")
-        download_link = main_row.find("a", class_="download-icon-a")
-        download_url = download_link.get("href") if download_link else None
-
-        next_row = main_row.find_next_sibling("tr")
-        works_on_arm_div = (
-            next_row.find("div", class_="description") if next_row else None
+    if ecosystem_dashboard_entries is None:
+        ecosystem_dashboard_entries = acquire_catalog(
+            http_session, os.getenv("ECOSYSTEM_DASHBOARD_REVISION", "")
         )
-        arm_support_statement = ""
-        if works_on_arm_div:
-            arm_support_statement = works_on_arm_div.get_text(" ", strip=True)
-
-        quick_start_section = None
-        if works_on_arm_div and works_on_arm_div.parent:
-            next_section = works_on_arm_div.parent.find_next_sibling("section")
-            if next_section:
-                quick_start_section = next_section.find("div", class_="description")
-
-        quick_start_lines = []
-        if quick_start_section:
-            for li in quick_start_section.find_all("li"):
-                link = li.find("a")
-                if not link:
-                    continue
-                link_text = link.get_text(" ", strip=True)
-                link_href = link.get("href")
-                if link_text and link_href:
-                    quick_start_lines.append(f"- [{link_text}]({link_href})")
-
-        snippet_parts = []
-        if arm_support_statement:
-            snippet_parts.append(arm_support_statement)
-        if download_url:
-            snippet_parts.append(f"[Download {package_name} here.]({download_url})")
-        if quick_start_lines:
-            snippet_parts.append(
-                "To get started quickly, here are some helpful guides from different sources:\n"
-                + "\n".join(quick_start_lines)
-            )
-        return "\n\n".join(part for part in snippet_parts if part)
-
-    url = "https://www.arm.com/developer-hub/ecosystem-dashboard/"
-    response = http_session.get(url, timeout=60)
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, "html.parser")
-    rows = soup.find_all("tr", class_=["main-sw-row"])
-    entries = {}
-    for row in rows:
-        package_name = row.get("data-title")
-        package_slug = row.get("data-title-urlized")
-        if not package_name or not package_slug:
-            continue
-
-        keywords = [package_name]
-        for c in row.get("class", []):
-            if "tag-" in c:
-                keywords.append(
-                    c.replace("tag-license-", "").replace("tag-category-", "")
-                )
-
-        package_url = f"{url}?package={package_slug}"
-        entries[package_slug] = {
-            "display_name": f"Ecosystem Dashboard - {package_name}",
-            "package_name": package_name,
-            "keywords": keywords,
-            "url": package_url,
-            "resolved_url": response.url + f"?package={package_slug}",
-            "content": create_text_snippet(row),
-        }
-
-    ecosystem_dashboard_entries = entries
     return ecosystem_dashboard_entries
 
 
-def ecosystem_dashboard_slug_from_url(source_url):
-    query = parse_qs(urlparse(source_url).query)
-    values = query.get("package", [])
-    if values:
-        return values[0].strip()
-    return ""
-
-
-def create_ecosystem_dashboard_chunk(source_url, source_name, keywords_value):
-    package_slug = ecosystem_dashboard_slug_from_url(source_url)
-    if not package_slug:
+def create_ecosystem_dashboard_chunk(source_url, keywords_value):
+    packages = build_ecosystem_dashboard_entries().get(source_url)
+    if not packages:
+        print(f"[ECOSYSTEM OMITTED SOURCE] Missing or invalid in snapshot: {source_url}")
         return []
-
-    entry = build_ecosystem_dashboard_entries().get(package_slug)
-    if not entry or not entry["content"]:
-        return []
-
-    keywords = parse_keywords(keywords_value, entry["package_name"])
-    return [
-        createChunk(
-            text_snippet=entry["content"],
-            WEBSITE_url=normalize_source_url(source_url),
-            keywords=keywords,
-            title=entry["display_name"],
-            heading=entry["package_name"],
-            heading_path=[entry["package_name"]],
-            doc_type="Ecosystem Dashboard",
-            product=derive_product(
-                entry["display_name"], source_url, "Ecosystem Dashboard", keywords
-            ),
-            version=derive_version(
-                entry["display_name"], entry["resolved_url"], entry["content"]
-            ),
-            resolved_url=entry["resolved_url"],
-            content_type="html",
-        )
+    # CSV rows represent public URLs, which may cover multiple editions. Keep
+    # each record's own catalog/category keywords instead of mixing editions.
+    generated = {word.casefold() for package in packages for word in package.keywords}
+    curated = [
+        word
+        for word in parse_keywords(keywords_value)
+        if word.casefold() not in generated
     ]
-
-
-def createEcosystemDashboardChunks(emit_chunks=True):
-    for entry in build_ecosystem_dashboard_entries().values():
-        register_source(
-            site_name="Ecosystem Dashboard",
-            license_type="Arm Proprietary",
-            display_name=entry["display_name"],
-            url=entry["url"],
-            keywords=entry["keywords"],
+    chunks = []
+    for package in packages:
+        keywords = list(dict.fromkeys(package.keywords + curated))
+        chunks.extend(
+            chunk_from_payload(payload, keywords)
+            for payload in chunk_parsed_document(
+                package.document, "Ecosystem Dashboard", keywords
+            )
         )
-        if not emit_chunks:
+    return chunks
+
+
+def reconcile_ecosystem_sources(discover=True):
+    """Replace only dashboard rows, keeping curated keywords and one row per URL.
+
+    Discovery reconciles the complete catalog, including removed/skipped entries.
+    With SKIP_DISCOVERY, only existing rows are retained; the requested source
+    subset never expands. Missing records are reported and omitted in both modes.
+    """
+    global all_sources, known_source_urls
+    existing = [row for row in all_sources if row["site_name"] == "Ecosystem Dashboard"]
+    if not discover and not existing:
+        return
+    catalog = build_ecosystem_dashboard_entries()
+    curated = {}
+    for row in existing:
+        curated.setdefault(row["url"], []).extend(parse_keywords(row["keywords"], ""))
+    missing = curated.keys() - catalog.keys()
+    for url in sorted(missing):
+        print(f"[ECOSYSTEM OMITTED SOURCE] Missing or invalid in snapshot: {url}")
+    replacements = []
+    for url, packages in catalog.items():
+        if not discover and url not in curated:
             continue
-
-        chunk = Chunk(
-            title=entry["display_name"],
-            url=entry["url"],
-            uuid=str(uuid.uuid4()),
-            keywords=entry["keywords"],
-            content=entry["content"],
-            heading=entry["package_name"],
-            heading_path=[entry["package_name"]],
-            doc_type="Ecosystem Dashboard",
-            product=derive_product(
-                entry["display_name"],
-                entry["url"],
-                "Ecosystem Dashboard",
-                entry["keywords"],
-            ),
-            version=derive_version(
-                entry["display_name"], entry["resolved_url"], entry["content"]
-            ),
-            resolved_url=entry["resolved_url"],
-            content_type="html",
+        keywords = list(
+            dict.fromkeys(
+                curated.get(url, [])
+                + [word for package in packages for word in package.keywords]
+            )
         )
-
-        chunkSaveAndTrack(entry["url"], chunk)
-
-    return
+        replacements.append(
+            {
+                "site_name": "Ecosystem Dashboard",
+                "license_type": "Arm Proprietary",
+                "display_name": packages[0].document.display_title,
+                "url": url,
+                "keywords": "; ".join(keywords),
+                "transcript_source_url": "",
+            }
+        )
+    position = next(
+        (
+            i
+            for i, row in enumerate(all_sources)
+            if row["site_name"] == "Ecosystem Dashboard"
+        ),
+        len(all_sources),
+    )
+    remaining = [
+        row for row in all_sources if row["site_name"] != "Ecosystem Dashboard"
+    ]
+    all_sources = remaining[:position] + replacements + remaining[position:]
+    known_source_urls = {row["url"] for row in all_sources}
 
 
 def createIntrinsicsDatabaseChunks():
@@ -604,19 +534,7 @@ def processLearningPath(url, type, emit_chunks=True):
 
         # 5) Create chunks for each snippet by adding metadata
         for payload in chunk_payloads:
-            chunk = createChunk(
-                payload["content"],
-                WEBSITE_url,
-                keywords,
-                payload["title"],
-                heading=payload["heading"],
-                heading_path=payload["heading_path"],
-                doc_type=payload["doc_type"],
-                product=payload["product"],
-                version=payload["version"],
-                resolved_url=payload["resolved_url"],
-                content_type=payload["content_type"],
-            )
+            chunk = chunk_from_payload(payload, keywords, url=WEBSITE_url)
             chunkSaveAndTrack(WEBSITE_url, chunk)
 
     if type == "Learning Path":
@@ -736,9 +654,7 @@ def processLearningPath(url, type, emit_chunks=True):
                     url=child_url,
                     keywords=child_keywords,
                 )
-                chunkizeLearningPath(
-                    sub_ig_rel_url, child_display_name, child_keywords
-                )
+                chunkizeLearningPath(sub_ig_rel_url, child_display_name, child_keywords)
 
             # If not multi-install (most cases)
             if not multi_install_guides:
@@ -891,35 +807,9 @@ def obtainTextSnippets__Markdown(
     return [chunk["content"] for chunk in chunks]
 
 
-def createChunk(
-    text_snippet,
-    WEBSITE_url,
-    keywords,
-    title,
-    heading="",
-    heading_path=None,
-    doc_type="",
-    product="",
-    version="",
-    resolved_url="",
-    content_type="",
-):
-    chunk = Chunk(
-        title=title,
-        url=WEBSITE_url,
-        uuid=str(uuid.uuid4()),
-        keywords=keywords,
-        content=text_snippet,
-        heading=heading,
-        heading_path=heading_path or [],
-        doc_type=doc_type,
-        product=product,
-        version=version,
-        resolved_url=resolved_url,
-        content_type=content_type,
-    )
-
-    return chunk
+def chunk_from_payload(payload, keywords, **overrides):
+    """Serialize shared chunker output without repeating its metadata field list."""
+    return Chunk(uuid=str(uuid.uuid4()), keywords=keywords, **(payload | overrides))
 
 
 def printChunks(chunks):
@@ -1000,18 +890,12 @@ def create_transcript_chunks(
         parsed_document, doc_type=doc_type or "Transcript", keywords=keywords
     ):
         chunks.append(
-            createChunk(
-                text_snippet=payload["content"],
-                WEBSITE_url=normalized_source_url,
-                keywords=keywords,
+            chunk_from_payload(
+                payload,
+                keywords,
+                url=normalized_source_url,
                 title=payload["title"] or source_name,
-                heading=payload["heading"],
-                heading_path=payload["heading_path"],
-                doc_type=payload["doc_type"],
-                product=payload["product"],
-                version=payload["version"],
                 resolved_url=response.url,
-                content_type=payload["content_type"],
             )
         )
     return chunks
@@ -1028,7 +912,7 @@ def create_chunks_for_source(
             source_url, transcript_url, source_name, doc_type, keywords_value
         )
     if doc_type == "Ecosystem Dashboard":
-        return create_ecosystem_dashboard_chunk(source_url, source_name, keywords_value)
+        return create_ecosystem_dashboard_chunk(source_url, keywords_value)
     if is_arm_developer_documentation_url(source_url):
         return create_arm_documentation_chunks(
             source_url, source_name, doc_type, keywords_value
@@ -1064,21 +948,7 @@ def create_chunks_for_source(
         for payload in chunk_parsed_document(
             parsed_document, doc_type=doc_type or "Documentation", keywords=keywords
         ):
-            chunks.append(
-                createChunk(
-                    text_snippet=payload["content"],
-                    WEBSITE_url=payload["url"],
-                    keywords=keywords,
-                    title=payload["title"],
-                    heading=payload["heading"],
-                    heading_path=payload["heading_path"],
-                    doc_type=payload["doc_type"],
-                    product=payload["product"],
-                    version=payload["version"],
-                    resolved_url=payload["resolved_url"],
-                    content_type=payload["content_type"],
-                )
-            )
+            chunks.append(chunk_from_payload(payload, keywords))
     return chunks
 
 
@@ -1133,18 +1003,10 @@ def create_arm_documentation_chunks(source_url, source_name, doc_type, keywords_
             parsed_document, doc_type=doc_type or "Documentation", keywords=keywords
         ):
             chunks.append(
-                createChunk(
-                    text_snippet=payload["content"],
-                    WEBSITE_url=payload["url"],
-                    keywords=keywords,
-                    title=payload["title"],
-                    heading=payload["heading"],
-                    heading_path=payload["heading_path"],
-                    doc_type=payload["doc_type"],
-                    product=payload["product"],
+                chunk_from_payload(
+                    payload,
+                    keywords,
                     version=root_data.get("versionLabel") or payload["version"],
-                    resolved_url=payload["resolved_url"],
-                    content_type=payload["content_type"],
                 )
             )
     return chunks
@@ -1230,6 +1092,15 @@ def main():
     # Load existing sources from vector-db-sources.csv (for deduplication)
     load_existing_sources(sources_file)
 
+    # 0) Obtain full database information:
+    # a) Learning Paths & Install Guides
+    if not skip_discovery:
+        createLearningPathChunks(emit_chunks=False)
+
+    # b) Validate and reconcile the dashboard before writing any source changes.
+    reconcile_ecosystem_sources(discover=not skip_discovery)
+    save_sources_csv(sources_file)
+
     # 0) Initialize files
     os.makedirs(yaml_dir, exist_ok=True)  # create if doesn't exist
     details_dir = os.path.dirname(details_file)
@@ -1243,18 +1114,6 @@ def main():
         writer.writerow(
             ["URL", "Date", "Number of Words", "Number of Chunks", "Chunk IDs"]
         )
-
-    # 0) Obtain full database information:
-    # a) Learning Paths & Install Guides
-    if not skip_discovery:
-        createLearningPathChunks(emit_chunks=False)
-
-        # b) Ecosystem Dashboard
-        createEcosystemDashboardChunks(emit_chunks=False)
-
-        # Persist discovery before chunking so newly registered sources are
-        # included in this acquisition run rather than the next one.
-        save_sources_csv(sources_file)
 
     # c) Intrinsics
     # createIntrinsicsDatabaseChunks()

@@ -568,14 +568,27 @@ def hybrid_search(
 
 
 def deduplicate_urls(results: List[Dict[str, Any]], max_chunks_per_url: int = 1) -> List[Dict[str, Any]]:
-    """Keep the highest-ranked chunk for each URL by default."""
-    seen_counts: Dict[str, int] = {}
+    """Keep the highest-ranked chunk per URL, retaining dashboard editions.
+
+    Dashboard URLs identify the platform and package; edition distinguishes
+    commercial and open-source records without retaining duplicate source files.
+    Legacy HTML records and all other document types still deduplicate by URL.
+    """
+    seen_counts: Dict[tuple[str, str], int] = {}
     deduplicated_results = []
     for item in results:
         url = item["metadata"].get("url")
         if not url:
             continue
-        seen_counts[url] = seen_counts.get(url, 0) + 1
-        if seen_counts[url] <= max_chunks_per_url:
+        metadata = item["metadata"]
+        edition = ""
+        if (
+            metadata.get("doc_type") == "Ecosystem Dashboard"
+            and metadata.get("content_type") == "markdown"
+        ):
+            edition = metadata.get("edition", "")
+        key = (url, edition)
+        seen_counts[key] = seen_counts.get(key, 0) + 1
+        if seen_counts[key] <= max_chunks_per_url:
             deduplicated_results.append(item)
     return deduplicated_results

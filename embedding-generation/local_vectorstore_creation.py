@@ -171,6 +171,8 @@ def main():
                 "product": yaml_content.get("product", ""),
                 "version": yaml_content.get("version", ""),
                 "content_type": yaml_content.get("content_type", ""),
+                "platform": yaml_content.get("platform", ""),
+                "edition": yaml_content.get("edition", ""),
                 "search_text": search_text,
             }
         )

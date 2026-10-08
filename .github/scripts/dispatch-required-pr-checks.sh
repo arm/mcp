@@ -11,7 +11,7 @@ branch="$1"
 # branch ruleset. Each workflow must support workflow_dispatch.
 workflows=(
   integration-tests.yml
-  embedding-unit-tests.yml
+  knowledge-base-unit-tests.yml
   scorecard.yml
 )
 
