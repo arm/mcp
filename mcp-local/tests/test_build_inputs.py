@@ -761,7 +761,7 @@ def test_generated_prs_dispatch_required_checks_without_an_external_token() -> N
         assert "propose-pin-pr.sh" in workflow
     for workflow in (
         "integration-tests.yml",
-        "embedding-unit-tests.yml",
+        "knowledge-base-unit-tests.yml",
         "scorecard.yml",
     ):
         assert workflow in REQUIRED_CHECK_DISPATCH

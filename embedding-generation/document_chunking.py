@@ -90,6 +90,8 @@ class ParsedDocument:
     # None permits inference; an empty string explicitly suppresses it.
     product: str | None = None
     version: str | None = None
+    platform: str = ""
+    edition: str = ""
 
 
 def normalize_source_url(url: str) -> str:
@@ -269,6 +271,12 @@ def extract_html_links(tag, base_url: str) -> list[Link]:
 
 
 def link_text_with_urls(text: str, links: list[Link]) -> str:
+    # Markdown links already retain absolute URLs; HTML text and relative links
+    # may still need their resolved destinations appended.
+    embedded_destinations = {
+        match.group(2) for match in MARKDOWN_LINK_PATTERN.finditer(text)
+    }
+    links = [link for link in links if link.url not in embedded_destinations]
     if not links:
         return text
     link_evidence = " ".join(f"{link.text} {link.url}" for link in links)
@@ -1161,6 +1169,8 @@ def chunk_parsed_document(
                     "product": product,
                     "version": version,
                     "content_type": parsed_document.content_type,
+                    "platform": parsed_document.platform,
+                    "edition": parsed_document.edition,
                     "content": build_chunk_text(
                         parsed_document.display_title, heading_path, chunk_body
                     ),

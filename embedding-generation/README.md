@@ -193,48 +193,59 @@ uv run --locked pytest
 
 
 
-## Ecosystem Dashboard adapter
+## Ecosystem Dashboard ingestion
 
-`ecosystem_dashboard.py` converts Linux and Windows on Arm dashboard Markdown
-into documents for the shared chunker. It does not fetch files: the caller supplies
-the Markdown text, platform (`linux` or `windows`) from the source directory,
-public dashboard package URL, and commit-pinned Markdown source URL. Production
-ingestion still uses HTML until acquisition is connected in a follow-up change:
+`ecosystem_dashboard.py` resolves the dashboard repository's `main` branch once
+per run and downloads a commit-pinned archive. Discovery and chunk generation
+share this snapshot. Set `ECOSYSTEM_DASHBOARD_REVISION` to a full 40-character
+commit SHA to reproduce a run. Every chunk's `resolved_url` records the exact
+Markdown source revision; its `url` points to the public Linux or Windows package
+page. Acquisition reads archive members in memory without extracting files.
 
-```python
-from ecosystem_dashboard import parse_ecosystem_package
-from document_chunking import chunk_parsed_document
+The same module converts package frontmatter into shared chunker documents.
+It includes descriptions, categories, vendor information, support status,
+minimum/recommended versions and dates, recommendation rationale, caveats,
+alternatives, and labeled resource links. Markdown bodies use the shared parser.
+Test-run output and maintenance fields are excluded. Missing support is unknown,
+not unsupported; version spelling is preserved (`3.10` stays `3.10`).
 
-parsed = parse_ecosystem_package(
-    markdown_text,
-    platform="linux",  # Use "windows" for content/windows/ packages.
-    source_url=dashboard_package_url,
-    resolved_url=raw_markdown_url,
-)
-chunks = chunk_parsed_document(parsed, "Ecosystem Dashboard", keywords)
-```
+Invalid individual records produce a warning with their source URL and reason and
+are skipped. Misplaced guidance fields are invalid rather than silently omitted.
+There are no package-specific fixes or HTML fallbacks. A failed download, invalid
+archive/revision, or snapshot with no usable packages for either platform fails
+acquisition before the existing source CSV or chunk snapshot is overwritten.
+Review skipped-record warnings, omitted-source notices, and package counts before
+promotion. Fixed upstream records return on the next discovery run.
 
-For the upstream field layout, see the
-[open-source](https://github.com/ArmDeveloperEcosystem/ecosystem-dashboard-for-arm/blob/main/archetypes/opensource_packages/index.md)
-and [commercial](https://github.com/ArmDeveloperEcosystem/ecosystem-dashboard-for-arm/blob/main/archetypes/commercial_packages/index.md)
-package templates.
+The CSV keeps one row per dashboard package URL, using
+`https://developer.arm.com/ecosystem-dashboard/{platform}?package={slug}`.
+Source matching uses these URLs exactly; custom CSVs must use this format too.
+Reconciliation preserves curated keywords for retained sources and reports removed
+or invalid sources. `SKIP_DISCOVERY=1` retains only existing dashboard rows and
+does not add new packages. Normal discovery also adds new Linux and Windows packages. Source records sharing a URL remain distinct in
+chunking through their pinned Markdown `resolved_url`. Retrieval keeps the
+highest-ranked hit per public URL and edition, so duplicate source files in the
+same edition do not consume additional result slots.
 
-The adapter puts name, platform context, description, category, and vendor first,
-followed by support status, minimum/recommended versions and dates, recommendation
-rationale, caveats, alternatives, and labeled resource links. Markdown body content
-uses the shared parser. Relative links resolve against the source file, while all
-chunks retain the dashboard URL without source-only heading fragments.
+Metadata for downstream dashboard search:
 
-Missing optional values are omitted; missing support is unknown, not unsupported.
-Version spelling is preserved (`3.10` stays `3.10`). Invalid frontmatter, missing
-names, or invalid types in consumed fields raise `ValueError` with the source URL.
-Maintenance fields under `optional_hidden_info` and unrecognized fields are not
-included. Tests use pinned source fixtures and synthetic edge cases offline.
+- `doc_type`: `Ecosystem Dashboard` for both platforms.
+- `platform`: `linux` or `windows`, from the source directory.
+- `edition`: `open-source` or `commercial` for the corresponding Linux catalog.
+  Windows `all_packages` does not establish an edition, so its value is empty.
+- `product` and `version`: explicitly empty. Package identity is separate from
+  product taxonomy, and minimum/recommended versions remain distinct content facts.
 
-The output schema is unchanged. Explicitly empty `product` and `version` suppress
-heuristic inference: product taxonomy is not yet agreed, and minimum/recommended
-versions are separate facts in the content. Other parsers retain inference unless
-they provide explicit values. Keyword discovery, GitHub acquisition, URL/slug
-mapping, platform/edition metadata propagation, and switching production ingestion
-are left to the integration change. `doc_type` remains `Ecosystem Dashboard` for
-both platforms; this adapter does not implement filtering or catalog deduplication.
+The shared chunker, YAML serialization, vector-store metadata, and shared search
+response preserve `platform` and `edition`. Other sources and older artifacts
+return empty values unless supplied. The shared search package version changes
+with this response extension; REST deployments must update their package pin to
+receive the fields. No request filters are added here.
+
+The dashboard consumer's [proposed contract in PR #1092](https://github.com/ArmDeveloperEcosystem/ecosystem-dashboard-for-arm/pull/1092)
+requires `doc_type`, `platform`, and `edition` on Linux hits, plus filtering before
+top-k selection. STESOL-625 must coordinate these scope filters as well as its
+planned `product` filter. The consumer's live integration remains disabled until
+that contract is implemented and verified. Same-name source records may disagree
+on support or minimum versions; ingestion preserves their facts and reports shared
+URLs rather than selecting an authoritative record.
