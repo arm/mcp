@@ -120,4 +120,14 @@ jobs:
           MCP_IMAGE: arm-mcp:latest
         run: |
           uv run --directory mcp-local --locked --only-group test \
-            pytest -s tests/test_mcp.py --platform ${{ matrix.platform }}
+            pytest -s tests/test_mcp.py tests/test_retrieval_smoke.py \
+            --platform ${{ matrix.platform }}
+
+      - name: Retain retrieval smoke results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: retrieval-smoke-${{ matrix.runner }}
+          path: ${{ runner.temp }}/retrieval-smoke/smoke.json
+          retention-days: 30
+          if-no-files-found: warn

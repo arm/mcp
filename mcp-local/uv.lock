@@ -64,7 +64,7 @@ wheels = [
 
 [[package]]
 name = "arm-kb-search"
-version = "0.4.0"
+version = "0.4.1"
 source = { directory = "../" }
 dependencies = [
     { name = "numkong" },
@@ -112,6 +112,7 @@ acquisition = [
 ]
 test = [
     { name = "pytest" },
+    { name = "pyyaml" },
     { name = "testcontainers" },
 ]
 
@@ -139,6 +140,7 @@ requires-dist = [
 acquisition = [{ name = "pip", specifier = "==26.2.1" }]
 test = [
     { name = "pytest" },
+    { name = "pyyaml", specifier = "==6.0.3" },
     { name = "testcontainers" },
 ]
 

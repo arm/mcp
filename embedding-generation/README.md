@@ -86,7 +86,7 @@ pip install playwright && playwright install chromium
 python discover-developer-arm-com-sources.py vector-db-sources.csv
 ```
 
-Review the printed `[NEW SOURCE]` lines, add a question with the new URL in `expected_urls` to `eval_questions.json` for each one, then commit the updated CSV. The production build chunks the new rows automatically — `generate-chunks.py` already handles developer.arm.com documentation and community blog URLs found in the CSV.
+Review the printed `[NEW SOURCE]` lines and commit the updated CSV. Propose benchmark coverage in a separate reviewed dataset change, following the [review process](../CONTRIBUTING.md#adding-questions-and-accepted-urls). Keep the checked-in evaluation suites fixed during retrieval improvements. The production build chunks the new rows automatically — `generate-chunks.py` already handles developer.arm.com documentation and community blog URLs found in the CSV.
 
 ### Transcript-backed sources
 
@@ -116,24 +116,82 @@ uv sync --locked
 
 Python 3.13 is required.
 
-Run the full local question eval:
+One evaluator runs the stable smoke suite on every PR and the full benchmark in
+the existing recurring embedding refresh. The suites are `../evals/smoke.json` and
+`../evals/benchmark.json`. Select either checked-in suite with `--suite`.
+Keep these suites fixed during retrieval improvements. Each question
+requires a unique, nonempty `id`, a `question`, and a nonempty `expected_urls` list.
+Smoke questions also require `area`; benchmark questions require `topic` and `intent`.
+Dataset changes or verified stale-label corrections require separate review and
+a fresh baseline.
+
+To rebuild the local corpus and run the benchmark:
 
 ```sh
 uv run --locked ./run-question-eval.sh
 ```
 
-That command copies intrinsic chunks from the embedding base image if needed,
-regenerates chunks, acquires the revision in `embedding-model.lock.json`, rebuilds
-the local USearch index from that local model, and runs `evaluate_retrieval.py`
-without model network access.
+The wrapper copies intrinsic chunks if needed, regenerates chunks, acquires the
+locked model, rebuilds the index, and invokes the same evaluator. It accepts
+`--suite`, `--eval-path`, `--output`, and `--baseline`.
+Relative paths passed to the wrapper are relative to this directory. Use a new
+output filename for each run.
 
-Useful options:
+To evaluate an existing local corpus without rebuilding it:
 
 ```sh
-uv run --locked ./run-question-eval.sh --refresh-intrinsic-chunks
-uv run --locked ./run-question-eval.sh --eval eval_questions.json --top-k 5
-SKIP_DISCOVERY=1 uv run --locked ./run-question-eval.sh
+uv run --locked python evaluate_retrieval.py --suite smoke \
+  --model-path .cache/embedding-model --output reports/smoke.json
+uv run --locked python evaluate_retrieval.py --suite benchmark \
+  --model-path .cache/embedding-model --output reports/benchmark.json
+uv run --locked python evaluate_retrieval.py --suite benchmark \
+  --model-path .cache/embedding-model --baseline reports/benchmark.json \
+  --output reports/benchmark-next.json
 ```
+
+For local experiments, pass `--eval-path` to use a custom question file without
+editing the checked-in datasets. It must meet the selected suite's validation
+requirements; `--suite` still controls URL matching and pass/fail behavior:
+
+```sh
+uv run --locked python evaluate_retrieval.py --suite benchmark \
+  --eval-path /path/to/questions.json --model-path .cache/embedding-model \
+  --output reports/local.json
+```
+
+Every run evaluates all questions in the selected file. PR smoke runs all 50
+questions alongside the MCP integration tests against the candidate image. Every question
+must retrieve an accepted source in the top five results; a miss or execution
+error fails the required integration check and blocks merging.
+
+The recurring embedding workflow runs all 408 benchmark questions in a separate
+job with read-only permissions. It evaluates the published candidate by digest,
+or the same saved image in a dry run, after verifying its original image ID.
+Evaluation runs without networking in the digest-pinned generator image, using
+the candidate's model, metadata, and index. Code and corpus mounts are read-only;
+only reports and temporary files are writable. No dependencies are installed in
+the benchmark job. Benchmark scores and failures are reported without blocking
+publication. Corpus build failures and security failures still block it.
+
+The pinned generator image must include all locked evaluation dependencies;
+the benchmark does not install packages at runtime.
+
+Smoke accepts the expected page or a child path on the same origin, ignoring
+query strings and fragments. Benchmark uses stricter matching that preserves
+meaningful query parameters, fragments, and resource paths while ignoring
+`utm_*` tracking parameters. The two suites' scores are not directly comparable.
+
+View aggregate results in the terminal or GitHub Actions Summary. Download
+`retrieval-smoke-*` or `retrieval-benchmark` Actions artifacts for individual
+question results. The recurring job compares against a compatible benchmark
+report from the latest successful run of the same workflow and branch. If that
+report is unavailable or incompatible, it shows current results only. Comparisons
+require unchanged category labels. Older reports without saved category labels
+cannot be used as baselines; the next completed report establishes a new baseline.
+
+New sources need a rebuilt local corpus: building the MCP image alone uses its
+pinned embedding artifact. See [contribution guidance](../CONTRIBUTING.md#retrieval-evaluations)
+for source-label rules and miss investigation.
 
 Run lint and tests with:
 
@@ -142,7 +200,7 @@ uv run --locked ruff check .
 uv run --locked pytest
 ```
 
-To check a new document, add or update a question in `eval_questions.json` with the document URL in `expected_urls`, then run the wrapper. Review `Hit@1`, `Hit@3`, `Hit@5`, `MRR`, and any printed misses before committing the CSV change.
+
 
 ## Ecosystem Dashboard ingestion
 
