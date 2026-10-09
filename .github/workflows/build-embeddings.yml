@@ -385,23 +385,14 @@ jobs:
             echo "::error::Missing or invalid chunk artifact digest."
             exit 1
           fi
-          snapshot_dir="$(mktemp -d "${RUNNER_TEMP}/embedding-sources.XXXXXX")"
-          container_id=""
-          cleanup() {
-            if [[ -n "${container_id}" ]]; then
-              docker rm "${container_id}" >/dev/null || true
-            fi
-            rm -rf "${snapshot_dir}"
-          }
-          trap cleanup EXIT
-
           docker pull --platform linux/arm64 "${CHUNK_REFERENCE}"
           container_id="$(docker create --platform linux/arm64 "${CHUNK_REFERENCE}" /bin/true)"
+          trap 'docker rm "${container_id}" >/dev/null || true' EXIT
+
           docker cp \
             "${container_id}:/embedding-data/vector-db-sources.csv" \
-            "${snapshot_dir}/vector-db-sources.csv"
-          test -s "${snapshot_dir}/vector-db-sources.csv"
-          cp "${snapshot_dir}/vector-db-sources.csv" embedding-generation/vector-db-sources.csv
+            embedding-generation/vector-db-sources.csv
+          test -s embedding-generation/vector-db-sources.csv
 
       - name: Update checked-in embedding pin and release version
         id: update
