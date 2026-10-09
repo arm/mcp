@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from .loaders import load_metadata, load_usearch_index
+from .filters import SearchFilters
 from .evaluation import (
     EvaluationCaseResult,
     EvaluationResult,
@@ -76,6 +77,7 @@ __all__ = [
     "RetrievalMiss",
     "salient_tokens",
     "search",
+    "SearchFilters",
     "SearchResources",
     "sentence_transformer_cache_folder",
     "tokenize_for_search",
