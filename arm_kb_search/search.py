@@ -278,7 +278,7 @@ def embedding_search(
             np.ascontiguousarray(vectors, dtype=np.float32),
             np.ascontiguousarray(query_embedding, dtype=np.float32),
             count=min(k, len(eligible_ids)),
-            metric="l2sq",
+            metric=usearch_index.metric,
             exact=True,
         )
     results: List[Dict[str, Any]] = []
