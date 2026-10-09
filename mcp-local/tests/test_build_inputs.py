@@ -434,7 +434,7 @@ def test_fork_pr_promotion_keeps_credentials_away_from_fork_code() -> None:
     assert "permission-contents: write" in FORK_PROMOTION_WORKFLOW
     assert "permission-pull-requests: write" in FORK_PROMOTION_WORKFLOW
     assert "permission-workflows:" not in FORK_PROMOTION_WORKFLOW
-    assert "FORK_PROMOTION_APP_PRIVATE_KEY" in FORK_PROMOTION_WORKFLOW
+    assert "GH_APP_TOKEN" in FORK_PROMOTION_WORKFLOW
     assert "actions/checkout" not in FORK_PROMOTION_SCRIPT
     assert 'WORKFLOW_DIRECTORY = ".github/workflows/"' in FORK_PROMOTION_SCRIPT
     assert "MAX_PULL_REQUEST_FILES = 3_000" in FORK_PROMOTION_SCRIPT

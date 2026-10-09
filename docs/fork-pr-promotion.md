@@ -65,8 +65,8 @@ permission provides a second enforcement layer at the GitHub API boundary.
 
 Configure the repository with:
 
-- Variable `FORK_PROMOTION_APP_CLIENT_ID`: the App client ID
-- Secret `FORK_PROMOTION_APP_PRIVATE_KEY`: one of the App private keys
+- Variable `GH_APP_ID`: the App client ID
+- Secret `GH_APP_TOKEN`: one of the App private keys
 
 The App token is used so the internal PR triggers normal `pull_request`
 workflows without the approval-required behavior applied to PRs created by the
