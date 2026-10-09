@@ -28,6 +28,7 @@ If you would prefer to use a pre-built, multi-arch image, the official image can
 
 - Docker with Buildx support
 - An MCP-compatible AI assistant client (e.g. GitHub Copilot, Kiro CLI, Codex CLI, Claude Code, etc)
+- Github access via Personal Access Token (PAT) with atleast `read:packages` scope for accessing secure ghcr.io docker images
 
 ## Quick Start
 
@@ -41,6 +42,8 @@ docker buildx build -f mcp-local/Dockerfile -t armlimited/arm-mcp . --load
 
 This builds for the Docker host's native architecture. The release workflow is
 responsible for explicit multi-architecture builds.
+
+Note: Please ensure to log into github with atleast `read:packages` scope to avoid 401 Unauthorized error.
 
 ### 2. Configure Your MCP Client
 
