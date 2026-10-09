@@ -27,6 +27,7 @@ acquisition = [
 ]
 test = [
     "pytest",
+    "pyyaml==6.0.3",
     "testcontainers",
 ]
 

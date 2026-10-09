@@ -19,15 +19,14 @@ dependencies = [
     "torch==2.14.0",
     "transformers==5.17.0",
     "usearch",
+    # Offline retrieval evaluation in the generator image
+    "rank-bm25",
 ]
 
 [dependency-groups]
 dev = [
     "pytest",
     "ruff",
-
-    # Used by retrieval evaluation, not by the generator image.
-    "rank-bm25",
 ]
 
 [tool.ruff.lint]
