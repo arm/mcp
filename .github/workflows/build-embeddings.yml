@@ -343,6 +343,7 @@ jobs:
 
   propose-mcp-embedding-pin:
     needs:
+      - acquire-and-publish-chunks
       - generate-and-publish-vectorstore
       - verify-vectorstore-provenance
     if: ${{ github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
@@ -354,7 +355,9 @@ jobs:
       # permissions cannot be narrowed to an individual step.
       contents: write
       pull-requests: write
+      packages: read
     env:
+      CHUNK_REFERENCE: ghcr.io/${{ github.repository_owner }}/mcp-embedding-chunks@${{ needs.acquire-and-publish-chunks.outputs.chunk-artifact-digest }}
       PROMOTION_BRANCH: automation/pin-embedding-vectorstore
       EMBEDDINGS_REFERENCE: ghcr.io/${{ github.repository_owner }}/mcp-embedding-vectorstore@${{ needs.generate-and-publish-vectorstore.outputs.embeddings-image-digest }}
     steps:
@@ -366,6 +369,30 @@ jobs:
 
       - name: Verify main has not advanced
         run: test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+
+      - name: Log in to GHCR for source CSV extraction
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Restore generated sources CSV from chunk artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "${CHUNK_REFERENCE}" =~ @sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Missing or invalid chunk artifact digest."
+            exit 1
+          fi
+          docker pull --platform linux/arm64 "${CHUNK_REFERENCE}"
+          container_id="$(docker create --platform linux/arm64 "${CHUNK_REFERENCE}" /bin/true)"
+          trap 'docker rm "${container_id}" >/dev/null || true' EXIT
+
+          docker cp \
+            "${container_id}:/embedding-data/vector-db-sources.csv" \
+            embedding-generation/vector-db-sources.csv
+          test -s embedding-generation/vector-db-sources.csv
 
       - name: Update checked-in embedding pin and release version
         id: update
@@ -391,9 +418,10 @@ jobs:
             - Source revision: `${{ github.sha }}`
             - Workflow run: [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
             - Candidate: `${{ env.EMBEDDINGS_REFERENCE }}`
+            - Chunk snapshot: `${{ env.CHUNK_REFERENCE }}`
             - Proposed MCP version: `${{ steps.update.outputs.release_version }}`
 
-            This PR updates the checked-in build-input manifest, Dockerfile default, and MCP release version. Merging the reviewed PR releases an MCP image using this exact digest.
+            This PR updates the checked-in source CSV, build-input manifest, Dockerfile default, and MCP release version. The CSV comes from the same immutable chunk snapshot used to build these embeddings. Merging the reviewed PR releases an MCP image using this exact digest.
           SUMMARY_TITLE: MCP embedding promotion
           CANDIDATE: ${{ env.EMBEDDINGS_REFERENCE }}
           SUMMARY_DETAILS: |
@@ -403,6 +431,7 @@ jobs:
           mcp-local/Dockerfile
           mcp-local/build-inputs.lock.json
           mcp-local/server.json
+          embedding-generation/vector-db-sources.csv
 
   verify-vectorstore-provenance:
     needs: generate-and-publish-vectorstore
