@@ -12,8 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+import sys
+
+import numpy as np
 import pytest
 
+import local_vectorstore_creation as vectorstore
 from local_vectorstore_creation import load_local_yaml_files
 
 
@@ -25,3 +30,64 @@ def test_load_local_yaml_files_requires_intrinsic_chunks(tmp_path, monkeypatch):
 
     with pytest.raises(FileNotFoundError, match="No intrinsic chunk YAML files found"):
         load_local_yaml_files()
+
+
+def test_vectorstore_serialization_preserves_dashboard_scope(tmp_path, monkeypatch):
+    records = [
+        dict(
+            uuid="a",
+            chunk_uuid="a",
+            url="https://example.com/linux",
+            title="Package",
+            keywords="package",
+            content="Useful software",
+            doc_type="Ecosystem Dashboard",
+            product="",
+            version="",
+            platform="linux",
+            edition="open-source",
+        ),
+        dict(
+            uuid="b",
+            chunk_uuid="b",
+            url="https://example.com/guide",
+            title="Guide",
+            keywords="guide",
+            content="Existing document",
+        ),
+    ]
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys, "argv", ["local_vectorstore_creation.py", "--model-path", "unused"]
+    )
+    monkeypatch.setattr(vectorstore, "load_local_yaml_files", lambda: records)
+    monkeypatch.setattr(
+        vectorstore, "create_embeddings", lambda *args: np.eye(2, dtype=np.float32)
+    )
+    vectorstore.main()
+    metadata = json.loads((tmp_path / "metadata.json").read_text())
+    assert (
+        metadata[0]["platform"] == "linux" and metadata[0]["edition"] == "open-source"
+    )
+    assert metadata[0]["product"] == metadata[0]["version"] == ""
+    assert metadata[1]["platform"] == metadata[1]["edition"] == ""
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("renamed", [False, True])
+def test_chunk_order_ignores_file_order_and_generated_ids(tmp_path, monkeypatch, reverse, renamed):
+    monkeypatch.chdir(tmp_path)
+    for env, directory in [("INTRINSIC_CHUNKS_DIR", "intrinsic_chunks"), ("YAML_DATA_DIR", "yaml_data")]:
+        monkeypatch.setenv(env, directory)
+        (tmp_path / directory).mkdir()
+    for position, content in enumerate(["intrinsic", "beta", "alpha"]):
+        directory = "intrinsic_chunks" if position == 0 else "yaml_data"
+        identifier = f"new-{9 - position}" if renamed else f"old-{position}"
+        chunk = {"uuid": identifier, "url": "https://example.com", "content": content}
+        (tmp_path / directory / f"chunk_{identifier}.yaml").write_text(json.dumps(chunk))
+    original_glob = vectorstore.glob.glob
+    monkeypatch.setattr(
+        vectorstore.glob, "glob",
+        lambda pattern: sorted(original_glob(pattern), reverse=reverse),
+    )
+    assert [chunk["content"] for chunk in load_local_yaml_files()] == ["intrinsic", "alpha", "beta"]

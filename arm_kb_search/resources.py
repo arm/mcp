@@ -138,6 +138,8 @@ def search(
             "heading": item["metadata"].get("heading", ""),
             "doc_type": item["metadata"].get("doc_type", ""),
             "product": item["metadata"].get("product", ""),
+            "platform": item["metadata"].get("platform", ""),
+            "edition": item["metadata"].get("edition", ""),
             "distance": item.get("distance"),
             "score": item.get("rerank_score", item.get("rrf_score")),
         }

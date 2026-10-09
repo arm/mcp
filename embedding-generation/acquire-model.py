@@ -33,6 +33,7 @@ def acquire_model(lock_path: Path, output_dir: Path) -> None:
         model_lock["model_id"],
         revision=model_lock["revision"],
         trust_remote_code=False,
+        token=False, # Ignore cached or environment credentials
     )
     model.save_pretrained(str(output_dir), safe_serialization=True)
 

@@ -50,6 +50,7 @@ def gc():
     # Reset global state before each test
     _generate_chunks_module.known_source_urls = set()
     _generate_chunks_module.all_sources = []
+    _generate_chunks_module.ecosystem_dashboard_entries = None
     yield _generate_chunks_module
     # Clean up after test
     _generate_chunks_module.known_source_urls = set()

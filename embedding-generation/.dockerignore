@@ -24,6 +24,7 @@
 !embedding-model.lock.json
 !acquire-model.py
 !document_chunking.py
+!ecosystem_dashboard.py
 !generate-chunks.py
 !local_vectorstore_creation.py
 !vector-db-sources.csv
