@@ -36,14 +36,14 @@
       "workflow_run": "37197092138"
     },
     "mcp_build_inputs": {
-      "reference": "ghcr.io/arm/mcp-build-inputs@sha256:664b78def56c746b90d3c319e096170df173c3d2e627dc9d9e2cbf54e4ce5d84",
+      "reference": "ghcr.io/arm/mcp-build-inputs@sha256:2555a58b1bcc4b502c88bb052c2491cdb7a7f831ef61ea9d023df2877f5f70cf",
       "architectures": [
         "amd64",
         "arm64"
       ],
       "manifests": {
-        "amd64": "ghcr.io/arm/mcp-build-inputs@sha256:80fa7a05619a575fee07412928fcbe58fe7032a0e2ee27f245e31d1717a9ffc7",
-        "arm64": "ghcr.io/arm/mcp-build-inputs@sha256:ace636ac8cd413825c6d72246af93d0542241253ed27df3874e518ededd8146b"
+        "amd64": "ghcr.io/arm/mcp-build-inputs@sha256:f9eb91ea5ff9aeb547b67abd82b6d50b3eb265f2c4ad29dcc7868a2fc8262fa4",
+        "arm64": "ghcr.io/arm/mcp-build-inputs@sha256:474c7222712a89a141b5baeb0c3532f992f8c5ac6a553f1c9c3adc863e6096c6"
       },
       "contents": [
         "/mcp-build-inputs/wheels/",
@@ -51,8 +51,8 @@
         "/mcp-build-inputs/migrate-ease.tar.gz",
         "/mcp-build-inputs/metadata/"
       ],
-      "source_revision": "51390228ca98a74d895b0ae24827e2a2364b2eaa",
-      "workflow_run": "37488048974",
+      "source_revision": "7c5d7e8d3e26ff8fcebffa584da92a707520938d",
+      "workflow_run": "37973573939",
       "verification": "private multi-architecture GHCR OCI image-index digest"
     }
   },
