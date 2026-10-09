@@ -52,6 +52,7 @@ to consume the newest registry artifact automatically. To promote a candidate:
    `automation/pin-embedding-vectorstore` PR with the immutable digest in both
    `mcp-local/build-inputs.lock.json` and `mcp-local/Dockerfile`, along with the
    next minor version in `mcp-local/server.json`.
+   The same PR updates `vector-db-sources.csv` from that run's immutable chunk artifact.
 3. Review the source revision, image digest, and proposed version.
 4. Merge the approved PR to publish the MCP release using that exact embedding
    digest and version.
