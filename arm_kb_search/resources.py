@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import os
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Any
 
 from rank_bm25 import BM25Okapi
@@ -21,6 +22,7 @@ from sentence_transformers import SentenceTransformer
 from usearch.index import Index
 
 from .config import K_RESULTS
+from .filters import MetadataFilterIndex, SearchFilters
 from .loaders import load_metadata, load_usearch_index
 from .response import add_disclaimer_to_arm_results, add_utm_source_to_results
 from .search import (
@@ -40,6 +42,10 @@ class SearchResources:
     default_k: int = K_RESULTS
     include_disclaimers: bool = True
     utm_source: str | None = None
+    _filter_index: MetadataFilterIndex = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        self._filter_index = MetadataFilterIndex(self.metadata)
 
 
 def sentence_transformer_cache_folder() -> str | None:
@@ -117,7 +123,13 @@ def search(
     query: str,
     resources: SearchResources,
     k: int | None = None,
+    *,
+    filters: SearchFilters | Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
+    """Search a resource snapshot, optionally restricting eligible metadata values."""
+    eligible_ids = resources._filter_index.eligible_ids(SearchFilters.parse(filters))
+    if eligible_ids == ():
+        return []
     resolved_k = k or resources.default_k
     candidate_depth = max(resolved_k * 20, 100)
     search_results = hybrid_search(
@@ -128,6 +140,7 @@ def search(
         resources.bm25_index,
         k=deduplication_candidate_count(resolved_k),
         candidate_depth=candidate_depth,
+        eligible_ids=eligible_ids,
     )
     deduped = deduplicate_urls(search_results)[:resolved_k]
     formatted = [

@@ -19,7 +19,7 @@ from urllib.parse import urlparse
 import numpy as np
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
-from usearch.index import Index
+from usearch.index import Index, search as search_vectors
 
 from .config import DISTANCE_THRESHOLD, K_RESULTS
 
@@ -261,12 +261,26 @@ def embedding_search(
     metadata: List[Dict],
     embedding_model: SentenceTransformer,
     k: int = K_RESULTS,
+    *,
+    eligible_ids: Optional[tuple[int, ...]] = None,
 ) -> List[Dict[str, Any]]:
-    """Search the USearch index with a text query."""
-    if usearch_index is None:
+    """Use ANN without filters, or exact search over eligible stored vectors."""
+    if usearch_index is None or eligible_ids == ():
         return []
     query_embedding = embedding_model.encode([query])[0]
-    matches = usearch_index.search(query_embedding, k)
+    if eligible_ids is None:
+        matches = usearch_index.search(query_embedding, k)
+    else:
+        vectors = usearch_index.get(eligible_ids, dtype="f32")
+        if any(vector is None for vector in vectors):
+            raise ValueError("Search metadata and vector index have mismatched chunk IDs")
+        matches = search_vectors(
+            np.ascontiguousarray(vectors, dtype=np.float32),
+            np.ascontiguousarray(query_embedding, dtype=np.float32),
+            count=min(k, len(eligible_ids)),
+            metric=usearch_index.metric,
+            exact=True,
+        )
     results: List[Dict[str, Any]] = []
     if matches is None:
         return results
@@ -290,11 +304,12 @@ def embedding_search(
                 continue
             distance = float(dist)
             if distance < DISTANCE_THRESHOLD:
+                metadata_id = int(idx) if eligible_ids is None else eligible_ids[int(idx)]
                 results.append(
                     {
                         "rank": rank,
                         "distance": distance,
-                        "metadata": metadata[int(idx)],
+                        "metadata": metadata[metadata_id],
                     }
                 )
     except Exception as exc:
@@ -307,24 +322,31 @@ def bm25_search(
     metadata: List[Dict],
     bm25_index: Optional[BM25Okapi],
     k: int = K_RESULTS,
+    *,
+    eligible_ids: Optional[tuple[int, ...]] = None,
 ) -> List[Dict[str, Any]]:
-    if bm25_index is None:
+    if bm25_index is None or eligible_ids == ():
         return []
     tokens = tokenize_for_search(query)
     if not tokens:
         return []
-    scores = bm25_index.get_scores(tokens)
+    if eligible_ids is None:
+        scores = bm25_index.get_scores(tokens)
+    else:
+        # rank-bm25 uses NumPy indexing, where a tuple means multiple axes.
+        scores = bm25_index.get_batch_scores(tokens, list(eligible_ids))
     ranking = np.argsort(scores)[::-1]
     results: List[Dict[str, Any]] = []
     for rank, idx in enumerate(ranking[:k], start=1):
         score = float(scores[idx])
         if score <= 0:
             continue
+        metadata_id = int(idx) if eligible_ids is None else eligible_ids[int(idx)]
         results.append(
             {
                 "rank": rank,
                 "bm25_score": score,
-                "metadata": metadata[int(idx)],
+                "metadata": metadata[metadata_id],
             }
         )
     return results
@@ -517,7 +539,11 @@ def hybrid_search(
     bm25_index: Optional[BM25Okapi],
     k: int = K_RESULTS,
     candidate_depth: Optional[int] = None,
+    *,
+    eligible_ids: Optional[tuple[int, ...]] = None,
 ) -> List[Dict[str, Any]]:
+    if eligible_ids == ():
+        return []
     candidate_depth = candidate_depth or max(k * 20, 100)
     lexical_limit = max(k * 3, PINNED_LEXICAL_CANDIDATES)
     bm25_depth = max(candidate_depth, LEXICAL_PREPASS_DEPTH, lexical_limit)
@@ -528,6 +554,7 @@ def hybrid_search(
         metadata,
         bm25_index,
         k=bm25_depth,
+        eligible_ids=eligible_ids,
     )
 
     lexical_results = _rank_lexical_candidates(
@@ -536,7 +563,8 @@ def hybrid_search(
     sparse_results = bm25_results[:candidate_depth]
 
     dense_results = embedding_search(
-        query, usearch_index, metadata, embedding_model, candidate_depth
+        query, usearch_index, metadata, embedding_model, candidate_depth,
+        eligible_ids=eligible_ids,
     )
 
     candidates: Dict[str, Dict[str, Any]] = {}
