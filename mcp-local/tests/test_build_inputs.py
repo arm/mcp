@@ -420,10 +420,17 @@ def test_source_scan_exports_cyclonedx_sbom_for_full_scans_only() -> None:
 
 
 def test_fork_pr_promotion_keeps_credentials_away_from_fork_code() -> None:
+    assert "\njobs:\n  build:\n    name: Black Duck security scan\n" in (
+        BLACKDUCK_SOURCE_SCAN_WORKFLOW
+    )
+
     triggers = FORK_PROMOTION_WORKFLOW.split("permissions:", maxsplit=1)[0]
     assert "pull_request_target:" in triggers
     assert "workflow_dispatch:" in triggers
-    assert "types: [opened, reopened, synchronize, ready_for_review]" in triggers
+    assert (
+        "types: [opened, reopened, synchronize, ready_for_review, closed]"
+        in triggers
+    )
     assert "!github.event.pull_request.draft" in FORK_PROMOTION_WORKFLOW
     assert "ref: main" in FORK_PROMOTION_WORKFLOW
     assert "persist-credentials: false" in FORK_PROMOTION_WORKFLOW
@@ -434,6 +441,9 @@ def test_fork_pr_promotion_keeps_credentials_away_from_fork_code() -> None:
     assert "permission-contents: write" in FORK_PROMOTION_WORKFLOW
     assert "permission-pull-requests: write" in FORK_PROMOTION_WORKFLOW
     assert "permission-workflows:" not in FORK_PROMOTION_WORKFLOW
+    assert "github.event.pull_request.merged == true" in FORK_PROMOTION_WORKFLOW
+    assert "finalize" in FORK_PROMOTION_WORKFLOW
+    assert "--internal-pull-number" in FORK_PROMOTION_WORKFLOW
     assert "GH_APP_TOKEN" in FORK_PROMOTION_WORKFLOW
     assert "actions/checkout" not in FORK_PROMOTION_SCRIPT
     assert 'WORKFLOW_DIRECTORY = ".github/workflows/"' in FORK_PROMOTION_SCRIPT

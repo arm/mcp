@@ -1,7 +1,7 @@
-name: Promote reviewed fork pull request
+name: Manage reviewed fork pull request
 
 run-name: >-
-  Promote fork PR #${{
+  Manage fork PR lifecycle for #${{
     github.event.pull_request.number || inputs.pull_request_number
   }}
 
@@ -10,7 +10,7 @@ on:
   # It never checks out or executes the fork's contents.
   pull_request_target:
     branches: [main]
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, synchronize, ready_for_review, closed]
   workflow_dispatch:
     inputs:
       pull_request_number:
@@ -39,7 +39,10 @@ jobs:
         github.repository == 'arm/mcp'
         && (
           github.event_name == 'workflow_dispatch'
-          || !github.event.pull_request.draft
+          || (
+            github.event.action != 'closed'
+            && !github.event.pull_request.draft
+          )
         )
         && (
           github.event_name == 'workflow_dispatch'
@@ -75,7 +78,55 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/scripts/promote-fork-pr.py \
+            promote \
             --mode "${PROMOTION_MODE}" \
             --pull-number "${PULL_REQUEST_NUMBER}" \
             --expected-sha "${EXPECTED_SHA}" \
             --actor "${PROMOTED_BY}"
+
+  finalize:
+    if: >-
+      ${{
+        github.repository == 'arm/mcp'
+        && github.event_name == 'pull_request_target'
+        && github.event.action == 'closed'
+        && github.event.pull_request.merged == true
+        && github.event.pull_request.head.repo.full_name == github.repository
+        && (
+          startsWith(
+            github.event.pull_request.head.ref,
+            'external-contributions/'
+          )
+          || startsWith(
+            github.event.pull_request.head.ref,
+            'trusted-fork-'
+          )
+        )
+      }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted promotion helper
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Create least-privilege finalization token
+        id: finalization-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_TOKEN }}
+          permission-metadata: read
+          permission-pull-requests: write
+
+      - name: Close the source PR after its promoted revision merges
+        env:
+          GH_TOKEN: ${{ steps.finalization-token.outputs.token }}
+          INTERNAL_PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/promote-fork-pr.py \
+            finalize \
+            --internal-pull-number "${INTERNAL_PULL_REQUEST_NUMBER}"

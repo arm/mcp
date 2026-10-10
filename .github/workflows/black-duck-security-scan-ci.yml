@@ -27,6 +27,7 @@ concurrency:
 
 jobs:
   build:
+    name: Black Duck security scan
     runs-on: ubuntu-latest
     permissions:
       contents: read

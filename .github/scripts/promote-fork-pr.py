@@ -13,7 +13,7 @@
 # limitations under the License.
 
 #!/usr/bin/env python3
-"""Promote an exact fork pull-request revision to a branch in arm/mcp."""
+"""Manage immutable fork pull-request promotions in arm/mcp."""
 
 from __future__ import annotations
 
@@ -36,6 +36,10 @@ WORKFLOW_DIRECTORY = ".github/workflows/"
 MAX_PULL_REQUEST_FILES = 3_000
 SHA_PATTERN = re.compile(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}")
 LOGIN_PATTERN = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?")
+PROMOTION_SUFFIX_PATTERN = re.compile(
+    r"pr-(?P<pull_number>[1-9][0-9]*)-"
+    r"(?P<sha>[0-9a-fA-F]{40}|[0-9a-fA-F]{64})"
+)
 
 
 class ApiError(RuntimeError):
@@ -115,6 +119,24 @@ def promotion_branch(
     if not LOGIN_PATTERN.fullmatch(username):
         raise ValueError(f"unsafe GitHub username for branch name: {username!r}")
     return f"trusted-fork-{username}/pr-{pull_number}-{sha}"
+
+
+def parse_promotion_branch(branch: str) -> tuple[int, str] | None:
+    """Return the source PR and immutable SHA encoded in a promotion branch."""
+    try:
+        namespace, suffix = branch.split("/", maxsplit=1)
+    except ValueError:
+        return None
+    if namespace != "external-contributions":
+        if not namespace.startswith("trusted-fork-"):
+            return None
+        username = namespace.removeprefix("trusted-fork-")
+        if not LOGIN_PATTERN.fullmatch(username):
+            return None
+    match = PROMOTION_SUFFIX_PATTERN.fullmatch(suffix)
+    if not match:
+        return None
+    return int(match.group("pull_number")), match.group("sha").lower()
 
 
 def validate_source_pr(
@@ -311,6 +333,52 @@ def create_internal_pr(
     )
 
 
+def internal_pr_identity(
+    pull: dict[str, Any], repository: str
+) -> tuple[int, str, str] | None:
+    """Validate and return source PR, SHA, and branch for an internal PR."""
+    base = pull.get("base") or {}
+    base_repo = base.get("repo") or {}
+    head = pull.get("head") or {}
+    head_repo = head.get("repo") or {}
+    branch = str(head.get("ref", ""))
+    parsed = parse_promotion_branch(branch)
+    if (
+        parsed is None
+        or base.get("ref") != BASE_BRANCH
+        or base_repo.get("full_name") != repository
+        or head_repo.get("full_name") != repository
+    ):
+        return None
+    source_pull_number, promoted_sha = parsed
+    marker = f"<!-- fork-promotion: source-pr={source_pull_number} -->"
+    if marker not in str(pull.get("body", "")):
+        return None
+    if str(head.get("sha", "")).lower() != promoted_sha:
+        return None
+    return source_pull_number, promoted_sha, branch
+
+
+def post_comment_once(
+    api: GitHubApi,
+    repository: str,
+    pull_number: int,
+    marker: str,
+    body: str,
+) -> None:
+    comments = paginated_get(
+        api,
+        f"/repos/{repository}/issues/{pull_number}/comments",
+        {},
+    )
+    if any(marker in str(comment.get("body", "")) for comment in comments):
+        return
+    api.post(
+        f"/repos/{repository}/issues/{pull_number}/comments",
+        {"body": f"{marker}\n{body}"},
+    )
+
+
 def comment_on_source_pr(
     api: GitHubApi,
     repository: str,
@@ -322,23 +390,71 @@ def comment_on_source_pr(
         f"<!-- fork-promotion-result: source-pr={source_pull_number} "
         f"source-sha={source_sha} -->"
     )
-    comments = paginated_get(
+    post_comment_once(
         api,
-        f"/repos/{repository}/issues/{source_pull_number}/comments",
-        {},
+        repository,
+        source_pull_number,
+        marker,
+        (
+            f"The reviewed revision `{source_sha}` was promoted to the internal "
+            f"pull request {internal_url}. Credentialed checks run there. Keep "
+            "this source pull request open for discussion and future revisions; "
+            "merge only the internal pull request."
+        ),
     )
-    if any(marker in str(comment.get("body", "")) for comment in comments):
-        return
-    api.post(
-        f"/repos/{repository}/issues/{source_pull_number}/comments",
-        {
-            "body": (
-                f"{marker}\nThe reviewed revision `{source_sha}` was promoted to "
-                f"the internal pull request {internal_url}. Credentialed checks "
-                "run there."
-            )
-        },
+
+
+def supersede_internal_prs(
+    api: GitHubApi,
+    repository: str,
+    source_pull_number: int,
+    current_branch: str,
+    current_url: str,
+) -> list[str]:
+    """Close older open internal PRs after their replacement exists."""
+    pulls = paginated_get(
+        api,
+        f"/repos/{repository}/pulls",
+        {"state": "open", "base": BASE_BRANCH},
     )
+    superseded: list[str] = []
+    for pull in pulls:
+        identity = internal_pr_identity(pull, repository)
+        if identity is None:
+            continue
+        candidate_source, _candidate_sha, candidate_branch = identity
+        if candidate_source != source_pull_number or candidate_branch == current_branch:
+            continue
+        internal_number = pull.get("number")
+        if not isinstance(internal_number, int):
+            raise RuntimeError("promoted internal pull request has no number")
+
+        # Re-read before mutating so an internal PR merged or changed during
+        # pagination is never treated as an open superseded revision.
+        latest = api.get(f"/repos/{repository}/pulls/{internal_number}")
+        if (
+            latest.get("state") != "open"
+            or latest.get("merged")
+            or internal_pr_identity(latest, repository) != identity
+        ):
+            continue
+        marker = (
+            "<!-- fork-promotion-superseded: "
+            f"replacement-branch={current_branch} -->"
+        )
+        post_comment_once(
+            api,
+            repository,
+            internal_number,
+            marker,
+            f"Superseded by {current_url}. Do not merge this older revision.",
+        )
+        api.patch(
+            f"/repos/{repository}/pulls/{internal_number}",
+            {"state": "closed"},
+        )
+        superseded.append(str(latest.get("html_url", "")))
+    return superseded
 
 
 def close_source_pr(
@@ -369,6 +485,121 @@ def close_source_pr(
     return closed.get("state") == "closed"
 
 
+def validate_source_pr_for_finalization(
+    pull: dict[str, Any], repository: str, pull_number: int
+) -> tuple[str, str]:
+    """Validate source PR identity without requiring it to remain open."""
+    if pull.get("number") != pull_number:
+        raise ValueError("GitHub returned a different source pull request")
+    base = pull.get("base") or {}
+    base_repo = base.get("repo") or {}
+    head = pull.get("head") or {}
+    head_repo = head.get("repo") or {}
+    if base_repo.get("full_name") != repository or base.get("ref") != BASE_BRANCH:
+        raise ValueError(
+            f"pull request #{pull_number} no longer targets "
+            f"{repository}:{BASE_BRANCH}"
+        )
+    if (
+        not head_repo
+        or head_repo.get("full_name") == repository
+        or not head_repo.get("fork")
+    ):
+        raise ValueError(f"pull request #{pull_number} is not from a fork")
+    source_sha = str(head.get("sha", "")).lower()
+    if not SHA_PATTERN.fullmatch(source_sha):
+        raise ValueError(f"pull request #{pull_number} has no valid head SHA")
+    return source_sha, str(pull.get("state", ""))
+
+
+def finalize_internal_pr(
+    api: GitHubApi, repository: str, internal_pull_number: int
+) -> bool:
+    """Close the source PR only when its matching internal revision merged."""
+    internal = api.get(f"/repos/{repository}/pulls/{internal_pull_number}")
+    identity = internal_pr_identity(internal, repository)
+    if identity is None:
+        raise ValueError(
+            f"pull request #{internal_pull_number} is not a valid promoted "
+            "internal pull request"
+        )
+    if internal.get("state") != "closed" or not internal.get("merged"):
+        raise ValueError(
+            f"internal pull request #{internal_pull_number} is not merged"
+        )
+    source_pull_number, promoted_sha, branch = identity
+    source = api.get(f"/repos/{repository}/pulls/{source_pull_number}")
+    source_sha, source_state = validate_source_pr_for_finalization(
+        source, repository, source_pull_number
+    )
+
+    source_closed = False
+    if source_state == "open" and source_sha == promoted_sha:
+        source_closed = close_source_pr(
+            api, repository, source_pull_number, promoted_sha
+        )
+
+    # Re-read after the conditional close so the comment describes the final
+    # observed state and a concurrent source update remains visible.
+    latest_source = api.get(f"/repos/{repository}/pulls/{source_pull_number}")
+    latest_sha, latest_state = validate_source_pr_for_finalization(
+        latest_source, repository, source_pull_number
+    )
+    if source_closed and latest_state == "closed" and latest_sha != promoted_sha:
+        # A contributor update can land just after close_source_pr's final
+        # verification. Restore the discussion thread if this automation closed
+        # a source PR whose head subsequently advanced.
+        api.patch(
+            f"/repos/{repository}/pulls/{source_pull_number}",
+            {"state": "open"},
+        )
+        latest_source = api.get(f"/repos/{repository}/pulls/{source_pull_number}")
+        latest_sha, latest_state = validate_source_pr_for_finalization(
+            latest_source, repository, source_pull_number
+        )
+        source_closed = False
+    internal_url = str(internal.get("html_url", ""))
+    marker = (
+        "<!-- fork-promotion-merged: "
+        f"internal-pr={internal_pull_number} source-sha={promoted_sha} -->"
+    )
+    if latest_sha == promoted_sha and latest_state == "closed":
+        result = "The source pull request is now closed."
+    elif latest_sha != promoted_sha:
+        result = (
+            f"The source pull request now points to `{latest_sha}`, so it remains "
+            "open. That newer revision requires separate authorization and "
+            "promotion."
+        )
+    else:
+        result = "The source pull request was not closed because its state changed."
+    post_comment_once(
+        api,
+        repository,
+        source_pull_number,
+        marker,
+        (
+            f"Internal pull request {internal_url} merged reviewed revision "
+            f"`{promoted_sha}` from branch `{branch}`. {result}"
+        ),
+    )
+
+    write_output("source_pull_number", str(source_pull_number))
+    write_output("source_closed", str(source_closed).lower())
+    append_summary(
+        [
+            "### Fork pull request finalization",
+            "",
+            f"- Internal pull request: {internal_url}",
+            f"- Source pull request: `#{source_pull_number}`",
+            f"- Merged source commit: `{promoted_sha}`",
+            f"- Source state: `{latest_state}`",
+            f"- Source head: `{latest_sha}`",
+        ]
+    )
+    return source_closed
+
+
 def write_output(name: str, value: str) -> None:
     output = os.environ.get("GITHUB_OUTPUT")
     if output:
@@ -385,10 +616,14 @@ def append_summary(lines: list[str]) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=("auto", "manual"), required=True)
-    parser.add_argument("--pull-number", type=int, required=True)
-    parser.add_argument("--expected-sha", required=True)
-    parser.add_argument("--actor", required=True)
+    commands = parser.add_subparsers(dest="command", required=True)
+    promote = commands.add_parser("promote")
+    promote.add_argument("--mode", choices=("auto", "manual"), required=True)
+    promote.add_argument("--pull-number", type=int, required=True)
+    promote.add_argument("--expected-sha", required=True)
+    promote.add_argument("--actor", required=True)
+    finalize = commands.add_parser("finalize")
+    finalize.add_argument("--internal-pull-number", type=int, required=True)
     return parser.parse_args()
 
 
@@ -405,6 +640,10 @@ def main() -> int:
         raise RuntimeError("GH_TOKEN is required")
 
     api = GitHubApi(api_url, token)
+    if args.command == "finalize":
+        finalize_internal_pr(api, repository, args.internal_pull_number)
+        return 0
+
     pull = api.get(f"/repos/{repository}/pulls/{args.pull_number}")
     source = validate_source_pr(
         pull, repository, args.pull_number, args.expected_sha
@@ -471,8 +710,12 @@ def main() -> int:
         source["sha"],
         internal_url,
     )
-    source_closed = close_source_pr(
-        api, repository, args.pull_number, source["sha"]
+    superseded = supersede_internal_prs(
+        api,
+        repository,
+        args.pull_number,
+        branch,
+        internal_url,
     )
 
     write_output("promoted", "true")
@@ -487,12 +730,8 @@ def main() -> int:
             f"- Internal branch: `{branch}`",
             f"- Internal pull request: {internal_url}",
             f"- Mode: `{args.mode}`",
-            "- Source pull request: "
-            + (
-                "`closed`"
-                if source_closed
-                else "`left open because its state or head changed`"
-            ),
+            "- Source pull request: `left open for discussion and revisions`",
+            f"- Superseded internal pull requests: `{len(superseded)}`",
         ]
     )
     return 0
@@ -502,5 +741,5 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except (ApiError, RuntimeError, ValueError) as error:
-        print(f"::error title=Fork promotion failed::{error}", file=sys.stderr)
+        print(f"::error title=Fork PR lifecycle failed::{error}", file=sys.stderr)
         raise SystemExit(1) from error

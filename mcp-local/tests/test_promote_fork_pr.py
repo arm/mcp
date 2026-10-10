@@ -52,6 +52,31 @@ def source_pr(*, sha: str = SHA, draft: bool = False) -> dict:
     }
 
 
+def internal_pr(
+    *,
+    number: int = 186,
+    source_number: int = 185,
+    sha: str = SHA,
+    branch: str | None = None,
+    state: str = "open",
+    merged: bool = False,
+) -> dict:
+    branch = branch or f"external-contributions/pr-{source_number}-{sha}"
+    return {
+        "number": number,
+        "state": state,
+        "merged": merged,
+        "html_url": f"https://github.com/arm/mcp/pull/{number}",
+        "body": f"<!-- fork-promotion: source-pr={source_number} -->",
+        "base": {"ref": "main", "repo": {"full_name": "arm/mcp"}},
+        "head": {
+            "ref": branch,
+            "sha": sha,
+            "repo": {"full_name": "arm/mcp"},
+        },
+    }
+
+
 def test_promotion_branch_names_match_trust_classification() -> None:
     assert PROMOTION.promotion_branch("manual", "ignored", 185, SHA) == (
         f"external-contributions/pr-185-{SHA}"
@@ -59,6 +84,13 @@ def test_promotion_branch_names_match_trust_classification() -> None:
     assert PROMOTION.promotion_branch("auto", "trusted-user", 185, SHA) == (
         f"trusted-fork-trusted-user/pr-185-{SHA}"
     )
+    assert PROMOTION.parse_promotion_branch(
+        f"external-contributions/pr-185-{SHA}"
+    ) == (185, SHA)
+    assert PROMOTION.parse_promotion_branch(
+        f"trusted-fork-trusted-user/pr-185-{SHA}"
+    ) == (185, SHA)
+    assert PROMOTION.parse_promotion_branch(f"feature/pr-185-{SHA}") is None
 
 
 def test_internal_pr_uses_the_promotion_name_for_its_title(
@@ -199,6 +231,61 @@ def test_missing_collaborator_is_treated_as_external() -> None:
     )
 
 
+def test_replacement_internal_pr_closes_the_superseded_revision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    old = internal_pr()
+    current_sha = "b" * 40
+    current_branch = f"external-contributions/pr-185-{current_sha}"
+    current_url = "https://github.com/arm/mcp/pull/187"
+
+    class RecordingApi:
+        def __init__(self) -> None:
+            self.requests: list[tuple[str, dict]] = []
+
+        def get(self, path: str) -> dict:
+            assert path == "/repos/arm/mcp/pulls/186"
+            return old
+
+        def patch(self, path: str, payload: dict) -> None:
+            self.requests.append((path, payload))
+
+    api = RecordingApi()
+    monkeypatch.setattr(
+        PROMOTION,
+        "paginated_get",
+        lambda *_args: [
+            old,
+            internal_pr(
+                number=187,
+                sha=current_sha,
+                branch=current_branch,
+            ),
+            internal_pr(number=188, source_number=999),
+        ],
+    )
+    comments: list[tuple[int, str]] = []
+    monkeypatch.setattr(
+        PROMOTION,
+        "post_comment_once",
+        lambda _api, _repository, number, _marker, body: comments.append(
+            (number, body)
+        ),
+    )
+
+    superseded = PROMOTION.supersede_internal_prs(
+        api, "arm/mcp", 185, current_branch, current_url
+    )
+
+    assert superseded == ["https://github.com/arm/mcp/pull/186"]
+    assert api.requests == [
+        ("/repos/arm/mcp/pulls/186", {"state": "closed"})
+    ]
+    assert comments == [
+        (186, f"Superseded by {current_url}. Do not merge this older revision.")
+    ]
+
+
 def test_closing_source_pr_uses_the_pull_request_endpoint() -> None:
     class RecordingApi:
         def __init__(self) -> None:
@@ -257,6 +344,99 @@ def test_source_pr_is_reopened_when_revision_races_the_close() -> None:
     assert api.requests == [
         ("/repos/arm/mcp/pulls/185", {"state": "closed"}),
         ("/repos/arm/mcp/pulls/185", {"state": "open"}),
+    ]
+
+
+def test_merged_internal_pr_closes_its_matching_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FinalizationApi:
+        def __init__(self) -> None:
+            self.source_state = "open"
+            self.requests: list[tuple[str, dict]] = []
+
+        def get(self, path: str) -> dict:
+            if path == "/repos/arm/mcp/pulls/186":
+                return internal_pr(state="closed", merged=True)
+            assert path == "/repos/arm/mcp/pulls/185"
+            pull = source_pr()
+            pull["state"] = self.source_state
+            return pull
+
+        def patch(self, path: str, payload: dict) -> None:
+            self.requests.append((path, payload))
+            self.source_state = payload["state"]
+
+    comments: list[str] = []
+    monkeypatch.setattr(
+        PROMOTION,
+        "post_comment_once",
+        lambda _api, _repository, _number, _marker, body: comments.append(body),
+    )
+    api = FinalizationApi()
+
+    assert PROMOTION.finalize_internal_pr(api, "arm/mcp", 186)
+    assert api.requests == [
+        ("/repos/arm/mcp/pulls/185", {"state": "closed"})
+    ]
+    assert "source pull request is now closed" in comments[0]
+
+
+def test_merged_internal_pr_leaves_a_newer_source_revision_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class UpdatedSourceApi:
+        def get(self, path: str) -> dict:
+            if path == "/repos/arm/mcp/pulls/186":
+                return internal_pr(state="closed", merged=True)
+            assert path == "/repos/arm/mcp/pulls/185"
+            return source_pr(sha="b" * 40)
+
+        def patch(self, _path: str, _payload: dict) -> None:
+            pytest.fail("a newer source revision must remain open")
+
+    comments: list[str] = []
+    monkeypatch.setattr(
+        PROMOTION,
+        "post_comment_once",
+        lambda _api, _repository, _number, _marker, body: comments.append(body),
+    )
+
+    assert not PROMOTION.finalize_internal_pr(
+        UpdatedSourceApi(), "arm/mcp", 186
+    )
+    assert "requires separate authorization and promotion" in comments[0]
+
+
+def test_finalization_reopens_a_source_updated_just_after_closing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class LateUpdateApi:
+        def __init__(self) -> None:
+            self.source_reads = 0
+            self.requests: list[tuple[str, dict]] = []
+
+        def get(self, path: str) -> dict:
+            if path == "/repos/arm/mcp/pulls/186":
+                return internal_pr(state="closed", merged=True)
+            assert path == "/repos/arm/mcp/pulls/185"
+            self.source_reads += 1
+            if self.source_reads == 1:
+                return source_pr()
+            pull = source_pr(sha="b" * 40)
+            pull["state"] = "closed" if self.source_reads == 2 else "open"
+            return pull
+
+        def patch(self, path: str, payload: dict) -> None:
+            self.requests.append((path, payload))
+
+    monkeypatch.setattr(PROMOTION, "close_source_pr", lambda *_args: True)
+    monkeypatch.setattr(PROMOTION, "post_comment_once", lambda *_args: None)
+    api = LateUpdateApi()
+
+    assert not PROMOTION.finalize_internal_pr(api, "arm/mcp", 186)
+    assert api.requests == [
+        ("/repos/arm/mcp/pulls/185", {"state": "open"})
     ]
 
 
@@ -321,7 +501,11 @@ def test_source_head_is_revalidated_after_file_inspection(
         PROMOTION,
         "parse_args",
         lambda: SimpleNamespace(
-            mode="auto", pull_number=185, expected_sha=SHA, actor="trusted-user"
+            command="promote",
+            mode="auto",
+            pull_number=185,
+            expected_sha=SHA,
+            actor="trusted-user",
         ),
     )
     monkeypatch.setattr(PROMOTION, "GitHubApi", lambda *_args: UpdatingSourceApi())
@@ -342,7 +526,7 @@ def test_source_head_is_revalidated_after_file_inspection(
 
 
 @pytest.mark.parametrize("mode", ["auto", "manual"])
-def test_source_pr_is_closed_after_internal_pr_is_created(
+def test_source_pr_stays_open_after_internal_pr_is_created(
     monkeypatch: pytest.MonkeyPatch,
     mode: str,
 ) -> None:
@@ -355,7 +539,11 @@ def test_source_pr_is_closed_after_internal_pr_is_created(
         PROMOTION,
         "parse_args",
         lambda: SimpleNamespace(
-            mode=mode, pull_number=185, expected_sha=SHA, actor="trusted-user"
+            command="promote",
+            mode=mode,
+            pull_number=185,
+            expected_sha=SHA,
+            actor="trusted-user",
         ),
     )
     monkeypatch.setattr(PROMOTION, "GitHubApi", lambda *_args: SourceApi())
@@ -379,8 +567,13 @@ def test_source_pr_is_closed_after_internal_pr_is_created(
     )
     monkeypatch.setattr(
         PROMOTION,
+        "supersede_internal_prs",
+        lambda *_args: calls.append("supersede-internal-prs") or [],
+    )
+    monkeypatch.setattr(
+        PROMOTION,
         "close_source_pr",
-        lambda *_args: calls.append("close-source-pr"),
+        lambda *_args: pytest.fail("the source PR must remain open after promotion"),
     )
     monkeypatch.setenv("GITHUB_REPOSITORY", "arm/mcp")
     monkeypatch.setenv("GH_TOKEN", "test-token")
@@ -390,7 +583,7 @@ def test_source_pr_is_closed_after_internal_pr_is_created(
         "ensure-ref",
         "create-internal-pr",
         "comment-on-source-pr",
-        "close-source-pr",
+        "supersede-internal-prs",
     ]
 
 
