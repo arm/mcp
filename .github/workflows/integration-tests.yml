@@ -66,6 +66,7 @@ jobs:
             pytest -q \
             tests/test_build_inputs.py \
             tests/test_invocation_logger.py \
+            tests/test_promote_fork_pr.py \
             tests/test_release_withdrawal.py
 
   integration-tests:

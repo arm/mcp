@@ -77,6 +77,12 @@ REQUIRED_CHECK_DISPATCH = (
 INTEGRATION_WORKFLOW = (
     REPOSITORY / ".github/workflows/integration-tests.yml"
 ).read_text()
+FORK_PROMOTION_WORKFLOW = (
+    REPOSITORY / ".github/workflows/promote-fork-pr.yml"
+).read_text()
+FORK_PROMOTION_SCRIPT = (
+    REPOSITORY / ".github/scripts/promote-fork-pr.py"
+).read_text()
 
 BENCHMARK_WORKFLOW = yaml.safe_load(EMBEDDING_WORKFLOW)
 BENCHMARK_SCRIPT = next(
@@ -540,6 +546,71 @@ def test_source_scan_exports_cyclonedx_sbom_for_full_scans_only() -> None:
     assert "steps.black-duck-full-scan.outputs.status == '8'" in full_scan_section
     assert "steps.black-duck-full-scan.outputs.status != '8'" in full_scan_section
     assert "Export Black Duck CycloneDX SBOM" not in pr_scan_section
+
+
+def test_fork_pr_promotion_keeps_credentials_away_from_fork_code() -> None:
+    assert "\njobs:\n  build:\n    name: Black Duck security scan\n" in (
+        BLACKDUCK_SOURCE_SCAN_WORKFLOW
+    )
+
+    triggers = FORK_PROMOTION_WORKFLOW.split("permissions:", maxsplit=1)[0]
+    assert "pull_request_target:" in triggers
+    assert "workflow_dispatch:" in triggers
+    assert (
+        "types: [opened, reopened, synchronize, ready_for_review, closed]"
+        in triggers
+    )
+    assert "!github.event.pull_request.draft" in FORK_PROMOTION_WORKFLOW
+    assert "ref: main" in FORK_PROMOTION_WORKFLOW
+    assert "persist-credentials: false" in FORK_PROMOTION_WORKFLOW
+    assert "github.event.pull_request.head.sha || inputs.reviewed_sha" in (
+        FORK_PROMOTION_WORKFLOW
+    )
+    assert "actions/create-github-app-token@" in FORK_PROMOTION_WORKFLOW
+    assert "permission-contents: write" in FORK_PROMOTION_WORKFLOW
+    assert "permission-pull-requests: write" in FORK_PROMOTION_WORKFLOW
+    assert "permission-workflows:" not in FORK_PROMOTION_WORKFLOW
+    assert "github.event.pull_request.merged == true" in FORK_PROMOTION_WORKFLOW
+    assert "finalize" in FORK_PROMOTION_WORKFLOW
+    assert "--internal-pull-number" in FORK_PROMOTION_WORKFLOW
+    assert "GH_APP_TOKEN" in FORK_PROMOTION_WORKFLOW
+    assert "actions/checkout" not in FORK_PROMOTION_SCRIPT
+    assert 'WORKFLOW_DIRECTORY = ".github/workflows/"' in FORK_PROMOTION_SCRIPT
+    assert "MAX_PULL_REQUEST_FILES = 3_000" in FORK_PROMOTION_SCRIPT
+    assert "external-contributions/pr-" in FORK_PROMOTION_SCRIPT
+    assert "trusted-fork-{username}/pr-" in FORK_PROMOTION_SCRIPT
+    assert "gh pr merge" not in FORK_PROMOTION_WORKFLOW
+
+    fork_guard = BLACKDUCK_SOURCE_SCAN_WORKFLOW.split(
+        "      - name: Require an internal promotion for fork pull requests",
+        maxsplit=1,
+    )[1].split("      - name: Checkout source", maxsplit=1)[0]
+    assert "github.event_name == 'pull_request'" in fork_guard
+    assert (
+        "github.event.pull_request.head.repo.full_name != github.repository"
+        in fork_guard
+    )
+    assert "Do not merge this source pull request" in fork_guard
+    assert "exit 1" in fork_guard
+
+    pin_guard = BLACKDUCK_SOURCE_SCAN_WORKFLOW.split(
+        "      - name: Verify promoted branch remains pinned to its reviewed commit",
+        maxsplit=1,
+    )[1].split("      - name: Checkout source", maxsplit=1)[0]
+    assert "external-contributions/" in pin_guard
+    assert "trusted-fork-" in pin_guard
+    assert 'expected_sha="${PROMOTED_REF##*-}"' in pin_guard
+    assert '"${ACTUAL_SHA,,}" != "${expected_sha,,}"' in pin_guard
+    assert "Promoted branch moved" in pin_guard
+    assert "exit 1" in pin_guard
+
+    pr_scan_section = BLACKDUCK_SOURCE_SCAN_WORKFLOW.split(
+        "      - name: Black Duck SCA PR Scan", maxsplit=1
+    )[1]
+    assert (
+        "github.event.pull_request.head.repo.full_name == github.repository"
+        in pr_scan_section
+    )
 
 
 def test_release_manifest_uses_the_validated_architecture_digests() -> None:
