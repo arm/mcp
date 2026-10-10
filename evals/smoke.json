@@ -1,0 +1,420 @@
+[
+  {
+    "id": "CGA01-SMOKE",
+    "area": "graviton",
+    "question": "On AWS Graviton, how can I check whether my compiled C++ binary contains LSE atomic instructions?",
+    "expected_urls": [
+      "https://github.com/aws/aws-graviton-getting-started/blob/main/c-c++.md",
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/lse/example"
+    ]
+  },
+  {
+    "id": "CGA02-SMOKE",
+    "area": "graviton",
+    "question": "How do I run repeated Go garbage-collection benchmarks with default settings on AWS Graviton and summarize the results with Benchstat?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/go-gc-default-settings/"
+    ]
+  },
+  {
+    "id": "CGA03-SMOKE",
+    "area": "graviton",
+    "question": "How do I package and deploy a Node.js AWS Lambda function on Graviton using Terraform?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/lambda_functions/"
+    ]
+  },
+  {
+    "id": "CGA04-SMOKE",
+    "area": "azure-cobalt",
+    "question": "How can I measure MinIO upload and download throughput on an Azure Cobalt 100 VM?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/minio-cobalt/"
+    ]
+  },
+  {
+    "id": "CGA05-SMOKE",
+    "area": "google-axion",
+    "question": "How do I benchmark MongoDB read and update latency on a Google Axion VM using YCSB Workload A?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mongodb-on-gcp/",
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mongodb/benchmark_mongodb-8.0/"
+    ]
+  },
+  {
+    "id": "CGA06-SMOKE",
+    "area": "azure-cobalt",
+    "question": "Spark SQL queries are slow on my Azure Cobalt VM. How can I compare native execution with the default JVM engine?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/spark-velox-cobalt/"
+    ]
+  },
+  {
+    "id": "CGA07-SMOKE",
+    "area": "google-axion",
+    "question": "After measuring Java performance on Google Axion, which JVM tuning flags should I try?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/java-on-axion/",
+      "https://learn.arm.com/install-guides/java/",
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/migration/java/"
+    ]
+  },
+  {
+    "id": "CGA08-SMOKE",
+    "area": "google-axion",
+    "question": "How do I deploy a Python HTTP endpoint with Ray Serve on a Google Axion VM?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/ray-on-axion/"
+    ]
+  },
+  {
+    "id": "CGA09-SMOKE",
+    "area": "azure-cobalt",
+    "question": "How do I check that Alluxio is caching data read by Spark on an Azure Cobalt 100 VM?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/alluxio-cobalt/"
+    ]
+  },
+  {
+    "id": "CGA10-SMOKE",
+    "area": "graviton",
+    "question": "Which compiler target should I use when one C++ binary needs to run on Graviton2, Graviton3, and Graviton4?",
+    "expected_urls": [
+      "https://github.com/aws/aws-graviton-getting-started/blob/main/c-c++.md",
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cplusplus_compilers_flags/"
+    ]
+  },
+  {
+    "id": "SME01-SMOKE",
+    "area": "sme",
+    "question": "How can I build and run SME2 examples if my machine has no SME2 hardware?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/"
+    ]
+  },
+  {
+    "id": "SME02-SMOKE",
+    "area": "sme",
+    "question": "Which C function attributes enable SME streaming mode and give a function its own ZA state?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/",
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/luti/"
+    ]
+  },
+  {
+    "id": "SME03-SMOKE",
+    "area": "sme",
+    "question": "How does SME2 INT8 MOPA accumulate a 16-by-16 matrix tile when the streaming vector length is 512 bits?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/kai_sme2_matmul_ukernel_explained/"
+    ]
+  },
+  {
+    "id": "SME04-SMOKE",
+    "area": "sme",
+    "question": "How can I compare llama.cpp inference performance on Android with KleidiAI SME2 kernels enabled and disabled?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/performance_llama_cpp_sme2/"
+    ]
+  },
+  {
+    "id": "SME05-SMOKE",
+    "area": "sme",
+    "question": "How does SME2 LUTI2 use ZT0 to expand packed 2-bit weights into 8-bit values?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/luti/"
+    ]
+  },
+  {
+    "id": "SVE01-SMOKE",
+    "area": "sve",
+    "question": "How do SVE predicates handle the final partial vector of an array without a scalar cleanup loop?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sve/",
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/adler32-kiro/"
+    ]
+  },
+  {
+    "id": "SVE02-SMOKE",
+    "area": "sve",
+    "question": "How can I check the SVE vector length at runtime in a C program?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sve/",
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/adler32-kiro/"
+    ]
+  },
+  {
+    "id": "SVE03-SMOKE",
+    "area": "sve",
+    "question": "How can SVE speed up scanning a sparse bitmap for set-bit positions?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/bitmap_scan_sve2/"
+    ]
+  },
+  {
+    "id": "SVE04-SMOKE",
+    "area": "sve",
+    "question": "How can I use SVE2 MATCH to search a byte array for any of several key values?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sve2-match/"
+    ]
+  },
+  {
+    "id": "SVE05-SMOKE",
+    "area": "sve",
+    "question": "How do I enable and verify bitwise-identical Libamath results across scalar, Neon, and SVE code?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/reproducible-libamath/"
+    ]
+  },
+  {
+    "id": "INTR01-SMOKE",
+    "area": "intrinsics",
+    "question": "How do I port C++ code that uses SSE2 intrinsics to Arm64 with sse2neon?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/intrinsics/"
+    ]
+  },
+  {
+    "id": "INTR02-SMOKE",
+    "area": "intrinsics",
+    "question": "How do I enable and use Arm Neon intrinsics in Unity C# code for an Android ARM64 build?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/using-neon-intrinsics-to-optimize-unity-on-android/"
+    ]
+  },
+  {
+    "id": "INTR03-SMOKE",
+    "area": "intrinsics",
+    "question": "How can I use SIMD.info to find Arm Neon equivalents of x86 SSE intrinsics?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/simd-info-demo/"
+    ]
+  },
+  {
+    "id": "EMBED01-SMOKE",
+    "area": "embedded-mcu",
+    "question": "How can I build and run the Zephyr hello-world sample on an Arm Corstone-300 FVP?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/zephyr/"
+    ]
+  },
+  {
+    "id": "MOBILE01-SMOKE",
+    "area": "mobile-gaming",
+    "question": "How do I request camera permission and receive frames using OpenCV JavaCameraView in an Android app?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/android_opencv_camera/",
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/android_opencv_facedetection/"
+    ]
+  },
+  {
+    "id": "AUTO01-SMOKE",
+    "area": "automotive",
+    "question": "How do I configure Cyclone DDS communication between OpenAD Kit ROS 2 containers running on two Arm instances?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/openadkit2_safetyisolation/"
+    ]
+  },
+  {
+    "id": "CI01-SMOKE",
+    "area": "ci-cd",
+    "question": "How can I build amd64 and arm64 Docker images with native GitHub Actions runners and publish them under one multi-architecture tag?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/github-arm-runners/"
+    ]
+  },
+  {
+    "id": "WIN01-SMOKE",
+    "area": "windows",
+    "question": "How can I use WindowsPerf sampling to find hot functions in a Windows on Arm program?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/windowsperf/",
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/windowsperf_sampling_cpython/",
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/windowsperf-vs-extension/",
+      "https://learn.arm.com/learning-paths/cross-platform/windowsperf_sampling_cpython_spe/"
+    ]
+  },
+  {
+    "id": "EMBED02-SMOKE",
+    "area": "embedded-mcu",
+    "question": "How do I compile and run a PyTorch model with ExecuTorch on the Corstone-320 FVP?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/introduction-to-tinyml-on-arm/",
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/training-inference-pytorch/",
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/visualizing-ethos-u-performance/"
+    ]
+  },
+  {
+    "id": "CONTAINER01-SMOKE",
+    "area": "containers",
+    "question": "How do I check whether an Arm Linux target is ready for Topo deployment and list compatible projects?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/deploy-containerized-workloads-with-topo/"
+    ]
+  },
+  {
+    "id": "SECURITY01-SMOKE",
+    "area": "security",
+    "question": "How do I trigger PAC/BTI tests on Arm devices through AWS IoT Greengrass and read the per-device results?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/aws-greengrass-pacbti-test/"
+    ]
+  },
+  {
+    "id": "PERF01-SMOKE",
+    "area": "performance",
+    "question": "How can I use llvm-mca to estimate throughput and identify resource bottlenecks in AArch64 assembly?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/mca-godbolt/"
+    ]
+  },
+  {
+    "id": "MOBILE02-SMOKE",
+    "area": "mobile-gaming",
+    "question": "How do I capture and inspect an Android app frame using RenderDoc for Arm GPUs?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/ams/"
+    ]
+  },
+  {
+    "id": "COMPILER01-SMOKE",
+    "area": "compilers",
+    "question": "When is it safe to add restrict to C pointer parameters, and how can it help optimization on Arm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/restrict-keyword-c99/",
+      "https://learn.arm.com/learning-paths/cross-platform/loop-reflowing/"
+    ]
+  },
+  {
+    "id": "EMBED03-SMOKE",
+    "area": "embedded-mcu",
+    "question": "How do I debug a mixed C and assembly Cortex-M program on an FVP using Keil Studio in VS Code?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/asm/"
+    ]
+  },
+  {
+    "id": "ML01-SMOKE",
+    "area": "machine-learning",
+    "question": "After exporting the models, how do I build and run Stable Audio Open Small on Android with ExecuTorch?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/run-stable-audio-with-executorch/"
+    ]
+  },
+  {
+    "id": "SECURITY02-SMOKE",
+    "area": "security",
+    "question": "How do I enable MTE in an Android app and use Android Studio to locate a use-after-free bug on a Pixel 8?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/debugging_with_mte_on_pixel8/",
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/mte_on_pixel8/"
+    ]
+  },
+  {
+    "id": "WIN02-SMOKE",
+    "area": "windows",
+    "question": "How do I rebuild a C++ DLL as Arm64EC in Visual Studio while keeping existing x64 dependencies?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_arm64ec_porting/"
+    ]
+  },
+  {
+    "id": "EMBED04-SMOKE",
+    "area": "embedded-mcu",
+    "question": "How can I convert a CMSIS-DSP Q15 signal-processing prototype from Python to C?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cmsisdsp-dev-with-python/"
+    ]
+  },
+  {
+    "id": "PERF02-SMOKE",
+    "area": "performance",
+    "question": "How can I use perf c2c and Arm SPE to find which variables are causing false sharing in a multithreaded C program?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/false-sharing-arm-spe/"
+    ]
+  },
+  {
+    "id": "CONTAINER02-SMOKE",
+    "area": "containers",
+    "question": "How do I use KubeArchInspect to check whether images running in my Kubernetes cluster support arm64?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/kubearchinspect/"
+    ]
+  },
+  {
+    "id": "SECURITY03-SMOKE",
+    "area": "security",
+    "question": "Once the Arm CCA reference stack is running on an FVP, how do I launch a Linux guest in a Realm?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/rme-cca-basics/",
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cca-container/"
+    ]
+  },
+  {
+    "id": "PORTING01-SMOKE",
+    "area": "porting",
+    "question": "Why can publishing a pointer with relaxed C++ atomics fail on Arm, and how do acquire/release operations fix it?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arm-cpp-memory-model/"
+    ]
+  },
+  {
+    "id": "AUTO02-SMOKE",
+    "area": "automotive",
+    "question": "How do I start the Open AD Kit Planning Visualizer demo with Docker Compose and view it in a browser?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/openadkit1_container/"
+    ]
+  },
+  {
+    "id": "EMBED05-SMOKE",
+    "area": "embedded-mcu",
+    "question": "How do I run a bare-metal Rust program on a Cortex-M3 FVP and debug it with Arm Development Studio?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/rust_armds/"
+    ]
+  },
+  {
+    "id": "NETWORK01-SMOKE",
+    "area": "networking",
+    "question": "How can I simulate packet loss on an Arm Linux system and measure its effect on TCP throughput with iperf3?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/microbenchmark-network-iperf3/"
+    ]
+  },
+  {
+    "id": "STORAGE01-SMOKE",
+    "area": "storage",
+    "question": "How do I use fio job files to compare storage throughput and latency on Arm Linux?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/disk-io-benchmark/"
+    ]
+  },
+  {
+    "id": "HPC01-SMOKE",
+    "area": "hpc",
+    "question": "How can I debug an MPI application on Arm Linux using Linaro DDT?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mpi/",
+      "https://learn.arm.com/install-guides/forge/"
+    ]
+  },
+  {
+    "id": "EMBED06-SMOKE",
+    "area": "embedded-mcu",
+    "question": "How can SysTick and the MPU be used to switch between isolated, unprivileged threads on Cortex-M?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/context-switch-cortex-m/"
+    ]
+  },
+  {
+    "id": "MAC01-SMOKE",
+    "area": "macos",
+    "question": "How do I build KleidiCV on an Apple M4 Mac and run its API tests?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/kleidicv-on-mac/"
+    ]
+  }
+]

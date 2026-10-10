@@ -18,7 +18,7 @@
       "verification": "OCI manifest-list digest"
     },
     "embeddings": {
-      "reference": "ghcr.io/arm/mcp-embedding-vectorstore@sha256:0cf92a4f41767324a27b463a9b6cc72ba0e69e8455a91c24bfbc831daac0e77b",
+      "reference": "ghcr.io/arm/mcp-embedding-vectorstore@sha256:d8387029689498ad6786bfbc49b532ab4aeec4b966995d45f89766523dbf773b",
       "architectures": [
         "arm64"
       ],
@@ -27,23 +27,23 @@
         "/embedding-data/metadata.json",
         "/embedding-data/usearch_index.bin"
       ],
-      "source_revision": "28f19bd9063aab48b8cc7e035f690fb768dc469f",
+      "source_revision": "b0b2f586b0b526f55482f714f823a58c2749740f",
       "model": {
         "model_id": "sentence-transformers/all-MiniLM-L6-v2",
         "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
       },
       "verification": "private GHCR OCI image-index digest",
-      "workflow_run": "36308781649"
+      "workflow_run": "37197092138"
     },
     "mcp_build_inputs": {
-      "reference": "ghcr.io/arm/mcp-build-inputs@sha256:4625bdac56a7a661a3f7451138a44f046deaf7067a0b65f96211b3809af99ed1",
+      "reference": "ghcr.io/arm/mcp-build-inputs@sha256:2555a58b1bcc4b502c88bb052c2491cdb7a7f831ef61ea9d023df2877f5f70cf",
       "architectures": [
         "amd64",
         "arm64"
       ],
       "manifests": {
-        "amd64": "ghcr.io/arm/mcp-build-inputs@sha256:52649037cce1124286b4350c97b4503d4f3968bd31025c4dac302473d470540f",
-        "arm64": "ghcr.io/arm/mcp-build-inputs@sha256:de05c2f2c76020bf7effe6c076d24cb2db3201651418c67c724ea63ee095344e"
+        "amd64": "ghcr.io/arm/mcp-build-inputs@sha256:f9eb91ea5ff9aeb547b67abd82b6d50b3eb265f2c4ad29dcc7868a2fc8262fa4",
+        "arm64": "ghcr.io/arm/mcp-build-inputs@sha256:474c7222712a89a141b5baeb0c3532f992f8c5ac6a553f1c9c3adc863e6096c6"
       },
       "contents": [
         "/mcp-build-inputs/wheels/",
@@ -51,8 +51,8 @@
         "/mcp-build-inputs/migrate-ease.tar.gz",
         "/mcp-build-inputs/metadata/"
       ],
-      "source_revision": "3dcda9357f9f8550fe42b29fe8a02502bbf551f4",
-      "workflow_run": "36024013209",
+      "source_revision": "7c5d7e8d3e26ff8fcebffa584da92a707520938d",
+      "workflow_run": "37973573939",
       "verification": "private multi-architecture GHCR OCI image-index digest"
     }
   },

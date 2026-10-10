@@ -68,6 +68,22 @@ def load_local_yaml_files() -> list[dict]:
             print(f"Error loading {file_path}: {e}")
             continue
 
+    # Generated IDs change on acquisition; order by stable chunk data instead.
+    yaml_contents.sort(
+        key=lambda chunk: (
+            0 if chunk["chunk_uuid"].startswith("intrinsic_") else 1,
+            chunk.get("url", ""),
+            json.dumps(
+                {
+                    key: value
+                    for key, value in chunk.items()
+                    if key not in {"uuid", "chunk_uuid"}
+                },
+                sort_keys=True,
+            ),
+        )
+    )
+
     print(f"Successfully loaded {len(yaml_contents)} YAML files")
     return yaml_contents
 
@@ -171,6 +187,8 @@ def main():
                 "product": yaml_content.get("product", ""),
                 "version": yaml_content.get("version", ""),
                 "content_type": yaml_content.get("content_type", ""),
+                "platform": yaml_content.get("platform", ""),
+                "edition": yaml_content.get("edition", ""),
                 "search_text": search_text,
             }
         )

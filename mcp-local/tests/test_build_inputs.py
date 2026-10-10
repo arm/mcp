@@ -13,12 +13,16 @@
 # limitations under the License.
 
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
 import sys
 import tempfile
 import tomllib
+
+import pytest
+import yaml
 
 
 REPOSITORY = Path(__file__).resolve().parents[2]
@@ -79,6 +83,16 @@ FORK_PROMOTION_WORKFLOW = (
 FORK_PROMOTION_SCRIPT = (
     REPOSITORY / ".github/scripts/promote-fork-pr.py"
 ).read_text()
+
+BENCHMARK_WORKFLOW = yaml.safe_load(EMBEDDING_WORKFLOW)
+BENCHMARK_SCRIPT = next(
+    step["run"]
+    for step in BENCHMARK_WORKFLOW["jobs"]["retrieval-benchmark"]["steps"]
+    if step["name"] == "Run full retrieval benchmark offline"
+)
+BENCHMARK_IMAGE_ID = "sha256:" + "a" * 64
+BENCHMARK_GENERATOR = "ghcr.io/arm/mcp-embedding-generator@sha256:" + "b" * 64
+BENCHMARK_CANDIDATE = "ghcr.io/arm/mcp-embedding-vectorstore@sha256:" + "c" * 64
 
 
 def test_docker_base_images_match_manifest() -> None:
@@ -234,6 +248,121 @@ def test_model_index_and_metadata_come_from_one_immutable_image() -> None:
         "/embedding-data/usearch_index.bin",
     }
     assert embeddings["model"] == MODEL_LOCK
+
+
+@pytest.fixture
+def benchmark(tmp_path):
+    binary = tmp_path / "docker"
+    binary.write_text(
+        f"#!{sys.executable}\n" + r'''
+import json, os, pathlib, sys
+args = sys.argv[1:]
+with open(os.environ["DOCKER_LOG"], "a") as log:
+    log.write(json.dumps(args) + "\n")
+if args[:2] == ["image", "inspect"]:
+    print(os.environ["ACTUAL_IMAGE_ID"])
+elif args[0] == "create":
+    print("corpus-container")
+elif args[0] == "run":
+    reports = pathlib.Path(os.environ["RUNNER_TEMP"]) / "retrieval-benchmark"
+    (reports / "summary.md").write_text("Benchmark summary\n")
+    sys.exit(int(os.environ["EVAL_EXIT"]))
+'''
+    )
+    binary.chmod(0o755)
+    log = tmp_path / "docker.jsonl"
+    env = dict(
+        os.environ,
+        PATH=f"{tmp_path}:{os.environ['PATH']}",
+        DOCKER_LOG=str(log),
+        RUNNER_TEMP=str(tmp_path / "runner temp"),
+        GITHUB_WORKSPACE=str(REPOSITORY),
+        GITHUB_SHA="d" * 40,
+        GITHUB_STEP_SUMMARY=str(tmp_path / "summary.md"),
+        GH_TOKEN="must-not-reach-evaluation",
+        GENERATOR_IMAGE=BENCHMARK_GENERATOR,
+        CANDIDATE_IMAGE=BENCHMARK_CANDIDATE,
+        CANDIDATE_IMAGE_ID=BENCHMARK_IMAGE_ID,
+        ACTUAL_IMAGE_ID=BENCHMARK_IMAGE_ID,
+        EVAL_EXIT="0",
+    )
+    log.touch()
+
+    def run(**overrides):
+        result = subprocess.run(
+            ["bash", "-c", BENCHMARK_SCRIPT],
+            env={**env, **overrides},
+            capture_output=True,
+            text=True,
+        )
+        return result, [json.loads(line) for line in log.read_text().splitlines()]
+
+    return run
+
+
+@pytest.mark.parametrize("candidate,exit_code", [(BENCHMARK_CANDIDATE, 0), (BENCHMARK_IMAGE_ID, 2)])
+def test_benchmark_runs_exact_candidate_offline(
+    benchmark, tmp_path, candidate, exit_code
+):
+    result, calls = benchmark(CANDIDATE_IMAGE=candidate, EVAL_EXIT=str(exit_code))
+    assert result.returncode == exit_code, result.stderr
+    create = next(call for call in calls if call[0] == "create")
+    assert create[-2:] == [candidate, "/unused"]
+    run = next(call for call in calls if call[0] == "run")
+    for flag in ("--network=none", "--read-only", "--pull=never", "--cap-drop=ALL"):
+        assert flag in run
+    assert BENCHMARK_GENERATOR in run
+    assert "/workspace/embedding-generation/evaluate_retrieval.py" in run
+    assert f"EVAL_TARGET={candidate}" in run
+    assert run[run.index("--model-path") + 1] == "/corpus/embedding-model"
+    assert run[run.index("--index-path") + 1] == "/corpus/usearch_index.bin"
+    assert run[run.index("--metadata-path") + 1] == "/corpus/metadata.json"
+    mounts = [run[i + 1] for i, arg in enumerate(run) if arg == "--mount"]
+    for target in ("/workspace", "/corpus", "/baseline"):
+        assert any(f"dst={target},readonly" in mount for mount in mounts)
+    assert not any("GH_TOKEN" in arg or "docker.sock" in arg for arg in run)
+    assert (tmp_path / "summary.md").read_text() == "Benchmark summary\n"
+    assert calls[-1] == ["rm", "-f", "corpus-container"]
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"GENERATOR_IMAGE": "ghcr.io/arm/mcp-embedding-generator:latest"},
+        {"CANDIDATE_IMAGE": "ghcr.io/arm/mcp-embedding-vectorstore:latest"},
+        {"ACTUAL_IMAGE_ID": "sha256:" + "e" * 64},
+    ],
+)
+def test_benchmark_rejects_mutable_or_wrong_images(benchmark, override):
+    result, calls = benchmark(**override)
+    assert result.returncode != 0
+    assert "::error::" in result.stderr
+    assert not any(call[0] in ("create", "run") for call in calls)
+
+
+def test_benchmark_has_no_publication_privileges_or_dependents():
+    jobs = BENCHMARK_WORKFLOW["jobs"]
+    benchmark = jobs["retrieval-benchmark"]
+    assert benchmark["permissions"] == {
+        "actions": "read",
+        "contents": "read",
+        "packages": "read",
+    }
+    assert benchmark["continue-on-error"] is True
+    checkout = next(
+        step
+        for step in benchmark["steps"]
+        if step.get("uses", "").startswith("actions/checkout@")
+    )
+    assert checkout["with"]["persist-credentials"] is False
+    for name, job in jobs.items():
+        if name != "retrieval-benchmark":
+            assert "retrieval-benchmark" not in job.get("needs", [])
+    publisher_steps = jobs["generate-and-publish-vectorstore"]["steps"]
+    assert not any(
+        "evaluate_retrieval.py" in step.get("run", "")
+        for step in publisher_steps
+    )
 
 
 def test_embedding_candidate_requires_reviewed_promotion_before_release() -> None:
@@ -576,7 +705,14 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
     assert "steps.sbom-subjects.outputs.arm64_digest" in attest_image_job
     assert "verify-provenance:" in TRUSTED_RELEASE_WORKFLOW
     assert "attestations: read" in TRUSTED_RELEASE_WORKFLOW
-    assert TRUSTED_RELEASE_WORKFLOW.count("gh attestation verify") == 3
+    assert verify_attestations_job.count("gh attestation verify") == 3
+    assert publish_release_job.count("gh attestation download") == 1
+    assert publish_release_job.count("gh attestation verify") == 1
+    assert '--bundle "${provenance}"' in publish_release_job
+    assert (
+        '"${provenance}#Signed container provenance (Sigstore bundle)"'
+        in publish_release_job
+    )
     assert "--bundle-from-oci" in TRUSTED_RELEASE_WORKFLOW
     assert "Verify registry-attached architecture SBOMs" in verify_attestations_job
     assert "--predicate-type https://cyclonedx.org/bom" in verify_attestations_job
@@ -825,7 +961,7 @@ def test_generated_prs_dispatch_required_checks_without_an_external_token() -> N
         assert "propose-pin-pr.sh" in workflow
     for workflow in (
         "integration-tests.yml",
-        "embedding-unit-tests.yml",
+        "knowledge-base-unit-tests.yml",
         "scorecard.yml",
     ):
         assert workflow in REQUIRED_CHECK_DISPATCH
@@ -947,6 +1083,7 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
         "Dockerfile.toolchain",
         "acquire-model.py",
         "document_chunking.py",
+        "ecosystem_dashboard.py",
         "embedding-model.lock.json",
         "generate-chunks.py",
         "local_vectorstore_creation.py",
@@ -968,16 +1105,13 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
     assert "push-to-registry: true" in TOOLCHAIN_WORKFLOW
 
 
-def test_embedding_toolchain_uses_fixed_python_and_expat_versions() -> None:
-    assert "ARG PYTHON_VERSION=3.13.15" in TOOLCHAIN_DOCKERFILE
-    assert "ARG EXPAT_VERSION=2.8.4" in TOOLCHAIN_DOCKERFILE
+def test_embedding_toolchain_uses_fixed_python_version() -> None:
     assert (
-        "ARG EXPAT_SHA256="
-        "b8ece2437692dad44d851c4532723390a5a330990007706be9c8d2b90d294f36"
+        "ARG PYTHON_IMAGE=docker.io/library/python:3.13.16-slim@sha256:"
+        "af7e5047e10ef70882ab774f03310df7151118fe77b8e63bac5e0766c4f5cc8c"
         in TOOLCHAIN_DOCKERFILE
     )
-    assert "assert sys.version_info[:3] == (3, 13, 15)" in TOOLCHAIN_DOCKERFILE
-    assert "assert pyexpat.version_info == (2, 8, 4)" in TOOLCHAIN_DOCKERFILE
+    assert "assert sys.version_info[:3] == (3, 13, 16)" in TOOLCHAIN_DOCKERFILE
 
 
 def test_input_images_export_and_attach_blackduck_cyclonedx_sboms() -> None:

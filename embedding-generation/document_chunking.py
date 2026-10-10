@@ -87,6 +87,11 @@ class ParsedDocument:
     display_title: str
     content_type: str
     sections: list[Section]
+    # None permits inference; an empty string explicitly suppresses it.
+    product: str | None = None
+    version: str | None = None
+    platform: str = ""
+    edition: str = ""
 
 
 def normalize_source_url(url: str) -> str:
@@ -266,6 +271,12 @@ def extract_html_links(tag, base_url: str) -> list[Link]:
 
 
 def link_text_with_urls(text: str, links: list[Link]) -> str:
+    # Markdown links already retain absolute URLs; HTML text and relative links
+    # may still need their resolved destinations appended.
+    embedded_destinations = {
+        match.group(2) for match in MARKDOWN_LINK_PATTERN.finditer(text)
+    }
+    links = [link for link in links if link.url not in embedded_destinations]
     if not links:
         return text
     link_evidence = " ".join(f"{link.text} {link.url}" for link in links)
@@ -296,13 +307,24 @@ def is_boilerplate_line(line: str) -> bool:
     return any(pattern.match(line) for pattern in BOILERPLATE_LINE_PATTERNS)
 
 
-def strip_frontmatter(markdown: str) -> str:
+def split_frontmatter(markdown: str) -> tuple[str | None, str]:
+    """Separate YAML text from the body without interpreting source metadata."""
     markdown = markdown.lstrip("\ufeff")
-    if markdown.startswith("---"):
-        end = markdown.find("\n---", 3)
-        if end != -1:
-            return markdown[end + 4 :].lstrip()
-    return markdown
+    lines = markdown.splitlines(keepends=True)
+    # Frontmatter must start on the first line, allowing LF or CRLF line endings.
+    if not lines or not re.fullmatch(r"---[ \t]*\r?\n", lines[0]):
+        return None, markdown
+    # Stop at the first closing delimiter, even for an empty block, so later
+    # Markdown horizontal rules cannot cause body content to be swallowed.
+    for index, line in enumerate(lines[1:], start=1):
+        if re.fullmatch(r"---[ \t]*(?:\r?\n)?", line):
+            frontmatter = "".join(lines[1:index]).removesuffix("\n").removesuffix("\r")
+            return frontmatter, "".join(lines[index + 1 :]).lstrip()
+    return None, markdown
+
+
+def strip_frontmatter(markdown: str) -> str:
+    return split_frontmatter(markdown)[1]
 
 
 def normalize_heading_path(title: str, heading_path: list[str]) -> list[str]:
@@ -1111,11 +1133,17 @@ def chunk_parsed_document(
     overlap_tokens: int = 50,
 ) -> list[dict[str, str]]:
     chunks: list[dict[str, str]] = []
-    product = derive_product(
-        parsed_document.display_title, parsed_document.source_url, doc_type, keywords
+    product = (
+        parsed_document.product
+        if parsed_document.product is not None
+        else derive_product(
+            parsed_document.display_title, parsed_document.source_url, doc_type, keywords
+        )
     )
-    version = derive_version(
-        parsed_document.display_title, parsed_document.resolved_url
+    version = (
+        parsed_document.version
+        if parsed_document.version is not None
+        else derive_version(parsed_document.display_title, parsed_document.resolved_url)
     )
     for section in parsed_document.sections:
         heading_path = normalize_heading_path(
@@ -1141,6 +1169,8 @@ def chunk_parsed_document(
                     "product": product,
                     "version": version,
                     "content_type": parsed_document.content_type,
+                    "platform": parsed_document.platform,
+                    "edition": parsed_document.edition,
                     "content": build_chunk_text(
                         parsed_document.display_title, heading_path, chunk_body
                     ),

@@ -1,0 +1,3675 @@
+[
+  {
+    "id": "B001",
+    "topic": "cloud-server",
+    "intent": "setup",
+    "question": "I want an Ubuntu EC2 instance that runs on Graviton. Which image architecture should I select in the launch wizard?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/csp/aws/#select-os-image"
+    ]
+  },
+  {
+    "id": "B002",
+    "topic": "cloud-server",
+    "intent": "setup",
+    "question": "I want to create an Azure Cobalt 100 VM for MySQL. How do I select the appropriate VM architecture and machine family in the Azure portal?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mysql-azure/create-instance/#create-an-arm-based-azure-virtual-machine"
+    ]
+  },
+  {
+    "id": "B003",
+    "topic": "cloud-server",
+    "intent": "setup",
+    "question": "How do I provision a Google Axion C4A VM with an Ubuntu Arm64 image and open its browser SSH session?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/csp/google/#provision-a-google-axion-c4a-arm-vm-in-google-cloud-console"
+    ]
+  },
+  {
+    "id": "B004",
+    "topic": "cloud-server",
+    "intent": "setup",
+    "question": "For a Terraform-managed Graviton EC2 instance, how do I connect an SSH key-pair resource and security-group resource to aws_instance?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/aws-terraform/terraform/#a-complete-maintf-file"
+    ]
+  },
+  {
+    "id": "B005",
+    "topic": "cloud-server",
+    "intent": "setup",
+    "question": "My Azure target VM has only a private IP, and I have a reachable bastion VM. How do I SSH to the target through that bastion?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/azure-terraform/jump_server/#use-jump-host-to-access-the-private-instance"
+    ]
+  },
+  {
+    "id": "B006",
+    "topic": "cloud-server",
+    "intent": "setup",
+    "question": "When launching an Arm EC2 instance, how do I restrict its SSH access to my own public IP?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/csp/aws/#network-settings"
+    ]
+  },
+  {
+    "id": "B007",
+    "topic": "cloud-server",
+    "intent": "troubleshooting",
+    "question": "SSH to my Ubuntu EC2 VM returns Permission denied (publickey), and I have been using root as the login name. What username and key arguments should I check?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/csp/aws/#ssh-client-connect"
+    ]
+  },
+  {
+    "id": "B008",
+    "topic": "cloud-server",
+    "intent": "troubleshooting",
+    "question": "My HTTP-only Keycloak test deployment on Cobalt 100 shows HTTPS required when I open the admin console. How can I make this test setup work over HTTP?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/keycloak-cobalt/keycloak_deployment_azure_cobalt100/#troubleshoot-https-required-error"
+    ]
+  },
+  {
+    "id": "B009",
+    "topic": "cloud-server",
+    "intent": "troubleshooting",
+    "question": "My test NGINX file server uses a self-signed certificate, and wget rejects the certificate before downloading file.txt. How can I test the local and remote endpoints in this lab?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/nginx/basic_static_file_server/#verify-that-files-are-being-served"
+    ]
+  },
+  {
+    "id": "B010",
+    "topic": "cloud-server",
+    "intent": "troubleshooting",
+    "question": "Services fail to start when I retry a DevStack deployment on my Cobalt 100 test VM after an earlier installation. What should I check from the previous installation?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/openstack-on-azure/devtstack-deployment/#clean-previous-setup"
+    ]
+  },
+  {
+    "id": "B011",
+    "topic": "cloud-server",
+    "intent": "conceptual",
+    "question": "Why put a jump server between my workstation and a private Azure VM?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/azure-terraform/jump_server/#introduction-to-jump-server"
+    ]
+  },
+  {
+    "id": "B012",
+    "topic": "cloud-server",
+    "intent": "conceptual",
+    "question": "Where does Alluxio sit between Spark and cloud storage, and how does it reduce repeated storage reads?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/alluxio-cobalt/background/#how-alluxio-improves-data-access"
+    ]
+  },
+  {
+    "id": "B013",
+    "topic": "cloud-server",
+    "intent": "comparison",
+    "question": "For an event pipeline on Redis, should I use Pub/Sub or Streams if consumers need to replay old messages?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/redis-cobalt/background/#redis"
+    ]
+  },
+  {
+    "id": "B014",
+    "topic": "cloud-server",
+    "intent": "comparison",
+    "question": "For a MinIO deployment on Cobalt 100, how do the mc client and Web Console differ as ways to manage stored objects?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/minio-cobalt/background/#minio-deployment-architecture"
+    ]
+  },
+  {
+    "id": "B015",
+    "topic": "cloud-server",
+    "intent": "reference",
+    "question": "Where can I filter the EC2 instance catalog to Graviton processors instead of guessing from instance names?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/csp/aws/#browse-for-an-appropriate-instance"
+    ]
+  },
+  {
+    "id": "B016",
+    "topic": "cloud-server",
+    "intent": "setup",
+    "question": "In Terraform, which aws_lambda_function setting selects Arm64 for a Python Lambda deployment?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/lambda_functions/python_deployment/#deploy-lambda-function-via-terraform"
+    ]
+  },
+  {
+    "id": "B017",
+    "topic": "cloud-server",
+    "intent": "setup",
+    "question": "After installing PostgreSQL on Cobalt 100, how do I create an application login and make it the owner of a new database?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/postgresql-cobalt/setup-and-install/#create-database-and-user"
+    ]
+  },
+  {
+    "id": "B018",
+    "topic": "cloud-server",
+    "intent": "setup",
+    "question": "What Spark configuration registers the Alluxio filesystem and makes its client JAR available to both the driver and executors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/alluxio-cobalt/integration-caching-and-performance/#connect-spark-with-alluxio"
+    ]
+  },
+  {
+    "id": "B019",
+    "topic": "cloud-server",
+    "intent": "setup",
+    "question": "How do I create a Redis Streams consumer group that begins at the start of the stream and creates the stream if it is missing?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/redis-cobalt/redis-benchmark-and-validation/#create-a-consumer-group"
+    ]
+  },
+  {
+    "id": "B020",
+    "topic": "cloud-server",
+    "intent": "setup",
+    "question": "How do I register a MinIO server endpoint and credentials under a reusable mc alias after opening a new SSH session?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/minio-cobalt/install-minio/#configure-the-minio-client"
+    ]
+  },
+  {
+    "id": "B021",
+    "topic": "cloud-server",
+    "intent": "troubleshooting",
+    "question": "PostgreSQL on my Cobalt VM accepts local connections but is configured to listen only on localhost. Which setting controls listening on remote interfaces?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/postgresql-cobalt/setup-and-install/#enable-remote-access"
+    ]
+  },
+  {
+    "id": "B022",
+    "topic": "cloud-server",
+    "intent": "troubleshooting",
+    "question": "Gerrit responds on localhost:8080 on my Axion VM, but outside requests time out because no ingress rule allows that port. How is the GCP firewall rule configured?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/gerrit-on-gcp/firewall_setup/#use-the-google-cloud-console-to-create-a-firewall-rule"
+    ]
+  },
+  {
+    "id": "B023",
+    "topic": "cloud-server",
+    "intent": "troubleshooting",
+    "question": "Dynatrace ActiveGate is running on my Azure Arm VM, but its TCP 9999 traffic is blocked by the VM network rule. Where do I add the inbound allowance?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/dynatrace-azure/firewall/#create-a-firewall-rule-in-azure"
+    ]
+  },
+  {
+    "id": "B024",
+    "topic": "cloud-server",
+    "intent": "troubleshooting",
+    "question": "My Redis Streams consumer has processed an entry but left it unacknowledged. Which command marks that message as handled for the consumer group?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/redis-cobalt/redis-benchmark-and-validation/#acknowledge-processed-messages"
+    ]
+  },
+  {
+    "id": "B025",
+    "topic": "cloud-server",
+    "intent": "troubleshooting",
+    "question": "PostgreSQL stops starting after I change huge_pages from try to on, with too few huge pages reserved. Why did try work, and how should I size the pool?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/postgresql_tune/kernel_comp_lib/#configure-postgresql-to-use-huge-pages"
+    ]
+  },
+  {
+    "id": "B026",
+    "topic": "cloud-server",
+    "intent": "optimization",
+    "question": "How should I test Redis client pipelining to improve throughput without overlooking its effect on tail latency?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/redis_tune/tune_redis/#client-side-pipelining"
+    ]
+  },
+  {
+    "id": "B027",
+    "topic": "cloud-server",
+    "intent": "optimization",
+    "question": "On a dedicated Arm MySQL server, how should I size the InnoDB buffer pool while leaving memory for connections and the operating system?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mysql_tune/tuning/#buffer-pool-size"
+    ]
+  },
+  {
+    "id": "B028",
+    "topic": "cloud-server",
+    "intent": "optimization",
+    "question": "How do I tune an NGINX reverse proxy to reuse idle upstream connections, and what does its keepalive cache size actually limit?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/nginx_tune/tune_revprox_and_apigw/#tuned-reverse-proxy-and-api-gateway-configuration"
+    ]
+  },
+  {
+    "id": "B029",
+    "topic": "cloud-server",
+    "intent": "conceptual",
+    "question": "Does increasing PostgreSQL effective_cache_size allocate more memory, or does it change how the query planner estimates cached reads?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/postgresql_tune/tuning/#effective-cache-size"
+    ]
+  },
+  {
+    "id": "B030",
+    "topic": "cloud-server",
+    "intent": "comparison",
+    "question": "For a write-heavy MySQL service, what tradeoff do I make by relaxing sync_binlog and innodb_flush_log_at_trx_commit instead of keeping both at 1?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mysql_tune/tuning/#transaction-durability-settings"
+    ]
+  },
+  {
+    "id": "B031",
+    "topic": "cloud-server",
+    "intent": "setup",
+    "question": "How do I run the manually installed RabbitMQ broker as a systemd service on the Cobalt 100 VM so it starts at boot and restarts after failure?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/rabbitmq-gcp/azure_installation/#configure-rabbitmq-systemd-service"
+    ]
+  },
+  {
+    "id": "B032",
+    "topic": "cloud-server",
+    "intent": "setup",
+    "question": "RabbitMQ is installed on my Azure Arm VM. How do I enable its browser administration interface and HTTP management API?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/rabbitmq-gcp/azure_installation/#enable-rabbitmq-management-plugin"
+    ]
+  },
+  {
+    "id": "B033",
+    "topic": "cloud-server",
+    "intent": "troubleshooting",
+    "question": "After installing the Couchbase C SDK into /usr/local/lib on my Arm VM, cbc-pillowfight cannot load its shared libraries. How do I make that directory visible to the dynamic linker?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/couchbase-on-gcp/benchmarking/#update-the-dynamic-linker-configuration"
+    ]
+  },
+  {
+    "id": "B034",
+    "topic": "cloud-server",
+    "intent": "troubleshooting",
+    "question": "RENAME causes latency spikes when it overwrites a large existing destination value on my Redis server. Which lazy-free setting should I investigate, and what memory tradeoff comes with background freeing?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/redis_tune/tune_redis/#configuration-options"
+    ]
+  },
+  {
+    "id": "B035",
+    "topic": "cloud-server",
+    "intent": "troubleshooting",
+    "question": "My MySQL transaction still waits on another transaction after I increase innodb_sync_spin_loops. Why does that setting not change this wait?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/mysql_tune/tuning/#spin-lock-configuration"
+    ]
+  },
+  {
+    "id": "B036",
+    "topic": "cloud-server",
+    "intent": "optimization",
+    "question": "How should I tune PostgreSQL work_mem for sort-heavy queries without multiplying memory use unexpectedly across operations and concurrent sessions?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/postgresql_tune/tuning/#query-and-maintenance-memory"
+    ]
+  },
+  {
+    "id": "B037",
+    "topic": "cloud-server",
+    "intent": "optimization",
+    "question": "My NGINX server repeatedly serves the same small set of static files. Which configuration caches open-file information to reduce that repeated work?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/nginx_tune/tune_static_file_server/#file-server-configuration"
+    ]
+  },
+  {
+    "id": "B038",
+    "topic": "cloud-server",
+    "intent": "reference",
+    "question": "Which Kafka command reports the version installed under /opt/kafka on the Cobalt 100 VM?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/kafka-azure/deploy/#check-installed-kafka-version"
+    ]
+  },
+  {
+    "id": "B039",
+    "topic": "cloud-server",
+    "intent": "reference",
+    "question": "Which listening ports identify the Couchbase web console, data service, and optional N1QL query service on an Arm VM?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/couchbase-on-gcp/installation/#check-required-ports"
+    ]
+  },
+  {
+    "id": "B040",
+    "topic": "cloud-server",
+    "intent": "comparison",
+    "question": "If I change an Arm Compute Engine VM from Tau T2A to C4A, am I keeping the same processor family, or moving from Ampere to Google Axion?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/compute/docs/cpu-platforms#arm_processors"
+    ]
+  },
+  {
+    "id": "B041",
+    "topic": "containers-kubernetes-ci",
+    "intent": "setup",
+    "question": "I have pushed an Arm64 container to ECR. Which ECS task-definition platform setting makes the task run on Graviton-backed Fargate?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/ecs/deployment/#create-an-ecs-task"
+    ]
+  },
+  {
+    "id": "B042",
+    "topic": "containers-kubernetes-ci",
+    "intent": "setup",
+    "question": "How do I constrain an Arm-only workload to Arm nodes in a GKE Standard cluster with the default architecture taint?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/kubernetes-engine/docs/how-to/prepare-arm-workloads-for-deployment#schedule-with-node-selector-arm"
+    ]
+  },
+  {
+    "id": "B043",
+    "topic": "containers-kubernetes-ci",
+    "intent": "setup",
+    "question": "My AKS cluster already has Intel and Arm NGINX deployments. How do I expose both through one Service and check which pods are its endpoints?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/multiarch_nginx_on_aks/deploy-multiarch/#create-the-multiarch-service"
+    ]
+  },
+  {
+    "id": "B044",
+    "topic": "containers-kubernetes-ci",
+    "intent": "setup",
+    "question": "I want to use Docker Build Cloud from GitHub Actions with my personal Docker account. Which credentials and repository secrets do I need if I do not belong to an organization?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/docker-build-cloud/actions/#set-up-secrets"
+    ]
+  },
+  {
+    "id": "B045",
+    "topic": "containers-kubernetes-ci",
+    "intent": "setup",
+    "question": "With RunsOn already installed, how do I choose a Graviton4 instance family for an Arm64 GitHub Actions job?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/github-actions-runner/execute-workflows/#specify-other-ec2-instance-types"
+    ]
+  },
+  {
+    "id": "B046",
+    "topic": "containers-kubernetes-ci",
+    "intent": "setup",
+    "question": "How do I configure a GitHub Actions workflow to use a Docker Build Cloud builder and push one image tag for linux/arm64 and linux/amd64?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/docker-build-cloud/actions/#add-files-to-the-repository"
+    ]
+  },
+  {
+    "id": "B047",
+    "topic": "containers-kubernetes-ci",
+    "intent": "troubleshooting",
+    "question": "After manually installing the Arm64 Docker Buildx plugin, invoking it fails with permission denied. What should I check?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/buildkite-gcp/installation/#download-docker-buildx"
+    ]
+  },
+  {
+    "id": "B048",
+    "topic": "containers-kubernetes-ci",
+    "intent": "troubleshooting",
+    "question": "The Gardener preparation step docker network rm kind returns network kind not found. Does that mean cleanup failed, and how can I confirm the intended state?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/gardener-gcp/installation/#remove-the-kind-network"
+    ]
+  },
+  {
+    "id": "B049",
+    "topic": "containers-kubernetes-ci",
+    "intent": "troubleshooting",
+    "question": "My GitHub Actions integration tests time out while waiting for the MCP test container. What startup check and pytest output should I add to diagnose it?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/automate-mcp-with-testcontainers/github-actions-ci/#troubleshoot-common-issues"
+    ]
+  },
+  {
+    "id": "B050",
+    "topic": "containers-kubernetes-ci",
+    "intent": "troubleshooting",
+    "question": "My multi-architecture image runs only on x86 nodes in a GKE Standard cluster whose Arm nodes still have the default NoSchedule taint. How can I allow scheduling on either architecture?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/kubernetes-engine/docs/how-to/prepare-arm-workloads-for-deployment#multi-arch-schedule-any-arch"
+    ]
+  },
+  {
+    "id": "B051",
+    "topic": "containers-kubernetes-ci",
+    "intent": "conceptual",
+    "question": "How can the same container image tag pull the appropriate image layers on both x86 and Graviton Kubernetes nodes?",
+    "expected_urls": [
+      "https://github.com/aws/aws-graviton-getting-started/blob/main/containers.md"
+    ]
+  },
+  {
+    "id": "B052",
+    "topic": "containers-kubernetes-ci",
+    "intent": "conceptual",
+    "question": "Why can tainting newly added Graviton nodes protect existing x86-only workloads without editing every existing deployment?",
+    "expected_urls": [
+      "https://github.com/aws/aws-graviton-getting-started/blob/main/containers.md"
+    ]
+  },
+  {
+    "id": "B053",
+    "topic": "containers-kubernetes-ci",
+    "intent": "conceptual",
+    "question": "Do Cluster Autoscaler node-template tags on an AWS Auto Scaling group actually label or taint the Kubernetes nodes?",
+    "expected_urls": [
+      "https://github.com/aws/aws-graviton-getting-started/blob/main/containers.md"
+    ]
+  },
+  {
+    "id": "B054",
+    "topic": "containers-kubernetes-ci",
+    "intent": "comparison",
+    "question": "In the mixed-architecture AKS NGINX example, how does traffic through the multiarch Service differ from the Arm-specific and Intel-specific Services?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/multiarch_nginx_on_aks/deploy-multiarch/#compare-architecture-specific-and-multiarch-routing"
+    ]
+  },
+  {
+    "id": "B055",
+    "topic": "containers-kubernetes-ci",
+    "intent": "reference",
+    "question": "Which AWS CLI command obtains an ECR password that can be piped into docker login without putting the password in a command-line argument?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/ecs/deployment/#log-in-to-ecr"
+    ]
+  },
+  {
+    "id": "B056",
+    "topic": "containers-kubernetes-ci",
+    "intent": "setup",
+    "question": "In the GitLab Arm64 container pipeline, how do I restrict publishing the latest tag to the default branch while still building commit-specific images?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/gitlab-managed-runners/pipeline/#create-pipeline-configuration"
+    ]
+  },
+  {
+    "id": "B057",
+    "topic": "containers-kubernetes-ci",
+    "intent": "setup",
+    "question": "I registered a CircleCI resource class for my Graviton runner. How do I make a job use that self-hosted machine and verify its architecture?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/circleci-on-aws/validation/#define-the-circleci-configuration"
+    ]
+  },
+  {
+    "id": "B058",
+    "topic": "containers-kubernetes-ci",
+    "intent": "setup",
+    "question": "How do I direct the Buildkite multi-architecture image build to my named agent queue?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/buildkite-gcp/multiarch_buildkite_pipeline/#create-a-buildkite-pipeline-for-multi-arch-builds"
+    ]
+  },
+  {
+    "id": "B059",
+    "topic": "containers-kubernetes-ci",
+    "intent": "setup",
+    "question": "How do I configure the GitLab CI/CD project variables so the multi-architecture deployment pipeline targets my Google Cloud project and GKE cluster?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/gitlab/2-gitlab-cicd/#create-project-variables"
+    ]
+  },
+  {
+    "id": "B060",
+    "topic": "containers-kubernetes-ci",
+    "intent": "troubleshooting",
+    "question": "After fetching credentials for my Arm GKE cluster on Ubuntu, gcloud reports that gke-gcloud-auth-plugin was not found or is not executable. How can I resolve this?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/gke/cluster_deployment/#view-the-gke-cluster"
+    ]
+  },
+  {
+    "id": "B061",
+    "topic": "containers-kubernetes-ci",
+    "intent": "troubleshooting",
+    "question": "An amd64 container built by Docker Build Cloud runs on x86 but cannot execute on my Arm Linux host with Docker Engine. What local emulation prerequisite should I check?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/docker-build-cloud/cloud/#build-a-docker-image-from-a-dockerfile"
+    ]
+  },
+  {
+    "id": "B062",
+    "topic": "containers-kubernetes-ci",
+    "intent": "troubleshooting",
+    "question": "My Arm64 Linux host uses Docker Engine, but its Buildx plugin lacks cloud-builder support. How do I enable Docker Build Cloud?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/docker-build-cloud/cloud/#additional-steps-for-docker-engine-linux"
+    ]
+  },
+  {
+    "id": "B063",
+    "topic": "containers-kubernetes-ci",
+    "intent": "conceptual",
+    "question": "For GitLab-hosted Arm runners, is the VM reused between jobs, and what happens to it when a job finishes?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/gitlab-managed-runners/info/#vm-lifecycle"
+    ]
+  },
+  {
+    "id": "B064",
+    "topic": "containers-kubernetes-ci",
+    "intent": "optimization",
+    "question": "Building my large C++ container under instruction emulation is too slow. What managed build approach avoids emulation and manually combining builds from separate architecture machines?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/docker-build-cloud/cloud/#methods-to-build-multi-architecture-container-images"
+    ]
+  },
+  {
+    "id": "B065",
+    "topic": "containers-kubernetes-ci",
+    "intent": "reference",
+    "question": "Which Docker command lists a cloud builder and the platforms supported by each of its build nodes?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/docker-build-cloud/cloud/#display-the-new-cloud-builder"
+    ]
+  },
+  {
+    "id": "B066",
+    "topic": "compatibility",
+    "intent": "setup",
+    "question": "How do I point Topo’s predeployment health check at a remote Linux target, or at localhost when my host is also the target?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/deploy-containerized-workloads-with-topo/assess-compatibility/#run-a-health-check-against-the-target"
+    ]
+  },
+  {
+    "id": "B067",
+    "topic": "compatibility",
+    "intent": "troubleshooting",
+    "question": "A Python wheel installs on my Amazon Linux 2 Arm server, but importing it fails with GLIBC_2.27 not found. What compatibility mismatch should I investigate and what installation alternatives are available?",
+    "expected_urls": [
+      "https://github.com/aws/aws-graviton-getting-started/blob/main/python.md"
+    ]
+  },
+  {
+    "id": "B068",
+    "topic": "compatibility",
+    "intent": "troubleshooting",
+    "question": "The Performix AppImage fails because its FUSE 2 library is missing on Ubuntu 22.04, which has FUSE 3 installed. What should I install?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110163/latest/Known-issues-and-limitations/AppImage-compatibility-on-Ubuntu?lang=en"
+    ]
+  },
+  {
+    "id": "B069",
+    "topic": "compatibility",
+    "intent": "troubleshooting",
+    "question": "A pod moved to an Arm GKE node crashes with exec ./hello-app: exec format error. What image-architecture mismatch does that indicate?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/kubernetes-engine/docs/troubleshooting/arm-workloads#arm-pods-crash"
+    ]
+  },
+  {
+    "id": "B070",
+    "topic": "compatibility",
+    "intent": "conceptual",
+    "question": "Why can Topo consider two Arm Linux targets compatible with different projects even when both report the same CPU architecture?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/deploy-containerized-workloads-with-topo/assess-compatibility/#understand-target-compatibility"
+    ]
+  },
+  {
+    "id": "B071",
+    "topic": "compatibility",
+    "intent": "comparison",
+    "question": "My application requires 4 KB kernel pages. How do the standard Ubuntu 22.04 and RHEL 8.2 Graviton images differ on that compatibility requirement in the AWS OS table?",
+    "expected_urls": [
+      "https://github.com/aws/aws-graviton-getting-started/blob/main/os.md"
+    ]
+  },
+  {
+    "id": "B072",
+    "topic": "compatibility",
+    "intent": "comparison",
+    "question": "I am choosing between FreeBSD 13.5 and 14.2 for a Graviton bare-metal deployment. How do their bare-metal support and device-hotplug limitations compare?",
+    "expected_urls": [
+      "https://github.com/aws/aws-graviton-getting-started/blob/main/os.md"
+    ]
+  },
+  {
+    "id": "B073",
+    "topic": "compatibility",
+    "intent": "comparison",
+    "question": "For Performix on Linux, what changes in distribution coverage and installation privileges when I choose the DEB package instead of the AppImage?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110163/latest/Known-issues-and-limitations/AppImage-compatibility-on-Ubuntu?lang=en"
+    ]
+  },
+  {
+    "id": "B074",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Where does Arm’s Ubuntu Server compatibility entry link to the native Arm server download?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=ubuntu-server"
+    ]
+  },
+  {
+    "id": "B075",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Where can I inspect the Arm ecosystem dashboard’s MongoDB validation record to see whether its Arm64 checks include database operations as well as binary checks?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=mongodb"
+    ]
+  },
+  {
+    "id": "B076",
+    "topic": "ai-ml",
+    "intent": "setup",
+    "question": "I want my Keras Core script to use PyTorch instead of its default backend. How do I select that backend before the script starts?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/keras-core/what-is-keras/#changing-the-backend-in-keras"
+    ]
+  },
+  {
+    "id": "B077",
+    "topic": "ai-ml",
+    "intent": "setup",
+    "question": "For a LlamaIndex RAG application on an Arm VM, which Python integrations do I install to use Ollama, Hugging Face embeddings, and ChromaDB?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/llamaindex-rag-axion/setup-llamaindex-rag/#install-llamaindex-packages"
+    ]
+  },
+  {
+    "id": "B078",
+    "topic": "ai-ml",
+    "intent": "setup",
+    "question": "How do I prepare separate MNIST training and test loaders that yield batches of 32 PyTorch tensors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/pytorch-digit-classification-arch-training/datasets-and-training/#prepare-the-mnist-data"
+    ]
+  },
+  {
+    "id": "B079",
+    "topic": "ai-ml",
+    "intent": "setup",
+    "question": "In my activated Python environment on Azure Cobalt 100, what packages do I need for ONNX inference with a FastAPI service?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/onnx-on-azure/deploy/#install-onnx-and-required-libraries"
+    ]
+  },
+  {
+    "id": "B080",
+    "topic": "ai-ml",
+    "intent": "troubleshooting",
+    "question": "My ONNX version-check script on an Azure Cobalt 100 VM raises ImportError even though I ran the installation. What should I check first?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/onnx-on-azure/deploy/#validate-onnx-and-onnx-runtime"
+    ]
+  },
+  {
+    "id": "B081",
+    "topic": "ai-ml",
+    "intent": "troubleshooting",
+    "question": "Installing the Python dependencies for my DeepSpeed project on Arm64 fails with wheel compatibility errors. What packaging-tool update should I try?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/deepspeed-on-axion/install-deepspeed-arm/#upgrade-pip"
+    ]
+  },
+  {
+    "id": "B082",
+    "topic": "ai-ml",
+    "intent": "troubleshooting",
+    "question": "The Ollama service is stopped after I installed it for the LlamaIndex RAG tutorial. How do I check its state and start it?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/llamaindex-rag-axion/setup-llamaindex-rag/#check-ollama-is-running"
+    ]
+  },
+  {
+    "id": "B083",
+    "topic": "ai-ml",
+    "intent": "troubleshooting",
+    "question": "The neural-upscaling PTQ example raises \"Calibration set is empty; check loader/num_batches.\" Which inputs to calibration-batch creation should I inspect?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/quantize-neural-upscaling-models/3-run-ptq-and-export-vgf/#run-the-end-to-end-ptq-example"
+    ]
+  },
+  {
+    "id": "B084",
+    "topic": "ai-ml",
+    "intent": "conceptual",
+    "question": "What roles do document loaders, an index, and a query engine play when LlamaIndex answers questions from my own documents?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/llamaindex-rag-axion/background/#llamaindex-for-rag-and-context-aware-ai-applications-on-arm"
+    ]
+  },
+  {
+    "id": "B085",
+    "topic": "ai-ml",
+    "intent": "conceptual",
+    "question": "In the ExecuTorch neural-upscaling workflow, how does a trained PyTorch network become a model consumed by a Vulkan pipeline?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/quantize-neural-upscaling-models/1-introduction/#executorch-quantization-workflow-for-arm"
+    ]
+  },
+  {
+    "id": "B086",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "My PyTorch network repeatedly applies a linear layer followed by ReLU. What graph optimization can reduce inference overhead from those pairs?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/pytorch-digit-classification-arch-training/intro-opt/#layer-fusion"
+    ]
+  },
+  {
+    "id": "B087",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "My neural network has weights and neurons that contribute little to its output. What model-reduction technique targets those components to lower resource use?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/pytorch-digit-classification-arch-training/intro-opt/#pruning"
+    ]
+  },
+  {
+    "id": "B088",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "My neural network is too large for the deployment memory budget, and the target supports low-precision arithmetic. What change to weights and activations can reduce its size?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/pytorch-digit-classification-arch-training/intro-opt/#quantization"
+    ]
+  },
+  {
+    "id": "B089",
+    "topic": "ai-ml",
+    "intent": "comparison",
+    "question": "For an image-upscaling model exported through ExecuTorch, when should I improve PTQ calibration and when should I switch to QAT?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/quantize-neural-upscaling-models/5-validate-and-choose-a-quantization-strategy/#choose-your-quantization-strategy"
+    ]
+  },
+  {
+    "id": "B090",
+    "topic": "ai-ml",
+    "intent": "reference",
+    "question": "In the ONNX Runtime benchmark results for Cobalt 100, what do P50 latency and latency consistency measure?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/onnx-on-azure/benchmarking/#benchmark-metrics-explained"
+    ]
+  },
+  {
+    "id": "B091",
+    "topic": "ai-ml",
+    "intent": "setup",
+    "question": "For the simple-add ExecuTorch bring-up model on Ethos-U65-256, how should I configure the target, system configuration, and memory mode before lowering?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/observing-ethos-u-on-nxp/7-build-executorch-pte/#compile-a-simple-add-model"
+    ]
+  },
+  {
+    "id": "B092",
+    "topic": "ai-ml",
+    "intent": "setup",
+    "question": "I have the MobileNet V2 .pte file on the first SD-card partition of an FRDM i.MX 93. How do I load it through U-Boot where executor_runner expects to find it?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/observing-ethos-u-on-nxp/10-deploy-executorchrunner-nxp-board/#load-the-model-to-ddr"
+    ]
+  },
+  {
+    "id": "B093",
+    "topic": "ai-ml",
+    "intent": "setup",
+    "question": "How do I build the ExecuTorch Android archive for an arm64-v8a Llama chat app once the Android SDK and NDK are installed?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/build-llama3-chat-android-app-using-executorch-and-xnnpack/6-build-android-chat-app/#build-the-android-archive-aar"
+    ]
+  },
+  {
+    "id": "B094",
+    "topic": "ai-ml",
+    "intent": "setup",
+    "question": "I already have a GGUF model on a Raspberry Pi 5. How can I load it from Python and run an interactive llama.cpp chat loop?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/llama-python-cpu/llama-python-chatbot/#python-bindings-for-llamacpp"
+    ]
+  },
+  {
+    "id": "B095",
+    "topic": "ai-ml",
+    "intent": "troubleshooting",
+    "question": "Exporting Stable Audio to ExecuTorch fails because exir/_serialize/program.fbs cannot be found. How do I restore the missing schema files?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/run-stable-audio-with-executorch/3-convert-model/#troubleshooting-conversion-issues"
+    ]
+  },
+  {
+    "id": "B096",
+    "topic": "ai-ml",
+    "intent": "troubleshooting",
+    "question": "The ExecuTorch runner on the i.MX 93 Cortex-M33 bus-faults on its first load_method call. Is there a known cause or workaround?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/observing-ethos-u-on-nxp/9-build-executorch-runner-for-cm33/#apply-required-sdk-patches"
+    ]
+  },
+  {
+    "id": "B097",
+    "topic": "ai-ml",
+    "intent": "troubleshooting",
+    "question": "After the FRDM i.MX 93 ExecuTorch runner completes one inference, waiting produces no new run. How do I trigger another inference and read fresh trace output?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/observing-ethos-u-on-nxp/10-deploy-executorchrunner-nxp-board/#re-run-inference"
+    ]
+  },
+  {
+    "id": "B098",
+    "topic": "ai-ml",
+    "intent": "troubleshooting",
+    "question": "The TinyRPS script prints that it is using random initialization when I run with --no-train. What saved-model condition causes that warning?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/training-inference-pytorch/fine-tune-2/#build-the-model"
+    ]
+  },
+  {
+    "id": "B099",
+    "topic": "ai-ml",
+    "intent": "conceptual",
+    "question": "In the i.MX 93 TinyML deployment example, why are both a .pte file and executor_runner firmware needed?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/observing-ethos-u-on-nxp/7-build-executorch-pte/#executorch-deployment-components"
+    ]
+  },
+  {
+    "id": "B100",
+    "topic": "ai-ml",
+    "intent": "conceptual",
+    "question": "In LiteRT with KleidiAI enabled through XNNPACK, what happens to weight packing at model load and activation packing during inference?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/litert-sme/1-litert-kleidiai-sme2/#litert--xnnpack--kleidiai-workflow"
+    ]
+  },
+  {
+    "id": "B101",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "My exported Llama 3.2 1B ExecuTorch model is still large because of its embedding table. Which export option in the Android workflow reduces that part of the model?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/build-llama3-chat-android-app-using-executorch-and-xnnpack/4-prepare-llama-models/#download-and-export-the-llama-32-1b-model"
+    ]
+  },
+  {
+    "id": "B102",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "How can I keep a LiteRT single-thread inference benchmark on the Android core that supports SME2 and collect operator timings while tuning the model?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/litert-sme/4-benchmark/#run-benchmark_model-on-an-sme2-core"
+    ]
+  },
+  {
+    "id": "B103",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "How do I convert a Keras model to LiteRT with FP16 weights so I can evaluate lower-precision inference with KleidiAI?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/litert-sme/2-build-model/#post-training-quantization-options"
+    ]
+  },
+  {
+    "id": "B104",
+    "topic": "ai-ml",
+    "intent": "comparison",
+    "question": "For LiteRT deployment, how do dynamic-range INT8 and full static INT8 quantization differ in activation handling and calibration requirements?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/litert-sme/2-build-model/#post-training-quantization-options"
+    ]
+  },
+  {
+    "id": "B105",
+    "topic": "ai-ml",
+    "intent": "reference",
+    "question": "In LiteRT operator profiling, what does the P in names such as PF32 or QP8 indicate for the KleidiAI-enabled build?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/litert-sme/4-benchmark/#interpreting-node-type-names-for-kleidiai"
+    ]
+  },
+  {
+    "id": "B106",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "setup",
+    "question": "What initialization sequence should main() use to start an app_main thread in the CMSIS-RTOS2 RTX example?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cmsis_rtx_vs/initialize/#create-the-main-function"
+    ]
+  },
+  {
+    "id": "B107",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "setup",
+    "question": "In the Cortex-M4 FVP csolution example, how do I describe the code, writable RAM, heap, and stack regions to the linker?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cmsis_rtx_vs/create/#define-the-memory-map"
+    ]
+  },
+  {
+    "id": "B108",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "setup",
+    "question": "On an FRDM-MCXN947 using its onboard USB-to-UART console, which prj.conf options enable the interactive Zephyr UART shell?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/zephyr_shell/4_uart_shell/#configure-the-application"
+    ]
+  },
+  {
+    "id": "B109",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "setup",
+    "question": "My Zephyr MQTT-shell board needs a fixed IPv4 address rather than DHCP. What should I change in its network configuration?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/zephyr_shell/3_mqtt_shell/#use-a-static-ipv4-address"
+    ]
+  },
+  {
+    "id": "B110",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "troubleshooting",
+    "question": "After migrating to CMSIS v6, the linker reports L6314W for *(.bss.noinit). Why does that section exist, and how can I suppress the unmatched-section warning?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/project-migration-cmsis-v6/troubleshooting/#linker-warning-l6314w"
+    ]
+  },
+  {
+    "id": "B111",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "troubleshooting",
+    "question": "After moving to the CMSIS v6 RTX5 library, linking fails with wchar-16 versus wchar-32 and packed-enum attribute clashes. How do I reconcile the build settings?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/project-migration-cmsis-v6/troubleshooting/#linker-errors-using-the-rtx5-library"
+    ]
+  },
+  {
+    "id": "B112",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "troubleshooting",
+    "question": "Threads that perform privileged operations start raising exceptions after my RTX5 v5.8.0 migration. Which changed default should I investigate?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/project-migration-cmsis-v6/troubleshooting/#run-time-exceptions-due-to-wrong-processor-mode-in-rtx5"
+    ]
+  },
+  {
+    "id": "B113",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "troubleshooting",
+    "question": "My Event Recorder scatter region produces \"No section matches pattern EventRecorder.o(ZI)\" at link time. Which compiler setting should I check?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cmsis_rtx/eventrecorder/#define-the-event-recorder-buffer"
+    ]
+  },
+  {
+    "id": "B114",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "conceptual",
+    "question": "How does enabling the Zephyr shell let me inspect or trigger firmware behavior without rebuilding and reflashing the application?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/zephyr_shell/2_overview/#how-the-zephyr-shell-subsystem-works"
+    ]
+  },
+  {
+    "id": "B115",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "conceptual",
+    "question": "How does the Zephyr MQTT shell keep command and response topics separate for multiple boards on one broker?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/zephyr_shell/3_mqtt_shell/#how-the-mqtt-shell-backend-works"
+    ]
+  },
+  {
+    "id": "B116",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "optimization",
+    "question": "Where can I configure the compiler optimization level for my RTX project in Keil MDK?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cmsis_rtx/create/#compiler-optimization-options"
+    ]
+  },
+  {
+    "id": "B117",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "optimization",
+    "question": "I need to keep a Zephyr shell small on a Cortex-M device. Which configuration choices determine its flash and RAM footprint?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/zephyr_shell/2_overview/#how-shell-backends-work"
+    ]
+  },
+  {
+    "id": "B118",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "comparison",
+    "question": "For a Zephyr application that exposes both UART and MQTT shells, should I maintain separate command trees or reuse the same commands through different backends?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/zephyr_shell/2_overview/#how-shell-backends-work"
+    ]
+  },
+  {
+    "id": "B119",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "reference",
+    "question": "Which EventRecorderConf.h setting selects the CMSIS-RTOS2 system timer as the Event Recorder timestamp source?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cmsis_rtx/eventrecorder/#set-the-event-recorder-timing-source"
+    ]
+  },
+  {
+    "id": "B120",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "reference",
+    "question": "What function prototype does a CMSIS-RTOS2 thread entry use, and where does its argument come from in osThreadNew?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cmsis_rtx_vs/initialize/#understanding-the-code"
+    ]
+  },
+  {
+    "id": "B121",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "setup",
+    "question": "For the Corstone-320 MPS4 Zephyr build, how do I point Zephyr at my installed Arm GNU embedded toolchain?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/zephyr_cs320_mps4/how-to-1/#configure-the-arm-gnu-toolchain-for-zephyr"
+    ]
+  },
+  {
+    "id": "B122",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "setup",
+    "question": "How do I split the Corstone-320 MPS4 Zephyr ELF into boot-vector and application binaries and arrange their loading from the SD card?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/zephyr_cs320_mps4/how-to-3/#run-the-hello_world-application-on-the-mps4-board"
+    ]
+  },
+  {
+    "id": "B123",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "setup",
+    "question": "In an AArch64 bare-metal program handling exceptions at EL3, how do I tell the processor where my exception vector table is?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/bare-metal/event-driven1/#point-to-the-exception-vector-table"
+    ]
+  },
+  {
+    "id": "B124",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "setup",
+    "question": "My Zephyr Workbench application builds successfully. What additional file can I configure to get a register-level view while debugging?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/zephyr_vsworkbench/3_debug/#program-settings"
+    ]
+  },
+  {
+    "id": "B125",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "troubleshooting",
+    "question": "Workbench for Zephyr does not detect my installed debug runner. How do I configure its executable manually?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/zephyr_vsworkbench/3_debug/#configure-manual-debug-runner"
+    ]
+  },
+  {
+    "id": "B126",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "troubleshooting",
+    "question": "My bare-metal Hello World runs multiple times on the Base AEM FVP. How can I start just one simulated processor without changing the program?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/bare-metal/hello/#enable-single-core-simulation"
+    ]
+  },
+  {
+    "id": "B127",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "troubleshooting",
+    "question": "In my CMSIS-DSP Q15 noise-suppression prototype, squared-magnitude energy values collapse to zero. How can I preserve precision in this calculation?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cmsisdsp-dev-with-python/how-to-6/#subnoise"
+    ]
+  },
+  {
+    "id": "B128",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "troubleshooting",
+    "question": "After disabling semihosting in my bare-metal printf example, the link reports a remaining _ttywrch dependency. Which stdio function should I retarget to the UART?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/bare-metal/retarget/#retarget-fputc-to-use-the-uart"
+    ]
+  },
+  {
+    "id": "B129",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "conceptual",
+    "question": "How does the Corstone-320 MPS4 target fit into Zephyr’s board, SoC, CPU-cluster, and architecture hierarchy?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/zephyr_cs320_mps4/how-to-2/#understand-zephyr-board-support-architecture"
+    ]
+  },
+  {
+    "id": "B130",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "conceptual",
+    "question": "How does the CMSIS-DSP Python package help me prototype fixed-point processing that will later become embedded C code?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cmsisdsp-dev-with-python/how-to-1/#what-is-the-cmsis-dsp-python-package"
+    ]
+  },
+  {
+    "id": "B131",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "optimization",
+    "question": "After normalizing Q15 blocks to improve numeric precision, how should I restore their amplitude after the inverse FFT before reconstructing the audio?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cmsisdsp-dev-with-python/how-to-6/#rescale"
+    ]
+  },
+  {
+    "id": "B132",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "optimization",
+    "question": "My Zephyr firmware is close to its memory limits. How do I identify which code and data consume ROM and RAM in Workbench for Zephyr?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/zephyr_vsworkbench/3_debug/#generate-memory-reports"
+    ]
+  },
+  {
+    "id": "B133",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "comparison",
+    "question": "In an Arm bare-metal scatter file, how does a load region differ from an execution region, and what makes an execution region a root region?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/bare-metal/hello/#understanding-the-scatter-file"
+    ]
+  },
+  {
+    "id": "B134",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "reference",
+    "question": "Which AArch64 secure physical timer registers control the timer period and enable or disable the timer?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/bare-metal/event-driven2/#generic-timer"
+    ]
+  },
+  {
+    "id": "B135",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "reference",
+    "question": "What array layout should I use when converting NumPy complex samples for the CMSIS-DSP Python example?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/cmsisdsp-dev-with-python/how-to-6/#utilities"
+    ]
+  },
+  {
+    "id": "B136",
+    "topic": "automotive",
+    "intent": "setup",
+    "question": "How do I launch the Zena CSS FVP through runfvp with the Iris debug server enabled and execution held at reset?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/zenacssdebug/launch/#enable-the-iris-debug-server-for-arm-development-studio"
+    ]
+  },
+  {
+    "id": "B137",
+    "topic": "automotive",
+    "intent": "setup",
+    "question": "Which Zena CSS model connection should I create in Arm Development Studio to debug the Linux kernel with SMP OS awareness?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/zenacssdebug/connect/#primary-linux-smp-os-awareness"
+    ]
+  },
+  {
+    "id": "B138",
+    "topic": "automotive",
+    "intent": "setup",
+    "question": "For Open AD Kit split across two machines, how do I configure CycloneDDS to discover the peers using unicast instead of multicast?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/openadkit2_safetyisolation/3_container_spliting/#configure-cyclonedds-for-peer-to-peer-communication"
+    ]
+  },
+  {
+    "id": "B139",
+    "topic": "automotive",
+    "intent": "setup",
+    "question": "How do I expose the Open AD Kit RViz visualizer through a browser-based VNC connection?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/openadkit1_container/4_run_openadkit/#visualizer-configuration"
+    ]
+  },
+  {
+    "id": "B140",
+    "topic": "automotive",
+    "intent": "troubleshooting",
+    "question": "My Zena CSS Safety Island debug connection is attached but cannot run yet. What must execute before the island becomes available?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/zenacssdebug/safetyisland/#start-execution-to-release-safety-island"
+    ]
+  },
+  {
+    "id": "B141",
+    "topic": "automotive",
+    "intent": "troubleshooting",
+    "question": "When I attach to Zena’s RSE at reset, the secure vector table is populated but the debugger shows no source. How do I make TF-M source stepping available?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/zenacssdebug/rse/#connect-the-debugger-to-rse-cortex-m55"
+    ]
+  },
+  {
+    "id": "B142",
+    "topic": "automotive",
+    "intent": "troubleshooting",
+    "question": "During early Zena Linux boot, Arm Debugger reports WARNING(ROS60) that the OS is not initialized. When should OS thread awareness become available?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/zenacssdebug/primarycompute/#view-linux-threads-with-os-awareness"
+    ]
+  },
+  {
+    "id": "B143",
+    "topic": "automotive",
+    "intent": "troubleshooting",
+    "question": "The automotive software-stack build in my Multipass VM fails because it runs out of memory. What can I change in the VM to get the build to complete?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/system76-auto/setup/#create-swap-space"
+    ]
+  },
+  {
+    "id": "B144",
+    "topic": "automotive",
+    "intent": "conceptual",
+    "question": "What can a safety island do when the main automotive processor becomes unresponsive or crashes?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/openadkit2_safetyisolation/1d_safety_island_arch/#key-capabilities-of-a-safety-island"
+    ]
+  },
+  {
+    "id": "B145",
+    "topic": "automotive",
+    "intent": "conceptual",
+    "question": "What does Parsec abstract in the automotive TLS demo, and why does that help an application work with different secure hardware?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/system76-auto/about3/#about-parsec"
+    ]
+  },
+  {
+    "id": "B146",
+    "topic": "automotive",
+    "intent": "optimization",
+    "question": "While tuning high-throughput DDS traffic between Open AD Kit nodes, which Linux settings control fragment retention and receive-buffer limits?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/openadkit2_safetyisolation/3_container_spliting/#explanation-of-parameters"
+    ]
+  },
+  {
+    "id": "B147",
+    "topic": "automotive",
+    "intent": "optimization",
+    "question": "My Open AD Kit simulator and planning logic have different hardware demands. How can separating them onto instances help tune resources for each workload?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/openadkit2_safetyisolation/3_container_spliting/#architectural-benefits"
+    ]
+  },
+  {
+    "id": "B148",
+    "topic": "automotive",
+    "intent": "comparison",
+    "question": "In the Open AD Kit obstacle-avoidance demo, how do the fail and pass planning configurations differ in what the vehicle does behind an obstacle?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/openadkit1_container/4_run_openadkit/#execute-the-planning-visualizer-demo"
+    ]
+  },
+  {
+    "id": "B149",
+    "topic": "automotive",
+    "intent": "reference",
+    "question": "Which processor families provide primary compute and the Safety Island in the Arm Zena Compute Subsystem?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/zenacssdebug/zena/#arm-zena-compute-subsystem"
+    ]
+  },
+  {
+    "id": "B150",
+    "topic": "automotive",
+    "intent": "reference",
+    "question": "Which launch parameter sets the simulation frame rate in the Open AD Kit scenario_test_runner example?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/automotive/openadkit1_container/4_run_openadkit/#simulator-module"
+    ]
+  },
+  {
+    "id": "B151",
+    "topic": "porting-languages-compilers",
+    "intent": "setup",
+    "question": "How do I install the Rust toolchain on an Arm Linux machine and initialize Cargo in my current shell?",
+    "expected_urls": [
+      "https://learn.arm.com/install-guides/rust/#how-do-i-download-and-install-rust"
+    ]
+  },
+  {
+    "id": "B152",
+    "topic": "porting-languages-compilers",
+    "intent": "setup",
+    "question": "I have gfortran installed on Arm Linux; how do I compile and run a small Fortran program to check the toolchain?",
+    "expected_urls": [
+      "https://learn.arm.com/install-guides/gfortran/#how-do-i-verify-the-gfortran-installation-and-get-started"
+    ]
+  },
+  {
+    "id": "B153",
+    "topic": "porting-languages-compilers",
+    "intent": "setup",
+    "question": "How do I add an Arm64EC build configuration to my existing Visual Studio CMake project for a Windows DLL?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_arm64ec_porting/how-to-2/#porting-to-arm64-with-arm64ec"
+    ]
+  },
+  {
+    "id": "B154",
+    "topic": "porting-languages-compilers",
+    "intent": "setup",
+    "question": "After installing GCC 16 alongside an older GCC on Ubuntu, how do I make gcc and g++ select the new version by default?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cplusplus_compilers_flags/2/#install-different-versions-of-the-gnu-compiler-collection"
+    ]
+  },
+  {
+    "id": "B155",
+    "topic": "porting-languages-compilers",
+    "intent": "setup",
+    "question": "Where should I add -flto when my GCC project compiles several C files separately and then links their object files?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/gcc-lto/request-lto/#a-simple-use-case"
+    ]
+  },
+  {
+    "id": "B156",
+    "topic": "porting-languages-compilers",
+    "intent": "troubleshooting",
+    "question": "After moving my Linux C code from x86 to Arm, a plain char no longer behaves as signed; how can I make the intended signedness explicit?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/migration/c/#signed-and-unsigned-char-data-types"
+    ]
+  },
+  {
+    "id": "B157",
+    "topic": "porting-languages-compilers",
+    "intent": "troubleshooting",
+    "question": "My Java application still runs after moving to Arm, but a library has become slower; how can I check whether its JAR is missing the native Arm shared object?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/migration/java/#native-code-in-shared-objects"
+    ]
+  },
+  {
+    "id": "B158",
+    "topic": "porting-languages-compilers",
+    "intent": "troubleshooting",
+    "question": "LLVM installed successfully on Windows on Arm, but I cannot invoke its tools from other directories; which installer setting should I check?",
+    "expected_urls": [
+      "https://learn.arm.com/install-guides/llvm-woa/#download-and-install-the-llvm-toolchain-for-windows-on-arm"
+    ]
+  },
+  {
+    "id": "B159",
+    "topic": "porting-languages-compilers",
+    "intent": "troubleshooting",
+    "question": "When I debug an optimized g++ binary, execution no longer follows my source lines as expected; what compiler setting should I revisit?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cplusplus_compilers_flags/1/#basic-g-optimization-levels"
+    ]
+  },
+  {
+    "id": "B160",
+    "topic": "porting-languages-compilers",
+    "intent": "conceptual",
+    "question": "How does GCC retain enough information for link-time optimization to optimize across separately compiled source files?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/gcc-lto/background/#link-time-optimization-and-intermediate-code-representation"
+    ]
+  },
+  {
+    "id": "B161",
+    "topic": "porting-languages-compilers",
+    "intent": "conceptual",
+    "question": "How can an Arm64EC migration let selected parts of a Windows application run natively while existing x64 components remain in the process?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win_arm64ec/app_arm64ec/#overview-of-arm64ec"
+    ]
+  },
+  {
+    "id": "B162",
+    "topic": "porting-languages-compilers",
+    "intent": "optimization",
+    "question": "For a long-running Java service on Arm, which JIT compilation and code-cache settings are candidates to test when tuning startup versus steady-state performance?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/migration/java/#flags-to-review"
+    ]
+  },
+  {
+    "id": "B163",
+    "topic": "porting-languages-compilers",
+    "intent": "comparison",
+    "question": "When selecting an Arm GCC toolchain, how do the target runtime and the host machine differ as selection criteria?",
+    "expected_urls": [
+      "https://learn.arm.com/install-guides/gcc/#what-should-i-consider-to-determine-the-correct-gcc-flavor"
+    ]
+  },
+  {
+    "id": "B164",
+    "topic": "porting-languages-compilers",
+    "intent": "comparison",
+    "question": "For a library that consumers may link with or without LTO, how do GCC slim and fat LTO object files differ?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/gcc-lto/request-lto/#flexible-object-files"
+    ]
+  },
+  {
+    "id": "B165",
+    "topic": "porting-languages-compilers",
+    "intent": "reference",
+    "question": "Which Java command-line options control thread stack size, and what units do their values use?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/migration/java/#stack-size"
+    ]
+  },
+  {
+    "id": "B166",
+    "topic": "porting-languages-compilers",
+    "intent": "setup",
+    "question": "How do I install a downloaded Linux Arm64 Go release on Ubuntu and make the go command available in Bash?",
+    "expected_urls": [
+      "https://learn.arm.com/install-guides/go/#download-and-install-go"
+    ]
+  },
+  {
+    "id": "B167",
+    "topic": "porting-languages-compilers",
+    "intent": "setup",
+    "question": "On an Arm Ubuntu development machine, how do I install Maven and check which Java runtime Maven is using?",
+    "expected_urls": [
+      "https://learn.arm.com/install-guides/java/#apache-maven"
+    ]
+  },
+  {
+    "id": "B168",
+    "topic": "porting-languages-compilers",
+    "intent": "setup",
+    "question": "I have checked out Porting Advisor for Graviton; how do I prepare a Python virtual environment and run the script?",
+    "expected_urls": [
+      "https://learn.arm.com/install-guides/porting-advisor/#run-porting-advisor-as-a-python-script"
+    ]
+  },
+  {
+    "id": "B169",
+    "topic": "porting-languages-compilers",
+    "intent": "setup",
+    "question": "How do I save a Porting Advisor for Graviton scan as an HTML report for offline review?",
+    "expected_urls": [
+      "https://learn.arm.com/install-guides/porting-advisor/#test-porting-advisor-with-a-sample-project"
+    ]
+  },
+  {
+    "id": "B170",
+    "topic": "porting-languages-compilers",
+    "intent": "setup",
+    "question": "How do I install Apache Ant with apt on my Arm Linux development system and verify the command works?",
+    "expected_urls": [
+      "https://learn.arm.com/install-guides/java/#apache-ant"
+    ]
+  },
+  {
+    "id": "B171",
+    "topic": "porting-languages-compilers",
+    "intent": "troubleshooting",
+    "question": "I unpacked a JDK tarball on Arm Ubuntu, but it is missing from update-alternatives; how should I select that Java installation?",
+    "expected_urls": [
+      "https://learn.arm.com/install-guides/java/#change-the-default-java-version-if-multiple-versions-are-installed"
+    ]
+  },
+  {
+    "id": "B172",
+    "topic": "porting-languages-compilers",
+    "intent": "troubleshooting",
+    "question": "My CMake project fails to build on Arm64 because x86 compiler flags are applied unconditionally; where should I guard those flags?",
+    "expected_urls": [
+      "https://amperecomputing.com/tutorials/porting-advisor"
+    ]
+  },
+  {
+    "id": "B173",
+    "topic": "porting-languages-compilers",
+    "intent": "troubleshooting",
+    "question": "Ampere Porting Advisor flags x86 inline assembly that is already behind an architecture conditional; do I always need to rewrite the flagged code?",
+    "expected_urls": [
+      "https://amperecomputing.com/tutorials/porting-advisor"
+    ]
+  },
+  {
+    "id": "B174",
+    "topic": "porting-languages-compilers",
+    "intent": "troubleshooting",
+    "question": "After enabling GCC LTO, the final build step is slow and other CPU cores are idle; how can I run LTO work in parallel?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/gcc-lto/request-lto/#parallelization"
+    ]
+  },
+  {
+    "id": "B175",
+    "topic": "porting-languages-compilers",
+    "intent": "conceptual",
+    "question": "Why can enabling link-time optimization make an executable larger even though it can eliminate unused code?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/gcc-lto/performance-uplift/#code-size-considerations"
+    ]
+  },
+  {
+    "id": "B176",
+    "topic": "porting-languages-compilers",
+    "intent": "conceptual",
+    "question": "What properties of Rust help prevent common memory-safety mistakes when developing native Arm software?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/simd-on-rust/intro-to-rust/#rust-a-safe-programming-language"
+    ]
+  },
+  {
+    "id": "B177",
+    "topic": "porting-languages-compilers",
+    "intent": "optimization",
+    "question": "Before configuring a fresh vLLM source build on Arm Linux, how do I enable C++ compiler caching to speed up subsequent rebuilds?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/vllm/vllm-setup/#install-dependencies-to-build-vllm"
+    ]
+  },
+  {
+    "id": "B178",
+    "topic": "porting-languages-compilers",
+    "intent": "comparison",
+    "question": "For running Porting Advisor for Graviton on several machines with the same OS and architecture, what does building the executable avoid compared with running the Python script?",
+    "expected_urls": [
+      "https://learn.arm.com/install-guides/porting-advisor/#run-porting-advisor-as-an-executable"
+    ]
+  },
+  {
+    "id": "B179",
+    "topic": "porting-languages-compilers",
+    "intent": "comparison",
+    "question": "When should I use -mcpu=native versus an explicit Neoverse CPU target when the build and deployment machines differ?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/migration/c/#gcc-neoverse-cpu-targets"
+    ]
+  },
+  {
+    "id": "B180",
+    "topic": "porting-languages-compilers",
+    "intent": "reference",
+    "question": "Which GCC command shows the default Arm target options, including the selected -march value?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/migration/c/#gcc-neoverse-cpu-targets"
+    ]
+  },
+  {
+    "id": "B181",
+    "topic": "architecture-concurrency-security",
+    "intent": "setup",
+    "question": "How do I build a multithreaded C++ test with GCC ThreadSanitizer so race reports include source locations on Arm Linux?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arm-cpp-memory-model/4/#how-can-i-detect-infrequent-race-conditions"
+    ]
+  },
+  {
+    "id": "B182",
+    "topic": "architecture-concurrency-security",
+    "intent": "setup",
+    "question": "When compiling for baseline Armv8-A, how do I enable GCC atomic helper calls so one binary can select the atomic implementation appropriate for its processor?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/lse/intro/#lse-in-neoverse-processors"
+    ]
+  },
+  {
+    "id": "B183",
+    "topic": "architecture-concurrency-security",
+    "intent": "troubleshooting",
+    "question": "My C++ consumer sees a non-null atomic Node pointer but sometimes reads uninitialized fields when I use relaxed ordering on Arm; what publication ordering is missing?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arm-cpp-memory-model/3/#using-correct-memory-ordering-of-atomics"
+    ]
+  },
+  {
+    "id": "B184",
+    "topic": "architecture-concurrency-security",
+    "intent": "troubleshooting",
+    "question": "A ThreadSanitizer run reported no races, but the failure occurs on a path that test never executed; what does that clean run actually establish?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arm-cpp-memory-model/4/#does-tsan-have-any-limitations"
+    ]
+  },
+  {
+    "id": "B185",
+    "topic": "architecture-concurrency-security",
+    "intent": "troubleshooting",
+    "question": "My Arm executable still contains load/store-exclusive instructions after I enabled atomic helpers; how can I check whether it also contains an LSE path?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/lse/example/#how-can-i-find-out-if-my-application-has-atomic-instructions"
+    ]
+  },
+  {
+    "id": "B186",
+    "topic": "architecture-concurrency-security",
+    "intent": "conceptual",
+    "question": "Why can another core observe shared-memory accesses in an order different from the order of statements in my C++ source?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arm-cpp-memory-model/1/#what-is-a-memory-model"
+    ]
+  },
+  {
+    "id": "B187",
+    "topic": "architecture-concurrency-security",
+    "intent": "conceptual",
+    "question": "What does the C++ as-if rule permit a compiler to change in single-threaded code?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arm-cpp-memory-model/2/#the-c-memory-model-for-single-threads"
+    ]
+  },
+  {
+    "id": "B188",
+    "topic": "architecture-concurrency-security",
+    "intent": "optimization",
+    "question": "How can I reduce contention and timing variability for a shared counter updated by many Arm cores using LSE instead of a load-exclusive/store-exclusive retry loop?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/lse/intro/#introduction"
+    ]
+  },
+  {
+    "id": "B189",
+    "topic": "architecture-concurrency-security",
+    "intent": "comparison",
+    "question": "When porting concurrent code from x86 to Arm, how do their memory-ordering guarantees differ?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arm-cpp-memory-model/1/#high-level-differences-between-the-arm-memory-model-and-the-x86-memory-model"
+    ]
+  },
+  {
+    "id": "B190",
+    "topic": "architecture-concurrency-security",
+    "intent": "reference",
+    "question": "What memory order do C++ atomic operations use when I omit the memory-order argument?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arm-cpp-memory-model/2/#c-atomic-memory-ordering"
+    ]
+  },
+  {
+    "id": "B191",
+    "topic": "architecture-concurrency-security",
+    "intent": "setup",
+    "question": "On a Pixel 8 with MTE already enabled, how do I configure an Android app to stop precisely at a memory-tag mismatch while debugging?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/debugging_with_mte_on_pixel8/how-to-3/#enabling-mte-in-the-android-project"
+    ]
+  },
+  {
+    "id": "B192",
+    "topic": "architecture-concurrency-security",
+    "intent": "setup",
+    "question": "In the Arm CCA and Trustee demonstration, how do I register the realm initial measurement as an expected reference value?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cca-trustee/flow/#endorse-realm-initial-measurement-rim"
+    ]
+  },
+  {
+    "id": "B193",
+    "topic": "architecture-concurrency-security",
+    "intent": "troubleshooting",
+    "question": "In the MTE C example, ptr[0x10] faults but smaller offsets within the first 16 bytes do not; why does the fault depend on that boundary?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/mte/mte/#create-and-build-the-example"
+    ]
+  },
+  {
+    "id": "B194",
+    "topic": "architecture-concurrency-security",
+    "intent": "troubleshooting",
+    "question": "While inspecting the CCA tutorial token, arc verify now reports that exp is not satisfied because the EAR expired; how do I continue?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cca-trustee/flow/#evaluate-the-attestation-result"
+    ]
+  },
+  {
+    "id": "B195",
+    "topic": "architecture-concurrency-security",
+    "intent": "troubleshooting",
+    "question": "Trustee reports Hardware as affirming but Executables as warning and refuses my realm a secret; what reference information is missing?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cca-trustee/flow/#evaluate-the-attestation-result"
+    ]
+  },
+  {
+    "id": "B196",
+    "topic": "architecture-concurrency-security",
+    "intent": "conceptual",
+    "question": "Why does an Arm CCA workflow attest a Linux realm before releasing confidential data into it?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cca-trustee/cca-trustee/#the-role-of-attestation"
+    ]
+  },
+  {
+    "id": "B197",
+    "topic": "architecture-concurrency-security",
+    "intent": "conceptual",
+    "question": "How do the pointer tag and allocation tag work together when MTE checks a memory access?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/memory-tagged-dynamic-memory-allocator/how-to-1/#the-memory-tagging-extension-mte"
+    ]
+  },
+  {
+    "id": "B198",
+    "topic": "architecture-concurrency-security",
+    "intent": "conceptual",
+    "question": "In Trustee attestation, why is validating an evidence signature separate from checking whether the realm measurements are approved?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cca-trustee/cca-trustee/#attestation-service-as"
+    ]
+  },
+  {
+    "id": "B199",
+    "topic": "architecture-concurrency-security",
+    "intent": "comparison",
+    "question": "How do Pointer Authentication and Branch Target Identification protect different parts of control flow?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/openjdk-pacbti-gcp/background/#openjdk-and-the-pacbti-armv9-instructions"
+    ]
+  },
+  {
+    "id": "B200",
+    "topic": "architecture-concurrency-security",
+    "intent": "reference",
+    "question": "In the RATS terminology used by the CCA attestation guide, which roles produce evidence, evaluate it and make the access decision?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cca-trustee/cca-trustee/#rats-roles"
+    ]
+  },
+  {
+    "id": "B201",
+    "topic": "desktop",
+    "intent": "setup",
+    "question": "How do I enable systemd in my Ubuntu WSL distribution and confirm that service management is available after restarting it?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/wsl2/systemd/#enable-systemd"
+    ]
+  },
+  {
+    "id": "B202",
+    "topic": "desktop",
+    "intent": "setup",
+    "question": "How do I connect from Windows to an XFCE desktop running inside Ubuntu on WSL using Remote Desktop?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/wsl2/rdp/#install-desktop-software-and-remote-desktop-protocol-rdp"
+    ]
+  },
+  {
+    "id": "B203",
+    "topic": "desktop",
+    "intent": "setup",
+    "question": "I downloaded an Alpine aarch64 mini root filesystem; how do I register and start it as a named WSL distribution?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/wsl2/import/#install-alpine-linux"
+    ]
+  },
+  {
+    "id": "B204",
+    "topic": "desktop",
+    "intent": "setup",
+    "question": "Which Visual Studio installer components do I need to build native Windows on Arm applications with LLVM through MSBuild?",
+    "expected_urls": [
+      "https://learn.arm.com/install-guides/vs-woa/#install-llvm-support-in-visual-studio"
+    ]
+  },
+  {
+    "id": "B205",
+    "topic": "desktop",
+    "intent": "setup",
+    "question": "How do I connect the native Windows Arm64 version of VS Code to an existing WSL instance for Linux development?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/wsl2/vscode/#native-on-windows"
+    ]
+  },
+  {
+    "id": "B206",
+    "topic": "desktop",
+    "intent": "troubleshooting",
+    "question": "The i3 status bar on my Pinebook Pro shows the battery incorrectly; which battery entry and sysfs path should I configure?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/pinebook-pro/i3/#how-do-i-fix-the-battery-status-of-the-i3-windows-manager"
+    ]
+  },
+  {
+    "id": "B207",
+    "topic": "desktop",
+    "intent": "troubleshooting",
+    "question": "My WSL SSH service is not reachable on its default port; how do I move it to port 2022 and connect using that port?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/wsl2/ssh/#change-the-ssh-server-port"
+    ]
+  },
+  {
+    "id": "B208",
+    "topic": "desktop",
+    "intent": "troubleshooting",
+    "question": "The Windows on Arm VM creation script reports insufficient disk space; how do I reduce the requested virtual disk size?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win11-vm-automation/vm-creation-3/#insufficient-disk-space"
+    ]
+  },
+  {
+    "id": "B209",
+    "topic": "desktop",
+    "intent": "troubleshooting",
+    "question": "After disconnecting from my Windows on Arm VM, Remmina prints Aborted (core dumped); does that message mean the guest VM has failed?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win11-vm-automation/vm-execution-4/#known-remmina-crash-issue"
+    ]
+  },
+  {
+    "id": "B210",
+    "topic": "desktop",
+    "intent": "conceptual",
+    "question": "What does run-win11-vm.sh do differently when a Windows VM is already running instead of stopped?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win11-vm-automation/understanding-scripts-2/#virtual-machine-execution"
+    ]
+  },
+  {
+    "id": "B211",
+    "topic": "desktop",
+    "intent": "optimization",
+    "question": "How do I reserve more RAM for the Linux host by giving a Windows on Arm guest less than the creation script’s default memory allocation?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/win11-vm-automation/vm-creation-3/#configuration-options"
+    ]
+  },
+  {
+    "id": "B212",
+    "topic": "desktop",
+    "intent": "comparison",
+    "question": "How does WSL 2 run Linux differently from WSL 1 on a Windows on Arm development machine?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/wsl2/setup/#introduction-to-wsl-2"
+    ]
+  },
+  {
+    "id": "B213",
+    "topic": "desktop",
+    "intent": "comparison",
+    "question": "When managing several WSL distributions, what is the difference between --terminate and --shutdown?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/wsl2/setup/#wsl-command-line-options"
+    ]
+  },
+  {
+    "id": "B214",
+    "topic": "desktop",
+    "intent": "reference",
+    "question": "Which xinput commands identify the Pinebook Pro touchpad and list its configurable properties?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/pinebook-pro/i3/#how-to-changing-the-i3-windows-manager-touchpad-behavior"
+    ]
+  },
+  {
+    "id": "B215",
+    "topic": "desktop",
+    "intent": "reference",
+    "question": "Which WSL command lists only distributions that are currently running?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/wsl2/setup/#wsl-command-line-options"
+    ]
+  },
+  {
+    "id": "B216",
+    "topic": "mobile-graphics",
+    "intent": "setup",
+    "question": "How do I switch an existing Unity sample project to Android and choose the scene that loads first?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/get-started-with-unity-on-android/3-test-on-android/#build-for-android"
+    ]
+  },
+  {
+    "id": "B217",
+    "topic": "mobile-graphics",
+    "intent": "setup",
+    "question": "How do I request camera permission from the user in a Kotlin Android app that captures frames with OpenCV?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/android_opencv_camera/add-camera/#request-access-to-the-camera"
+    ]
+  },
+  {
+    "id": "B218",
+    "topic": "mobile-graphics",
+    "intent": "setup",
+    "question": "Which Vulkan extensions do I need to request fixed-rate compression for swapchain images?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/afrc/p3-enable-extensions/#vulkan-extensions"
+    ]
+  },
+  {
+    "id": "B219",
+    "topic": "mobile-graphics",
+    "intent": "troubleshooting",
+    "question": "My installed Unity editor has no Android build support; how do I add it without reinstalling the editor?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/get-started-with-unity-on-android/1-setup/#optional-install-android-build-support-on-pre-existing-versions-of-unity"
+    ]
+  },
+  {
+    "id": "B220",
+    "topic": "mobile-graphics",
+    "intent": "troubleshooting",
+    "question": "My Vulkan compression query reports DISABLED and FIXED_RATE_NONE for an image; which image properties should I reconsider?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/afrc/p4-query-afrc-support/#why-does-this-image-not-support-fixed-rate-compression"
+    ]
+  },
+  {
+    "id": "B221",
+    "topic": "mobile-graphics",
+    "intent": "troubleshooting",
+    "question": "Mali Offline Compiler says Has slow ray traversal: true for my ray-query shader; what does that indicate about hardware acceleration?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/ray_tracing/rt09_optimizing/#optimizing"
+    ]
+  },
+  {
+    "id": "B222",
+    "topic": "mobile-graphics",
+    "intent": "conceptual",
+    "question": "If WebGPU is an API standard, what role does Dawn play in a native Android graphics application?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/android_webgpu_dawn/1-webgpu-fundamentals/#dawn-the-google-webgpu-implementation"
+    ]
+  },
+  {
+    "id": "B223",
+    "topic": "mobile-graphics",
+    "intent": "optimization",
+    "question": "How should I arrange vertex attributes to reduce wasted bandwidth in a mobile shadow-map pass that only needs positions?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/optimizing-vertex-efficiency/vme-learning-path/#fixing-a-suboptimal-layout"
+    ]
+  },
+  {
+    "id": "B224",
+    "topic": "mobile-graphics",
+    "intent": "optimization",
+    "question": "How can I avoid a separate vkCmdClearColorImage transfer when clearing a Vulkan render-pass attachment?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/render-graph-optimization/inefficient-transfer-workloads/#problem-inefficient-clear-routines"
+    ]
+  },
+  {
+    "id": "B225",
+    "topic": "mobile-graphics",
+    "intent": "comparison",
+    "question": "For a ray-query effect on an Arm GPU, why would I choose a fragment shader rather than a compute shader?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/ray_tracing/rt03_ray_traversal/#do-i-use-ray-query-or-ray-tracing"
+    ]
+  },
+  {
+    "id": "B226",
+    "topic": "mobile-graphics",
+    "intent": "setup",
+    "question": "I generated a Halide static library for Android Arm64; how do I add it to my Android Studio CMake build and restrict the app to arm64-v8a?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/android_halide/android/#configuring-the-android-project"
+    ]
+  },
+  {
+    "id": "B227",
+    "topic": "mobile-graphics",
+    "intent": "setup",
+    "question": "In the Dawn Android sample, how do I request a WebGPU adapter that can present to the Game Activity’s native window?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/android_webgpu_dawn/4-using-webgpu-apis/#requesting-the-adapter"
+    ]
+  },
+  {
+    "id": "B228",
+    "topic": "mobile-graphics",
+    "intent": "setup",
+    "question": "How do I ask Vulkan to use its default supported fixed-rate compression when creating an image?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/afrc/p5-request-afrc/#request-fixed-rate-compression"
+    ]
+  },
+  {
+    "id": "B229",
+    "topic": "mobile-graphics",
+    "intent": "troubleshooting",
+    "question": "I built my Halide AOT pipelines with NoRuntime enabled and linked no separate runtime into my Android app. How do I fix the unresolved Halide runtime symbols?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/android_halide/aot-and-cross-compilation/#prepare-pipeline-for-android"
+    ]
+  },
+  {
+    "id": "B230",
+    "topic": "mobile-graphics",
+    "intent": "troubleshooting",
+    "question": "A texture that my shader reads is missing from the Frame Advisor render graph; could the graph intentionally omit that resource?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/render-graph-optimization/understanding-your-render-graph/#components-of-a-render-graph"
+    ]
+  },
+  {
+    "id": "B231",
+    "topic": "mobile-graphics",
+    "intent": "conceptual",
+    "question": "In Halide image processing, what belongs in the algorithm and what belongs in the schedule?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/android_halide/intro/#separate-algorithm-from-schedule-for-optimal-performance"
+    ]
+  },
+  {
+    "id": "B232",
+    "topic": "mobile-graphics",
+    "intent": "optimization",
+    "question": "How can I reduce intermediate-buffer memory traffic in a Halide image pipeline, and what recomputation cost should I watch for?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/android_halide/fusion/#what-fusion-means-in-halide"
+    ]
+  },
+  {
+    "id": "B233",
+    "topic": "mobile-graphics",
+    "intent": "optimization",
+    "question": "My render graph starts with a high-resolution pass whose result is later reduced to a smaller output; how should I reduce the wasted texture bandwidth?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/render-graph-optimization/textures-with-excessive-resolution/#solution"
+    ]
+  },
+  {
+    "id": "B234",
+    "topic": "mobile-graphics",
+    "intent": "comparison",
+    "question": "For a Halide pipeline deployed to an Android phone, what does ahead-of-time cross-compilation change compared with compiling the pipeline just in time on the device?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/android_halide/aot-and-cross-compilation/#learn-about-ahead-of-time-aot-and-cross-compilation"
+    ]
+  },
+  {
+    "id": "B235",
+    "topic": "mobile-graphics",
+    "intent": "reference",
+    "question": "Which adb logcat filter shows only the VulkanSamples messages from the Android AFRC example?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/mobile-graphics-and-gaming/afrc/p2-setup/#view-the-sample-logs"
+    ]
+  },
+  {
+    "id": "B236",
+    "topic": "simd-matrix-extensions",
+    "intent": "comparison",
+    "question": "When moving a Neon algorithm to SVE, do I have to choose a fixed wider vector size, or can one binary adapt to different SVE implementations?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sve/sve_basics/#arm-sve"
+    ]
+  },
+  {
+    "id": "B237",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "What role do SVE predicate registers play in loop and arithmetic control?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sve/sve_basics/#sve-registers"
+    ]
+  },
+  {
+    "id": "B238",
+    "topic": "simd-matrix-extensions",
+    "intent": "troubleshooting",
+    "question": "My SVE application sees a shorter vector length inside a virtual machine than I expected from the processor. What could limit the vector length visible to the program?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sve/sve_basics/#sve-vector-length"
+    ]
+  },
+  {
+    "id": "B239",
+    "topic": "simd-matrix-extensions",
+    "intent": "setup",
+    "question": "How do I enable SVE instructions when compiling a C program with GCC?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sve/sve_compile/#c"
+    ]
+  },
+  {
+    "id": "B240",
+    "topic": "simd-matrix-extensions",
+    "intent": "setup",
+    "question": "How can I run my SVE executable under QEMU with a 256-bit vector length on a machine without SVE hardware?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sve/sve_armie/#qemu"
+    ]
+  },
+  {
+    "id": "B241",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "Can an SME function have a different SVE vector length in streaming mode than the rest of my program?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/3-streaming-mode/#streaming-mode-behavior-and-compiler-handling"
+    ]
+  },
+  {
+    "id": "B242",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "When a C or C++ function needs its own SME ZA state, who is responsible for preserving the caller’s ZA contents?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/3-streaming-mode/#working-with-za-state"
+    ]
+  },
+  {
+    "id": "B243",
+    "topic": "simd-matrix-extensions",
+    "intent": "comparison",
+    "question": "What does SME2 add for processing multiple vectors that was not part of the original SME feature set?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/overview/#key-architectural-features-of-sme2"
+    ]
+  },
+  {
+    "id": "B244",
+    "topic": "simd-matrix-extensions",
+    "intent": "optimization",
+    "question": "How does expressing matrix multiplication as a sum of outer products improve the reuse of loaded data for an SME implementation?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/5-outer-product/#increase-mac-efficiency-using-outer-products"
+    ]
+  },
+  {
+    "id": "B245",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "In an SME matrix-multiplication kernel, does repacking the left matrix into column-major storage change the mathematical matrix being multiplied?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/5-outer-product/#optimize-memory-layout-with-transposition"
+    ]
+  },
+  {
+    "id": "B246",
+    "topic": "simd-matrix-extensions",
+    "intent": "setup",
+    "question": "How can I build only the Neon target in the SIMD Loops project and run its first loop for five iterations?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/simd-loops/2-using/#simd-loops-structure"
+    ]
+  },
+  {
+    "id": "B247",
+    "topic": "simd-matrix-extensions",
+    "intent": "setup",
+    "question": "I do not have SME2 hardware. What development environment does Arm provide for compiling and emulating the SME2 matrix-multiplication examples?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/1-get-started/#docker-sme2"
+    ]
+  },
+  {
+    "id": "B248",
+    "topic": "simd-matrix-extensions",
+    "intent": "troubleshooting",
+    "question": "My GCC build is not vectorizing a loop for SVE. How can I make the compiler report which loops it failed to vectorize?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sve/sve_compile/#compiler-insights"
+    ]
+  },
+  {
+    "id": "B249",
+    "topic": "simd-matrix-extensions",
+    "intent": "troubleshooting",
+    "question": "When I step through an SME function in a debugger, the processor’s streaming mode does not always match the source-level annotation. Does that necessarily mean the compiler is wrong?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/3-streaming-mode/#streaming-mode-behavior-and-compiler-handling"
+    ]
+  },
+  {
+    "id": "B250",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "Why does using C[i-1] to compute C[i] make straightforward SIMD vectorization of a loop difficult?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/loop-reflowing/autovectorization-limits/#no-data-inter-dependency-between-iterations"
+    ]
+  },
+  {
+    "id": "B251",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "In the SME2 matrix-multiplication implementation in SIMD Loops, where do partial results live while the kernel traverses the K dimension?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/simd-loops/3-example/#sme2-optimized-code"
+    ]
+  },
+  {
+    "id": "B252",
+    "topic": "simd-matrix-extensions",
+    "intent": "optimization",
+    "question": "My Neon particle simulation wastes a lane on padding in every x/y/z vector. How can I reorganize the particle data to use all four float lanes for useful work?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/vectorization-friendly-data-layout/a-more-complex-problem-revisited/#learning-path-title"
+    ]
+  },
+  {
+    "id": "B253",
+    "topic": "simd-matrix-extensions",
+    "intent": "optimization",
+    "question": "How can an SVE bitmap scanner avoid spending scalar work on every zero byte in a sparse bitmap?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/bitmap_scan_sve2/05-benchmarking-and-results/#key-optimizations-in-sve-implementation"
+    ]
+  },
+  {
+    "id": "B254",
+    "topic": "simd-matrix-extensions",
+    "intent": "comparison",
+    "question": "In Arm’s bitmap-scanning benchmark, is SVE always the better choice than Neon when the bitmaps are completely empty?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/bitmap_scan_sve2/05-benchmarking-and-results/#neon-vs-sve"
+    ]
+  },
+  {
+    "id": "B255",
+    "topic": "simd-matrix-extensions",
+    "intent": "optimization",
+    "question": "I use SVE2 MATCH to search long arrays. What loop-level changes should I try to improve throughput?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sve2-match/sve2-match-search/#3-optimized-sve2-match-implementation"
+    ]
+  },
+  {
+    "id": "B256",
+    "topic": "intrinsics",
+    "intent": "reference",
+    "question": "Which Neon intrinsic adds two uint8x16_t vectors with saturation so that overflowing byte sums clamp instead of wrapping?",
+    "expected_urls": [
+      "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=vqaddq_u8"
+    ]
+  },
+  {
+    "id": "B257",
+    "topic": "intrinsics",
+    "intent": "optimization",
+    "question": "I have packed float triples x0,y0,z0,x1,y1,z1 and want separate x, y and z Neon vectors. Which load intrinsic can deinterleave four triples without scalar shuffling?",
+    "expected_urls": [
+      "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=vld3q_f32"
+    ]
+  },
+  {
+    "id": "B258",
+    "topic": "intrinsics",
+    "intent": "conceptual",
+    "question": "Does vbslq_u32 select entire 32-bit lanes or individual bits when its mask contains a mixture of zero and one bits?",
+    "expected_urls": [
+      "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=vbslq_u32"
+    ]
+  },
+  {
+    "id": "B259",
+    "topic": "intrinsics",
+    "intent": "reference",
+    "question": "Which Neon intrinsic extracts lane 2 of an int32x4_t as a signed scalar int32_t?",
+    "expected_urls": [
+      "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=vgetq_lane_s32"
+    ]
+  },
+  {
+    "id": "B260",
+    "topic": "intrinsics",
+    "intent": "troubleshooting",
+    "question": "My AArch64 vqtbl1q_u8 lookup returns zero for an index of 16 rather than wrapping to the first byte. Is that the defined behavior?",
+    "expected_urls": [
+      "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=vqtbl1q_u8"
+    ]
+  },
+  {
+    "id": "B261",
+    "topic": "intrinsics",
+    "intent": "reference",
+    "question": "What SVE intrinsic should I use for the runtime loop increment when each iteration processes one vector of 32-bit elements?",
+    "expected_urls": [
+      "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=svcntw"
+    ]
+  },
+  {
+    "id": "B262",
+    "topic": "intrinsics",
+    "intent": "reference",
+    "question": "How do I create an SVE predicate for 32-bit lanes whose indexes are below an unsigned 64-bit loop bound?",
+    "expected_urls": [
+      "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=svwhilelt_b32[_u64]"
+    ]
+  },
+  {
+    "id": "B263",
+    "topic": "intrinsics",
+    "intent": "conceptual",
+    "question": "In svadd_f32_m(pg, a, b), where do the values of inactive result lanes come from?",
+    "expected_urls": [
+      "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=svadd[_f32]_m"
+    ]
+  },
+  {
+    "id": "B264",
+    "topic": "intrinsics",
+    "intent": "reference",
+    "question": "Which SVE load intrinsic reads uint8_t values and zero-extends them directly into uint32_t vector lanes under a predicate?",
+    "expected_urls": [
+      "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=svld1ub_u32"
+    ]
+  },
+  {
+    "id": "B265",
+    "topic": "intrinsics",
+    "intent": "conceptual",
+    "question": "What does svptest_any return when none of the lanes selected by its governing predicate are active?",
+    "expected_urls": [
+      "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=svptest_any"
+    ]
+  },
+  {
+    "id": "B266",
+    "topic": "intrinsics",
+    "intent": "reference",
+    "question": "Which SME intrinsic gives the number of 32-bit elements in a streaming vector for sizing an FP32 ZA tile?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/7-sme2-matmul-intr/#implementation"
+    ]
+  },
+  {
+    "id": "B267",
+    "topic": "intrinsics",
+    "intent": "reference",
+    "question": "How can I write an svint8_t vector into horizontal byte slice 0 of ZA using an SME intrinsic?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/Toolchains-and-model-support/Calling-conventions/Controlling-the-use-of-ZA-storage?lang=en"
+    ]
+  },
+  {
+    "id": "B268",
+    "topic": "intrinsics",
+    "intent": "reference",
+    "question": "Which SME intrinsic stores a horizontal 32-bit ZA tile slice directly to memory under a predicate?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/7-sme2-matmul-intr/#outer-product-multiplication"
+    ]
+  },
+  {
+    "id": "B269",
+    "topic": "intrinsics",
+    "intent": "conceptual",
+    "question": "Why does the FP32 svmopa_za32_m call take separate predicates for the two input vectors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/7-sme2-matmul-intr/#outer-product-multiplication"
+    ]
+  },
+  {
+    "id": "B270",
+    "topic": "intrinsics",
+    "intent": "troubleshooting",
+    "question": "After reusing a ZA tile, my svmopa_za32_m results include values from the previous multiplication. What initialization step should I check before starting a fresh accumulation?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/7-sme2-matmul-intr/#outer-product-multiplication"
+    ]
+  },
+  {
+    "id": "B271",
+    "topic": "performance",
+    "intent": "setup",
+    "question": "PAPI is already installed on my Arm Linux machine. What environment variables should I set before building and running a program that uses it?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arm_pmu/papi/#install-papi"
+    ]
+  },
+  {
+    "id": "B272",
+    "topic": "performance",
+    "intent": "setup",
+    "question": "How do I start a Streamline CLI capture of an application using the basic top-down metric group and save the result to a new capture directory?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/profiling-for-neoverse/streamline-cli/#procedure"
+    ]
+  },
+  {
+    "id": "B273",
+    "topic": "performance",
+    "intent": "troubleshooting",
+    "question": "Running sl-record slows my application on a high-core-count server. How can I leave room for the profiler to process its data?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/profiling-for-neoverse/troubleshooting/#capture-impacts-application-performance"
+    ]
+  },
+  {
+    "id": "B274",
+    "topic": "performance",
+    "intent": "troubleshooting",
+    "question": "Streamline shows “SPE Aux data missing” markers in my capture. What causes those gaps, and which capture settings can reduce them?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/profiling-for-neoverse/troubleshooting/#capture-reports-spe-aux-data-missing-in-streamline-gui"
+    ]
+  },
+  {
+    "id": "B275",
+    "topic": "performance",
+    "intent": "troubleshooting",
+    "question": "Why does sl-record with -I poll exhaust file descriptors when my application creates many threads on a many-core Arm server?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/profiling-for-neoverse/troubleshooting/#capture-reports-file-descriptor-exhaustion"
+    ]
+  },
+  {
+    "id": "B276",
+    "topic": "performance",
+    "intent": "troubleshooting",
+    "question": "My Arm machine supports SPE but profiling cannot use it. How can I check whether the Linux kernel includes the SPE driver or expects a loadable module?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/spe-on-performix/how-to-2/#check-kernel-spe"
+    ]
+  },
+  {
+    "id": "B277",
+    "topic": "performance",
+    "intent": "troubleshooting",
+    "question": "My perf profile of a Java service shows raw addresses instead of Java method names. What JVM profiling component is missing?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/java-perf-flamegraph/3_agent/#overview"
+    ]
+  },
+  {
+    "id": "B278",
+    "topic": "performance",
+    "intent": "conceptual",
+    "question": "What can PMU event counts reveal about an Arm workload that elapsed runtime alone does not tell me?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/profiling-for-neoverse/performance-analysis-concepts/#performance-counters"
+    ]
+  },
+  {
+    "id": "B279",
+    "topic": "performance",
+    "intent": "conceptual",
+    "question": "Why can one execution queue become a bottleneck even though an Arm core has several backend pipelines?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/profiling-for-neoverse/performance-analysis-concepts/#backend"
+    ]
+  },
+  {
+    "id": "B280",
+    "topic": "performance",
+    "intent": "conceptual",
+    "question": "Why does the number of issued operations differ from the number that retire when profiling speculative execution?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/profiling-for-neoverse/performance-analysis-concepts/#retire"
+    ]
+  },
+  {
+    "id": "B281",
+    "topic": "performance",
+    "intent": "conceptual",
+    "question": "Why is MPKI more useful than a raw cache-miss count when comparing two runs that execute different amounts of work?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/topdown-compare/1b-arm/#understanding-mpki-metrics"
+    ]
+  },
+  {
+    "id": "B282",
+    "topic": "performance",
+    "intent": "conceptual",
+    "question": "Does WindowsPerf consist only of the wperf command-line program, or is a kernel component part of its architecture?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/windowsperf/windowsperf/#windowsperf-architecture"
+    ]
+  },
+  {
+    "id": "B283",
+    "topic": "performance",
+    "intent": "comparison",
+    "question": "When profiling an Arm workload, what operation-specific information can SPE provide in addition to ordinary aggregate performance counters?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/profiling-for-neoverse/performance-analysis-concepts/#arm-statistical-profiling-extension"
+    ]
+  },
+  {
+    "id": "B284",
+    "topic": "performance",
+    "intent": "comparison",
+    "question": "In WindowsPerf, when should I choose counting versus sampling if I need to find which functions generate events?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/laptops-and-desktops/windowsperf/windowsperf/#overview"
+    ]
+  },
+  {
+    "id": "B285",
+    "topic": "performance",
+    "intent": "comparison",
+    "question": "When using Linux perf on Arm, how do software events such as context switches differ from hardware events such as CPU cycles?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arm_pmu/access_options/#hardware-and-software-events"
+    ]
+  },
+  {
+    "id": "B286",
+    "topic": "performance",
+    "intent": "optimization",
+    "question": "On a system with 64-byte cache lines, how can I lay out per-thread atomic counters to stop independent updates from sharing a cache line?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/false-sharing-arm-spe/how-to-1/#alignment-to-cache-lines"
+    ]
+  },
+  {
+    "id": "B287",
+    "topic": "performance",
+    "intent": "optimization",
+    "question": "How do I use a representative execution of my GCC C++ program to generate profile-guided optimizations in a rebuilt binary?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/cpp-profile-guided-optimisation/how-to-4/#build-with-pgo"
+    ]
+  },
+  {
+    "id": "B288",
+    "topic": "performance",
+    "intent": "optimization",
+    "question": "I collected separate BOLT .fdata profiles for read-heavy and write-heavy workloads. How can I combine them so optimization reflects both behaviors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/bolt-merge/how-to-3/#merge-the-feature-profiles"
+    ]
+  },
+  {
+    "id": "B289",
+    "topic": "performance",
+    "intent": "optimization",
+    "question": "My Go parser allocates a temporary slice for every key=value record when using strings.SplitN. How can I avoid that allocation?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/go-gc-default-settings/try_on_your_own/#replace-splitn-with-indexbyte"
+    ]
+  },
+  {
+    "id": "B290",
+    "topic": "performance",
+    "intent": "optimization",
+    "question": "A long-lived Go worker creates a new output slice on every operation. How can I reuse its capacity to reduce allocation and garbage-collection pressure?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/go-gc-default-settings/try_on_your_own/#reuse-the-output-slice"
+    ]
+  },
+  {
+    "id": "B291",
+    "topic": "performance",
+    "intent": "optimization",
+    "question": "How should I coordinate thread placement and memory allocation to reduce remote-memory access on an Arm NUMA server?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/pinning-threads/background_info/#improve-memory-locality-on-numa-systems"
+    ]
+  },
+  {
+    "id": "B292",
+    "topic": "performance",
+    "intent": "optimization",
+    "question": "How can I keep non-network interrupt handling off the cores reserved for a latency-sensitive workload?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/irq-tuning-guide/patterns/#housekeeping-pattern"
+    ]
+  },
+  {
+    "id": "B293",
+    "topic": "performance",
+    "intent": "optimization",
+    "question": "My loop’s valid element count is guaranteed to be a multiple of four. How can I express that guarantee so the compiler can exploit it?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/cpp-loop-size-context/loop-boundary-optimization/#how-can-i-add-developer-knowledge-to-optimize-performance"
+    ]
+  },
+  {
+    "id": "B294",
+    "topic": "performance",
+    "intent": "optimization",
+    "question": "In a sequential bump allocator, how can I bring upcoming allocation data into cache before the next allocations need it?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/memory-latency/latency-and-cache-prefetching/#learning-path-title"
+    ]
+  },
+  {
+    "id": "B295",
+    "topic": "performance",
+    "intent": "optimization",
+    "question": "My application knows the maximum number and size of its short-lived objects. How can I make allocation latency more predictable than walking a general-purpose heap?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/dynamic-memory-allocator/4_conclusions_further_work/#special-case-allocators"
+    ]
+  },
+  {
+    "id": "B296",
+    "topic": "performance",
+    "intent": "optimization",
+    "question": "How can a custom allocator make better use of adjacent freed blocks when a later request needs more space than either block alone?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/dynamic-memory-allocator/4_conclusions_further_work/#merging-free-ranges"
+    ]
+  },
+  {
+    "id": "B297",
+    "topic": "performance",
+    "intent": "optimization",
+    "question": "My C function repeatedly scales two arrays that are guaranteed not to overlap each other or the scale value. How can I tell the compiler it can reuse the scale load and group memory operations?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/restrict-keyword-c99/what-is-restrict/#the-solution-restrict"
+    ]
+  },
+  {
+    "id": "B298",
+    "topic": "performance",
+    "intent": "optimization",
+    "question": "I want to try Arm’s optimized libamath for scalar math in a C++ program. What source and link changes let me benchmark that replacement?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/using-and-porting-performance-libs/3/#update-to-use-libamath"
+    ]
+  },
+  {
+    "id": "B299",
+    "topic": "performance",
+    "intent": "optimization",
+    "question": "What layout change should I benchmark to reduce unaligned-access costs in packed linked-list nodes whose pointer follows a one-byte field?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/memory-latency/latency-and-cache-alignment/#when-is-memory-alignment-important"
+    ]
+  },
+  {
+    "id": "B300",
+    "topic": "performance",
+    "intent": "comparison",
+    "question": "For a latency-sensitive process, what trade-off does exclusive CPU pinning make compared with shared pinning or letting the scheduler choose freely?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/pinning-threads/using_taskset/#understanding-the-trade-offs"
+    ]
+  },
+  {
+    "id": "B301",
+    "topic": "ai-ml",
+    "intent": "conceptual",
+    "question": "How do large language models generate responses efficiently during inference, and what role does KV caching play in reducing latency for long prompts?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@aceb4905f1a048409ca84bb8589b24b1"
+    ]
+  },
+  {
+    "id": "B302",
+    "topic": "ai-ml",
+    "intent": "comparison",
+    "question": "When should I use graph mode instead of eager execution for AI inference, and how do approaches like static compilation, JIT compilation, and frameworks such as PyTorch and llama.cpp affect CPU performance?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@2b7f5c42e9ae46edb3aa050437b504fa"
+    ]
+  },
+  {
+    "id": "B303",
+    "topic": "ai-ml",
+    "intent": "comparison",
+    "question": "What are the advantages and challenges of running machine learning inference directly on Arm Cortex-M microcontrollers instead of sending data to the cloud?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@b3970ac680ee4f7b9c838034fd16c5c6"
+    ]
+  },
+  {
+    "id": "B304",
+    "topic": "ai-ml",
+    "intent": "setup",
+    "question": "For keyword spotting with a CNN, how should I turn microphone audio into input features?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@ec75d375250c40d4b806c2ad03f6fdff"
+    ]
+  },
+  {
+    "id": "B305",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "How can I train a Mixture of Experts model to balance prediction accuracy with more even use of its experts?",
+    "expected_urls": [
+      "https://github.com/arm-education/Advanced-AI-Mixture-of-Experts/blob/main/Part-5-Routing-and-Load-Balancing-Improved/Part-5-Routing-and-Load-Balancing-Improved_AC_Ed.ipynb"
+    ]
+  },
+  {
+    "id": "B306",
+    "topic": "ai-ml",
+    "intent": "conceptual",
+    "question": "How can I optimize generative AI inference across cloud and edge CPUs by understanding CPU versus GPU architecture differences, memory and compute bottlenecks, and techniques such as quantization, distillation, and pruning?",
+    "expected_urls": [
+      "https://github.com/arm-education/AI-on-Arm/blob/main/slides/chapter1.pptx"
+    ]
+  },
+  {
+    "id": "B307",
+    "topic": "ai-ml",
+    "intent": "troubleshooting",
+    "question": "My quantized LLM runs slowly in llama.cpp on an Arm CPU. How can I check whether it is using optimized Arm kernels?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/llama_cpp_streamline/4_analyze_token_prefill_decode/#analyze-the-data-with-streamline"
+    ]
+  },
+  {
+    "id": "B308",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "How can I search for per-layer quantization bit widths that trade off model loss against estimated model size?",
+    "expected_urls": [
+      "https://github.com/arm-education/Advanced-AI-Hardware-Software-Co-Design/blob/main/lab2.ipynb"
+    ]
+  },
+  {
+    "id": "B309",
+    "topic": "ai-ml",
+    "intent": "setup",
+    "question": "How can I deploy a quantized Llama model that runs entirely on an Android device using llama.cpp while comparing the performance and memory trade-offs of different quantization formats?",
+    "expected_urls": [
+      "https://github.com/arm-education/Advanced-AI-Hardware-Software-Co-Design/blob/main/lab3.md"
+    ]
+  },
+  {
+    "id": "B310",
+    "topic": "ai-ml",
+    "intent": "setup",
+    "question": "How can I deploy a quantized PyTorch model to an Arm Ethos-U NPU with ExecuTorch, use TOSA and the Vela compiler during lowering, and determine which operations run on the NPU versus the CPU?",
+    "expected_urls": [
+      "https://github.com/arm-education/executorch_on_arm_labs/blob/main/Lab_3_Accelerating_ExecuTorch_Ethos_NPU.ipynb"
+    ]
+  },
+  {
+    "id": "B311",
+    "topic": "cloud-server",
+    "intent": "comparison",
+    "question": "How do I choose the right Arm Neoverse core or cloud instance for a server workload based on performance, power efficiency, scalability, security features, and deployment target?",
+    "expected_urls": [
+      "https://github.com/arm-education/Introduction-to-Cloud-Compute-on-Arm/blob/main/Part%201%20-%20Introduction%20to%20Neoverse%20Cores.md"
+    ]
+  },
+  {
+    "id": "B312",
+    "topic": "cloud-server",
+    "intent": "conceptual",
+    "question": "How does Google Cloud's next-generation dynamic resource management improve N4A VM placement and live migration for Axion workloads?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/compute/docs/dynamic-resource-management"
+    ]
+  },
+  {
+    "id": "B313",
+    "topic": "cloud-server",
+    "intent": "troubleshooting",
+    "question": "In Google Cloud Troubleshooting Arm VMs, what happens if you create an Arm VM from a boot disk with x86 architecture, and how do serial console logs help identify it?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/compute/docs/troubleshooting/troubleshooting-arm-vms"
+    ]
+  },
+  {
+    "id": "B314",
+    "topic": "containers-kubernetes-ci",
+    "intent": "setup",
+    "question": "How do you request Arm nodes in GKE Autopilot, and what does kubernetes.io/arch=arm64 select on newer versus older cluster versions?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/kubernetes-engine/docs/how-to/autopilot-arm-workloads"
+    ]
+  },
+  {
+    "id": "B315",
+    "topic": "performance",
+    "intent": "optimization",
+    "question": "What huge page, NIC, and core-affinity setup is recommended in the DPDK setup and tuning guide for Ampere?",
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/DPDK-setup-and-tuning-guide"
+    ]
+  },
+  {
+    "id": "B316",
+    "topic": "performance",
+    "intent": "comparison",
+    "question": "How does Arm Performix Instruction Mix compare static analysis and dynamic analysis, and when would each approach miss or reveal instruction behavior?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110163/latest/About-Arm-Performix/Basic-concepts/Instruction-Mix-recipe/Dynamic-analysis?lang=en"
+    ]
+  },
+  {
+    "id": "B317",
+    "topic": "performance",
+    "intent": "conceptual",
+    "question": "How does the Arm Performix CPU Microarchitecture recipe organize frontend-bound, backend-bound, bad speculation, and retire metrics for top-down analysis?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110163/latest/About-Arm-Performix/Basic-concepts/CPU-Microarchitecture-recipe?lang=en"
+    ]
+  },
+  {
+    "id": "B318",
+    "topic": "performance",
+    "intent": "setup",
+    "question": "How can I collect a quick report of my Arm Linux system configuration for performance analysis?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sysreport/"
+    ]
+  },
+  {
+    "id": "B319",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "Why do predicate or flag updates make a CME loop inefficient?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/CME-instruction-execution/Example-2--inefficient-loop?lang=en"
+    ]
+  },
+  {
+    "id": "B320",
+    "topic": "simd-matrix-extensions",
+    "intent": "optimization",
+    "question": "How do I avoid Matrix Multiply Unit stalls from reusing the same ZA tile?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/Matrix-Multiply-Unit/Implications-for-programmers?lang=en"
+    ]
+  },
+  {
+    "id": "B321",
+    "topic": "ai-ml",
+    "intent": "conceptual",
+    "question": "How are decoder-only transformer models trained and optimized to become large language models, from tokenization and pre-training through fine-tuning and reinforcement learning from human feedback?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@dfb048b7b0404c268184f5c12797738f"
+    ]
+  },
+  {
+    "id": "B322",
+    "topic": "ai-ml",
+    "intent": "conceptual",
+    "question": "How do computation graphs enable AI inference optimizations such as operator fusion, parallel execution, and graph compilation on CPUs?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@4f1ac49c77af4817a05c5114da3eb90e"
+    ]
+  },
+  {
+    "id": "B323",
+    "topic": "ai-ml",
+    "intent": "comparison",
+    "question": "What software stack and libraries should I use to get the best CPU inference performance for generative AI on Arm, and how do PyTorch, KleidiAI, and llama.cpp work together?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@62073294cb824dffa8517c97b62890ab"
+    ]
+  },
+  {
+    "id": "B324",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "How can I use Arm KleidiAI to accelerate large language model inference on Arm Neoverse processors by combining optimized microkernels with low-bit group-wise quantization to reduce latency and memory usage?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@3de39ce1f349446597f3bb22d4067dc3"
+    ]
+  },
+  {
+    "id": "B325",
+    "topic": "ai-ml",
+    "intent": "conceptual",
+    "question": "What's the difference between AI, machine learning, training, and inference, and why is only the inference stage typically deployed on resource-constrained edge devices such as Arm Cortex-M processors?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@d91725e4d39340be9695fa276d42ae04"
+    ]
+  },
+  {
+    "id": "B326",
+    "topic": "ai-ml",
+    "intent": "conceptual",
+    "question": "How do I prepare, split, and use labeled datasets to train and evaluate a supervised machine learning model for classification or regression before deploying it for inference?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@33ce57dcbaac49f49686c76702faeabd"
+    ]
+  },
+  {
+    "id": "B327",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "How do I extract and select meaningful features from sensor or audio data so a machine learning model can accurately classify activities or recognize speech on an edge device?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@aa17e1fdfff7495e8f711111217f76fd"
+    ]
+  },
+  {
+    "id": "B328",
+    "topic": "ai-ml",
+    "intent": "conceptual",
+    "question": "How do artificial neurons and activation functions work together in a neural network to learn complex patterns from data during machine learning?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@4440762f76114af9bd920d3702bfae41"
+    ]
+  },
+  {
+    "id": "B329",
+    "topic": "ai-ml",
+    "intent": "conceptual",
+    "question": "How are multi-layer neural networks trained using forward propagation, backpropagation, and gradient descent to optimize weights and improve prediction accuracy?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@dc338f5160934b888cbfb8be2446e2d4"
+    ]
+  },
+  {
+    "id": "B330",
+    "topic": "ai-ml",
+    "intent": "conceptual",
+    "question": "How do convolutional neural networks use convolution, pooling, stride, and padding to efficiently process image, audio, or sensor data for edge AI applications?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@042770f70c8e45c6a59b592e31461c96"
+    ]
+  },
+  {
+    "id": "B331",
+    "topic": "ai-ml",
+    "intent": "comparison",
+    "question": "How can I choose a neural network architecture for real-time audio inference on an Arm Cortex-M microcontroller while balancing accuracy against memory usage and computational cost?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@871f883268e24c848e8e014f29500a3c"
+    ]
+  },
+  {
+    "id": "B332",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "How can I optimize a neural network for deployment on an Arm Cortex-M microcontroller using CMSIS-DSP and CMSIS-NN to improve inference speed, energy efficiency, and memory usage?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@4df67a3f08be42338e3c9ed0812d194e"
+    ]
+  },
+  {
+    "id": "B333",
+    "topic": "ai-ml",
+    "intent": "conceptual",
+    "question": "In a CNN image classifier, how do convolution and pooling settings determine the sizes of the intermediate feature maps?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@5e3ac498a032482a9ddc5f1f4d3ddec3"
+    ]
+  },
+  {
+    "id": "B334",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "How can I optimize a machine learning application for an Arm Cortex-M microcontroller to minimize inference latency and energy consumption while staying within strict memory and compute constraints?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@a1297eceb2c341e0b6b449ee625843d4"
+    ]
+  },
+  {
+    "id": "B335",
+    "topic": "ai-ml",
+    "intent": "comparison",
+    "question": "I’m learning TinyML. How should I compare candidate models when RAM usage and inference latency matter as much as accuracy?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/edge/software-edge-impulse/#review-model-performance"
+    ]
+  },
+  {
+    "id": "B336",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "How can I compare and tune different machine learning algorithms using cross-validation, feature selection, and hyperparameter optimization to find the best model for activity recognition?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@f1488dc7a38a467b9010c9363e180692"
+    ]
+  },
+  {
+    "id": "B337",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "I'm quantizing a TensorFlow model for an STM32 microcontroller. How can I use TensorFlow Lite and STM32Cube.AI to compare memory use and inference time before and after quantization?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXML.6x+2T2022+type@video+block@22b73d7ee4e94d738ae8dcf58697c7c6"
+    ]
+  },
+  {
+    "id": "B338",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "When running a quantized language model with llama.cpp on an Arm CPU, how can I compare its inference speed and output with the full-precision model?",
+    "expected_urls": [
+      "https://courses.edx.org/videos/block-v1:ArmEducationX+EDARMXAIOA.4x+2T2025+type@video+block@64c996e199754717816958a107c5b4a6"
+    ]
+  },
+  {
+    "id": "B339",
+    "topic": "ai-ml",
+    "intent": "comparison",
+    "question": "How do I benchmark and compare large language model inference on Arm edge and server processors to understand throughput bottlenecks, memory limitations, and the trade-offs between Raspberry Pi and Graviton deployments?",
+    "expected_urls": [
+      "https://github.com/arm-education/AI-on-Arm/blob/main/lab3.ipynb"
+    ]
+  },
+  {
+    "id": "B340",
+    "topic": "ai-ml",
+    "intent": "comparison",
+    "question": "How can I benchmark Mixture of Experts and dense Transformer models to compare inference speed, scalability, and accuracy under different batch sizes and real-world workloads?",
+    "expected_urls": [
+      "https://github.com/arm-education/Advanced-AI-Mixture-of-Experts/blob/main/Part-3-Sentiment-Detection/Part-3-Sentiment-Detection_AC_Ed.ipynb"
+    ]
+  },
+  {
+    "id": "B341",
+    "topic": "ai-ml",
+    "intent": "setup",
+    "question": "How can I deploy a PyTorch model on an Arm-based edge device with ExecuTorch to reduce memory usage, improve inference latency, and take advantage of XNNPACK and KleidiAI optimizations?",
+    "expected_urls": [
+      "https://github.com/arm-education/executorch_on_arm_labs/blob/main/Lab_1_Transformer_Inference_ExecuTorch.ipynb"
+    ]
+  },
+  {
+    "id": "B342",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "How can I deploy a quantized image classification model with ExecuTorch on a Raspberry Pi to reduce memory usage and improve inference performance while using the XNNPACK backend?",
+    "expected_urls": [
+      "https://github.com/arm-education/executorch_on_arm_labs/blob/main/Lab_2_Efficient_Image_Classification_ExecuTorch.ipynb"
+    ]
+  },
+  {
+    "id": "B343",
+    "topic": "cloud-server",
+    "intent": "conceptual",
+    "question": "What should I check when choosing a Linux distribution for an application on an Arm Neoverse platform?",
+    "expected_urls": [
+      "https://github.com/arm-education/Introduction-to-Cloud-Compute-on-Arm/blob/main/Part%202%20-%20The%20Software%20Stack.md"
+    ]
+  },
+  {
+    "id": "B344",
+    "topic": "cloud-server",
+    "intent": "optimization",
+    "question": "I’m moving a containerized web service from x86 to Graviton. What should I check before deployment, and how should I compare performance?",
+    "expected_urls": [
+      "https://github.com/arm-education/Introduction-to-Cloud-Compute-on-Arm/blob/main/Part%203%20-%20Arm%20Neoverse%20Software%20and%20System%20Design.md"
+    ]
+  },
+  {
+    "id": "B345",
+    "topic": "cloud-server",
+    "intent": "optimization",
+    "question": "Which MySQL configuration and benchmarking steps are recommended to improve OLTP performance on Ampere systems?",
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/mysql-tuning-guide"
+    ]
+  },
+  {
+    "id": "B346",
+    "topic": "cloud-server",
+    "intent": "optimization",
+    "question": "What Redis server settings and benchmark client parameters does the Ampere tuning guide focus on?",
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/Redis-setup-and-tuning-guide"
+    ]
+  },
+  {
+    "id": "B347",
+    "topic": "porting-languages-compilers",
+    "intent": "optimization",
+    "question": "Which GCC compiler options and tuning recommendations are called out in the 2025 Ampere GCC guide?",
+    "expected_urls": [
+      "https://amperecomputing.com/tutorials/gcc-guide-ampere-processors"
+    ]
+  },
+  {
+    "id": "B348",
+    "topic": "cloud-server",
+    "intent": "optimization",
+    "question": "What thread-count, connection, and benchmarking guidance does the Memcached tuning guide give for Ampere?",
+    "expected_urls": [
+      "https://amperecomputing.com/tuning-guides/memcached-tuning-guide"
+    ]
+  },
+  {
+    "id": "B349",
+    "topic": "cloud-server",
+    "intent": "reference",
+    "question": "Which storage layout and deployment pattern is described in the MinIO single-node workload brief on Ampere?",
+    "expected_urls": [
+      "https://www.amperecomputing.com/briefs/minio-on-single-node-brief"
+    ]
+  },
+  {
+    "id": "B350",
+    "topic": "cloud-server",
+    "intent": "comparison",
+    "question": "What Google Axion-backed Compute Engine machine series are available for Arm VMs, and how do C4A and N4A differ?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/compute/docs/instances/arm-on-compute"
+    ]
+  },
+  {
+    "id": "B351",
+    "topic": "cloud-server",
+    "intent": "comparison",
+    "question": "What storage, networking, and workload positioning does Google Cloud call out for the C4A and N4A general-purpose machine families?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/compute/docs/general-purpose-machines"
+    ]
+  },
+  {
+    "id": "B352",
+    "topic": "cloud-server",
+    "intent": "reference",
+    "question": "What C4A bare metal instance options does Compute Engine provide, including the machine type, vCPU count, memory, and network bandwidth?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/compute/docs/instances/bare-metal-instances"
+    ]
+  },
+  {
+    "id": "B353",
+    "topic": "containers-kubernetes-ci",
+    "intent": "reference",
+    "question": "Which GKE cluster modes and machine families support Arm workloads, and what are the major limitations for Arm nodes on GKE?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/kubernetes-engine/docs/concepts/arm-on-gke"
+    ]
+  },
+  {
+    "id": "B354",
+    "topic": "containers-kubernetes-ci",
+    "intent": "setup",
+    "question": "How do you build and verify a multi-architecture container image so the same image can run on both x86 and Arm nodes in GKE?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/kubernetes-engine/docs/how-to/build-multi-arch-for-arm"
+    ]
+  },
+  {
+    "id": "B355",
+    "topic": "performance",
+    "intent": "conceptual",
+    "question": "When should I use Arm Performix, and what kinds of CPU activity, stalls, memory latency, and hardware efficiency problems does it help investigate?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110163/latest/Get-started-with-performance-analysis-using-Arm-Performix/What-Arm-Performix-does-well?lang=en"
+    ]
+  },
+  {
+    "id": "B356",
+    "topic": "performance",
+    "intent": "setup",
+    "question": "Before starting with Arm Performix, what must be installed and what target, SSH, elevated privilege, and workload requirements should I confirm?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110163/latest/Get-started-with-performance-analysis-using-Arm-Performix/Before-you-start?lang=en"
+    ]
+  },
+  {
+    "id": "B357",
+    "topic": "performance",
+    "intent": "conceptual",
+    "question": "What does the Arm Performix Code Hotspots recipe show, and how should I interpret the top hotspots, flame graphs, function tables, CPU usage, and source line attribution?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110163/latest/About-Arm-Performix/Basic-concepts/Code-Hotspots-recipe/Interpreting-and-using-the-results?lang=en"
+    ]
+  },
+  {
+    "id": "B358",
+    "topic": "performance",
+    "intent": "conceptual",
+    "question": "What does the Arm Performix Memory Access recipe reveal about L1D, L2, LLC, DRAM, local and remote memory, and TLB walk latency by function?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110163/latest/About-Arm-Performix/Basic-concepts/Memory-Access-recipe/Interpreting-and-using-the-results?lang=en"
+    ]
+  },
+  {
+    "id": "B359",
+    "topic": "performance",
+    "intent": "conceptual",
+    "question": "What does the Arm Performix System Characterization recipe measure for memory latency, memory bandwidth, NUMA effects, and system configuration?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110163/latest/About-Arm-Performix/Basic-concepts/System-Characterization-recipe?lang=en"
+    ]
+  },
+  {
+    "id": "B360",
+    "topic": "simd-matrix-extensions",
+    "intent": "reference",
+    "question": "devices that support SME and SME2",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/1-get-started/#devices"
+    ]
+  },
+  {
+    "id": "B361",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "How does SME context save and restore preserve Streaming SVE mode and ZA storage state?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/SME-context-save-restore?lang=en"
+    ]
+  },
+  {
+    "id": "B362",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "What is Streaming SVE mode and when would I use it?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/Streaming-SVE-mode?lang=en"
+    ]
+  },
+  {
+    "id": "B363",
+    "topic": "simd-matrix-extensions",
+    "intent": "reference",
+    "question": "Which compiler options, feature identifiers, or ACLE pragmas do I need for SME code?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/Toolchains-and-model-support/Compiler-support/Compiler-options-and-pragmas?lang=en"
+    ]
+  },
+  {
+    "id": "B364",
+    "topic": "simd-matrix-extensions",
+    "intent": "reference",
+    "question": "Which Arm Compiler and Clang versions support SME and SME2 applications?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/Toolchains-and-model-support/Compiler-support?lang=en"
+    ]
+  },
+  {
+    "id": "B365",
+    "topic": "simd-matrix-extensions",
+    "intent": "reference",
+    "question": "How do I control Streaming SVE mode with SMSTART and SMSTOP in SME code?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/Streaming-SVE-mode?lang=en",
+      "https://developer.arm.com/documentation/109246/0101/Toolchains-and-model-support/Calling-conventions/Controlling-the-use-of-streaming-mode?lang=en"
+    ]
+  },
+  {
+    "id": "B366",
+    "topic": "simd-matrix-extensions",
+    "intent": "optimization",
+    "question": "What are the programming implications of different CME system configurations?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/CME-system-configurations/Implications-for-programmers?lang=en"
+    ]
+  },
+  {
+    "id": "B367",
+    "topic": "simd-matrix-extensions",
+    "intent": "optimization",
+    "question": "How can I avoid memory access conflicts between CPU instructions and SME instructions on the CME?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/Memory-access/Avoid-access-conflicts-in-1KB-regions?lang=en"
+    ]
+  },
+  {
+    "id": "B368",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "Why does an operating system use Fast Context Switching Instructions with CME?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/CME-system-configurations/Fast-Context-Switching-Instructions?lang=en"
+    ]
+  },
+  {
+    "id": "B369",
+    "topic": "simd-matrix-extensions",
+    "intent": "optimization",
+    "question": "Can you show me a CME loop that avoids synchronization back to the CPU?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/CME-instruction-execution/Example-1--efficient-loop?lang=en"
+    ]
+  },
+  {
+    "id": "B370",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "Which instructions run on the CPU versus the CME, and when is synchronization required?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110636/0100/CME-instruction-execution?lang=en"
+    ]
+  },
+  {
+    "id": "B371",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Can I run Visual Studio on my Windows on Arm laptop?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/windows?package=visual-studio"
+    ]
+  },
+  {
+    "id": "B372",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Is there a Windows Arm64 build of CMake I can download?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/windows?package=cmake"
+    ]
+  },
+  {
+    "id": "B373",
+    "topic": "compatibility",
+    "intent": "setup",
+    "question": "Where can I download Ninja for a Windows on Arm build machine?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/windows?package=ninja"
+    ]
+  },
+  {
+    "id": "B374",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Can I run Python 3.11 on a Windows on Arm laptop?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/windows?package=python"
+    ]
+  },
+  {
+    "id": "B375",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Can I install a prebuilt PyTorch package on Windows Arm64?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/windows?package=pytorch"
+    ]
+  },
+  {
+    "id": "B376",
+    "topic": "compatibility",
+    "intent": "setup",
+    "question": "Can I use IntelliJ IDEA for Java development on Windows on Arm?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/windows?package=intellij-idea"
+    ]
+  },
+  {
+    "id": "B377",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Is there a Go toolchain that runs on Windows Arm64?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/windows?package=golang"
+    ]
+  },
+  {
+    "id": "B378",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "I'm setting up LLVM on Windows on Arm. Which version does Arm recommend?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/windows?package=llvm-toolchain"
+    ]
+  },
+  {
+    "id": "B379",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Can I use Electron to build desktop apps for Windows on Arm?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/windows?package=electron"
+    ]
+  },
+  {
+    "id": "B380",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Can I use WinDbg to debug apps on a Windows on Arm machine?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/windows?package=windbg"
+    ]
+  },
+  {
+    "id": "B381",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Can I use vcpkg for C++ dependency management on Windows on Arm?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/windows?package=vcpkg"
+    ]
+  },
+  {
+    "id": "B382",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Will Qt 6.8 work for a desktop app targeting Windows on Arm?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/windows?package=qt"
+    ]
+  },
+  {
+    "id": "B383",
+    "topic": "compatibility",
+    "intent": "setup",
+    "question": "Where should I download Git for my Windows on Arm laptop?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/windows?package=git"
+    ]
+  },
+  {
+    "id": "B384",
+    "topic": "compatibility",
+    "intent": "setup",
+    "question": "Where can I get PowerShell for a Windows on Arm machine?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/windows?package=powershell"
+    ]
+  },
+  {
+    "id": "B385",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "I'm moving a .NET app to Windows on Arm. Which .NET version does Arm recommend for performance?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/windows?package=.net"
+    ]
+  },
+  {
+    "id": "B386",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Can I use CMake to build and run a project on an Arm Linux machine?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=cmake"
+    ]
+  },
+  {
+    "id": "B387",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Can I set up local Git repositories on an Arm Linux machine?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=git"
+    ]
+  },
+  {
+    "id": "B388",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Is zlib available for C development on Arm Linux?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=zlib"
+    ]
+  },
+  {
+    "id": "B389",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Can I run Python 3.11 on Ubuntu Arm64?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=python"
+    ]
+  },
+  {
+    "id": "B390",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Can I use NumPy for array calculations on an Arm Linux machine?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=numpy"
+    ]
+  },
+  {
+    "id": "B391",
+    "topic": "compatibility",
+    "intent": "conceptual",
+    "question": "I'm evaluating SciPy for an Arm Linux deployment. What compatibility testing has been done?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=scipy"
+    ]
+  },
+  {
+    "id": "B392",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Can I use OpenSSL to generate certificates on Arm Linux?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=openssl"
+    ]
+  },
+  {
+    "id": "B393",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Can I generate a test video with FFmpeg and inspect it with ffprobe on Arm Linux?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=ffmpeg"
+    ]
+  },
+  {
+    "id": "B394",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Where can I check whether Redis has been tested on Arm Linux?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=redis"
+    ]
+  },
+  {
+    "id": "B395",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Can I create a SQLite database on Arm Linux?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=sqlite"
+    ]
+  },
+  {
+    "id": "B396",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Does Memcached work on Arm Linux for basic cache reads and writes?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=memcached"
+    ]
+  },
+  {
+    "id": "B397",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Has NGINX been tested on Ubuntu Arm64?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=nginx"
+    ]
+  },
+  {
+    "id": "B398",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "Can I validate a HAProxy configuration on Arm Linux before starting the service?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=haproxy"
+    ]
+  },
+  {
+    "id": "B399",
+    "topic": "compatibility",
+    "intent": "setup",
+    "question": "Where can I get curl for an Arm Linux machine?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=curl"
+    ]
+  },
+  {
+    "id": "B400",
+    "topic": "compatibility",
+    "intent": "reference",
+    "question": "I'm considering Prometheus on Arm Linux. Are there compatibility test results I can check?",
+    "expected_urls": [
+      "https://developer.arm.com/ecosystem-dashboard/linux?package=prometheus"
+    ]
+  },
+  {
+    "id": "B401",
+    "topic": "simd-matrix-extensions",
+    "intent": "reference",
+    "question": "How do I check if SME or SME2 is supported?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/SME-and-SME2/If-SME-and-SME2-are-supported?lang=en"
+    ]
+  },
+  {
+    "id": "B402",
+    "topic": "performance",
+    "intent": "troubleshooting",
+    "question": "If Arm Performix reports insufficient PMU counters, why does that matter for recipe metrics and what should I do about profiling tools, virtual machines, or bare metal runs?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/110163/latest/Known-issues-and-limitations/Resolve-insufficient-PMU-counters-error/What-you-can-do?lang=en"
+    ]
+  },
+  {
+    "id": "B403",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "Can you give me a quick explanation of SME and SME2?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109974/0100/What-is-SME-SME2-?lang=en"
+    ]
+  },
+  {
+    "id": "B404",
+    "topic": "simd-matrix-extensions",
+    "intent": "reference",
+    "question": "Can you show me a minimal SME assembly example?",
+    "expected_urls": [
+      "https://developer.arm.com/documentation/109974/0100/Basic-SME-example/Assembly-code?lang=en"
+    ]
+  },
+  {
+    "id": "B405",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "Can you give me a beginner-friendly introduction to Arm SME?",
+    "expected_urls": [
+      "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/arm-scalable-matrix-extension-introduction#blog-title"
+    ]
+  },
+  {
+    "id": "B406",
+    "topic": "simd-matrix-extensions",
+    "intent": "reference",
+    "question": "Which SME ZA tile instructions should I learn?",
+    "expected_urls": [
+      "https://community.arm.com/arm-community-blogs/b/architectures-and-processors-blog/posts/arm-scalable-matrix-extension-introduction-p2#blog-title"
+    ]
+  },
+  {
+    "id": "B408",
+    "topic": "cloud-server",
+    "intent": "setup",
+    "question": "What are the main deployment steps in the reference architecture for running an ELK stack on Google Tau T2A?",
+    "expected_urls": [
+      "https://amperecomputing.com/reference-architecture/deploying-an-elk-stack-on-google-tau-t2a"
+    ]
+  },
+  {
+    "id": "B409",
+    "topic": "cloud-server",
+    "intent": "reference",
+    "question": "What does the Azure Dpsv5 workload brief say about running AI inference workloads on Ampere-based virtual machines?",
+    "expected_urls": [
+      "https://amperecomputing.com/briefs/ai-inference-on-azure-brief"
+    ]
+  }
+]

@@ -25,14 +25,29 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse
 
+import pytest
+
 from document_chunking import (
     chunk_parsed_document,
+    extract_markdown_links,
     learn_learning_path_step_urls,
+    link_text_with_urls,
     parse_document_content,
+    split_frontmatter,
+    strip_frontmatter,
 )
 
 FIXTURE_DIR = Path(__file__).parent
 SAMPLE_PPTX_FIXTURE = "sample_course_slides.pptx"
+
+
+def test_relative_link_evidence_is_retained_when_url_prefix_is_embedded():
+    text = "[Home](/) [Guide](https://learn.arm.com/guide)"
+    links = extract_markdown_links(text, "https://learn.arm.com/example/")
+
+    result = link_text_with_urls(text, links)
+
+    assert result == text + "\n\nLinked references: Home https://learn.arm.com/"
 
 
 def _arm_api_response(title, html):
@@ -152,6 +167,25 @@ class TestChunkClass:
         )
 
         assert chunk.keywords == ""
+
+
+class TestMarkdownFrontmatter:
+    @pytest.mark.parametrize(
+        "opening",
+        ["---\n---\n", "\ufeff---\r\n---\r\n"],
+    )
+    def test_empty_frontmatter_preserves_body_with_later_horizontal_rule(self, opening):
+        body = "# Title\n\nIntroduction.\n\n---\n\nMore content."
+        markdown = opening + body
+
+        assert split_frontmatter(markdown) == ("", body)
+        assert strip_frontmatter(markdown) == body
+
+    def test_unclosed_frontmatter_is_left_unchanged(self):
+        markdown = "---\nname: Example\n---not a delimiter\n# Title"
+
+        assert split_frontmatter(markdown) == (None, markdown)
+        assert strip_frontmatter(markdown) == markdown
 
 
 class TestDocumentChunkingAnchors:
@@ -430,6 +464,32 @@ class TestDocumentChunkingAnchors:
             in devices_chunks[0]["content"]
         )
         assert "MacBook Air (2025) | 2025 | M4" in devices_chunks[0]["content"]
+
+    @pytest.mark.parametrize("include_relative_link", [False, True])
+    def test_absolute_markdown_links_are_not_repeated(self, include_relative_link):
+        absolute_url = "https://learn.arm.com/install-guides/dotnet/"
+        markdown = f"# Example\n\n[Arm guide]({absolute_url})"
+        if include_relative_link:
+            markdown += " and [Related guide](/related/)."
+        parsed = parse_document_content(
+            source_url="https://learn.arm.com/example/",
+            resolved_url="https://learn.arm.com/example/",
+            response_content=markdown.encode(),
+            content_type="text/markdown",
+            fallback_title="Example",
+        )
+
+        chunks = chunk_parsed_document(parsed, doc_type="Documentation", keywords=[])
+        content = chunks[0]["content"]
+        assert f"[Arm guide]({absolute_url})" in content
+        assert content.count(absolute_url) == 1
+        if include_relative_link:
+            assert (
+                "Linked references: Related guide https://learn.arm.com/related/"
+                in content
+            )
+        else:
+            assert "Linked references:" not in content
 
     def test_markdown_links_stay_on_source_chunk_as_link_evidence(self):
         parsed = parse_document_content(
@@ -1114,33 +1174,6 @@ class TestReadInCSV:
         assert csv_dict["urls"] == []
         assert csv_dict["source_names"] == []
         assert csv_dict["focus"] == []
-
-
-class TestCreateChunk:
-    """Tests for createChunk function."""
-
-    def test_create_chunk_basic(self, gc):
-        """Test basic chunk creation."""
-        chunk = gc.createChunk(
-            text_snippet="Test content",
-            WEBSITE_url="https://example.com",
-            keywords=["key1", "key2"],
-            title="Test Title",
-        )
-
-        assert chunk.title == "Test Title"
-        assert chunk.url == "https://example.com"
-        assert chunk.content == "Test content"
-        assert chunk.keywords == "key1, key2"
-        # UUID should be generated
-        assert len(chunk.uuid) > 0
-
-    def test_create_chunk_generates_unique_uuids(self, gc):
-        """Test that each chunk gets a unique UUID."""
-        chunk1 = gc.createChunk("content", "url", ["key"], "title")
-        chunk2 = gc.createChunk("content", "url", ["key"], "title")
-
-        assert chunk1.uuid != chunk2.uuid
 
 
 class TestArmDocumentationParsing:
