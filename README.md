@@ -42,6 +42,9 @@ docker buildx build -f mcp-local/Dockerfile -t armlimited/arm-mcp . --load
 This builds for the Docker host's native architecture. The release workflow is
 responsible for explicit multi-architecture builds.
 
+For local development builds, see the
+[Quick Local Development Builds section in CONTRIBUTING.md](CONTRIBUTING.md#quick-local-development-builds).
+
 ### 2. Configure Your MCP Client
 
 Choose the configuration that matches your MCP client:

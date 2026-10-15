@@ -115,6 +115,31 @@ The local build defaults to the Docker host's native architecture. GitHub
 Actions performs the same GHCR login and explicitly builds both release
 architectures without running the acquisition script.
 
+### Quick Local Development Builds
+
+For Python source changes, build on the latest public release from the
+repository root:
+
+```bash
+docker buildx build --pull \
+  --file mcp-local/Dockerfile.local \
+  --tag arm-mcp:local \
+  --load \
+  .
+```
+
+This copies `server.py`, `utils/`, and `arm_kb_search/` over the released image
+and reuses its Python environment, executables, and knowledge base. Omit
+`--pull` during repeated edits to reuse the cached base, or select a particular
+release with `--build-arg BASE_IMAGE=armlimited/arm-mcp:VERSION`.
+
+To try additional Python packages, add a `RUN python -m pip install ...` line
+before the source copies in `Dockerfile.local`. This modifies only the derived
+image's existing `/app/.venv`; a fresh environment would require reinstalling
+the release dependencies. This shortcut does not install changes from
+`pyproject.toml` or `uv.lock` automatically. Use the full build above for OS,
+built-in executable, or knowledge-base artifact changes.
+
 ### Testing a Local MCP Image
 
 The Dockerfile installs the application but does not run the application test
