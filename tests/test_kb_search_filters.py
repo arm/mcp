@@ -342,7 +342,8 @@ def test_embedding_keeps_original_cli_query():
             return np.zeros((1, 2))
 
     class Index:
-        def search(self, _vector, _k):
+        def search(self, _vector, _k, *, exact):
+            assert exact is True
             return (np.array([0]), np.array([0.1]))
 
     metadata = [candidate("aws-cli", "AWS CLI")["metadata"]]
@@ -379,7 +380,8 @@ def test_filtered_dense_pool_refills_with_useful_pages():
             return np.zeros((1, 2))
 
     class Index:
-        def search(self, _vector, k):
+        def search(self, _vector, k, *, exact):
+            assert exact is True
             count = min(k, 200)
             return (np.arange(count), np.full(count, 0.2))
 

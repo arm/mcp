@@ -431,12 +431,12 @@ def embedding_search(
     *,
     eligible_ids: Optional[tuple[int, ...]] = None,
 ) -> List[Dict[str, Any]]:
-    """Use ANN without filters, or exact search over eligible stored vectors."""
+    """Use exact vector search, restricted to eligible IDs when supplied."""
     if usearch_index is None or eligible_ids == ():
         return []
     query_embedding = embedding_model.encode([query])[0]
     if eligible_ids is None:
-        matches = usearch_index.search(query_embedding, k)
+        matches = usearch_index.search(query_embedding, k, exact=True)
     else:
         vectors = usearch_index.get(eligible_ids, dtype="f32")
         if any(vector is None for vector in vectors):

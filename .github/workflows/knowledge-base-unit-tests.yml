@@ -43,6 +43,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
+      - name: Acquire pinned model for tokenizer contract tests
+        run: uv run --locked python acquire-model.py --output .cache/embedding-model
+
       - name: Run lint
         run: uv run --locked ruff check .
 

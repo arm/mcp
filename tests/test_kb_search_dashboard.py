@@ -1,6 +1,7 @@
 """Resource sections and Dashboard identity survive deduplication and fusion."""
 
 import importlib
+from copy import deepcopy
 
 import pytest
 
@@ -162,6 +163,73 @@ def test_search_response_retains_dashboard_scope_and_defaults_for_old_metadata(
     hits = resources.search("query", state)
     assert hits[0]["platform"] == "linux" and hits[0]["edition"] == "commercial"
     assert hits[1]["platform"] == hits[1]["edition"] == ""
+
+
+def pieces(parent_uuid, parent_chunk_uuid, texts):
+    rows = []
+    start = 0
+    for number, text in enumerate(texts, 1):
+        rows.append({
+            "uuid": f"{parent_uuid}:{parent_chunk_uuid}:{number}",
+            "chunk_uuid": f"{parent_chunk_uuid}:{parent_uuid}:{number}",
+            "parent_uuid": parent_uuid, "parent_chunk_uuid": parent_chunk_uuid,
+            "source_start": start, "source_end": start + len(text),
+            "source_part": number, "source_parts": len(texts),
+            "original_text": text, "search_text": "Install guide " + text,
+            "url": "https://example.com/guide?version=2#install",
+            "title": "Install guide", "heading": "Install", "doc_type": "Install Guides",
+        })
+        start += len(text)
+    return rows
+
+
+@pytest.mark.parametrize("selected_part", [0, 1, 2])
+def test_search_returns_exact_parent_without_changing_retrieval(monkeypatch, selected_part):
+    texts = ["Prerequisites: café\r\n  ", "\tcommand --flag\n", "\nVerify the result.  "]
+    family = pieces("parent", "chunk", texts)
+    # Parent identity, rather than URL or either ID alone, determines context.
+    others = pieces("parent", "other", ["Unrelated ", "section."])
+    others += pieces("other", "chunk", ["Another ", "parent."])
+    plain = {"url": "https://example.com/plain", "original_text": "Unsplit text"}
+    legacy = {"url": "https://example.com/legacy", "content": "Legacy content"}
+    metadata = list(reversed(family + others + [plain, legacy]))
+    snapshot = deepcopy(metadata)
+    bm25 = resources.build_bm25_index(metadata)
+    state = resources.SearchResources(metadata, None, None, bm25, include_disclaimers=False)
+    selected = family[selected_part]
+
+    def ranked(query, index, rows, model, lexical_index, **kwargs):
+        assert rows is metadata and rows == snapshot
+        assert lexical_index is bm25
+        return [
+            {"metadata": selected, "distance": 0.25, "rerank_score": 0.8},
+            {"metadata": plain, "rerank_score": 0.4},
+            {"metadata": legacy, "rerank_score": 0.2},
+        ]
+
+    monkeypatch.setattr(resources, "hybrid_search", ranked)
+    hits = resources.search("install", state)
+
+    assert [hit["snippet"] for hit in hits] == ["".join(texts), "Unsplit text", "Legacy content"]
+    assert [hit["score"] for hit in hits] == [0.8, 0.4, 0.2]
+    assert hits[0]["distance"] == 0.25
+    for key in ("url", "title", "heading", "doc_type"):
+        assert hits[0][key] == selected[key]
+    assert metadata == snapshot  # Neither dense nor BM25 inputs are expanded.
+
+
+@pytest.mark.parametrize("field,offset", [
+    (None, 0), ("source_start", 1), ("source_start", -1), ("source_end", 1),
+], ids=["missing", "gap", "overlap", "length"])
+def test_incomplete_or_invalid_parent_falls_back_to_selected_piece(field, offset):
+    family = pieces("parent", "chunk", ["Before ", "command", " after"])
+    selected = family[1]
+    if field is None:
+        family.pop()
+    else:
+        selected[field] += offset
+    state = resources.SearchResources(family, None, None, None)
+    assert state.snippet_for(selected) == selected["original_text"]
 
 
 def passage(identifier, url, distance=0.5, resolved_url=None):

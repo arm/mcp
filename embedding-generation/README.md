@@ -197,6 +197,7 @@ Run lint and tests with:
 
 ```sh
 uv run --locked ruff check .
+uv run --locked python acquire-model.py --output .cache/embedding-model
 uv run --locked pytest
 ```
 
