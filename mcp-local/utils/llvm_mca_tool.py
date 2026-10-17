@@ -23,7 +23,7 @@ def mca_help() -> Dict[str, Any]:
 def llvm_mca_analyze(input_path: str, triple: Optional[str], cpu: Optional[str], extra_args: Optional[List[str]]) -> Dict[str, Any]:
     cmd = ["llvm-mca", input_path]
     if triple:
-        cmd += ["--triple", triple]
+        cmd += ["--mtriple", triple]
     if cpu:
         cmd += ["--mcpu", cpu]
     if extra_args:
