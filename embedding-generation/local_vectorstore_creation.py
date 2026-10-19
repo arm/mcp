@@ -17,6 +17,7 @@ import datetime
 import glob
 import json
 import os
+import re
 import uuid
 
 import numpy as np
@@ -24,6 +25,48 @@ import torch
 import yaml
 from sentence_transformers import SentenceTransformer
 from usearch.index import Index
+
+_INTRINSIC_URL = "/instruction-sets/intrinsics/#q="
+_GENERIC_KEYWORDS = {"intrinsic", "sse", "avx", "streaming simd extension"}
+_ISAS = {"neon": "Neon", "sve": "SVE", "sve2": "SVE2"}
+
+
+def is_intrinsic_chunk(chunk: dict) -> bool:
+    return _INTRINSIC_URL in str(chunk.get("url") or "")
+
+
+def normalize_intrinsic_chunk(chunk: dict) -> dict:
+    """Normalize catalog metadata without changing unrelated chunks."""
+    if not is_intrinsic_chunk(chunk):
+        return chunk
+    name = chunk["url"].split("#q=", 1)[1]
+    text = chunk["content"]
+    match = re.search(r"part of the (\S+) instruction set architecture", text, re.I)
+    isa = _ISAS.get(match.group(1).lower(), match.group(1)) if match else ""
+    keywords = ", ".join(
+        term.strip() for term in str(chunk.get("keywords") or "").split(",")
+        if term.strip() and term.strip().lower() not in _GENERIC_KEYWORDS
+    )
+    if isa == "Neon":
+        text = text.replace("#include <arm_sve.h>", "#include <arm_neon.h>")
+    return {**chunk, "doc_type": "Intrinsic", "product": isa, "heading": name,
+            "heading_path": [isa, name], "keywords": keywords, "content": text}
+
+
+def intrinsic_embedding_text(record: dict) -> str:
+    """Embed the operation and signature; retain full source text in metadata."""
+    text = record["original_text"]
+    name, isa = record["heading"], record["product"]
+    description = re.search(r"description: (.*?)\n\n", text, re.S)
+    signature = re.search(r"follows:\n`(.*?)`", text, re.S)
+    keywords = ", ".join(
+        term.strip() for term in str(record.get("keywords") or "").split(",")
+        if term.strip() and term.strip().lower() not in {name.lower(), isa.lower()}
+    )
+    return (
+        f"{isa} intrinsic {name}. {description.group(1) if description else ''} "
+        f"Operation: {keywords}. Signature: {signature.group(1) if signature else ''}"
+    )
 
 
 def load_local_yaml_files() -> list[dict]:
@@ -122,12 +165,19 @@ def choose_end(text: str, start: int, tokenizer) -> int:
     return end
 
 
+def embedding_input(row: dict) -> str:
+    """Use compact intrinsic cards while preserving complete response text."""
+    if row.get("doc_type") == "Intrinsic":
+        return intrinsic_embedding_text(row)
+    return row["original_text"]
+
+
 def split_embedding_inputs(metadata: list[dict], tokenizer) -> list[dict]:
     """Return lossless consecutive pieces; leave fitting records unchanged."""
     output = []
     for row in metadata:
         text = row["original_text"]
-        if token_count(tokenizer, text) <= EMBEDDING_TOKEN_CAP:
+        if row.get("doc_type") == "Intrinsic" or token_count(tokenizer, text) <= EMBEDDING_TOKEN_CAP:
             output.append(row)
             continue
         if not row["search_text"].endswith(text):
@@ -168,7 +218,7 @@ def create_embeddings(
     metadata = split_embedding_inputs(metadata, model.tokenizer)
     embeddings = np.empty((len(metadata), 384), dtype=np.float32)
     for start in range(0, len(metadata), 32):
-        texts = [row["original_text"] for row in metadata[start:start + 32]]
+        texts = [embedding_input(row) for row in metadata[start:start + 32]]
         if any(token_count(model.tokenizer, text) > EMBEDDING_TOKEN_CAP for text in texts):
             raise ValueError("Embedding input exceeds 500 tokens including special tokens")
         embeddings[start:start + len(texts)] = model.encode(
@@ -238,6 +288,7 @@ def main():
     for i, yaml_content in enumerate(yaml_contents, 1):
         if i <= 10 or i % 1000 == 0 or i == len(yaml_contents):
             print(f"Processing YAML content {i}/{len(yaml_contents)}")
+        yaml_content = normalize_intrinsic_chunk(yaml_content)
         heading_path = yaml_content.get("heading_path", []) or []
         search_text = " ".join(
             str(value)

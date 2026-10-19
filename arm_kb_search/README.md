@@ -73,3 +73,41 @@ Metadata filters apply to both channels and to any refill before ranking.
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md#versioning-arm-kb-search) for package
 versioning guidance.
+
+## Reference records
+
+Support and availability questions favor an Ecosystem Dashboard record when its
+complete package name is present and its Linux/Windows scope agrees with the
+query. Instructional questions such as "How can I use ..." do not receive that
+support preference by themselves.
+
+Typed intrinsic records receive an exact-name preference (including catalog
+names with optional ACLE brackets). Otherwise, intrinsic intent, the requested
+ISA, and signature types determine their preference. An SME query does not
+prefer SVE records. Exact snake_case API identifiers in passages receive extra
+weight; generic architecture names and type names are excluded. These terms
+adjust the existing hybrid score before the existing resource-rank fusion.
+
+The intrinsic preference requires the rebuilt `doc_type=Intrinsic` metadata.
+Older bundles remain readable but do not receive that typed-record preference.
+
+Canonical C spellings of typed catalog names, such as `svqrdmulh_s32` for
+`svqrdmulh[_s32]`, are indexed in a separate sparse name field. Only a query
+containing one of those names receives its evidence. This preserves the prose
+index's corpus statistics and scores for other queries. Name-field length
+normalization is disabled because each populated entry contains one name;
+metadata filters constrain name matches exactly as they constrain prose matches.
+
+Descriptive Neon/SVE intrinsic requests can also receive a bounded score from
+source-derived operation and operand roles: vector element kind/width, lane
+count, predicate width, scalar bounds, and memory versus return types. These
+facts are extracted directly from existing signatures and source categories;
+this step requires no additional embeddings, cache, or metadata migration. The score
+is applied only to eligible typed intrinsic candidates before the existing
+80/20 rank fusion. Requests containing explicit API identifiers retain their
+name-based ranking; the descriptive matcher abstains for those requests.
+
+The role matcher abstains when it cannot recognize an operation, for mixed ISA
+requests, and for SME/SME2 requests. Missing source facts earn no credit. Its
+vocabulary and role binding are deliberately limited; it does not resolve SME
+coverage gaps or guarantee improvements on unseen descriptive questions.

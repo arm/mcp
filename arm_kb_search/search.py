@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Dict, Iterable, List, Optional
 import re
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -23,6 +23,7 @@ from sentence_transformers import SentenceTransformer
 from usearch.index import Index, search as search_vectors
 
 from .config import DISTANCE_THRESHOLD, K_RESULTS
+from .intrinsic_roles import match_bonus, query_roles
 
 
 SEARCH_TOKEN_PATTERN = re.compile(r"(?:_+)?[a-z0-9][a-z0-9_\-+.]*", re.IGNORECASE)
@@ -66,6 +67,18 @@ TUTORIAL_INTENT_TOKENS = {
 }
 INSTALL_INTENT_TOKENS = {"install", "installing", "installation", "setup"}
 INSTALL_GUIDE_BONUS = 0.30
+SUPPORT_QUESTION_PATTERN = re.compile(
+    r"\b(?:(?<!how )can i \w+(?: up)?|is there|are there|available|availability|"
+    r"supported|support|compatib\w*|tested|(?:does|will) \S+ work|works? on|download|"
+    r"where (?:can|should|do) i (?:get|download|find)|which version|recommend\w*)\b",
+    re.IGNORECASE,
+)
+ACLE_TYPE_PATTERN = re.compile(
+    r"^(?:sv)?(?:u?int|float|poly|bfloat|mfloat)(?:8|16|32|64)(?:x\d+){0,2}_t$|^svbool_t$"
+)
+CODE_IDENTIFIER_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
+INTRINSIC_ISAS = {"neon": "neon", "asimd": "neon", "sve": "sve", "sve2": "sve2",
+                  "sme": "sme", "sme2": "sme", "za": "sme"}
 # Acquisition adds these keywords to every install guide; they identify no product.
 GENERIC_INSTALL_GUIDE_KEYWORDS = {"build", "download"}
 SUPPORT_INTENT_TOKENS = {
@@ -184,6 +197,12 @@ class _QueryAnalysis:
     prefers_tutorial: bool
     asks_for_learning_path: bool
     compiler_guide_query: bool
+    support_question: bool = False
+    intrinsic_query: bool = False
+    intrinsic_roles: Optional[Dict[str, Any]] = None
+    acle_types: set[str] = dataclass_field(default_factory=set)
+    intrinsic_isas: set[str] = dataclass_field(default_factory=set)
+    code_identifiers: set[str] = dataclass_field(default_factory=set)
 
 
 def _analyze_query(query: str) -> _QueryAnalysis:
@@ -220,6 +239,8 @@ def _analyze_query(query: str) -> _QueryAnalysis:
         scoring_query_tokens = direct_query_tokens - {"run", "use", "using", "arm"}
 
     compiler_guide_query = bool(query_tokens & COMPILER_GUIDE_TOKENS) and "guide" in query_tokens
+    acle_types = {token for token in query_tokens if ACLE_TYPE_PATTERN.fullmatch(token)}
+    roles = query_roles(query)
     return _QueryAnalysis(
         query_tokens=query_tokens,
         lexical_query_tokens=lexical_query_tokens,
@@ -235,6 +256,14 @@ def _analyze_query(query: str) -> _QueryAnalysis:
         prefers_tutorial=prefers_tutorial,
         asks_for_learning_path=asks_for_learning_path,
         compiler_guide_query=compiler_guide_query,
+        support_question=bool(SUPPORT_QUESTION_PATTERN.search(query)),
+        intrinsic_query=bool(acle_types or query_tokens & {"intrinsic", "intrinsics"} or roles),
+        intrinsic_roles=roles,
+        acle_types=acle_types,
+        intrinsic_isas={INTRINSIC_ISAS[token] for token in query_tokens if token in INTRINSIC_ISAS},
+        code_identifiers={token for token in query_tokens
+                          if CODE_IDENTIFIER_PATTERN.fullmatch(token)
+                          and not token.endswith("_t") and token not in GENERIC_ENTITY_TOKENS},
     )
 
 
@@ -415,11 +444,40 @@ def _bm25_tokens(text: str) -> List[str]:
     return ["arm64" if token == "aarch64" else token for token in tokenize_for_search(text)]
 
 
+class _IntrinsicBM25(BM25Okapi):
+    """Keep canonical-name evidence separate from the shared prose statistics."""
+
+    def __init__(self, corpus, aliases):
+        super().__init__(corpus)
+        # Each populated name field has one token; empty fields must not dilute it.
+        self.alias_index = BM25Okapi(aliases, b=0.0) if any(aliases) else None
+
+    def get_scores(self, query):
+        return np.asarray(self.get_batch_scores(query, range(self.corpus_size)))
+
+    def get_batch_scores(self, query, doc_ids):
+        scores = super().get_batch_scores(query, doc_ids)
+        aliases = [term for term in query if self.alias_index and term in self.alias_index.idf]
+        if aliases:
+            scores = (np.asarray(scores) + self.alias_index.get_batch_scores(aliases, doc_ids)).tolist()
+        return scores
+
+
 def build_bm25_index(metadata: List[Dict]) -> Optional[BM25Okapi]:
-    corpus = [_bm25_tokens(item.get("search_text", "")) for item in metadata]
+    corpus = []
+    aliases = []
+    for item in metadata:
+        tokens = _bm25_tokens(item.get("search_text", ""))
+        names = []
+        if _normalized_doc_type(item.get("doc_type", "")) == "intrinsic":
+            name = str(item.get("heading") or "").lower().replace("[", "").replace("]", "")
+            if CODE_IDENTIFIER_PATTERN.fullmatch(name) and name not in tokens:
+                names.append(name)
+        corpus.append(tokens)
+        aliases.append(names)
     if not any(corpus):
         return None
-    return BM25Okapi(corpus)
+    return _IntrinsicBM25(corpus, aliases)
 
 
 def embedding_search(
@@ -547,6 +605,38 @@ def _field_phrase_bonus(
     return min(limit, bonus) if limit is not None else bonus
 
 
+def _reference_record_bonus(
+    query: _QueryAnalysis, metadata: Dict[str, Any], doc_type: str,
+) -> float:
+    """Prefer reference records only when the query identifies their scope."""
+    heading = str(metadata.get("heading") or "").lower()
+    if doc_type == "ecosystem dashboard" and query.support_question:
+        name_tokens = set(tokenize_for_search(heading)) - DIRECT_INTENT_STOPWORDS - {"arm"}
+        platform = str(metadata.get("platform") or "").lower()
+        if not (name_tokens - GENERIC_ENTITY_TOKENS) or not name_tokens <= query.query_tokens:
+            return 0.0
+        if platform == "windows" and "windows" not in query.query_tokens:
+            return 0.0
+        if platform == "linux" and "windows" in query.query_tokens:
+            return 0.0
+        return 0.35
+    if doc_type != "intrinsic":
+        return 0.0
+    if heading and ({heading, heading.replace("[", "").replace("]", "")} & query.query_tokens):
+        return 0.45
+    product = str(metadata.get("product") or "").lower()
+    if "sme" in query.intrinsic_isas and not product.startswith("sme"):
+        return 0.0
+    if not query.intrinsic_query or not any(product.startswith(isa) for isa in query.intrinsic_isas):
+        return 0.0
+    signature = re.search(r"follows:\n`(.*?)`", str(metadata.get("original_text") or ""), re.S)
+    signature_types = {token.removeprefix("sv") for token in tokenize_for_search(signature.group(1) if signature else "")
+                       if ACLE_TYPE_PATTERN.fullmatch(token)}
+    query_types = {token.removeprefix("sv") for token in query.acle_types}
+    type_match = len(query_types & signature_types) / len(query_types) if query_types else 0.0
+    return 0.10 + 0.25 * type_match
+
+
 def _document_type_bonuses(
     query: _QueryAnalysis,
     metadata: Dict[str, Any],
@@ -607,6 +697,7 @@ def _document_type_bonuses(
         ):
             doc_type_bonus += INSTALL_GUIDE_BONUS
 
+    doc_type_bonus += _reference_record_bonus(query, metadata, doc_type)
     return provider_doc_bonus, doc_type_bonus
 
 
@@ -632,6 +723,8 @@ def _rerank_candidates(
     entity_query_tokens = query.entity_query_tokens
     short_query = len(scoring_query_tokens) <= 3
     reranked: List[Dict[str, Any]] = []
+    # Explicit API requests use the existing name and identifier evidence.
+    role_query = query.intrinsic_roles if query.intrinsic_query and not query.code_identifiers else None
     for candidate in candidates:
         metadata = candidate["metadata"]
         if is_navigation_only(metadata):
@@ -754,9 +847,11 @@ def _rerank_candidates(
             + ((0.12 if short_query else 0.15) * sparse_bonus)
             + ((0.25 if short_query else 0.35) * lexical_prepass_bonus)
             + support_evidence_bonus
+            + match_bonus(role_query, metadata)
             + provider_doc_bonus
             + doc_type_bonus
             + intent_bonus
+            + (0.30 if query.code_identifiers & full_text_tokens else 0.0)
         )
         reranked.append({**candidate, "rerank_score": rerank_score})
 

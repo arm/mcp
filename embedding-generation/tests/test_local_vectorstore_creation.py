@@ -15,6 +15,7 @@
 import json
 import os
 import sys
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, call
@@ -212,3 +213,59 @@ def test_real_query_window_and_builtin_normalization(tokenizer):
     assert type(model[-1]).__name__ == "Normalize"
     vectors = model.encode(["Arm intrinsics", "hello " * 510], convert_to_numpy=True)
     np.testing.assert_allclose(np.linalg.norm(vectors, axis=1), 1, atol=1e-6)
+
+
+def test_intrinsics_embed_compact_cards_without_splitting_full_text(tokenizer, monkeypatch):
+    text = ("Intrinsic description: Add unsigned bytes.\n\n"
+            "Signature follows:\n`uint8x16_t vaddq_u8(uint8x16_t a, uint8x16_t b);`\n"
+            + "Full pseudocode and compiler advice. " * 200)
+    row = {**record(text), "doc_type": "Intrinsic", "heading": "vaddq_u8",
+           "product": "Neon", "keywords": "vaddq_u8, neon, addition"}
+    assert vectorstore.token_count(tokenizer, text) > 500
+    assert vectorstore.split_embedding_inputs([row], tokenizer) == [row]
+    # Use the real model: this checks which input was encoded, beyond a mock call.
+    monkeypatch.setattr(torch, "set_num_interop_threads", lambda _: None)
+    vectors, metadata = vectorstore.create_embeddings([row], tokenizer.name_or_path)
+    model = resources.load_embedding_model(tokenizer.name_or_path, allow_download=False).to("cpu").float().eval()
+    expected = model.encode([vectorstore.embedding_input(row)], normalize_embeddings=True)
+    np.testing.assert_allclose(vectors, expected, atol=1e-6)
+    assert metadata == [row]
+    assert "compiler advice" not in vectorstore.embedding_input(row)
+
+
+def chunk(isa="Neon"):
+    return {
+        "url": "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=vaddq_u8",
+        "keywords": "vaddq_u8, neon, addition, intrinsic, SSE, avx, streaming simd extension",
+        "content": f"The intrinsic is part of the {isa} instruction set architecture. "
+        "Here is a brief intrinsic description: Add unsigned bytes.\n\n"
+        "The signature is as follows:\n`uint8x16_t vaddq_u8(uint8x16_t a, uint8x16_t b);`\n"
+        "#include <arm_sve.h>\nShared compiler advice and full pseudocode.",
+    }
+
+
+@pytest.mark.parametrize("isa,expected", [("neon", "Neon"), ("sve", "SVE"), ("sve2", "SVE2")])
+def test_normalization_assigns_scope_and_removes_shared_keywords(isa, expected):
+    raw = chunk(isa)
+    before = deepcopy(raw)
+    normalized = vectorstore.normalize_intrinsic_chunk(raw)
+    assert raw == before
+    assert normalized["doc_type"] == "Intrinsic"
+    assert normalized["product"] == expected
+    assert normalized["heading_path"] == [expected, "vaddq_u8"]
+    assert normalized["keywords"] == "vaddq_u8, neon, addition"
+    assert ("#include <arm_neon.h>" in normalized["content"]) == (expected == "Neon")
+
+
+def test_card_preserves_operation_and_signature_but_omits_shared_template():
+    normalized = vectorstore.normalize_intrinsic_chunk(chunk())
+    record = {**normalized, "original_text": normalized["content"]}
+    text = vectorstore.intrinsic_embedding_text(record)
+    assert text == ("Neon intrinsic vaddq_u8. Add unsigned bytes. Operation: addition. "
+                    "Signature: uint8x16_t vaddq_u8(uint8x16_t a, uint8x16_t b);")
+    assert "full pseudocode" in record["original_text"]
+
+
+def test_nonintrinsic_chunk_is_unchanged():
+    raw = {"url": "https://example.com/intrinsic-guide", "content": "example"}
+    assert vectorstore.normalize_intrinsic_chunk(raw) is raw

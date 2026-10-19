@@ -259,3 +259,19 @@ planned `product` filter. The consumer's live integration remains disabled until
 that contract is implemented and verified. Same-name source records may disagree
 on support or minimum versions; ingestion preserves their facts and reports shared
 URLs rather than selecting an authoritative record.
+
+## Intrinsic embedding records
+
+Catalog URLs containing `/instruction-sets/intrinsics/#q=` are normalized to
+`doc_type: Intrinsic`, with the ISA in `product` and the intrinsic name in
+`heading`. Shared x86 keywords are removed and Neon header references are
+corrected to `arm_neon.h`.
+
+The embedding input contains the ISA, name, description, operation keywords, and
+signature. Full source text remains in `original_text` for returned passages,
+including pseudocode; only the Neon header correction changes that text.
+Intrinsic records stay whole instead of being split. Their compact embedding
+inputs still must fit the 500-token cap: an overflow raises an error rather than
+silently truncating a card. Other documents keep the lossless 500-token splitting
+behavior. Rebuild and distribute metadata and vectors together after changing
+this representation.
