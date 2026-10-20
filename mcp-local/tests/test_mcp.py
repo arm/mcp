@@ -217,6 +217,14 @@ def test_mcp_stdio_transport_responds(platform):
             check_mca_response = _read_response(6, timeout=60)
             assert check_mca_response.get("result")["structuredContent"]["status"] == constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS, "Test Failed: MCP mca tool failed: status mismatch.Expected: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS,indent=2), json.dumps(check_mca_response.get("result")["structuredContent"]["status"],indent=2))
             print("\n***Test Passed: MCP mca tool succeeded")
+
+            #Check MCA Tool with triple and cpu - regression test for the --mtriple flag
+            raw_socket.sendall(_encode_mcp_message(constants.CHECK_MCA_TOOL_TRIPLE_CPU_REQUEST))
+            check_mca_triple_response = _read_response(7, timeout=60)
+            mca_triple_content = check_mca_triple_response.get("result")["structuredContent"]
+            assert mca_triple_content["status"] == constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS, "Test Failed: MCP mca tool with triple and cpu failed: status mismatch. Expected: {}, Received: {}\nFull response: {}".format(constants.EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS, mca_triple_content["status"], json.dumps(mca_triple_content, indent=2))
+            assert "--mtriple" in mca_triple_content["cmd"], "Test Failed: MCP mca tool did not pass --mtriple to llvm-mca. Received cmd: {}".format(mca_triple_content["cmd"])
+            print("\n***Test Passed: MCP mca tool with triple and cpu succeeded")
         else:
             print("\n***Test NA: MCP mca tool is not supported on this platform: {}".format(platform))
 

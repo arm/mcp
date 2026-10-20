@@ -225,4 +225,19 @@ EXPECTED_CHECK_MCA_TOOL_RESPONSE = {
               ]
       }'''
 
-EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS = "ok"     
+EXPECTED_CHECK_MCA_TOOL_RESPONSE_STATUS = "ok"
+
+CHECK_MCA_TOOL_TRIPLE_CPU_REQUEST = {
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "tools/call",
+            "params": {
+                "name": "mca",
+                "arguments": {
+                    "input_path": "/workspace/tests/sum_test.s",
+                    "triple": "aarch64",
+                    "cpu": "neoverse-v2",
+                    "invocation_reason": "Regression test: run the MCA tool with an explicit target triple and CPU to check both options are passed to llvm-mca correctly"
+                },
+            },
+        }
