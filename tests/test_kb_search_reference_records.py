@@ -351,3 +351,43 @@ def test_signature_evidence_accepts_acquisition_whitespace(separator):
 def test_identifier_queries_tolerate_empty_optional_search_text(text):
     record = candidate("svmopa_za32_m", "Documentation", text)
     assert rerank_candidates("How do I use svmopa_za32_m?", [record])[0]["metadata"] == record["metadata"]
+
+
+@pytest.mark.parametrize("count", [1, 2])
+@pytest.mark.parametrize("catalog_name", ["svadd[_f32]_m", "svst1_scatter[_u32base]_index[_s32]"])
+@pytest.mark.parametrize("ending", ["", ".", "..."])
+def test_hybrid_and_public_search_preserve_catalog_names_in_small_snapshots(count, catalog_name, ending):
+    from arm_kb_search import SearchResources, search
+    from arm_kb_search.search import build_bm25_index, hybrid_search
+
+    target = intrinsic(catalog_name, signature=f"svfloat32_t {catalog_name}(void);")["metadata"]
+    sibling = intrinsic("svadd[_u32]_m", signature="svuint32_t svadd[_u32]_m(void);")["metadata"]
+    metadata = [target, sibling][:count]
+    index = build_bm25_index(metadata)
+    resources = SearchResources(metadata, object(), None, index, include_disclaimers=False)
+    for name in (catalog_name, catalog_name.replace("[", "").replace("]", "")):
+        query = name + ending
+        hits = hybrid_search(query, None, metadata, object(), index, k=1)
+        assert [hit["metadata"] for hit in hits] == [target]
+        assert [hit["url"] for hit in search(query, resources, k=1)] == [target["url"]]
+        assert hybrid_search(query, None, metadata, object(), index, k=1, eligible_ids=(0,))[0]["metadata"] == target
+        assert all(hit["metadata"] != target for hit in
+                   hybrid_search(query, None, metadata, object(), index, eligible_ids=tuple(range(1, count))))
+
+
+def test_preserving_catalog_names_does_not_repeat_prose_query_terms():
+    from rank_bm25 import BM25Okapi
+    from arm_kb_search.search import _bm25_tokens, bm25_search, hybrid_search
+
+    metadata = [intrinsic("svadd[_f32]_m")["metadata"]]
+    metadata.extend(candidate(f"Guide {i}", "Documentation", "Unrelated advice")["metadata"] for i in range(5))
+    # A plain prose index deliberately has no canonical-name channel.
+    index = BM25Okapi([_bm25_tokens(row["search_text"]) for row in metadata])
+    query = "SVE sve svadd[_f32]_m. svadd[_f32]_m."
+    lexical_query = " ".join(dict.fromkeys(tokenize_for_search(query)))
+    expected = bm25_search(lexical_query, metadata, index, k=10)
+    actual = hybrid_search(query, None, metadata, object(), index, k=10)
+    assert expected
+    assert {r["metadata"]["chunk_uuid"]: r["bm25_score"] for r in actual} == {
+        r["metadata"]["chunk_uuid"]: r["bm25_score"] for r in expected
+    }

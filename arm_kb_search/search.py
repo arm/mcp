@@ -577,12 +577,15 @@ def bm25_search(
     k: int = K_RESULTS,
     *,
     eligible_ids: Optional[tuple[int, ...]] = None,
+    original_query: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     if bm25_index is None or eligible_ids == ():
         return []
     # Brackets never occur in prose tokens, so these additions only reach the
     # canonical-name channel and leave the prose index's scores unchanged.
-    tokens = _bm25_tokens(query) + _bracketed_identifiers(query)
+    # Hybrid search deduplicates prose tokens; recover names from its raw query.
+    names = _bracketed_identifiers(query if original_query is None else original_query)
+    tokens = _bm25_tokens(query) + list(dict.fromkeys(names))
     if not tokens:
         return []
     if eligible_ids is None:
@@ -930,6 +933,7 @@ def hybrid_search(
         bm25_index,
         k=bm25_depth,
         eligible_ids=eligible_ids,
+        original_query=query,
     )
 
     lexical_results = _rank_lexical_candidates(
