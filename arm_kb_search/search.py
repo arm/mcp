@@ -129,6 +129,11 @@ def tokenize_for_search(text: str) -> List[str]:
     return [token.lower() for token in SEARCH_TOKEN_PATTERN.findall(text or "")]
 
 
+def _evidence_tokens(tokens: Iterable[str]) -> List[str]:
+    """Ignore terminal periods in names and types; preserve prose-scoring tokens."""
+    return [token.rstrip(".") for token in tokens]
+
+
 def _query_field_tokens(tokens: set[str], query_tokens: set[str]) -> set[str]:
     """Retain explicit architecture equivalence without compound-name matching."""
     tokens = tokens.copy()
@@ -237,7 +242,8 @@ def _analyze_query(query: str) -> _QueryAnalysis:
         scoring_query_tokens = direct_query_tokens - {"run", "use", "using", "arm"}
 
     compiler_guide_query = bool(query_tokens & COMPILER_GUIDE_TOKENS) and "guide" in query_tokens
-    acle_types = {token for token in query_tokens if ACLE_TYPE_PATTERN.fullmatch(token)}
+    evidence_tokens = set(_evidence_tokens(query_tokens))
+    acle_types = {token for token in evidence_tokens if ACLE_TYPE_PATTERN.fullmatch(token)}
     return _QueryAnalysis(
         query_tokens=query_tokens,
         lexical_query_tokens=lexical_query_tokens,
@@ -254,10 +260,10 @@ def _analyze_query(query: str) -> _QueryAnalysis:
         asks_for_learning_path=asks_for_learning_path,
         compiler_guide_query=compiler_guide_query,
         support_question=bool(SUPPORT_QUESTION_PATTERN.search(query)),
-        intrinsic_query=bool(acle_types or query_tokens & {"intrinsic", "intrinsics"}),
+        intrinsic_query=bool(acle_types or evidence_tokens & {"intrinsic", "intrinsics"}),
         acle_types=acle_types,
-        intrinsic_isas={INTRINSIC_ISAS[token] for token in query_tokens if token in INTRINSIC_ISAS},
-        code_identifiers={token for token in query_tokens
+        intrinsic_isas={INTRINSIC_ISAS[token] for token in evidence_tokens if token in INTRINSIC_ISAS},
+        code_identifiers={token for token in evidence_tokens
                           if CODE_IDENTIFIER_PATTERN.fullmatch(token)
                           and not token.endswith("_t") and token not in GENERIC_ENTITY_TOKENS},
     )
@@ -453,7 +459,7 @@ class _IntrinsicBM25(BM25Okapi):
 
     def get_batch_scores(self, query, doc_ids):
         scores = super().get_batch_scores(query, doc_ids)
-        aliases = [term for term in query if self.alias_index and term in self.alias_index.idf]
+        aliases = [term for term in _evidence_tokens(query) if self.alias_index and term in self.alias_index.idf]
         if aliases:
             scores = (np.asarray(scores) + self.alias_index.get_batch_scores(aliases, doc_ids)).tolist()
         return scores
@@ -606,20 +612,20 @@ def _reference_record_bonus(
 ) -> float:
     """Prefer reference records only when the query identifies their scope."""
     heading = str(metadata.get("heading") or "").lower()
+    evidence_tokens = set(_evidence_tokens(query.query_tokens))
     if doc_type == "ecosystem dashboard" and query.support_question:
-        name_tokens = set(tokenize_for_search(heading)) - DIRECT_INTENT_STOPWORDS - {"arm"}
+        name_tokens = set(_evidence_tokens(tokenize_for_search(heading))) - DIRECT_INTENT_STOPWORDS - {"arm"}
         platform = str(metadata.get("platform") or "").lower()
-        if not (name_tokens - GENERIC_ENTITY_TOKENS) or not name_tokens <= query.query_tokens:
+        if not (name_tokens - GENERIC_ENTITY_TOKENS) or not name_tokens <= evidence_tokens:
             return 0.0
-        platform_tokens = {token.rstrip(".") for token in query.query_tokens}
-        if platform == "windows" and "windows" not in platform_tokens:
+        if platform == "windows" and "windows" not in evidence_tokens:
             return 0.0
-        if platform == "linux" and platform_tokens & {"windows", "mac", "macos", "osx", "ios", "android"}:
+        if platform == "linux" and evidence_tokens & {"windows", "mac", "macos", "osx", "ios", "android"}:
             return 0.0
         return 0.35
     if doc_type != "intrinsic":
         return 0.0
-    if heading and ({heading, heading.replace("[", "").replace("]", "")} & query.query_tokens):
+    if heading and ({heading, heading.replace("[", "").replace("]", "")} & evidence_tokens):
         return 0.45
     product = str(metadata.get("product") or "").lower()
     if "sme" in query.intrinsic_isas and not product.startswith("sme"):
@@ -845,7 +851,7 @@ def _rerank_candidates(
             + provider_doc_bonus
             + doc_type_bonus
             + intent_bonus
-            + (0.30 if query.code_identifiers & full_text_tokens else 0.0)
+            + (0.30 if query.code_identifiers & set(_evidence_tokens(full_text_tokens)) else 0.0)
         )
         reranked.append({**candidate, "rerank_score": rerank_score})
 

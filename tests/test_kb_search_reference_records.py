@@ -5,9 +5,11 @@ import pytest
 
 from arm_kb_search.search import (
     _analyze_query,
+    _evidence_tokens,
     _reference_record_bonus,
     _rerank_candidates,
     rerank_candidates,
+    tokenize_for_search,
 )
 
 
@@ -81,6 +83,52 @@ def test_dashboard_platform_bonus_ignores_sentence_punctuation(question, preferr
         assert _reference_record_bonus(_analyze_query(question), metadata, "ecosystem dashboard") == expected
 
 
+def test_sentence_punctuation_preserves_internal_technical_characters():
+    tokens = tokenize_for_search("Node.js. llama.cpp. C++. 3.12.2. arm_neon.h. vaddq_u8... __ARM_FEATURE_SVE.")
+    assert _evidence_tokens(tokens) == [
+        "node.js", "llama.cpp", "c++", "3.12.2", "arm_neon.h", "vaddq_u8", "__arm_feature_sve",
+    ]
+    assert "node.js." in tokens  # Prose tokens and their BM25 statistics remain unchanged.
+    assert tokenize_for_search("...?!") == []
+
+
+@pytest.mark.parametrize("question", [
+    "Which operation returns svuint32_t", "How do I use svqrdmulh_s32",
+    "Find intrinsics for SVE2", "Is Redis supported on Windows",
+    "Is there support for Redis", "Build llama.cpp with C++",
+])
+def test_query_evidence_ignores_sentence_final_period(question):
+    plain, punctuated = _analyze_query(question), _analyze_query(question + ".")
+    for field in ("acle_types", "intrinsic_isas", "code_identifiers", "intrinsic_query", "support_question"):
+        assert getattr(punctuated, field) == getattr(plain, field)
+
+
+@pytest.mark.parametrize("ctype,isa", [
+    ("svuint32_t", "SVE"), ("float32x4_t", "Neon"), ("svbool_t", "SVE"),
+])
+def test_sentence_final_return_type_contributes_reference_evidence(ctype, isa):
+    query = _analyze_query(f"{isa} intrinsic returning {ctype}.")
+    record = intrinsic(isa=isa, signature=f"{ctype} example(void);")["metadata"]
+    assert query.acle_types == {ctype}
+    assert _reference_record_bonus(query, record, "intrinsic") == pytest.approx(0.35)
+
+
+@pytest.mark.parametrize("name", ["Redis", "Node.js", "C++"])
+def test_sentence_final_product_name_keeps_dashboard_evidence(name):
+    query = _analyze_query(f"Is there support for {name}.")
+    record = candidate(name, "Ecosystem Dashboard", "", platform="linux")["metadata"]
+    assert _reference_record_bonus(query, record, "ecosystem dashboard") == 0.35
+
+
+@pytest.mark.parametrize("ending", [".", "..."])
+def test_sentence_final_document_api_keeps_identifier_evidence(ending):
+    query = _analyze_query("How do I use svmopa_za32_m.")
+    record = candidate("Matrix API", "Documentation", "Use svmopa_za32_m" + ending)
+    score = _rerank_candidates(query, [record])[0]["rerank_score"]
+    control = _rerank_candidates(replace(query, code_identifiers=set()), [record])[0]["rerank_score"]
+    assert score - control == pytest.approx(0.30)
+
+
 def intrinsic(name="svld1ub_u32", isa="SVE", signature="svuint32_t svld1ub_u32(svbool_t pg, const uint8_t *base);"):
     record = candidate(name, "Intrinsic", f"The intrinsic is part of the {isa} instruction set architecture. "
                        "Here is a brief intrinsic description: Unsigned byte load into 32-bit elements.\n\n"
@@ -107,11 +155,13 @@ def test_bracketed_catalog_name_matches_explicit_acle_identifier():
     assert _reference_record_bonus(_analyze_query("How do I call svadd_f32_m?"), record, "intrinsic") == 0.45
 
 
-def test_signature_argument_types_distinguish_signed_siblings():
-    query = _analyze_query("Which SVE intrinsic loads uint8_t into svuint32_t?")
+@pytest.mark.parametrize("ending", ["?", ".", "..."])
+def test_signature_argument_types_distinguish_signed_siblings(ending):
+    query = _analyze_query("Which SVE intrinsic loads uint8_t into svuint32_t" + ending)
     unsigned = intrinsic()["metadata"]
     signed = intrinsic("svld1ub_s32", signature="svint32_t svld1ub_s32(svbool_t pg, const uint8_t *base);")["metadata"]
-    assert _reference_record_bonus(query, unsigned, "intrinsic") > _reference_record_bonus(query, signed, "intrinsic")
+    assert _reference_record_bonus(query, unsigned, "intrinsic") == pytest.approx(0.35)
+    assert _reference_record_bonus(query, signed, "intrinsic") == pytest.approx(0.225)
     # The sv prefix is equivalent for the purpose of matching scalar/vector base types.
     assert _reference_record_bonus(_analyze_query("SVE intrinsic for uint32_t"), unsigned, "intrinsic") == 0.35
 
@@ -142,7 +192,8 @@ def test_query_analysis_excludes_types_and_generic_architectures_from_api_names(
     ("svqrdmulh[_s32]", "svqrdmulh_s32"),
     ("svst1_scatter[_u32base]_index[_s32]", "svst1_scatter_u32base_index_s32"),
 ])
-def test_canonical_intrinsic_name_retrieved_without_semantic_match(catalog_name, c_name):
+@pytest.mark.parametrize("query_format", ["{}", "{}.", "{}...", "{}?", "`{}`.", '"{}".'])
+def test_canonical_intrinsic_name_retrieved_without_semantic_match(catalog_name, c_name, query_format):
     from arm_kb_search.search import build_bm25_index, hybrid_search
 
     target = intrinsic(catalog_name)["metadata"]
@@ -150,9 +201,11 @@ def test_canonical_intrinsic_name_retrieved_without_semantic_match(catalog_name,
     guide = candidate("Arithmetic guide", "Documentation", "General arithmetic advice")["metadata"]
     metadata = [target, sibling, guide]
     bm25 = build_bm25_index(metadata)
-    hits = hybrid_search(c_name, None, metadata, object(), bm25, k=1)
+    query = query_format.format(c_name)
+    hits = hybrid_search(query, None, metadata, object(), bm25, k=1)
     assert [x["metadata"] for x in hits] == [target]
-    assert hybrid_search(c_name, None, metadata, object(), bm25, k=1, eligible_ids=(1, 2)) == []
+    assert hybrid_search(query, None, metadata, object(), bm25, k=1, eligible_ids=(1, 2)) == []
+    assert hybrid_search(query, None, metadata, object(), bm25, k=1, eligible_ids=(0, 2))[0]["metadata"] == target
 
 
 def test_canonical_name_indexing_does_not_rewrite_other_document_types():
@@ -164,7 +217,9 @@ def test_canonical_name_indexing_does_not_rewrite_other_document_types():
     assert bm25_search("example_s32", metadata, build_bm25_index(metadata)) == []
 
 
-@pytest.mark.parametrize("query", ["SVE load vector", "svqrdmulh", "svmissing_s32"])
+@pytest.mark.parametrize("query", [
+    "SVE load vector", "SVE load vector.", "svqrdmulh", "svmissing_s32", "svmissing_s32.", "svqrdmulh_s32.extra",
+])
 def test_alias_channel_leaves_nonmatching_sparse_scores_identical(query):
     import numpy as np
     from rank_bm25 import BM25Okapi
