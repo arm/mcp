@@ -27,6 +27,11 @@ def candidate(name, doc_type, text, *, heading=None, platform="", product=""):
     "Is Redis supported on Arm Linux?", "Is there Redis for Arm Linux?",
     "Does Redis work on Arm Linux?", "Which version of Redis supports Arm Linux?",
     "Can I run Redis on Arm?", "Is Redis supported on Ubuntu?",
+    "Can I create a Redis database on Arm Linux?",
+    "Can I generate a file with Redis on Arm Linux?",
+    "Can I validate a Redis configuration on Arm Linux?",
+    "Where can I inspect Redis validation results for Arm Linux?",
+    "Can\tI run Redis on Arm Linux?",
 ])
 def test_support_question_prefers_package_record(question):
     card = candidate("Redis", "Ecosystem Dashboard", "Redis supported on Arm Linux", platform="linux")
@@ -191,12 +196,15 @@ def test_query_analysis_excludes_types_and_generic_architectures_from_api_names(
 @pytest.mark.parametrize("catalog_name,c_name", [
     ("svqrdmulh[_s32]", "svqrdmulh_s32"),
     ("svst1_scatter[_u32base]_index[_s32]", "svst1_scatter_u32base_index_s32"),
+    ("vaddq_u8", "vaddq_u8"),
+    ("svcntb", "svcntb"),
+    ("__crc32b", "__crc32b"),
 ])
 @pytest.mark.parametrize("query_format", ["{}", "{}.", "{}...", "{}?", "`{}`.", '"{}".'])
 def test_canonical_intrinsic_name_retrieved_without_semantic_match(catalog_name, c_name, query_format):
     from arm_kb_search.search import build_bm25_index, hybrid_search
 
-    target = intrinsic(catalog_name)["metadata"]
+    target = intrinsic(catalog_name, signature=f"svint32_t {catalog_name}(void);")["metadata"]
     sibling = intrinsic("svqrdmulh[_u32]")["metadata"]
     guide = candidate("Arithmetic guide", "Documentation", "General arithmetic advice")["metadata"]
     metadata = [target, sibling, guide]
@@ -253,3 +261,93 @@ def test_sparse_name_evidence_survives_a_large_non_intrinsic_corpus():
 
 def test_descriptive_request_does_not_use_removed_role_intent_detector():
     assert _reference_record_bonus(_analyze_query("Which SVE load reads bytes?"), intrinsic()["metadata"], "intrinsic") == 0.0
+
+
+@pytest.mark.parametrize("question", [
+    "Can I optimize Redis latency on Arm Linux?",
+    "Can I benchmark Redis on Arm Linux?",
+    "Can I debug Redis on Arm Linux?",
+    "Is there a way to tune Redis latency on Arm Linux?",
+    "Are there tips to optimize Redis on Arm Linux?",
+    "Recommend a Redis performance tuning guide for Arm Linux.",
+    "Recommend a tutorial for Redis.",
+    "Is there a Redis guide for tuning.",
+    "Can I generate a Redis latency report on Arm Linux?",
+    "Can I validate Redis throughput on Arm Linux?",
+    "How  can I use Redis on Arm Linux?",
+])
+def test_procedural_questions_do_not_receive_availability_bonus(question):
+    card = candidate("Redis", "Ecosystem Dashboard", "Redis on Arm Linux", platform="linux")
+    assert not _analyze_query(question).support_question
+    assert _reference_record_bonus(_analyze_query(question), card["metadata"], "ecosystem dashboard") == 0
+
+
+@pytest.mark.parametrize("package,expected", [("Redis", .35), ("PostgreSQL", 0)])
+def test_dashboard_subsection_uses_package_identity(package, expected):
+    record = candidate("Features", "Ecosystem Dashboard", "", platform="linux")["metadata"]
+    record["heading_path"] = ["Linux", package, "Features"]
+    query = _analyze_query("Which Redis features are supported on Linux?")
+    assert _reference_record_bonus(query, record, "ecosystem dashboard") == expected
+
+
+@pytest.mark.parametrize("catalog_name,c_name", [
+    ("svadd[_f32]_m", "svadd_f32_m"),
+    ("svst1_scatter[_u32base]_index[_s32]", "svst1_scatter_u32base_index_s32"),
+])
+@pytest.mark.parametrize("ending", ["?", ".", "..."])
+def test_literal_catalog_names_receive_canonical_evidence(catalog_name, c_name, ending):
+    from arm_kb_search.search import build_bm25_index, hybrid_search
+
+    target = intrinsic(catalog_name, signature=f"svfloat32_t {catalog_name}(void);")["metadata"]
+    metadata = [target] + [candidate(f"Guide {i}", "Documentation", "Unrelated guide")["metadata"] for i in range(3)]
+    index = build_bm25_index(metadata)
+    for spelling in (catalog_name, c_name):
+        query = "How do I call " + spelling + ending
+        analysis = _analyze_query(query)
+        assert c_name in analysis.code_identifiers
+        assert analysis.code_identifiers == {c_name}
+        assert _reference_record_bonus(analysis, target, "intrinsic") == .45
+        assert hybrid_search(query, None, metadata, object(), index, k=1)[0]["metadata"] == target
+        assert hybrid_search(query, None, metadata, object(), index, eligible_ids=(1, 2, 3)) == []
+
+
+@pytest.mark.parametrize("query", ["svadd[_f32]_m.extra", "svadd[_f32]_missing", "svadd[_f32_m"])
+def test_partial_catalog_names_do_not_receive_exact_bonus(query):
+    record = intrinsic("svadd[_f32]_m")["metadata"]
+    assert _reference_record_bonus(_analyze_query(query), record, "intrinsic") == 0
+
+
+@pytest.mark.parametrize("name", ["vaddq_u8", "svadd[_f32]_m"])
+@pytest.mark.parametrize("count", [1, 2])
+def test_exact_names_remain_searchable_in_small_snapshots(name, count):
+    from arm_kb_search.search import bm25_search, build_bm25_index
+
+    metadata = [intrinsic(name)["metadata"] for _ in range(count)]
+    index = build_bm25_index(metadata)
+    for query in (name, name + ".", name.replace("[", "").replace("]", "") + "."):
+        hits = bm25_search(query, metadata, index)
+        assert len(hits) == count
+        assert all(hit["bm25_score"] > 0 for hit in hits)
+
+
+def test_api_evidence_treats_literal_catalog_and_expanded_spellings_equally():
+    question = "How do I use svadd[_f32]_m?"
+    query = _analyze_query(question)
+    record = candidate("SVE API", "Documentation", "Use svadd[_f32]_m.")
+    score = _rerank_candidates(query, [record])[0]["rerank_score"]
+    control = _rerank_candidates(replace(query, code_identifiers=set()), [record])[0]["rerank_score"]
+    assert score - control == pytest.approx(.30)
+
+
+@pytest.mark.parametrize("separator", ["\n", "\r\n", " ", "\n\n"])
+def test_signature_evidence_accepts_acquisition_whitespace(separator):
+    record = intrinsic()["metadata"]
+    record["original_text"] = record["original_text"].replace("follows:\n", "follows:" + separator)
+    query = _analyze_query("SVE intrinsic for svuint32_t")
+    assert _reference_record_bonus(query, record, "intrinsic") == .35
+
+
+@pytest.mark.parametrize("text", [None, ""])
+def test_identifier_queries_tolerate_empty_optional_search_text(text):
+    record = candidate("svmopa_za32_m", "Documentation", text)
+    assert rerank_candidates("How do I use svmopa_za32_m?", [record])[0]["metadata"] == record["metadata"]

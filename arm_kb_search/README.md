@@ -78,8 +78,10 @@ versioning guidance.
 
 Support and availability questions favor an Ecosystem Dashboard record when its
 complete package name is present and its Linux/Windows scope agrees with the
-query. Instructional questions such as "How can I use ..." do not receive that
-support preference by themselves.
+query. Package identity comes from `heading_path`, including for body subsections;
+legacy records without a path use `heading`. Instructional questions such as
+"How can I use ..." and tuning requests do not receive the support preference
+by themselves. "Can I ..." requires an availability or execution verb.
 
 Typed intrinsic records receive an exact-name preference (including catalog
 names with optional ACLE brackets). Otherwise, intrinsic intent, the requested
@@ -91,9 +93,11 @@ adjust the existing hybrid score before the existing resource-rank fusion.
 The intrinsic preference requires the rebuilt `doc_type=Intrinsic` metadata.
 Older bundles remain readable but do not receive that typed-record preference.
 
-Canonical C spellings of typed catalog names, such as `svqrdmulh_s32` for
-`svqrdmulh[_s32]`, are indexed in a separate sparse name field. Only a query
-containing one of those names receives its evidence. This preserves the prose
-index's corpus statistics and scores for other queries. Name-field length
-normalization is disabled because each populated entry contains one name;
-metadata filters constrain name matches exactly as they constrain prose matches.
+Every typed intrinsic name is indexed in a separate sparse name field, including
+names already present in prose, names without underscores (`svcntb`), and names
+with leading underscores (`__crc32b`). Literal catalog spellings such as
+`svqrdmulh[_s32]` and expanded spellings such as `svqrdmulh_s32` share name
+evidence, including with trailing sentence periods. Prose tokens and corpus
+statistics stay unchanged. The name field uses positive inverse-document-frequency
+weights without length normalization so exact names also work in small snapshots.
+Metadata filters constrain name matches exactly as they constrain prose matches.
