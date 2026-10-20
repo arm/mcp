@@ -613,7 +613,7 @@ def _reference_record_bonus(
             return 0.0
         if platform == "windows" and "windows" not in query.query_tokens:
             return 0.0
-        if platform == "linux" and "windows" in query.query_tokens:
+        if platform == "linux" and query.query_tokens & {"windows", "mac", "macos", "osx", "ios", "android"}:
             return 0.0
         return 0.35
     if doc_type != "intrinsic":

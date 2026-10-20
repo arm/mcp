@@ -24,6 +24,7 @@ def candidate(name, doc_type, text, *, heading=None, platform="", product=""):
     "Can I use Redis on Arm Linux?", "Can I set up Redis on Arm Linux?",
     "Is Redis supported on Arm Linux?", "Is there Redis for Arm Linux?",
     "Does Redis work on Arm Linux?", "Which version of Redis supports Arm Linux?",
+    "Can I run Redis on Arm?", "Is Redis supported on Ubuntu?",
 ])
 def test_support_question_prefers_package_record(question):
     card = candidate("Redis", "Ecosystem Dashboard", "Redis supported on Arm Linux", platform="linux")
@@ -48,6 +49,11 @@ def test_exact_api_identifier_overcomes_a_generic_competitor():
     ("Tune Redis latency", "Redis", "linux"),
     ("Can I run PostgreSQL on Arm?", "Redis", "linux"),
     ("Can I run Redis on Windows?", "Redis", "linux"),
+    ("Is Redis supported on macOS?", "Redis", "linux"),
+    ("Can I run Redis on Android?", "Redis", "linux"),
+    ("Is Redis supported on iOS?", "Redis", "linux"),
+    ("Can I run Redis on Mac OS X?", "Redis", "linux"),
+    ("Is Redis supported on OSX?", "Redis", "linux"),
     ("Can I run Redis on Linux?", "Redis", "windows"),
     ("Is IDEA supported on Windows?", "IntelliJ IDEA", "windows"),
     ("Is Arm supported?", "Arm", "linux"),

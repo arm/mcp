@@ -244,6 +244,10 @@ def test_intrinsics_embed_one_source_card_without_splitting_full_text(tokenizer,
 
 
 @pytest.mark.parametrize("ctype,description", [
+    ("void", "no return value"),
+    ("void *", "pointer to writable untyped memory"),
+    ("const void *", "pointer to read-only untyped memory"),
+    ("void *const", "pointer to writable untyped memory"),
     ("const uint8_t *", "pointer to read-only 8-bit unsigned integer scalar"),
     ("float32x4x3_t", "tuple of 3 vectors, each with 4 lanes of 32-bit floating point, 128-bit vector"),
     ("svuint32_t", "scalable vector of 32-bit unsigned integer elements"),

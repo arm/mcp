@@ -95,7 +95,7 @@ def intrinsic_type_description(raw: str) -> str:
     fixed = re.fullmatch(r"(u?int|float|poly|bfloat)(\d+)((?:x\d+)*)_t", base)
     scalable = re.fullmatch(r"sv(u?int|float|bfloat)(\d+)(?:x(\d+))?_t", base)
     description = {"svbool_t": "scalable predicate mask", "bool": "boolean scalar",
-                   "void": "no return value"}.get(base, base)
+                   "void": "untyped memory" if "*" in raw else "no return value"}.get(base, base)
     if fixed:
         kind, width, dimensions = fixed.groups()
         sizes = [int(size) for size in re.findall(r"x(\d+)", dimensions)]
