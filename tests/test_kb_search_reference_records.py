@@ -63,6 +63,24 @@ def test_dashboard_bonus_requires_support_full_name_and_platform(question, headi
     assert _reference_record_bonus(_analyze_query(question), metadata, "ecosystem dashboard") == 0
 
 
+@pytest.mark.parametrize("question,preferred_platform", [
+    ("Redis compatibility on Windows.", "windows"),
+    ("Redis compatibility on Windows?", "windows"),
+    ("Redis compatibility on Windows...", "windows"),
+    ("Redis compatibility on macOS.", None),
+    ("Redis compatibility on Android.", None),
+    ("Redis compatibility on iOS.", None),
+    ("Redis compatibility on Linux.", "linux"),
+    ("Redis compatibility on Ubuntu.", "linux"),
+    ("Can I run Redis on Arm?", "linux"),
+])
+def test_dashboard_platform_bonus_ignores_sentence_punctuation(question, preferred_platform):
+    for platform in ("linux", "windows"):
+        metadata = candidate("Redis", "Ecosystem Dashboard", "", platform=platform)["metadata"]
+        expected = 0.35 if platform == preferred_platform else 0.0
+        assert _reference_record_bonus(_analyze_query(question), metadata, "ecosystem dashboard") == expected
+
+
 def intrinsic(name="svld1ub_u32", isa="SVE", signature="svuint32_t svld1ub_u32(svbool_t pg, const uint8_t *base);"):
     record = candidate(name, "Intrinsic", f"The intrinsic is part of the {isa} instruction set architecture. "
                        "Here is a brief intrinsic description: Unsigned byte load into 32-bit elements.\n\n"

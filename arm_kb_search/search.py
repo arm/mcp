@@ -611,9 +611,10 @@ def _reference_record_bonus(
         platform = str(metadata.get("platform") or "").lower()
         if not (name_tokens - GENERIC_ENTITY_TOKENS) or not name_tokens <= query.query_tokens:
             return 0.0
-        if platform == "windows" and "windows" not in query.query_tokens:
+        platform_tokens = {token.rstrip(".") for token in query.query_tokens}
+        if platform == "windows" and "windows" not in platform_tokens:
             return 0.0
-        if platform == "linux" and query.query_tokens & {"windows", "mac", "macos", "osx", "ios", "android"}:
+        if platform == "linux" and platform_tokens & {"windows", "mac", "macos", "osx", "ios", "android"}:
             return 0.0
         return 0.35
     if doc_type != "intrinsic":
