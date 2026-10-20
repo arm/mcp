@@ -60,6 +60,125 @@ ARM_DOCUMENTATION_SERVICE_HOST = "documentation-service.arm.com"
 ARM_DEVELOPER_HOST = "developer.arm.com"
 
 
+_INTRINSIC_URL = "/instruction-sets/intrinsics/#q="
+_GENERIC_KEYWORDS = {"intrinsic", "sse", "avx", "streaming simd extension"}
+_ISAS = {"neon": "Neon", "sve": "SVE", "sve2": "SVE2"}
+
+
+def is_intrinsic_chunk(chunk: dict) -> bool:
+    return _INTRINSIC_URL in str(chunk.get("url") or "")
+
+
+def normalize_intrinsic_chunk(chunk: dict) -> dict:
+    """Normalize catalog metadata without changing unrelated chunks."""
+    if not is_intrinsic_chunk(chunk):
+        return chunk
+    name = chunk["url"].split("#q=", 1)[1]
+    text = chunk["content"]
+    match = re.search(r"part of the (\S+) instruction set architecture", text, re.I)
+    isa = _ISAS.get(match.group(1).lower(), match.group(1)) if match else ""
+    keywords = ", ".join(
+        term.strip() for term in str(chunk.get("keywords") or "").split(",")
+        if term.strip() and term.strip().lower() not in _GENERIC_KEYWORDS
+    )
+    if isa == "Neon":
+        text = text.replace("#include <arm_sve.h>", "#include <arm_neon.h>")
+    return {**chunk, "doc_type": "Intrinsic", "product": isa, "heading": name,
+            "heading_path": [isa, name], "keywords": keywords, "content": text}
+
+
+def intrinsic_type_description(raw: str) -> str:
+    """Describe C scalar, vector, tuple and pointer types at ingestion time."""
+    base = re.sub(r"\b(?:const|volatile|restrict|__restrict)\b", "", raw).replace("*", "").strip()
+    labels = {"uint": "unsigned integer", "int": "signed integer", "float": "floating point",
+              "poly": "polynomial", "bfloat": "brain floating point"}
+    fixed = re.fullmatch(r"(u?int|float|poly|bfloat)(\d+)((?:x\d+)*)_t", base)
+    scalable = re.fullmatch(r"sv(u?int|float|bfloat)(\d+)(?:x(\d+))?_t", base)
+    description = {"svbool_t": "scalable predicate mask", "bool": "boolean scalar",
+                   "void": "no return value"}.get(base, base)
+    if fixed:
+        kind, width, dimensions = fixed.groups()
+        sizes = [int(size) for size in re.findall(r"x(\d+)", dimensions)]
+        description = f"{width}-bit {labels[kind]} scalar"
+        if sizes:
+            description = f"{sizes[0]} lanes of {width}-bit {labels[kind]}, {sizes[0] * int(width)}-bit vector"
+            if len(sizes) > 1:
+                description = f"tuple of {sizes[1]} vectors, each with " + description
+    elif scalable:
+        kind, width, count = scalable.groups()
+        description = f"scalable vector of {width}-bit {labels[kind]} elements"
+        if count:
+            description = f"tuple of {count} {description}s"
+    if "*" in raw:
+        qualifier = "read-only" if re.search(r"\bconst\b", raw.split("*")[0]) else "writable"
+        description = f"pointer to {qualifier} " + description
+    return description
+
+
+def intrinsic_embedding_text(record: dict, *, detailed: bool = True) -> str:
+    """Format compact or detailed source text; preserve full text for responses."""
+    text, name = record["original_text"], record["heading"]
+    isa_match = re.search(r"is part of the (\S+) instruction set", text)
+    isa = isa_match.group(1) if isa_match else record["product"]
+    signature_match = re.search(r"follows:\s*`([^`]+)`", text)
+    if not signature_match:
+        raise ValueError(f"Missing intrinsic signature: {name}")
+    signature = signature_match.group(1)
+    categories = [term.strip() for term in str(record.get("keywords") or "").split(",")
+                  if term.strip() and term.strip().lower() not in _GENERIC_KEYWORDS | {name.lower(), isa.lower()}]
+    description_match = re.search(r"description: (.*?)\n\n", text, re.S)
+    description = description_match.group(1) if description_match else ""
+    if not detailed:
+        return (f"{record['product']} intrinsic {name}. {description} "
+                f"Operation: {', '.join(categories)}. Signature: {signature}")
+    description = description.strip()
+    declaration = re.fullmatch(r"\s*(.+?)\s+" + re.escape(name) + r"\s*\((.*?)\)\s*;\s*", signature, re.S)
+    if not declaration:
+        raise ValueError(f"Invalid intrinsic signature: {signature}")
+    result_type, arguments = (part.strip() for part in declaration.groups())
+    operation = text.partition("operates:\n")[2]
+    if operation.startswith("`") or operation.strip() == "No operation information.":
+        operation = ""
+    lines = [f"{isa} intrinsic {name}. Operation: {', '.join(categories)}."]
+    if description:
+        lines.append(description)
+    elif operation.strip().startswith(("Return ", "Returns ", "Store ", "Stores ", "Load ", "Loads ")):
+        sentences = re.split(r"(?<=[.!?])\s+", re.sub(r"\s+", " ", operation.strip()))
+        for sentence in sentences[:2]:
+            if len(sentence) > 400:
+                break
+            lines.append(sentence)
+    lines.append("Returns: " + intrinsic_type_description(result_type.strip()) + ".")
+    predicate_bits = sorted({int(bits) for bits in re.findall(r"(?:_|\[)b(8|16|32|64)(?=$|_|\]|\[)", name)})
+    if isa.lower().startswith("sve") and predicate_bits:
+        lines.append(f"Predicate controls {predicate_bits[0]}-bit lanes.")
+    counted_bits = sorted({int(bits) for bits in re.findall(
+        r"number of (8|16|32|64)[- ]bit (?:data )?elements", description + " " + operation, re.I)})
+    if counted_bits:
+        lines.append(f"Counts {counted_bits[0]}-bit vector elements.")
+    if arguments and arguments != "void":
+        for argument in arguments.split(","):
+            argument = argument.strip()
+            match = re.search(r"([A-Za-z_]\w*)\s*$", argument)
+            if not match or not argument[:match.start()].strip():
+                raise ValueError(f"Unparsed intrinsic argument: {signature}")
+            lines.append(f"Input {match[1]}: {intrinsic_type_description(argument[:match.start()].strip())}.")
+    lines.append("Signature: " + signature)
+    return " ".join(lines)
+
+
+def prepare_intrinsic_chunk(chunk: dict) -> dict:
+    """Prepare clean metadata and both embedding descriptions during acquisition."""
+    if not is_intrinsic_chunk(chunk):
+        return chunk
+    normalized = normalize_intrinsic_chunk(chunk)
+    record = {**normalized, "original_text": normalized["content"]}
+    return {**normalized, "embedding_texts": {
+        "compact": intrinsic_embedding_text(record, detailed=False),
+        "detailed": intrinsic_embedding_text(record),
+    }}
+
+
 @dataclass
 class Link:
     text: str

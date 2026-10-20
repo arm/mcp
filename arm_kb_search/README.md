@@ -97,17 +97,3 @@ containing one of those names receives its evidence. This preserves the prose
 index's corpus statistics and scores for other queries. Name-field length
 normalization is disabled because each populated entry contains one name;
 metadata filters constrain name matches exactly as they constrain prose matches.
-
-Descriptive Neon/SVE intrinsic requests can also receive a bounded score from
-source-derived operation and operand roles: vector element kind/width, lane
-count, predicate width, scalar bounds, and memory versus return types. These
-facts are extracted directly from existing signatures and source categories;
-this step requires no additional embeddings, cache, or metadata migration. The score
-is applied only to eligible typed intrinsic candidates before the existing
-80/20 rank fusion. Requests containing explicit API identifiers retain their
-name-based ranking; the descriptive matcher abstains for those requests.
-
-The role matcher abstains when it cannot recognize an operation, for mixed ISA
-requests, and for SME/SME2 requests. Missing source facts earn no credit. Its
-vocabulary and role binding are deliberately limited; it does not resolve SME
-coverage gaps or guarantee improvements on unseen descriptive questions.

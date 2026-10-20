@@ -20,6 +20,7 @@ import os
 import re
 import sys
 import uuid
+from pathlib import Path
 
 import requests
 import yaml
@@ -35,6 +36,7 @@ from document_chunking import (
     normalize_source_url,
     parse_arm_documentation_api_json,
     parse_document_content,
+    prepare_intrinsic_chunk,
     source_to_fetch_url,
 )
 from ecosystem_dashboard import acquire_catalog
@@ -462,9 +464,6 @@ def createIntrinsicsDatabaseChunks():
                 intrinsic["SIMD_ISA"],
                 intrinsic["instruction_group"].replace("|", ", "),
                 "Intrinsic",
-                "SSE",
-                "AVX",
-                "Streaming SIMD Extension",
             ]
 
             url = "https://developer.arm.com/architectures/instruction-sets/intrinsics/"
@@ -1064,11 +1063,19 @@ def chunkSaveAndTrack(url, chunk):
     # Save chunk
     file_name = f"{yaml_dir}/chunk_{chunk.uuid}.yaml"
     with open(file_name, "w") as file:
-        yaml.dump(chunk.toDict(), file, default_flow_style=False, sort_keys=False)
+        yaml.dump(prepare_intrinsic_chunk(chunk.toDict()), file, default_flow_style=False, sort_keys=False)
 
     # Record chunk
     recordChunk()
     print(f"{file_name} === {chunk.title}")
+
+
+def prepare_intrinsic_chunks():
+    """Prepare copied intrinsic records before publishing the chunk artifact."""
+    directory = Path(os.getenv("INTRINSIC_CHUNKS_DIR", "intrinsic_chunks"))
+    for path in sorted(directory.glob("*.yaml")):
+        chunk = prepare_intrinsic_chunk(yaml.safe_load(path.read_text()))
+        path.write_text(yaml.safe_dump(chunk, sort_keys=False))
 
 
 def main():
@@ -1088,6 +1095,8 @@ def main():
     )
     args = parser.parse_args()
     sources_file = args.sources_file
+
+    prepare_intrinsic_chunks()
 
     # Load existing sources from vector-db-sources.csv (for deduplication)
     load_existing_sources(sources_file)

@@ -172,5 +172,5 @@ def test_sparse_name_evidence_survives_a_large_non_intrinsic_corpus():
     assert any(x["metadata"] == target for x in hits)
 
 
-def test_descriptive_intrinsic_request_without_literal_intrinsic_word():
-    assert _reference_record_bonus(_analyze_query("Which SVE load reads bytes?"), intrinsic()["metadata"], "intrinsic") == 0.10
+def test_descriptive_request_does_not_use_removed_role_intent_detector():
+    assert _reference_record_bonus(_analyze_query("Which SVE load reads bytes?"), intrinsic()["metadata"], "intrinsic") == 0.0

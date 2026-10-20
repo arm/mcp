@@ -17,7 +17,6 @@ import datetime
 import glob
 import json
 import os
-import re
 import uuid
 
 import numpy as np
@@ -26,47 +25,7 @@ import yaml
 from sentence_transformers import SentenceTransformer
 from usearch.index import Index
 
-_INTRINSIC_URL = "/instruction-sets/intrinsics/#q="
-_GENERIC_KEYWORDS = {"intrinsic", "sse", "avx", "streaming simd extension"}
-_ISAS = {"neon": "Neon", "sve": "SVE", "sve2": "SVE2"}
-
-
-def is_intrinsic_chunk(chunk: dict) -> bool:
-    return _INTRINSIC_URL in str(chunk.get("url") or "")
-
-
-def normalize_intrinsic_chunk(chunk: dict) -> dict:
-    """Normalize catalog metadata without changing unrelated chunks."""
-    if not is_intrinsic_chunk(chunk):
-        return chunk
-    name = chunk["url"].split("#q=", 1)[1]
-    text = chunk["content"]
-    match = re.search(r"part of the (\S+) instruction set architecture", text, re.I)
-    isa = _ISAS.get(match.group(1).lower(), match.group(1)) if match else ""
-    keywords = ", ".join(
-        term.strip() for term in str(chunk.get("keywords") or "").split(",")
-        if term.strip() and term.strip().lower() not in _GENERIC_KEYWORDS
-    )
-    if isa == "Neon":
-        text = text.replace("#include <arm_sve.h>", "#include <arm_neon.h>")
-    return {**chunk, "doc_type": "Intrinsic", "product": isa, "heading": name,
-            "heading_path": [isa, name], "keywords": keywords, "content": text}
-
-
-def intrinsic_embedding_text(record: dict) -> str:
-    """Embed the operation and signature; retain full source text in metadata."""
-    text = record["original_text"]
-    name, isa = record["heading"], record["product"]
-    description = re.search(r"description: (.*?)\n\n", text, re.S)
-    signature = re.search(r"follows:\n`(.*?)`", text, re.S)
-    keywords = ", ".join(
-        term.strip() for term in str(record.get("keywords") or "").split(",")
-        if term.strip() and term.strip().lower() not in {name.lower(), isa.lower()}
-    )
-    return (
-        f"{isa} intrinsic {name}. {description.group(1) if description else ''} "
-        f"Operation: {keywords}. Signature: {signature.group(1) if signature else ''}"
-    )
+INTRINSIC_DETAIL_WEIGHT = 0.75
 
 
 def load_local_yaml_files() -> list[dict]:
@@ -168,8 +127,14 @@ def choose_end(text: str, start: int, tokenizer) -> int:
 def embedding_input(row: dict) -> str:
     """Use compact intrinsic cards while preserving complete response text."""
     if row.get("doc_type") == "Intrinsic":
-        return intrinsic_embedding_text(row)
+        return row["embedding_texts"]["compact"]
     return row["original_text"]
+
+
+def blend_intrinsic_embeddings(compact: np.ndarray, detailed: np.ndarray) -> np.ndarray:
+    """Combine two normalized representations into one stored unit vector."""
+    blended = (1 - INTRINSIC_DETAIL_WEIGHT) * compact + INTRINSIC_DETAIL_WEIGHT * detailed
+    return blended / np.linalg.norm(blended, axis=-1, keepdims=True)
 
 
 def split_embedding_inputs(metadata: list[dict], tokenizer) -> list[dict]:
@@ -207,7 +172,7 @@ def split_embedding_inputs(metadata: list[dict], tokenizer) -> list[dict]:
 def create_embeddings(
     metadata: list[dict], model_path: str, device: str = "cpu",
 ) -> tuple[np.ndarray, list[dict]]:
-    """Build fresh capped vectors in metadata order, one encode call per 32 inputs."""
+    """Build one vector per record, blending both source views for intrinsics."""
     torch.manual_seed(0)
     torch.set_num_threads(2)
     torch.set_num_interop_threads(1)
@@ -218,14 +183,21 @@ def create_embeddings(
     metadata = split_embedding_inputs(metadata, model.tokenizer)
     embeddings = np.empty((len(metadata), 384), dtype=np.float32)
     for start in range(0, len(metadata), 32):
-        texts = [embedding_input(row) for row in metadata[start:start + 32]]
+        batch = metadata[start:start + 32]
+        intrinsic_ids = [i for i, row in enumerate(batch) if row.get("doc_type") == "Intrinsic"]
+        texts = [embedding_input(row) for row in batch]
+        texts.extend(batch[i]["embedding_texts"]["detailed"] for i in intrinsic_ids)
         if any(token_count(model.tokenizer, text) > EMBEDDING_TOKEN_CAP for text in texts):
             raise ValueError("Embedding input exceeds 500 tokens including special tokens")
-        embeddings[start:start + len(texts)] = model.encode(
+        encoded = model.encode(
             texts, batch_size=32, show_progress_bar=False, convert_to_numpy=True,
             precision="float32", normalize_embeddings=True,
         )
-        print(f"Embedded {start + len(texts)}/{len(metadata)} pieces", flush=True)
+        vectors = encoded[:len(batch)]
+        if intrinsic_ids:
+            vectors[intrinsic_ids] = blend_intrinsic_embeddings(vectors[intrinsic_ids], encoded[len(batch):])
+        embeddings[start:start + len(batch)] = vectors
+        print(f"Embedded {start + len(batch)}/{len(metadata)} pieces", flush=True)
     return embeddings, metadata
 
 
@@ -288,7 +260,17 @@ def main():
     for i, yaml_content in enumerate(yaml_contents, 1):
         if i <= 10 or i % 1000 == 0 or i == len(yaml_contents):
             print(f"Processing YAML content {i}/{len(yaml_contents)}")
-        yaml_content = normalize_intrinsic_chunk(yaml_content)
+        if (yaml_content.get("doc_type") == "Intrinsic"
+                or "/instruction-sets/intrinsics/#q=" in str(yaml_content.get("url") or "")):
+            views = yaml_content.get("embedding_texts")
+            if (not isinstance(views, dict) or set(views) != {"compact", "detailed"}
+                    or not all(isinstance(text, str) and text.strip() for text in views.values())
+                    or yaml_content.get("doc_type") != "Intrinsic"
+                    or not yaml_content.get("heading") or not yaml_content.get("product")):
+                raise ValueError(
+                    f"Missing or invalid prepared intrinsic: {yaml_content.get('url')}. "
+                    "Regenerate the chunk artifact with the updated acquisition stage."
+                )
         heading_path = yaml_content.get("heading_path", []) or []
         search_text = " ".join(
             str(value)
@@ -325,8 +307,14 @@ def main():
             }
         )
 
+        if "embedding_texts" in yaml_content:
+            metadata[-1]["embedding_texts"] = yaml_content["embedding_texts"]
+
     # Create embeddings
     embeddings, metadata = create_embeddings(metadata, args.model_path, args.device)
+
+    for row in metadata:
+        row.pop("embedding_texts", None)
 
     print("Saving embeddings to file")
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")

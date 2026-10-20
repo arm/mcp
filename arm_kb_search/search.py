@@ -23,7 +23,6 @@ from sentence_transformers import SentenceTransformer
 from usearch.index import Index, search as search_vectors
 
 from .config import DISTANCE_THRESHOLD, K_RESULTS
-from .intrinsic_roles import match_bonus, query_roles
 
 
 SEARCH_TOKEN_PATTERN = re.compile(r"(?:_+)?[a-z0-9][a-z0-9_\-+.]*", re.IGNORECASE)
@@ -199,7 +198,6 @@ class _QueryAnalysis:
     compiler_guide_query: bool
     support_question: bool = False
     intrinsic_query: bool = False
-    intrinsic_roles: Optional[Dict[str, Any]] = None
     acle_types: set[str] = dataclass_field(default_factory=set)
     intrinsic_isas: set[str] = dataclass_field(default_factory=set)
     code_identifiers: set[str] = dataclass_field(default_factory=set)
@@ -240,7 +238,6 @@ def _analyze_query(query: str) -> _QueryAnalysis:
 
     compiler_guide_query = bool(query_tokens & COMPILER_GUIDE_TOKENS) and "guide" in query_tokens
     acle_types = {token for token in query_tokens if ACLE_TYPE_PATTERN.fullmatch(token)}
-    roles = query_roles(query)
     return _QueryAnalysis(
         query_tokens=query_tokens,
         lexical_query_tokens=lexical_query_tokens,
@@ -257,8 +254,7 @@ def _analyze_query(query: str) -> _QueryAnalysis:
         asks_for_learning_path=asks_for_learning_path,
         compiler_guide_query=compiler_guide_query,
         support_question=bool(SUPPORT_QUESTION_PATTERN.search(query)),
-        intrinsic_query=bool(acle_types or query_tokens & {"intrinsic", "intrinsics"} or roles),
-        intrinsic_roles=roles,
+        intrinsic_query=bool(acle_types or query_tokens & {"intrinsic", "intrinsics"}),
         acle_types=acle_types,
         intrinsic_isas={INTRINSIC_ISAS[token] for token in query_tokens if token in INTRINSIC_ISAS},
         code_identifiers={token for token in query_tokens
@@ -723,8 +719,6 @@ def _rerank_candidates(
     entity_query_tokens = query.entity_query_tokens
     short_query = len(scoring_query_tokens) <= 3
     reranked: List[Dict[str, Any]] = []
-    # Explicit API requests use the existing name and identifier evidence.
-    role_query = query.intrinsic_roles if query.intrinsic_query and not query.code_identifiers else None
     for candidate in candidates:
         metadata = candidate["metadata"]
         if is_navigation_only(metadata):
@@ -847,7 +841,6 @@ def _rerank_candidates(
             + ((0.12 if short_query else 0.15) * sparse_bonus)
             + ((0.25 if short_query else 0.35) * lexical_prepass_bonus)
             + support_evidence_bonus
-            + match_bonus(role_query, metadata)
             + provider_doc_bonus
             + doc_type_bonus
             + intent_bonus

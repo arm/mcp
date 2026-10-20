@@ -262,16 +262,23 @@ URLs rather than selecting an authoritative record.
 
 ## Intrinsic embedding records
 
-Catalog URLs containing `/instruction-sets/intrinsics/#q=` are normalized to
-`doc_type: Intrinsic`, with the ISA in `product` and the intrinsic name in
-`heading`. Shared x86 keywords are removed and Neon header references are
-corrected to `arm_neon.h`.
+During acquisition, catalog URLs containing `/instruction-sets/intrinsics/#q=`
+are normalized to `doc_type: Intrinsic`, with the ISA in `product` and the
+intrinsic name in `heading`. Shared x86 keywords are removed and Neon header
+references are corrected to `arm_neon.h`.
 
-The embedding input contains the ISA, name, description, operation keywords, and
-signature. Full source text remains in `original_text` for returned passages,
-including pseudocode; only the Neon header correction changes that text.
-Intrinsic records stay whole instead of being split. Their compact embedding
-inputs still must fit the 500-token cap: an overflow raises an error rather than
-silently truncating a card. Other documents keep the lossless 500-token splitting
-behavior. Rebuild and distribute metadata and vectors together after changing
-this representation.
+Acquisition prepares two `embedding_texts` fields in each intrinsic YAML chunk:
+`compact` contains the name, description, operation keywords and signature;
+`detailed` also describes return and argument types, lane widths and source facts.
+The embedding builder requires these nonempty strings and prepared metadata.
+Missing or malformed fields fail with instructions to regenerate the chunk
+artifact. Deploy the updated acquisition stage and regenerate its chunk snapshot
+before using the stricter builder; there is no legacy-chunk preparation fallback.
+
+Both descriptions are encoded and blended into one normalized vector using
+25% compact and 75% detailed. The intermediate descriptions are excluded from
+saved search metadata. Full source text remains in `original_text` for returned
+passages, including pseudocode; only the Neon header correction changes that text.
+Intrinsic records stay whole. Both embedding descriptions must fit the 500-token
+cap; overflow fails instead of truncating. Other documents retain lossless
+500-token splitting. Rebuild and distribute metadata and vectors together.
