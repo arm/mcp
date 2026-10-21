@@ -67,6 +67,11 @@ TUTORIAL_INTENT_TOKENS = {
 }
 INSTALL_INTENT_TOKENS = {"install", "installing", "installation", "setup"}
 INSTALL_GUIDE_BONUS = 0.30
+ECOSYSTEM_SUPPORT_BONUS = 0.35
+INTRINSIC_EXACT_NAME_BONUS = 0.45
+INTRINSIC_ISA_BONUS = 0.10
+INTRINSIC_SIGNATURE_TYPE_BONUS = 0.25
+CODE_IDENTIFIER_MATCH_BONUS = 0.30
 SUPPORT_QUESTION_PATTERN = re.compile(
     r"\b(?:(?<!how )can i (?:run|use|install|set up|get|download|create|generate|validate)|is there|are there|available|availability|"
     r"supported|support|compatib\w*|tested|validation|(?:does|will) \S+ work|works? on|download|"
@@ -74,8 +79,9 @@ SUPPORT_QUESTION_PATTERN = re.compile(
     r"recommend\w*[^.!?]*\bversion|version[^.!?]*\brecommend\w*)\b",
     re.IGNORECASE,
 )
+# Numeric widths are syntax; the type bonus requires an actual signature match.
 ACLE_TYPE_PATTERN = re.compile(
-    r"^(?:sv)?(?:u?int|float|poly|bfloat|mfloat)(?:8|16|32|64)(?:x\d+){0,2}_t$|^svbool_t$"
+    r"^(?:sv)?(?:u?int|float|poly|bfloat|mfloat)\d+(?:x\d+){0,2}_t$|^svbool_t$"
 )
 CODE_IDENTIFIER_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
 INTRINSIC_ISAS = {"neon": "neon", "asimd": "neon", "sve": "sve", "sve2": "sve2",
@@ -481,7 +487,11 @@ class _IntrinsicBM25(BM25Okapi):
             }
 
     def get_scores(self, query):
-        return np.asarray(self.get_batch_scores(query, range(self.corpus_size)))
+        scores = super().get_scores(query)
+        aliases = [term for term in _evidence_tokens(query) if self.alias_index and term in self.alias_index.idf]
+        if aliases:
+            scores = np.maximum(scores, 0) + self.alias_index.get_scores(aliases)
+        return scores
 
     def get_batch_scores(self, query, doc_ids):
         scores = super().get_batch_scores(query, doc_ids)
@@ -655,11 +665,11 @@ def _reference_record_bonus(
             return 0.0
         if platform == "linux" and evidence_tokens & {"windows", "mac", "macos", "osx", "ios", "android"}:
             return 0.0
-        return 0.35
+        return ECOSYSTEM_SUPPORT_BONUS
     if doc_type != "intrinsic":
         return 0.0
     if heading and ({heading, heading.replace("[", "").replace("]", "")} & evidence_tokens):
-        return 0.45
+        return INTRINSIC_EXACT_NAME_BONUS
     product = str(metadata.get("product") or "").lower()
     if "sme" in query.intrinsic_isas and not product.startswith("sme"):
         return 0.0
@@ -670,7 +680,7 @@ def _reference_record_bonus(
                        if ACLE_TYPE_PATTERN.fullmatch(token)}
     query_types = {token.removeprefix("sv") for token in query.acle_types}
     type_match = len(query_types & signature_types) / len(query_types) if query_types else 0.0
-    return 0.10 + 0.25 * type_match
+    return INTRINSIC_ISA_BONUS + INTRINSIC_SIGNATURE_TYPE_BONUS * type_match
 
 
 def _document_type_bonuses(
@@ -884,7 +894,8 @@ def _rerank_candidates(
             + provider_doc_bonus
             + doc_type_bonus
             + intent_bonus
-            + (0.30 if query.code_identifiers and query.code_identifiers & _technical_evidence(full_text) else 0.0)
+            + (CODE_IDENTIFIER_MATCH_BONUS
+               if query.code_identifiers and query.code_identifiers & _technical_evidence(full_text) else 0.0)
         )
         reranked.append({**candidate, "rerank_score": rerank_score})
 

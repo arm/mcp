@@ -110,6 +110,7 @@ def test_query_evidence_ignores_sentence_final_period(question):
 
 @pytest.mark.parametrize("ctype,isa", [
     ("svuint32_t", "SVE"), ("float32x4_t", "Neon"), ("svbool_t", "SVE"),
+    ("poly128_t", "Neon"),
 ])
 def test_sentence_final_return_type_contributes_reference_evidence(ctype, isa):
     query = _analyze_query(f"{isa} intrinsic returning {ctype}.")
@@ -169,6 +170,27 @@ def test_signature_argument_types_distinguish_signed_siblings(ending):
     assert _reference_record_bonus(query, signed, "intrinsic") == pytest.approx(0.225)
     # The sv prefix is equivalent for the purpose of matching scalar/vector base types.
     assert _reference_record_bonus(_analyze_query("SVE intrinsic for uint32_t"), unsigned, "intrinsic") == 0.35
+
+
+@pytest.mark.parametrize("ending", ["?", "."])
+def test_poly128_return_type_distinguishes_matching_signatures(ending):
+    query = _analyze_query("Which Neon intrinsic returns poly128_t" + ending)
+    matching = intrinsic("vmull_p64", "Neon", "poly128_t vmull_p64(poly64_t a, poly64_t b);")
+    other = intrinsic("vmull_p8", "Neon", "poly16x8_t vmull_p8(poly8x8_t a, poly8x8_t b);")
+    assert query.acle_types == {"poly128_t"}
+    assert _reference_record_bonus(query, matching["metadata"], "intrinsic") == pytest.approx(0.35)
+    assert _reference_record_bonus(query, other["metadata"], "intrinsic") == pytest.approx(0.10)
+    # Equal prose evidence makes the ordering depend on signature matching.
+    matching["metadata"]["search_text"] = other["metadata"]["search_text"] = "Neon polynomial multiplication"
+    assert _rerank_candidates(query, [other, matching])[0]["metadata"] == matching["metadata"]
+    control = replace(query, acle_types=set())
+    assert _rerank_candidates(control, [other, matching])[0]["metadata"] == other["metadata"]
+
+
+def test_numeric_type_spelling_requires_a_matching_signature_for_type_bonus():
+    query = _analyze_query("Which Neon intrinsic returns poly256_t?")
+    record = intrinsic("vmull_p64", "Neon", "poly128_t vmull_p64(poly64_t a, poly64_t b);")
+    assert _reference_record_bonus(query, record["metadata"], "intrinsic") == pytest.approx(0.10)
 
 
 @pytest.mark.parametrize("question", [
@@ -243,6 +265,32 @@ def test_alias_channel_leaves_nonmatching_sparse_scores_identical(query):
     np.testing.assert_array_equal(actual.get_scores(tokens), original.get_scores(tokens))
     np.testing.assert_array_equal(actual.get_batch_scores(tokens, [0, 2]),
                                   original.get_batch_scores(tokens, [0, 2]))
+
+
+@pytest.mark.parametrize("with_intrinsics", [False, True])
+def test_full_sparse_scores_match_filtered_scores_without_using_batch_scoring(monkeypatch, with_intrinsics):
+    import numpy as np
+    from arm_kb_search.search import _bm25_tokens, build_bm25_index
+
+    metadata = [candidate("Guide", "Documentation", "SVE arithmetic examples")["metadata"]]
+    if with_intrinsics:
+        metadata.insert(0, intrinsic("svadd[_f32]_m")["metadata"])
+    index = build_bm25_index(metadata)
+    queries = [[], _bm25_tokens("SVE arithmetic"), ["svadd_f32_m."], ["svadd[_f32]_m"],
+               ["svadd_f32_m", "svadd_f32_m"], ["unknown_name"]]
+    selections = [list(range(len(metadata))), [len(metadata) - 1, 0, 0], []]
+    expected = [[index.get_batch_scores(query, ids) for ids in selections] for query in queries]
+
+    def reject_batch_scoring(*args, **kwargs):
+        pytest.fail("Full-corpus scoring must use the vectorized get_scores path")
+
+    monkeypatch.setattr(index, "get_batch_scores", reject_batch_scoring)
+    if index.alias_index:
+        monkeypatch.setattr(index.alias_index, "get_batch_scores", reject_batch_scoring)
+    for query, batches in zip(queries, expected):
+        scores = index.get_scores(query)
+        for ids, batch in zip(selections, batches):
+            np.testing.assert_array_equal(scores[ids], batch)
 
 
 def test_sparse_name_evidence_survives_a_large_non_intrinsic_corpus():
