@@ -21,6 +21,8 @@
 - A contributor opens or updates a fork pull request. Its Black Duck check
   fails intentionally and directs reviewers to use the promoted internal pull
   request.
+- For untrusted forked PR, promote workflow will be successful however following message will be displayed in the workflow logs - `Manual fork promotion required, Pull request ## must be reviewed and promoted with the manual workflow.`
+- For an untrusted fork PR, after code review and successful applicable non-Black-Duck checks, a maintainer runs **Promote reviewed fork pull request** manually using `workflow_dispatch`, providing the source PR number and the full reviewed head SHA. Black Duck intentionally fails on the source fork PR and must pass on the resulting internal PR.
 - The exact fork head SHA follows one of the promotion paths below.
 - The workflow applies the promotion safeguards before creating an internal
   pull request.

@@ -316,6 +316,9 @@ def create_internal_pr(
             "Promotes the exact revision from a fork pull request into an "
             "internal branch.",
             "",
+            "NOTE: Reviewers should not commit or comment directly on this internal pull request. "
+            "Instead, discuss and push on the original fork pull request. ",
+            "",
             f"- Original pull request: {source['html_url']}",
             f"- Source repository: `{source['head_repository']}`",
             f"- Reviewed commit: `{source['sha']}`",
