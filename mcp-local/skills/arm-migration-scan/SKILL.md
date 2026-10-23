@@ -1,9 +1,38 @@
 ---
 name: arm-migration-scan
-description: Scan a local or cloned codebase for Arm portability issues with migrate-ease from the command line. Supports C/C++, Python, Go, JavaScript, and Java migration assessments and validation of fixes.
+description: Use when scanning a local checkout or cloned repository for Arm portability issues with migrate-ease from the command line. Guides JSON-first migration reports, optional txt/csv/html output, split-directory scans, metrics, and fix validation for C/C++, Python, Go, JavaScript, and Java. Do not use for unrelated static analysis, unsupported-language compatibility claims, or native Arm build/test certification by itself.
 ---
 
 # Scan a codebase for Arm migration
+
+## Overview
+
+This skill runs migrate-ease scanners from the agent shell, using the
+Arm MCP container image, and reports Arm migration issues for supported language components. The primary output is a reproducible
+scan report with provenance, metrics, warning level, target architecture, report paths, and any generated issue data.
+
+## Workflow
+
+1. **Initial assessment:** Determine whether the input is a local checkout or a
+   remote repository URL, identify the requested branch/ref and directories, and
+   detect which supported scanners are relevant: `cpp`, `python`, `go`, `js`, or
+   `java`.
+2. **Prepare scan location and outputs:** Keep temporary clones and generated
+   reports outside the current project worktree unless the user explicitly asks
+   otherwise. Record the commit/ref, selected directories, excluded paths,
+   target architecture, warning level, requested report format, and scanner
+   version when available.
+3. **Execution step:** Run the appropriate `migrate-ease-{language}` command
+   with a persistent output directory. Split scans when the parallel-directory
+   rules apply.
+4. **Verification:** Confirm each command's exit status, report file existence,
+   requested format validity, stdout/stderr, and metrics before presenting
+   results. Treat missing or invalid reports as failed or incomplete scans.
+5. **Result handling:** Print the requested report data first. Consolidate JSON
+   split-scan results only from generated JSON files. Ask before rendering JSON
+   as HTML, and ask again before opening any HTML report in a browser.
+
+## Tooling and command basics
 
 Run commands through the agent's shell. This replaces the former
 `migrate_ease_scan` MCP tool. Identify relevant languages and scan each supported
@@ -37,19 +66,25 @@ Change both the executable and report name for each language. On Linux, pass
 Use `armv8-a` for a baseline assessment unless a different deployment target was
 requested. Match optional features such as SVE2 to the actual target CPU.
 
-## Report format
+## Decision Rules (If/Then)
 
-Use `json` as the default report format unless the user requests another
-supported format. If the user requests `txt`, `csv`, or `html`, set the output
-filename extension and scanner format option accordingly, and report that format
-instead of forcing `json`. Confirm format support in the selected scanner's
-`--help` when uncertain.
-
-Use `json` when consolidation, partial issue summaries, or later HTML rendering
-from the scan result is required. Non-`json` formats should still include
-provenance, metrics, commands, exit status, stdout/stderr, and report paths in
-the final response, but do not invent structured issue counts that are not
-available from the generated report.
+- If **the user does not request an output format**, then **use `json`**.
+- If **the user requests `txt`, `csv`, or `html`**, then **generate that format
+  and do not force JSON, while still reporting provenance, metrics, status, and
+  paths**.
+- If **the repository is large (size > 1 GB), the requested scan spans multiple independent
+  directories, or multiple language components are in scope**, then **split the
+  scan by directory or component and run parallel commands when practical**.
+- If **a parallel scan finishes before the others**, then **show a clearly
+  labeled partial result for that completed command and continue waiting for the
+  remaining scans**.
+- If **a command fails, a report is missing, or the report is invalid for the
+  requested format**, then **mark that scan failed or incomplete instead of
+  inventing counts or findings**.
+- If **JSON split-scan reports all complete successfully**, then **consolidate
+  them using the parallel-directory aggregation rules**.
+- If **the user wants an HTML view after JSON output**, then **render the
+  existing JSON result using the optional HTML rendering rules**.
 
 ## Excluded paths and patterns
 
@@ -84,6 +119,20 @@ old MCP wrapper made. If staging a copy is necessary, preserve uncommitted edits
 and record exclusions. Do not use a clean remote clone to validate local fixes.
 For a remote URL, clone it into a new local directory first, record the commit,
 then scan that directory. Cloning requires network access; local scanning does not.
+
+## Report format
+
+Use `json` as the default report format unless the user requests another
+supported format. If the user requests `txt`, `csv`, or `html`, set the output
+filename extension and scanner format option accordingly, and report that format
+instead of forcing `json`. Confirm format support in the selected scanner's
+`--help` when uncertain.
+
+Use `json` when consolidation, partial issue summaries, or later HTML rendering
+from the scan result is required. Non-`json` formats should still include
+provenance, metrics, commands, exit status, stdout/stderr, and report paths in
+the final response, but do not invent structured issue counts that are not
+available from the generated report.
 
 ## Keep scan artifacts out of Git/GitHub tracking
 
@@ -206,7 +255,7 @@ browser. Request any environment-required approval before using GUI commands
 such as `open`, `xdg-open`, or `start`. If a browser cannot be opened, provide
 the local HTML file path so the user can open it manually.
 
-## Guardrails against fabricated results
+## Safety & Guardrails
 
 Base the scan result only on executed commands, generated report files, and
 explicit user-provided context. Do not invent issue counts, file paths, line
@@ -230,6 +279,14 @@ scanner executable and version when available, target architecture, warning
 level, command line, image or tool installation used, report paths, exit status,
 and relevant stdout/stderr. Scanner output is advisory; do not claim that a
 project is fully Arm-compatible without a successful native Arm build and test.
+
+Scans can take minutes. Use a shell timeout suited to project size and retain
+exit status, stderr, and the report; an empty or missing report after a failed
+command is not a clean scan. Report file paths, line numbers, issue categories,
+and relevant recommendations. Scanner findings require review and a native Arm
+build/test where available; they do not prove runtime compatibility. Apply fixes
+only within the user's requested scope and rerun the same scan on the edited
+checkout. Use `knowledge_base_search` for Arm-specific dependency guidance.
 
 ## Required metrics
 
@@ -265,10 +322,10 @@ Populate token usage from the client or agent runtime if it is exposed. If token
 usage is not available, set `available` to `false` and leave token counts as
 `null`; do not estimate token usage.
 
-Scans can take minutes. Use a shell timeout suited to project size and retain
-exit status, stderr, and the report; an empty or missing report after a failed
-command is not a clean scan. Report file paths, line numbers, issue categories,
-and relevant recommendations. Scanner findings require review and a native Arm
-build/test where available; they do not prove runtime compatibility. Apply fixes
-only within the user's requested scope and rerun the same scan on the edited
-checkout. Use `knowledge_base_search` for Arm-specific dependency guidance.
+
+
+## Reference Files
+
+No extra reference files are required for the default workflow. Use the selected
+scanner's `--help` output as the command-specific reference for flags, supported
+formats, scanner version behavior, and warning-level support.
