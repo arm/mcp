@@ -19,6 +19,14 @@ FROM ${BASE_IMAGE}
 # layer stays cached when only the source changes, for example:
 # RUN python -m pip install --no-cache-dir 'your-package==1.2.3'
 
-COPY mcp-local/server.py /app/server.py
-COPY mcp-local/utils/ /app/utils/
 COPY arm_kb_search/ /app/arm_kb_search/
+
+# Build document-name evidence once per image/corpus; startup only loads it.
+COPY mcp-local/name-aliases.json /app/name-aliases.json
+RUN --network=none python -m arm_kb_search.build_names \
+    --metadata /app/data/metadata.json \
+    --aliases /app/name-aliases.json \
+    --output /app/data/names.json
+
+COPY mcp-local/utils/ /app/utils/
+COPY mcp-local/server.py /app/server.py

@@ -81,8 +81,16 @@ COPY --from=embeddings /embedding-data/embedding-model/ /app/embedding-model/
 COPY --from=embeddings /embedding-data/metadata.json /app/data/metadata.json
 COPY --from=embeddings /embedding-data/usearch_index.bin /app/data/usearch_index.bin
 
-COPY mcp-local/utils/ /app/utils/
 COPY arm_kb_search/ /app/arm_kb_search/
+
+# Build document-name evidence once per image/corpus; startup only loads it.
+COPY mcp-local/name-aliases.json /app/name-aliases.json
+RUN --network=none python -m arm_kb_search.build_names \
+    --metadata /app/data/metadata.json \
+    --aliases /app/name-aliases.json \
+    --output /app/data/names.json
+
+COPY mcp-local/utils/ /app/utils/
 COPY mcp-local/server.py /app/server.py
 
 FROM ${UBUNTU_IMAGE} AS runtime

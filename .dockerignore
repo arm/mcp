@@ -4,6 +4,7 @@
 !mcp-local/
 !mcp-local/Dockerfile
 !mcp-local/server.py
+!mcp-local/name-aliases.json
 !mcp-local/sql/
 !mcp-local/sql/**
 !mcp-local/utils/
