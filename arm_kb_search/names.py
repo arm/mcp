@@ -155,7 +155,7 @@ class NameIndex:
             reason = None
             if len(stripped) > _MAX_LABEL_LENGTH:
                 reason = "label_too_long"
-            elif not _LABEL.fullmatch(stripped):
+            elif not _LABEL.fullmatch(stripped) or re.search(r"(?:^|\s)\.[A-Za-z]", stripped):
                 reason = "unsupported_syntax"
             else:
                 components = tuple(part.lower() for part in re.findall(r"[A-Za-z]+", stripped))
