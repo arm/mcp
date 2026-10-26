@@ -109,7 +109,7 @@ def test_single_letter_labels_cannot_consume_meaningful_symbols(text):
     assert lookup([package("C")]).keys(text) == frozenset()
 
 
-@pytest.mark.parametrize("connector", ["for", "on", "with", "using", "and", "or", "from", "to", "in"])
+@pytest.mark.parametrize("connector", ["for", "on", "with", "using", "and", "or", "from", "to", "in", "via", "through"])
 def test_installation_prose_is_reported_instead_of_guessing_products(connector):
     title = f"Install AWS CLI {connector} Linux"
     index = lookup([{"doc_type": "Install Guides", "title": title, "chunk_uuid": "guide", "url": "https://example.com/guide"}])
@@ -130,6 +130,16 @@ def test_installation_titles_and_package_heading_fallback_are_inventory_sources(
     ])
     assert index.keys("DockerCompose Node JS Unknown Tool AWS CLI") == frozenset({"dockercompose", "nodejs"})
     assert index.candidates("node-js") == [1]
+
+
+@pytest.mark.parametrize("title", ["Access via API", "Access via Internet Browser", "Access through API"])
+def test_generic_access_titles_do_not_turn_prose_into_product_names(title):
+    index = lookup([{"doc_type": "Install Guides", "title": title, "chunk_uuid": "access"},
+                    package("AWS CLI", 1)])
+    query = f"Can I {title.lower()} on Arm?"
+    assert index.project(query) == query
+    assert index.candidates(query) == []
+    assert index.keys("aws_cli") == {"awscli"}
 
 
 def test_label_extraction_is_bounded_by_components_and_character_count():

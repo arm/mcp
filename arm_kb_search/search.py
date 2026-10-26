@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from collections import Counter
-from dataclasses import dataclass, field as dataclass_field, replace
+from dataclasses import dataclass, field as dataclass_field, fields as dataclass_fields, replace
 from typing import Any, Dict, Iterable, List, Optional
 import re
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -24,7 +24,7 @@ from sentence_transformers import SentenceTransformer
 from usearch.index import Index, search as search_vectors
 
 from .config import DISTANCE_THRESHOLD, K_RESULTS
-from .names import NameIndex
+from .names import BODY_FIELDS, NameIndex, field_items
 
 
 SEARCH_TOKEN_PATTERN = re.compile(r"(?:_+)?[a-z0-9][a-z0-9_\-+.]*", re.IGNORECASE)
@@ -206,8 +206,8 @@ def _installation_subject_tokens(query: str) -> set[str]:
 
 
 @dataclass(frozen=True)
-class _QueryAnalysis:
-    """Query terms and intent shared by lexical scoring and reranking."""
+class _QueryTerms:
+    """The matching view; complete names replace their component words."""
 
     query_tokens: set[str]
     lexical_query_tokens: set[str]
@@ -217,6 +217,12 @@ class _QueryAnalysis:
     entity_query_tokens: set[str]
     salient_query_terms: List[str]
     direct_query_terms: List[str]
+
+
+@dataclass(frozen=True)
+class _QueryAnalysis(_QueryTerms):
+    """Matching terms plus intent and protected evidence from the original query."""
+
     installation_query: bool
     prefers_tuning_guide: bool
     prefers_reference_architecture: bool
@@ -321,13 +327,8 @@ def _analyze_query(query: str, name_index: Optional[NameIndex] = None) -> _Query
     parts.append(query[end:])
     projected = _separate_name_punctuation("".join(parts))
     scoring = _analyze_query_raw(projected)
-    fields = (
-        "query_tokens", "lexical_query_tokens", "salient_query_tokens",
-        "direct_query_tokens", "scoring_query_tokens", "entity_query_tokens",
-        "salient_query_terms", "direct_query_terms",
-    )
     return replace(
-        analysis, **{field: getattr(scoring, field) for field in fields},
+        analysis, **{field.name: getattr(scoring, field.name) for field in dataclass_fields(_QueryTerms)},
         name_index=name_index, name_keys=frozenset(seen),
         name_evidence_tokens=frozenset(_technical_evidence(projected)),
         code_identifiers=analysis.code_identifiers & scoring.code_identifiers,
@@ -355,33 +356,19 @@ def _matching_metadata_text(query: _QueryAnalysis, metadata: Dict[str, Any], fie
             # search_text is a flattened aggregate. Rebuild only the matching
             # view, projecting each original field/list item before concatenation.
             body_field = "original_text" if isinstance(metadata.get("original_text"), str) else "content"
-            values.append(_matching_metadata_text(query, metadata, (
-                "title", "heading_path", "heading", "doc_type", "product",
-                "version", "keywords", body_field,
-            )))
+            values.append(_matching_metadata_text(query, metadata, (*BODY_FIELDS, body_field)))
             continue
-        value = metadata.get(field)
-        for item_number, item in enumerate(value if isinstance(value, list) else [value]):
-            if item:
-                if hasattr(query.name_index, "project_field"):
-                    projected = query.name_index.project_field(metadata, field, item_number, str(item), query.name_keys)
-                    values.append(_separate_name_punctuation(projected))
-                else:
-                    values.append(_matching_text(query, str(item)))
+        for item_number, text in field_items(metadata, field):
+            projected = query.name_index.project_field(metadata, field, item_number, text, query.name_keys)
+            values.append(_separate_name_punctuation(projected))
     return " ".join(values)
 
 
 def _matching_url_tokens(query: _QueryAnalysis, text: str, metadata=None) -> set[str]:
     if not query.name_keys:
         return set(tokenize_url_content_for_search(text))
-    if metadata is not None and hasattr(query.name_index, "project_url_parts"):
-        parts = query.name_index.project_url_parts(metadata, text, query.name_keys)
-        return {token for part in parts for token in tokenize_url_for_search(_separate_name_punctuation(part))}
-    parsed = urlparse(text or "")
-    return {
-        token for part in (parsed.path, parsed.query, parsed.fragment)
-        for token in tokenize_url_for_search(_matching_text(query, part))
-    }
+    parts = query.name_index.project_url_parts(metadata or {}, text, query.name_keys)
+    return {token for part in parts for token in tokenize_url_for_search(_separate_name_punctuation(part))}
 
 
 def is_navigation_only(metadata: Dict[str, Any]) -> bool:
@@ -756,7 +743,7 @@ def bm25_search(
                 "rank": rank,
                 "bm25_score": score,
                 "metadata": metadata[metadata_id],
-                        "metadata_id": metadata_id,
+                "metadata_id": metadata_id,
             }
         )
     return results
@@ -799,7 +786,7 @@ def _reference_record_bonus(
     if doc_type == "ecosystem dashboard" and query.support_question:
         heading_path = metadata.get("heading_path")
         package = heading_path[1] if isinstance(heading_path, list) and len(heading_path) > 1 else heading
-        if query.name_keys and hasattr(query.name_index, "project_field"):
+        if query.name_keys:
             field, number = ("heading_path", 1) if isinstance(heading_path, list) and len(heading_path) > 1 else ("heading", 0)
             package = heading_path[1] if field == "heading_path" else str(metadata.get("heading") or "")
             package = _separate_name_punctuation(query.name_index.project_field(metadata, field, number, str(package), query.name_keys))
@@ -918,8 +905,9 @@ def _candidate_body_tokens(query, candidate, bm25_index):
         frequencies = bm25_index.doc_freqs[row_id]
         if not query.name_keys:
             return frequencies.keys()
-        if hasattr(query.name_index, "body_tokens"):
-            return query.name_index.body_tokens(row_id, frequencies, query.name_keys)
+        tokens = query.name_index.body_tokens(row_id, frequencies, query.name_keys)
+        if tokens is not None:
+            return tokens
     return set(tokenize_for_search(_matching_metadata_text(query, candidate["metadata"], ("search_text",))))
 
 
@@ -936,8 +924,12 @@ def _rerank_candidates(
     direct_query_terms = query.direct_query_terms
     direct_query_tokens = query.direct_query_tokens
     scoring_query_tokens = query.scoring_query_tokens
-    entity_query_tokens = query.entity_query_tokens
     short_query = len(scoring_query_tokens) <= 3
+    if short_query and query.name_keys and query.installation_query:
+        # Action and generic Arm context must not outweigh the named subject.
+        # Keep platform constraints and the original intent/document bonuses.
+        scoring_query_tokens = query.salient_query_tokens
+    entity_query_tokens = query.entity_query_tokens
     needs_support = bool(query_tokens & SUPPORT_INTENT_TOKENS) and bool(_capability_tokens(query_tokens))
     reranked: List[Dict[str, Any]] = []
     for candidate in candidates:
@@ -1122,7 +1114,7 @@ def hybrid_search(
 
     name_results = [
         {"metadata": metadata[row_id], "metadata_id": row_id}
-        for row_id in (name_index.candidates(query, eligible_ids=eligible_ids)
+        for row_id in (name_index.candidate_ids(query_analysis.name_keys, eligible_ids=eligible_ids)
                        if name_index is not None else [])
     ]
     lexical_pool = {_candidate_key(item): item for item in name_results}

@@ -1,3 +1,7 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """Score-preserving query-local work reuse, without a corpus token cache."""
 
 import importlib
@@ -150,3 +154,24 @@ def test_lexical_prepass_preserves_tied_candidate_order():
     }
     ranked = s._rank_lexical_candidates(query, [first, second], k=2)
     assert [item["metadata"]["chunk_uuid"] for item in ranked] == ["B", "A"]
+
+
+def test_query_name_matching_is_reused_for_candidate_lookup(tmp_path, monkeypatch):
+    data = rows()
+    path = tmp_path / "names.json"
+    NameIndex.precompute(data, path)
+    index = NameIndex.load_precomputed(data, path)
+    resources = SearchResources(data, None, None, s.build_bm25_index(data),
+                                include_disclaimers=False, prepared_name_index=index)
+    query = "install maple_studio on Linux"
+    calls = []
+    original = index.match
+
+    def counted(text):
+        if text == query:
+            calls.append(text)
+        return original(text)
+
+    monkeypatch.setattr(index, "match", counted)
+    assert search(query, resources, k=1)[0]["url"] == "https://example.org/0"
+    assert len(calls) == 1

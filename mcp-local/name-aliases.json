@@ -200,16 +200,6 @@
     "provenance": "catalog parenthetical abbreviation"
   },
   {
-    "canonical": "Modular Accelerated Xecution",
-    "labels": [
-      "Modular Accelerated Xecution (MAX)"
-    ],
-    "aliases": [
-      "MAX"
-    ],
-    "provenance": "catalog parenthetical abbreviation"
-  },
-  {
     "canonical": "Network Mapper",
     "labels": [
       "Network Mapper (Nmap)"

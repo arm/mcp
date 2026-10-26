@@ -1,3 +1,7 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """Offline builder integration: immutable source and auditable optional aliases."""
 
 import json
@@ -67,3 +71,20 @@ def test_offline_builder_refuses_overwriting_source(tmp_path):
     assert result.returncode != 0
     assert "distinct" in result.stderr
     assert source.read_text() == "[]"
+
+
+def test_missing_optional_alias_is_visible_without_report(tmp_path):
+    source = tmp_path / 'metadata.json'
+    source.write_text('[]')
+    aliases = tmp_path / 'aliases.json'
+    aliases.write_text(json.dumps([dict(canonical='Absent Product', labels=['Absent Product'],
+                                       aliases=['abp'], provenance='optional catalog')]))
+    output = tmp_path / 'names.json'
+    result = subprocess.run([sys.executable, '-m', 'arm_kb_search.build_names',
+                             '--metadata', str(source), '--output', str(output),
+                             '--aliases', str(aliases)], text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert output.exists()
+    assert 'Absent Product' in result.stderr
+    assert 'no_exact_source_label' in result.stderr
+    assert 'labels' in result.stderr

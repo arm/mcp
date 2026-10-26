@@ -254,6 +254,7 @@ def evaluate(args):
         metadata_path=str(args.metadata_path),
         usearch_index_path=str(args.index_path),
         model_path=str(args.model_path),
+        **({"name_index_path": str(args.name_index_path)} if args.name_index_path else {}),
     )
     if (
         not resources.metadata
@@ -321,6 +322,7 @@ def main(argv=None):
     parser.add_argument("--index-path", type=Path, default=Path("usearch_index.bin"))
     parser.add_argument("--metadata-path", type=Path, default=Path("metadata.json"))
     parser.add_argument("--model-path", type=Path, required=True)
+    parser.add_argument("--name-index-path", type=Path, help="Prepared name index to evaluate; omit for ordinary retrieval")
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--output", type=Path, help="Write a new JSON report")
     parser.add_argument(

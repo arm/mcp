@@ -1,18 +1,24 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """Versioned, corpus-bound whole-name evidence computed without embeddings."""
 
 from collections import Counter
-import os
-import tempfile
-from typing import Any
 import hashlib
 import json
+import os
 from pathlib import Path
+import re
 import sys
+import tempfile
+from typing import Any
 from urllib.parse import urlparse
 
-from .names import NameEntry, NameIndex
+from .names import BODY_FIELDS, NameEntry, NameIndex, field_items
 
-SCHEMA = 3
+# Rebuild older artifacts so they cannot retain superseded extraction policies.
+SCHEMA = 5
 FIELDS = (
     "title",
     "heading",
@@ -25,15 +31,6 @@ FIELDS = (
     "content",
     "url",
     "resolved_url",
-)
-BODY_FIELDS = (
-    "title",
-    "heading_path",
-    "heading",
-    "doc_type",
-    "product",
-    "version",
-    "keywords",
 )
 
 
@@ -91,6 +88,84 @@ def _row_ids(metadata: list[dict]) -> dict[str, int]:
     return {key: number for number, key in enumerate(keys)}
 
 
+def _validate_spans(spans: list, text: str, name_count: int) -> None:
+    """Check saved offsets without rescanning document text for names."""
+    if not isinstance(spans, list):
+        raise ValueError("span list required")
+    previous_end = 0
+    for name_id, start, end in spans:
+        if (
+            any(type(value) is not int for value in (name_id, start, end))
+            or not 0 <= name_id < name_count
+            or not previous_end <= start < end <= len(text)
+        ):
+            raise ValueError("invalid or overlapping span")
+        previous_end = end
+
+
+def _validate_delta(delta: list) -> None:
+    if not isinstance(delta, list):
+        raise ValueError("token adjustments must be a list")
+    seen = set()
+    for token, count in delta:
+        if (
+            not isinstance(token, str) or not token or token in seen
+            or type(count) is not int or count == 0
+        ):
+            raise ValueError("invalid token adjustment")
+        seen.add(token)
+
+
+def _validate_evidence(payload: dict, metadata: list[dict]) -> None:
+    """Reject structurally invalid evidence before it reaches query scoring."""
+    try:
+        names = payload["names"]
+        if not isinstance(payload["rows"], list):
+            raise ValueError("row list required")
+        for row, record in zip(metadata, payload["rows"]):
+            if record is None:
+                continue
+            if not isinstance(record, dict) or not isinstance(record["spans"], dict):
+                raise ValueError("invalid row record")
+            _validate_delta(record["base"])
+            for name_id, delta in record["names"].items():
+                number = int(name_id)
+                if str(number) != name_id or not 0 <= number < len(names):
+                    raise ValueError("invalid name reference")
+                _validate_delta(delta)
+            for field, items in record["spans"].items():
+                if field not in FIELDS:
+                    raise ValueError("unknown evidence field")
+                texts = {str(number): text for number, text in field_items(row, field)}
+                for number, spans in items.items():
+                    _validate_spans(spans, texts[number], len(names))
+        for url, parts in payload["urls"].items():
+            parsed = urlparse(url)
+            if not isinstance(parts, list) or len(parts) != 3:
+                raise ValueError("invalid URL evidence")
+            for spans, text in zip(parts, (parsed.path, parsed.query, parsed.fragment)):
+                _validate_spans(spans, text, len(names))
+        inventory = payload["report"]["inventory"]
+        seen = set()
+        for entry in inventory:
+            key = entry["key"]
+            if (
+                not isinstance(key, str) or not key or key in seen
+                or "".join(entry["components"]) != key
+                or not isinstance(entry["sources"], list)
+                or any(not isinstance(source, dict) or not isinstance(source.get("label"), str)
+                       for source in entry["sources"])
+            ):
+                raise ValueError("invalid provenance inventory")
+            seen.add(key)
+        if not set(names) <= seen:
+            raise ValueError("missing provenance inventory")
+        for pattern, _ in payload["literal_specs"]:
+            re.compile(pattern)
+    except (KeyError, TypeError, IndexError, AttributeError, ValueError, re.error) as exc:
+        raise ValueError(f"Invalid name artifact evidence: {exc}") from exc
+
+
 def _load_payload(metadata: list[dict], path: str | Path) -> dict:
     try:
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -133,16 +208,10 @@ def _load_payload(metadata: list[dict], path: str | Path) -> dict:
             payload["report"], dict
         ):
             raise ValueError("Invalid name artifact fields")
+        _validate_evidence(payload, metadata)
         return payload
     except (KeyError, TypeError, IndexError, json.JSONDecodeError) as exc:
         raise ValueError("Invalid name artifact; rebuild the artifact") from exc
-
-
-def _items(row, field):
-    value = row.get(field)
-    for number, item in enumerate(value if isinstance(value, list) else [value]):
-        if item:
-            yield number, str(item)
 
 
 def _delta(before, after):
@@ -173,7 +242,8 @@ def write_artifact(metadata: list[dict[str, Any]], path: str | Path, aliases=())
 
     _row_ids(metadata)
     index = NameIndex(metadata, aliases)
-    names = sorted(index._postings)
+    payload = index.snapshot()
+    names = payload["names"]
     ids = {key: number for number, key in enumerate(names)}
     records = []
     urls = {}
@@ -181,7 +251,7 @@ def write_artifact(metadata: list[dict[str, Any]], path: str | Path, aliases=())
         spans = {}
         for field in FIELDS:
             found = {}
-            for number, text in _items(row, field):
+            for number, text in field_items(row, field):
                 matches = [[ids[m.key], m.start, m.end] for m in index.match(text)]
                 if matches:
                     found[str(number)] = matches
@@ -192,7 +262,7 @@ def write_artifact(metadata: list[dict[str, Any]], path: str | Path, aliases=())
             if url and url not in urls:
                 parsed = urlparse(url)
                 matches = [
-                    [[ids[m.key], m.start, m.end] for m in index.match(part)]
+                    [[ids[m.key], m.start, m.end] for m in index.match_url(part)]
                     for part in (parsed.path, parsed.query, parsed.fragment)
                 ]
                 if any(matches):
@@ -203,7 +273,7 @@ def write_artifact(metadata: list[dict[str, Any]], path: str | Path, aliases=())
         body_parts = [
             (field, number, text)
             for field in (*BODY_FIELDS, body_field)
-            for number, text in _items(row, field)
+            for number, text in field_items(row, field)
         ]
         base = Counter(tokenize_for_search(" ".join(text for _, _, text in body_parts)))
         bm25 = Counter(_bm25_tokens(row.get("search_text", "")))
@@ -235,17 +305,12 @@ def write_artifact(metadata: list[dict[str, Any]], path: str | Path, aliases=())
             if spans or base_delta or patches
             else None
         )
-    payload = {
+    payload.update({
         "schema": SCHEMA,
         "corpus": corpus_fingerprint(metadata),
-        "names": names,
-        "report": index.report(),
-        "matcher_specs": index._matcher_specs,
-        "literal_specs": index._literal_specs,
-        "postings": {key: list(rows.items()) for key, rows in index._postings.items()},
         "rows": records,
         "urls": urls,
-    }
+    })
     payload["checksum"] = _checksum(payload)
     write_json_atomic(path, payload)
     return {
@@ -318,7 +383,7 @@ class PreparedNameIndex(NameIndex):
         parsed = urlparse(url or "")
         parts = (parsed.path, parsed.query, parsed.fragment)
         if metadata.get("chunk_uuid") not in self._row_ids:
-            return tuple(self.project(part, keys) for part in parts)
+            return super().project_url_parts(metadata, url, keys)
         matches = self._urls.get(url, ((), (), ()))
         return tuple(
             _project(part, spans, keys, self._names)

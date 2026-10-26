@@ -1,3 +1,7 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """Whole-name evidence through the public resource-level retrieval pipeline."""
 import importlib
 
@@ -181,3 +185,32 @@ def test_flattened_fallback_without_raw_body_cannot_gain_name_credit():
     analysis = s._analyze_query('awscli', resources._name_index)
     metadata = {'title': 'AWS', 'heading': 'CLI', 'search_text': 'AWS CLI'}
     assert s._score_lexical_exactness(analysis, metadata) == 0.0
+
+
+@pytest.mark.parametrize('query', ['install sklearn on arm', 'how do I install sk_learn on arm',
+                                  'install scikit-learn on arm'])
+def test_contextual_installation_prefers_product_over_generic_action(query, tmp_path):
+    rows = [row(0, 'Scikit-learn', 'Package: Scikit-learn. Arm Linux support. Official installation documentation.',
+                heading='Scikit-learn', heading_path=['Linux', 'Scikit-learn'], doc_type='Ecosystem Dashboard'),
+            row(1, 'Install Arm tools', 'Install tools on Arm.', heading='Install Arm tools', doc_type='Tutorial'),
+            row(2, 'Other library', 'Install scikit-learn as a prerequisite on Arm.', doc_type='Tutorial'),
+            *[row(i, 'Background', 'background') for i in range(3, 12)]]
+    aliases = [dict(canonical='Scikit-learn', labels=['Scikit-learn'],
+                    aliases=['sklearn', 'sk learn'], provenance='reviewed test alias')]
+    path = tmp_path / 'names.json'
+    NameIndex.precompute(rows, path, aliases)
+    resources = state(rows)
+    resources._name_index = NameIndex.load_precomputed(rows, path)
+    assert search(query, resources, k=1)[0]['url'] == 'https://example.org/0'
+
+
+@pytest.mark.parametrize('query', ['How do I install AWS CLI on Ubuntu Arm64?',
+                                  'How do I install aws_cli on Ubuntu Arm64?'])
+def test_installation_subject_does_not_switch_long_queries_to_short_scoring(query):
+    rows = [row(0, 'AWS CLI', 'Download the AWS CLI client.', heading='Install AWS CLI',
+                doc_type='Install Guides'),
+            row(1, 'Install another product on Ubuntu Arm64', 'Install tools on Ubuntu Arm64.',
+                heading='Install another product on Ubuntu Arm64', doc_type='Tutorial')]
+    candidates = [dict(metadata=r, bm25_score=25.0) for r in rows]
+    results = s.rerank_candidates(query, candidates, name_index=NameIndex(rows))
+    assert results[0]['metadata']['chunk_uuid'] == '0'

@@ -1,3 +1,7 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """Prepared evidence must preserve raw-name scoring and reject stale snapshots."""
 
 import importlib
@@ -241,3 +245,46 @@ def test_prepared_aliases_keep_unsupported_complete_label_blockers(tmp_path):
     assert index.candidates("mse") == [0]
     assert index.keys("Maple Studio Editor (Open Source)") == frozenset()
     assert index.keys("Maple Studio Editor (MSE)") == frozenset({"maplestudioeditor"})
+
+
+@pytest.mark.parametrize("mutation", [
+    "negative_span", "long_span", "overlapping_spans", "unknown_field", "delta_type",
+    "name_id", "row_type", "url_span", "inventory", "regex", "old_schema", "source_label",
+])
+def test_invalid_prepared_evidence_is_rejected_before_search(tmp_path, mutation):
+    from arm_kb_search.prepared_names import _checksum
+
+    rows = [row(0, "Maple Studio", "editor")]
+    prepared(rows, tmp_path)
+    path = tmp_path / "names.json"
+    data = json.loads(path.read_text())
+    record = data["rows"][0]
+    if mutation == "negative_span":
+        record["spans"]["title"]["0"] = [[0, -1, 4]]
+    elif mutation == "long_span":
+        record["spans"]["title"]["0"] = [[0, 0, 10000]]
+    elif mutation == "overlapping_spans":
+        record["spans"]["title"]["0"] = [[0, 0, 5], [0, 4, 11]]
+    elif mutation == "unknown_field":
+        record["spans"]["not_a_field"] = {"0": [[0, 0, 1]]}
+    elif mutation == "delta_type":
+        record["base"] = [["word", 1.5]]
+    elif mutation == "name_id":
+        record["names"] = {"999": [["__name_maplestudio", 1]]}
+    elif mutation == "row_type":
+        data["rows"][0] = []
+    elif mutation == "url_span":
+        data["urls"] = {"https://example.org/maple-studio": [[[0, 0, 10000]], [], []]}
+    elif mutation == "inventory":
+        data["report"]["inventory"] = []
+    elif mutation == "regex":
+        data["literal_specs"] = [["[", "maplestudio"]]
+    elif mutation == "source_label":
+        data["report"]["inventory"][0]["sources"][0]["label"] = None
+    else:
+        data["schema"] = 4
+    # Simulate a malformed builder output, rather than just checksum damage.
+    data["checksum"] = _checksum(data)
+    path.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="artifact"):
+        NameIndex.load_precomputed(rows, path)

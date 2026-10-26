@@ -21,14 +21,17 @@ supply component boundaries; ordinary prose and URLs never create new names.
 from dataclasses import dataclass
 import re
 from typing import Any, Iterable, Mapping, Optional
+from urllib.parse import urlparse
 
 
 _MAX_COMPONENTS = 8
 _MAX_LABEL_LENGTH = 80
-_CONNECTORS = frozenset({"for", "on", "with", "using", "and", "or", "from", "to", "in"})
+_CONNECTORS = frozenset({"for", "on", "with", "using", "and", "or", "from", "to", "in", "via", "through"})
 _LABEL = re.compile(r"[A-Za-z]+(?:(?:[ \t]+|[ \t]*[-_.][ \t]*)[A-Za-z]+)*")
 # Starts exclude adjacent identifiers, meaningful symbols and namespaces.
 _LEFT_BOUNDARY = r"(?<![\w.:+#-])"
+# Keep offline token adjustments and query-time field scoring in the same order.
+BODY_FIELDS = ("title", "heading_path", "heading", "doc_type", "product", "version", "keywords")
 
 
 @dataclass(frozen=True)
@@ -111,6 +114,14 @@ def _texts(value: Any) -> Iterable[str]:
         for item in value:
             if isinstance(item, str):
                 yield item
+
+
+def field_items(row: Mapping[str, Any], field: str) -> Iterable[tuple[int, str]]:
+    """Share field/list boundaries between prepared evidence and live scoring."""
+    value = row.get(field)
+    for number, item in enumerate(value if isinstance(value, list) else [value]):
+        if item:
+            yield number, str(item)
 
 
 class NameIndex:
@@ -318,6 +329,28 @@ class NameIndex:
         starts = "".join(sorted(self._trie.children))
         self._starts = re.compile(_LEFT_BOUNDARY + f"(?ai:[{starts}])") if starts else None
         self._literals = [(re.compile(pattern), key) for pattern, key in self._literal_specs]
+        # URL slugs can spell an explicitly reviewed full label without brackets.
+        # Only an approved parenthetical alias qualifies; editions and versions
+        # cannot gain identity just by following a recognized product prefix.
+        owners = {spelling: key for spelling, _, key in self._matcher_specs}
+        slugs: dict[tuple[str, ...], set[str]] = {}
+        for key, entry in self.inventory.items():
+            for source in entry.sources:
+                label = re.fullmatch(r"([A-Za-z ._-]+)\s*\(([A-Za-z ._-]+)\)", source["label"])
+                if label is None or not source.get("provenance"):
+                    continue
+                prefix, suffix = (_alias_parts(part.strip()) for part in label.groups())
+                if ("".join(prefix) != key or owners.get("".join(suffix)) != key):
+                    continue
+                parts = prefix + suffix
+                joined = "".join(parts)
+                if joined in self.inventory or owners.get(joined, key) != key:
+                    continue
+                slugs.setdefault(parts, set()).add(key)
+        self._url_literals = [
+            (re.compile(_LEFT_BOUNDARY + "(?ai:" + r"[-_.]".join(parts) + ")"), next(iter(keys)))
+            for parts, keys in slugs.items() if len(keys) == 1
+        ]
 
     @staticmethod
     def precompute(metadata, path, aliases=()):
@@ -402,32 +435,73 @@ class NameIndex:
         """Return each complete name at most once regardless of repetition."""
         return frozenset(matched.key for matched in self.match(text))
 
+    def match_url(self, text: str) -> tuple[NameMatch, ...]:
+        """Match URL parts, including complete reviewed label slugs."""
+        candidates = list(self.match(text))
+        for pattern, key in self._url_literals:
+            candidates.extend(NameMatch(key, m.start(), m.end()) for m in pattern.finditer(text)
+                              if _valid_right_boundary(text, m.end()))
+        matches, consumed = [], 0
+        for match in sorted(candidates, key=lambda m: (m.start, -m.end)):
+            if match.start >= consumed:
+                matches.append(match)
+                consumed = match.end
+        return tuple(matches)
+
+    def project_field(self, metadata, field, item_number, text, keys):
+        """Project one independent field; prepared indexes use saved offsets."""
+        return self.project(text, keys)
+
+    def project_url_parts(self, metadata, url, keys):
+        parsed = urlparse(url or "")
+        return tuple(self._project_matches(part, self.match_url(part), keys)
+                     for part in (parsed.path, parsed.query, parsed.fragment))
+
+    def body_tokens(self, row_id, frequencies, keys):
+        """Return prepared tokens, or None to request raw-field tokenization."""
+        return None
+
+    def snapshot(self):
+        """Export the resolved matcher and postings for the offline artifact writer."""
+        return {"names": sorted(self._postings), "report": self.report(),
+                "matcher_specs": self._matcher_specs, "literal_specs": self._literal_specs,
+                "postings": {key: list(rows.items()) for key, rows in self._postings.items()}}
+
     def project(self, text: str, keys: Optional[Iterable[str]] = None) -> str:
         """Replace complete spans, optionally selecting keys after overlap masking.
 
         Matching always uses the full inventory so selecting a shorter key cannot
         expose a nested span hidden inside a longer recognized name.
         """
+        return self._project_matches(text, self.match(text), keys)
+
+    @staticmethod
+    def _project_matches(text, matches, keys):
         selected = None if keys is None else frozenset(keys)
         pieces = []
         cursor = 0
-        for matched in self.match(text):
+        for matched in matches:
             if selected is not None and matched.key not in selected:
                 continue
-            pieces.extend((text[cursor:matched.start], self.atom(matched.key)))
+            pieces.extend((text[cursor:matched.start], NameIndex.atom(matched.key)))
             cursor = matched.end
         pieces.append(text[cursor:])
         return "".join(pieces)
 
     def candidates(self, query: str, eligible_ids: Optional[Iterable[int]] = None,
                    limit: int = 100) -> list[int]:
+        """Recognize names and return their bounded, filtered candidate rows."""
+        return self.candidate_ids(self.keys(query), eligible_ids, limit)
+
+    def candidate_ids(self, keys: Iterable[str], eligible_ids: Optional[Iterable[int]] = None,
+                      limit: int = 100) -> list[int]:
         """Return filtered row IDs ordered by field prominence and stable row ID."""
         if limit <= 0:
             return []
         eligible = None if eligible_ids is None else frozenset(eligible_ids)
         priorities: dict[int, int] = {}
-        for key in self.keys(query):
-            for row_id, priority in self._postings[key].items():
+        for key in keys:
+            for row_id, priority in self._postings.get(key, {}).items():
                 if eligible is None or row_id in eligible:
                     priorities[row_id] = min(priorities.get(row_id, priority), priority)
         return sorted(priorities, key=lambda row_id: (priorities[row_id], row_id))[:limit]

@@ -36,6 +36,7 @@ def test_retrieval_smoke(platform, tmp_path):
             "--metadata-path", "/app/data/metadata.json",
             "--index-path", "/app/data/usearch_index.bin",
             "--model-path", "/app/embedding-model",
+            "--name-index-path", "/app/data/names.json",
             "--output", "/results/smoke.json",
         ])
     )

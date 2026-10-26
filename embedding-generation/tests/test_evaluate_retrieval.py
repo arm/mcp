@@ -46,6 +46,23 @@ def test_checked_in_suites_have_required_fields(suite):
     runner.validate_rows(rows, suite)
 
 
+def test_explicit_name_index_is_required_instead_of_silently_disabled(inputs, tmp_path, monkeypatch):
+    from arm_kb_search import load_search_resources
+
+    metadata = tmp_path / "metadata.json"
+    metadata.write_text(json.dumps([{"chunk_uuid": "one", "search_text": "AWS CLI"}]))
+    missing = tmp_path / "missing-names.json"
+    output = tmp_path / "missing-index-report.json"
+    # Exercise the real metadata/artifact loader; it must fail before model loading.
+    monkeypatch.setattr(runner, "load_search_resources", load_search_resources)
+    result = runner.main([
+        *inputs[2], "--metadata-path", str(metadata),
+        "--name-index-path", str(missing), "--output", str(output),
+    ])
+    assert result == 2
+    assert str(missing) in json.loads(output.read_text())["error"]
+
+
 @pytest.mark.parametrize(
     "suite,field", [("smoke", "area"), ("benchmark", "topic"), ("benchmark", "intent")]
 )

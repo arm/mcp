@@ -1,6 +1,12 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
 """Explicit build inputs authorize aliases; runtime only consumes saved evidence."""
 import copy
 import importlib
+import json
+from pathlib import Path
 
 import pytest
 
@@ -182,3 +188,50 @@ def test_full_label_unicode_boundary_does_not_consume_independent_alias():
     index = NameIndex([row(0, "Maple Studio Editor (MSE)")], [group()])
     text = "éMaple Studio Editor (MSE)"
     assert [(m.start, m.end) for m in index.match(text)] == [(22, 25)]
+
+
+def test_shipped_aliases_do_not_claim_the_ordinary_word_max():
+    definitions = Path(__file__).resolve().parents[1] / "mcp-local/name-aliases.json"
+    aliases = json.loads(definitions.read_text())
+    rows = [row(0, "Modular Accelerated Xecution (MAX)"),
+            row(1, "Amazon Elastic Kubernetes Service (EKS)")]
+    index = NameIndex(rows, aliases)
+    for spelling in ["max", "Max", "MAX"]:
+        query = f"What is the {spelling} supported size?"
+        assert index.project(query) == query
+        assert index.candidates(query) == []
+    assert index.candidates("eks") == [1]
+
+
+@pytest.mark.parametrize('prepared', [False, True])
+def test_reviewed_full_label_slug_preserves_url_evidence(prepared, tmp_path):
+    rows = [row(i, 'Maple Studio Editor (MSE)') for i in range(2)]
+    for item, slug in zip(rows, ['maple-studio-editor-mse', 'maple_studio_editor_mse']):
+        item['url'] = 'https://example.org/?package=' + slug
+    if prepared:
+        path = tmp_path / 'names.json'
+        NameIndex.precompute(rows, path, [group()])
+        index = NameIndex.load_precomputed(rows, path)
+    else:
+        index = NameIndex(rows, [group()])
+    s = importlib.import_module('arm_kb_search.search')
+    query = s._analyze_query('MSE', index)
+    for item in rows:
+        assert '__name_maplestudioeditor' in s._matching_url_tokens(query, item['url'], item)
+        assert '__name_maplestudioeditor' in s._matching_url_tokens(query, item['url'])
+    assert not index.keys('maple-studio-editor-mse')  # URL-only spelling rule.
+    for slug in ['maple-studio-editor-mse2', 'maple-studio-editor-mse-pro',
+                 'maple-studio-editor-open-source', 'maple-studio-editor-2026',
+                 'maple-studio-other-editor-mse']:
+        assert '__name_maplestudioeditor' not in s._matching_url_tokens(query, 'https://example.org/' + slug)
+
+
+def test_reviewed_slug_cannot_override_another_complete_product(tmp_path):
+    rows = [row(0, 'Maple Studio Editor (MSE)'), row(1, 'Maple Studio Editor MSE')]
+    path = tmp_path / 'names.json'
+    NameIndex.precompute(rows, path, [group()])
+    index = NameIndex.load_precomputed(rows, path)
+    s = importlib.import_module('arm_kb_search.search')
+    query = s._analyze_query('MSE', index)
+    assert '__name_maplestudioeditor' not in s._matching_url_tokens(
+        query, 'https://example.org/maple-studio-editor-mse')
