@@ -291,7 +291,7 @@ def test_hybrid_fuses_before_cutting_off_candidate_pool(monkeypatch):
     items[8]["metadata"].update(
         url="https://example.com/page0#troubleshooting", resolved_url="https://example.com/page0",
     )
-    monkeypatch.setattr(search_module, "_rerank_candidates", lambda query, candidates: items)
+    monkeypatch.setattr(search_module, "_rerank_candidates", lambda query, candidates, **kwargs: items)
 
     results = search_module.hybrid_search("target", None, [], object(), None, k=5)
 

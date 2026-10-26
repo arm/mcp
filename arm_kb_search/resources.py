@@ -23,6 +23,7 @@ from usearch.index import Index
 
 from .config import K_RESULTS
 from .filters import MetadataFilterIndex, SearchFilters
+from .names import NameIndex
 from .loaders import load_metadata, load_usearch_index
 from .response import add_disclaimer_to_arm_results, add_utm_source_to_results
 from .search import (
@@ -43,11 +44,14 @@ class SearchResources:
     default_k: int = K_RESULTS
     include_disclaimers: bool = True
     utm_source: str | None = None
+    prepared_name_index: NameIndex | None = field(default=None, repr=False)
     _filter_index: MetadataFilterIndex = field(init=False, repr=False, compare=False)
+    _name_index: NameIndex | None = field(init=False, repr=False, compare=False)
     _parent_texts: dict[tuple[str, str], str] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         self._filter_index = MetadataFilterIndex(self.metadata)
+        self._name_index = self.prepared_name_index
         parents: dict[tuple[str, str], list[dict[str, Any]]] = {}
         for row in self.metadata:
             if row.get("parent_uuid") and row.get("parent_chunk_uuid"):
@@ -125,9 +129,11 @@ def load_search_resources(
     include_disclaimers: bool = True,
     utm_source: str | None = None,
     model_path: str | None = None,
+    name_index_path: str | None = None,
 ) -> SearchResources:
     """Load search resources, treating an explicit model path as local-only."""
     metadata = load_metadata(metadata_path)
+    prepared = NameIndex.load_precomputed(metadata, name_index_path) if name_index_path else None
     embedding_model = load_embedding_model(
         model_path if model_path is not None else model_name,
         cache_folder=cache_folder,
@@ -146,6 +152,7 @@ def load_search_resources(
         default_k=default_k,
         include_disclaimers=include_disclaimers,
         utm_source=utm_source,
+        prepared_name_index=prepared,
     )
 
 
@@ -176,6 +183,7 @@ def search(
             k=pool_size,
             candidate_depth=max(candidate_depth, pool_size),
             eligible_ids=eligible_ids,
+            name_index=resources._name_index,
         )
 
     pool_size = deduplication_candidate_count(resolved_k)
