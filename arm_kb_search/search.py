@@ -23,7 +23,8 @@ from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 from usearch.index import Index, search as search_vectors
 
-from .analysis import EMPTY, Synonyms, analyze, analyze_tokens, basic_tokens, name_keys
+from .analysis import EMPTY, Synonyms, analyze, analyze_tokens, basic_tokens, literal_term, name_keys
+from .markdown import searchable_text
 from .config import DISTANCE_THRESHOLD, K_RESULTS
 
 
@@ -180,7 +181,7 @@ def tokenize_url_for_search(
         # Fragments may reinforce a name independently recognized in the document.
         names.extend(token for token in analyze_tokens(tokens, synonyms)
                      if token.startswith("__name_") and token in name_evidence)
-    return list(dict.fromkeys([*names, *tokens]))
+    return list(dict.fromkeys([*names, *(literal_term(token) for token in tokens)]))
 
 
 def tokenize_url_content_for_search(
@@ -214,12 +215,10 @@ def _installation_subject_tokens(query: str, synonyms: Synonyms = EMPTY) -> set[
         return set()
     # Query analysis collapses complete names even when the suffix is only a name.
     terms = analyze(query[match.end():], synonyms, query=True)
-    for end, term in enumerate(terms):
-        if term in {"on", "in", "for", "using", "with"}:
-            subject = (set(terms[:end]) - GENERIC_ENTITY_TOKENS
-                       - {"tool", "tools", "package", "packages", "software", "instructions"})
-            return subject if 0 < len(subject) <= 3 else set()
-    return set()
+    end = next((i for i, term in enumerate(terms) if term in {"on", "in", "for", "using", "with"}), len(terms))
+    subject = (set(terms[:end]) - GENERIC_ENTITY_TOKENS
+               - {"tool", "tools", "package", "packages", "software", "instructions"})
+    return subject if 0 < len(subject) <= 3 else set()
 
 
 @dataclass(frozen=True)
@@ -287,6 +286,10 @@ def _analyze_query(query: str, synonyms: Synonyms = EMPTY) -> _QueryAnalysis:
         or {"learning", "path"}.issubset(raw_query_tokens)
     )
     entity_query_tokens = salient_query_tokens - GENERIC_ENTITY_TOKENS - platforms
+    if installation_query:
+        # Descriptors such as "latest release" cannot substitute for a named product.
+        named_entities = {term for term in entity_query_tokens if term.startswith("__name_")}
+        entity_query_tokens = named_entities or entity_query_tokens
     # In a short execution request, the named tool carries more information
     # than the generic action and Arm context shared by most documents.
     if (len(set(direct_query_terms)) <= 3 and entity_query_tokens
@@ -362,10 +365,10 @@ def _metadata_text(metadata: Dict[str, Any], fields: Iterable[str]) -> str:
     for field in fields:
         value = metadata.get(field)
         if isinstance(value, list):
-            values.append(" ".join(str(item) for item in value))
+            values.extend(searchable_text(str(item)) for item in value)
         elif value:
-            values.append(str(value))
-    return " ".join(values)
+            values.append(searchable_text(str(value)))
+    return "\n\n".join(values)
 
 
 def _token_match_count(query_tokens: set[str], document_tokens: set[str]) -> int:
@@ -572,7 +575,7 @@ def build_bm25_index(metadata: List[Dict], synonyms: Synonyms = EMPTY) -> Option
         if _normalized_doc_type(item.get("doc_type", "")) == "intrinsic":
             name = str(item.get("heading") or "").lower().replace("[", "").replace("]", "")
             if re.fullmatch(r"[a-z_][a-z0-9_]*", name):
-                names.append(name)
+                names.append(literal_term(name))
         corpus.append(tokens)
         aliases.append(names)
     if not any(corpus):
@@ -706,7 +709,7 @@ def _field_phrase_bonus(
 ) -> float:
     """Score adjacent pairs/triples in order, with the caller's weights and cap."""
     query_terms = [re.sub(r"\baarch64\b", "arm64", term.lower()) for term in query_terms]
-    field_text = re.sub(r"\baarch64\b", "arm64", field_text.lower())
+    field_text = re.sub(r"\baarch64\b", "arm64", searchable_text(field_text).lower())
     bonus = 0.0
     for size, weight in enumerate(weights, start=2):
         for index in range(len(query_terms) - size + 1):
@@ -850,7 +853,7 @@ def _rerank_candidates(
         metadata = candidate["metadata"]
         if is_navigation_only(metadata):
             continue
-        full_text = metadata.get("search_text", "")
+        full_text = searchable_text(metadata.get("search_text", ""))
         body_tokens = _body_tokens(candidate, bm25_index)
         full_text_tokens = _query_field_tokens(
             set(body_tokens) if body_tokens is not None else set(analyze(full_text, query.synonyms)), query_tokens)
@@ -897,7 +900,7 @@ def _rerank_candidates(
             intent_bonus = 0.35 * title_url_overlap
             intent_bonus += 0.15 * _overlap_ratio(scoring_query_tokens, url_tokens | resolved_url_tokens)
             intent_bonus += _field_phrase_bonus(
-                direct_query_terms or list(scoring_query_tokens), f"{title_text} {url_text}",
+                direct_query_terms or list(scoring_query_tokens), f"{title_text}\n\n{url_text}",
             )
             if title_url_overlap >= 0.75:
                 intent_bonus += 0.20

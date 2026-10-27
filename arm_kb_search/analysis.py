@@ -21,55 +21,22 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
+from .markdown import searchable_text
+
 _DELIMITERS = re.compile(r"[_\-.]+")
 _PROSE_COMPOUND = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)+[.]?")
 _RAW_TOKEN = re.compile(r"(?:_+)?[a-z0-9][a-z0-9_\-+.]*", re.IGNORECASE)
 # Keep identifier punctuation; a terminal prose colon is a phrase boundary.
 _TOKEN = re.compile(
-    r"(?:[._]+)?[a-z0-9](?:[a-z0-9_\-+.#\[\]]|:(?=[a-z0-9_\-+.#:\[\]]))*\(?|[^\w\s]",
+    r"\r?\n[ \t]*\r?\n|(?:[._]+)?[a-z0-9](?:[a-z0-9_\-+.#\[\]]|:(?=[a-z0-9_\-+.#:\[\]]))*\(?|[^\w\s]",
     re.IGNORECASE,
 )
-# Inline and reference link labels are prose; attached identifier brackets stay protected.
-_LINK_LABEL = re.compile(
-    r"(?<![\w\\.\]\)])\[([^\[\]\\\n]+)\](?:"
-    r"(?=\([^\n)]*\))|\[[^\[\]\\\n]*\])"
-)
-# Reference titles may use quotes or parentheses and span nonblank lines.
-# Require the closing delimiter at the end of its line, so malformed titles
-# and subsequent visible paragraphs are not consumed as link metadata.
-_REFERENCE_TITLE = (
-    r'"(?:\\[^\r\n]|[^"\\\r\n]|\r?\n(?![ \t]*(?:\r?\n|$)))*"'
-    r"|'(?:\\[^\r\n]|[^'\\\r\n]|\r?\n(?![ \t]*(?:\r?\n|$)))*'"
-    r"|\((?:\\[^\r\n]|[^()\\\r\n]|\r?\n(?![ \t]*(?:\r?\n|$)))*\)"
-)
-_REFERENCE_DEFINITION = re.compile(
-    r"^ {0,3}\[(?![ \t\r\n]*\])"
-    r"((?:\\[^\r\n]|[^\[\]\\\r\n]|\r?\n(?![ \t]*(?:\r?\n|$))){1,999})\]:"
-    r"[ \t]*(?:\r?\n[ \t]*)?"
-    r"(?:<(?:\\[^\r\n]|[^<>\\\r\n])*>|[^\s<>]+)"
-    rf"(?:(?:[ \t]+(?:\r?\n[ \t]*)?|\r?\n[ \t]*)(?:{_REFERENCE_TITLE}))?"
-    r"[ \t]*(?=\r?$)", re.MULTILINE,
-)
-_SHORTCUT_LABEL = re.compile(r"(?<![\w\\.\[\]\)])\[([^\[\]\\\n]+)\](?![\[(:])")
 _FORM = re.compile(r"[a-z0-9]+(?:[ \t_\-.]+[a-z0-9]+)*", re.IGNORECASE)
 _CODE_PART = re.compile(r"^(?:(?:sv)?(?:u?int|float|poly|bfloat|mfloat|[subfp]|bf|mf)?\d+|[a-z])$")
 
 
 def basic_tokens(text: str) -> list[str]:
-    text = text or ""
-    if "]:" in text:
-        # A bare [name] is prose only when a matching reference is defined.
-        definitions = {" ".join(label.lower().split()) for label in _REFERENCE_DEFINITION.findall(text)}
-        if definitions:
-            # Remove complete definitions before interpreting inline link syntax.
-            text = _REFERENCE_DEFINITION.sub("", text)
-            text = _SHORTCUT_LABEL.sub(
-                lambda match: f"[ {match[1]} ]" if " ".join(match[1].lower().split()) in definitions else match[0],
-                text,
-            )
-    if "](" in text or "][" in text:
-        text = _LINK_LABEL.sub(r"[ \1 ]", text)
-    return [token.lower() for token in _TOKEN.findall(text)]
+    return [token.lower() for token in _TOKEN.findall(searchable_text(text))]
 
 
 def delimit(token: str) -> list[str]:
@@ -82,9 +49,14 @@ def delimit(token: str) -> list[str]:
     return list(dict.fromkeys([token, *parts]))
 
 
+def literal_term(token: str) -> str:
+    # A literal identifier cannot impersonate an internally generated name atom.
+    return "\0" + token if token.startswith("__name_") else token
+
+
 @lru_cache(maxsize=8192)
 def _literal_tokens(token: str, expand: bool) -> tuple[str, ...]:
-    return tuple(part for word in _RAW_TOKEN.findall(token)
+    return tuple(literal_term(part) for word in _RAW_TOKEN.findall(token)
                  for part in (delimit(word) if expand else [word]))
 
 
