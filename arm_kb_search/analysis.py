@@ -21,18 +21,20 @@ from functools import lru_cache, partial
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
+import regex
 from markdown_it import MarkdownIt
 from markdown_it.rules_block import reference
 from markdown_it.rules_inline import image, link
 
 _DELIMITERS = re.compile(r"[_\-.]+")
 _PROSE_COMPOUND = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)+[.]?")
-_RAW_TOKEN = re.compile(r"(?:_+)?[^\W_][\w\-+.]*", re.IGNORECASE)
-# Keep Unicode identifier characters intact so fragments cannot become aliases.
+_RAW_TOKEN = regex.compile(r"(?:_+)?[^\W_][\w\p{XID_Continue}\-+.]*", regex.IGNORECASE)
+# Unicode word and identifier continuations include marks and connector characters.
+# Retain them in both stages so identifier fragments cannot become aliases.
 # A terminal prose colon and blank lines remain phrase boundaries.
-_TOKEN = re.compile(
-    r"\r?\n[ \t]*\r?\n|(?:[._]+)?[^\W_](?:[\w\-+.#\[\]]|:(?=[\w\-+.#:\[\]]))*\(?|[^\w\s]",
-    re.IGNORECASE,
+_TOKEN = regex.compile(
+    r"\r?\n[ \t]*\r?\n|(?:[._]+)?[^\W_](?:[\w\p{XID_Continue}\-+.#\[\]]|:(?=[\w\p{XID_Continue}\-+.#:\[\]]))*\(?|[^\w\s]",
+    regex.IGNORECASE,
 )
 _FORM = re.compile(r"[a-z0-9]+(?:[ \t_\-.]+[a-z0-9]+)*", re.IGNORECASE)
 _CODE_PART = re.compile(r"^(?:(?:sv)?(?:u?int|float|poly|bfloat|mfloat|[subfp]|bf|mf)?\d+|[a-z])$")
@@ -122,6 +124,11 @@ def basic_tokens(text: str) -> list[str]:
     return [token.lower() for token in _TOKEN.findall(searchable_text(text))]
 
 
+def raw_tokens(text: str) -> list[str]:
+    """Preserve complete literal identifiers in query guards and technical scoring."""
+    return [token.lower() for token in _RAW_TOKEN.findall(text or "")]
+
+
 def delimit(token: str) -> list[str]:
     """Retain whole terms while exposing prose parts, excluding lane/type fragments."""
     if token.isalnum() or token.startswith(("_", ".")):
@@ -139,7 +146,7 @@ def literal_term(token: str) -> str:
 
 @lru_cache(maxsize=8192)
 def _literal_tokens(token: str, expand: bool) -> tuple[str, ...]:
-    return tuple(literal_term(part) for word in _RAW_TOKEN.findall(token)
+    return tuple(literal_term(part) for word in raw_tokens(token)
                  for part in (delimit(word) if expand else [word]))
 
 

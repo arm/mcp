@@ -64,8 +64,16 @@ omitting it disables aliases. Missing or invalid configured files fail loading.
 
 ## Retrieval behavior
 
-Keyword search uses tokens from document search text; vector search embeds the
-original query. Keyword matching and field scoring recognize Arm64/AArch64 equivalents.
+Keyword search analyzes metadata fields, heading-path elements and the original
+body separately, so adjacent fields cannot form a product name. `original_text`
+(or legacy `content`) is authoritative even when empty; `search_text` is used as
+a fallback only when neither body field is available. Existing snapshots that
+retain these fields need no vector regeneration. Markdown link metadata is
+excluded independently within each field, and Unicode identifier continuations
+remain literal rather than becoming product-name fragments.
+
+Vector search embeds the original query. Keyword matching and field scoring
+recognize Arm64/AArch64 equivalents.
 Short execution requests prioritize the named tool over generic action words.
 
 Installation intent includes "set up". When a short installation subject precedes

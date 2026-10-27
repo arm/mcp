@@ -1,12 +1,15 @@
 """Visible Markdown evidence must agree across tokenization and ranking."""
 
 import importlib
+import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
 
 from arm_kb_search import SearchResources, search
 from arm_kb_search.analysis import Synonyms, analyze, atom, name_keys, searchable_text
+from arm_kb_search.loaders import load_metadata
 from arm_kb_search.search import bm25_search, build_bm25_index
 
 scoring = importlib.import_module("arm_kb_search.search")
@@ -101,6 +104,15 @@ def test_name_fragments_do_not_join_across_metadata_fields(synonyms):
     ("２sklearn", "sklearn", "scikitlearn"),
     ("sklearn２", "sklearn", "scikitlearn"),
     ("aws２cli", "awscli", "awscli"),
+    ("sklearn\u0301", "sklearn", "scikitlearn"),
+    ("sk\u0301learn", "sklearn", "scikitlearn"),
+    ("aws\u0903cli", "awscli", "awscli"),
+    ("sklearn\u20dd", "sklearn", "scikitlearn"),
+    ("sklearn\u203f", "sklearn", "scikitlearn"),
+    ("sklearn\u00b7", "sklearn", "scikitlearn"),
+    ("sklearn\u0387", "sklearn", "scikitlearn"),
+    ("İsklearn", "sklearn", "scikitlearn"),
+    ("Scikit\u0301-learn", "Scikit-learn", "scikitlearn"),
 ])
 def test_unicode_identifiers_cannot_become_product_aliases(text, query, key, synonyms):
     for is_query in [False, True]:
@@ -119,7 +131,7 @@ def test_unicode_identifiers_cannot_become_product_aliases(text, query, key, syn
         scoring._analyze_query(query, synonyms), {"search_text": text, "title": text}) == 0
 
 
-@pytest.mark.parametrize("text", ["AWS λ CLI", "AWS 工具 CLI"])
+@pytest.mark.parametrize("text", ["AWS λ CLI", "AWS 工具 CLI", "AWS \u0301 CLI"])
 def test_unicode_words_keep_name_components_separate(text, synonyms):
     assert "awscli" not in name_keys(analyze(text, synonyms), synonyms)
     assert search("awscli", resource(text, synonyms)) == []
@@ -208,3 +220,85 @@ def test_markdown_cleanup_is_idempotent(synonyms):
         visible = searchable_text(text)
         assert searchable_text(visible) == visible
         assert analyze(text, synonyms) == analyze(visible, synonyms)
+
+
+@pytest.mark.parametrize("fields,query", [
+    ({"title": "AWS", "heading": "CLI", "original_text": "neutral", "search_text": "AWS CLI neutral"}, "awscli"),
+    ({"heading_path": ["AWS", "CLI"], "original_text": "neutral", "search_text": "AWS CLI neutral"}, "awscli"),
+    ({"title": "AWS", "original_text": "CLI", "search_text": "AWS CLI"}, "awscli"),
+    ({"product": "AWS", "version": "CLI", "original_text": "", "search_text": "AWS CLI"}, "awscli"),
+    ({"keywords": ["AWS", "CLI"], "original_text": "", "search_text": "AWS CLI"}, "awscli"),
+    ({"original_text": "", "search_text": "sklearn"}, "sklearn"),
+    ({"title": "neutral", "original_text": '[AWS CLI]: /guide\n  "Scikit-learn documentation"',
+      "search_text": 'neutral [AWS CLI]: /guide\n  "Scikit-learn documentation"'}, "sklearn"),
+    ({"title": "neutral", "content": '[AWS CLI]: /guide\n  "Scikit-learn documentation"',
+      "search_text": 'neutral [AWS CLI]: /guide\n  "Scikit-learn documentation"'}, "sklearn"),
+    ({"title": "[AWS CLI]", "original_text": "[AWS CLI]: /guide", "search_text": "[AWS CLI] [AWS CLI]: /guide"}, "awscli"),
+    ({"title": "AWS", "heading_path": ["CLI"], "original_text":
+      'Document Title: AWS\nHeading Path: CLI\n\n[AWS CLI]: /guide\n  "Scikit-learn documentation"',
+      "search_text": 'AWS CLI Document Title: AWS\nHeading Path: CLI\n\n[AWS CLI]: /guide\n  "Scikit-learn documentation"'}, "awscli"),
+])
+def test_existing_snapshots_keep_field_and_body_evidence_separate(tmp_path, fields, query, synonyms):
+    row = {"chunk_uuid": "0", "url": "https://example.org/guide", **fields}
+    path = tmp_path / "metadata.json"
+    path.write_text(json.dumps([row]))
+    rows = load_metadata(str(path))
+    original = deepcopy(rows)
+    index = build_bm25_index(rows, synonyms)
+    state = SearchResources(rows, None, None, index, include_disclaimers=False, synonyms=synonyms)
+    assert search(query, state) == []
+    analyzed = scoring._analyze_query(query, synonyms)
+    candidate = {"metadata": rows[0], "metadata_id": 0, "distance": 0.2}
+    for cached in [None, scoring._body_tokens(candidate, index)]:
+        assert scoring._score_lexical_exactness(analyzed, rows[0], cached) == 0
+    direct = scoring.rerank_candidates(query, [candidate], synonyms=synonyms)
+    indexed = scoring._rerank_candidates(analyzed, [candidate], index)
+    assert direct[0]["rerank_score"] == indexed[0]["rerank_score"]
+    assert rows == original
+
+
+@pytest.mark.parametrize("fields", [
+    {"title": "AWS CLI", "original_text": "neutral"},
+    {"heading_path": ["neutral", "AWS CLI"], "original_text": "neutral"},
+    {"title": "neutral", "original_text": "Use AWS CLI."},
+    {"title": "neutral", "content": "Use AWS CLI."},
+    {"original_text": "Use [AWS CLI].\n\n[AWS CLI]: /guide"},
+])
+def test_structured_fields_preserve_real_names_without_flattened_search_text(fields, synonyms):
+    rows = [{"chunk_uuid": "0", "url": "https://example.org/guide", **fields}]
+    state = SearchResources(rows, None, None, build_bm25_index(rows, synonyms),
+                            include_disclaimers=False, synonyms=synonyms)
+    assert [hit["url"] for hit in search("awscli", state)] == ["https://example.org/guide"]
+
+
+@pytest.mark.parametrize("name", ["PyTorch", "sklearn"])
+@pytest.mark.parametrize("suffix", ["\u0301", "()"])
+def test_identifier_boundaries_cannot_grant_a_product_support_bonus(name, suffix, synonyms):
+    query = scoring._analyze_query(f"Is {name}{suffix} supported on Arm Linux?", synonyms)
+    row = {"heading": name, "platform": "linux"}
+    assert scoring._reference_record_bonus(query, row, "ecosystem dashboard") == 0
+
+
+@pytest.mark.parametrize("url", [
+    "https://example.org/sklearn%CC%81",
+    "https://example.org/?tool=sklearn%CC%81",
+    "https://example.org/#sklearn%CC%81",
+])
+def test_encoded_unicode_identifiers_cannot_supply_url_name_evidence(url, synonyms):
+    query = scoring._analyze_query("sklearn", synonyms)
+    assert scoring._score_lexical_exactness(query, {"url": url, "original_text": "neutral"}) == 0
+
+
+def test_encoded_whole_product_names_still_supply_url_evidence(synonyms):
+    query = scoring._analyze_query("sklearn", synonyms)
+    row = {"url": "https://example.org/Scikit%20learn", "original_text": "neutral"}
+    assert scoring._score_lexical_exactness(query, row) > 0
+
+
+def test_non_latin_literal_identifier_remains_searchable(synonyms):
+    text = "किताब"
+    rows = [{"chunk_uuid": str(i), "url": f"https://example.org/{i}", "original_text": value}
+            for i, value in enumerate([text, "background", "unrelated"])]
+    state = SearchResources(rows, None, None, build_bm25_index(rows, synonyms),
+                            include_disclaimers=False, synonyms=synonyms)
+    assert [hit["url"] for hit in search(text, state)] == ["https://example.org/0"]

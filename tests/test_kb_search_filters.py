@@ -576,6 +576,8 @@ def test_technical_evidence_preserves_internal_punctuation():
 
 def test_typed_intrinsic_question_prefers_reference_to_general_guide():
     card = intrinsic()
+    # Real intrinsic bodies describe the operation as well as its signature.
+    card["metadata"]["original_text"] += "\nThis intrinsic loads bytes into a wider vector."
     guide = passage("guide", "SVE loads", "SVE intrinsics can load bytes into a svuint32_t vector.", doc_type="Tutorial")
     query = search_module._analyze_query("Which SVE intrinsic loads uint8_t into svuint32_t?")
     assert search_module._rerank_candidates(query, [guide, card])[0]["metadata"] == card["metadata"]
@@ -689,7 +691,8 @@ def test_canonical_name_indexing_does_not_rewrite_other_document_types():
 @pytest.mark.parametrize("query", ["SVE load vector.", "svqrdmulh", "svmissing_s32.", "svqrdmulh_s32.extra"])
 def test_alias_channel_leaves_nonmatching_sparse_scores_identical(query):
     metadata = [intrinsic("svqrdmulh[_s32]")["metadata"], chunk(1, search_text="SVE load vector examples")]
-    original = BM25Okapi([search_module._bm25_tokens(row["search_text"]) for row in metadata])
+    # Compare the alias channel with ordinary BM25 over the same structured fields.
+    original = BM25Okapi([search_module._bm25_tokens(search_module._search_text(row)) for row in metadata])
     actual = build_bm25_index(metadata)
     tokens = search_module._bm25_tokens(query)
     np.testing.assert_array_equal(actual.get_scores(tokens), original.get_scores(tokens))

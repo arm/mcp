@@ -16,18 +16,19 @@ from collections import Counter
 from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Collection, Dict, Iterable, List, Optional
 import re
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 import numpy as np
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 from usearch.index import Index, search as search_vectors
 
-from .analysis import EMPTY, Synonyms, analyze, analyze_tokens, basic_tokens, literal_term, name_keys, searchable_text
+from .analysis import (
+    EMPTY, Synonyms, analyze, analyze_tokens, basic_tokens, literal_term, name_keys, raw_tokens, searchable_text,
+)
 from .config import DISTANCE_THRESHOLD, K_RESULTS
 
 
-SEARCH_TOKEN_PATTERN = re.compile(r"(?:_+)?[a-z0-9][a-z0-9_\-+.]*", re.IGNORECASE)
 TOKEN_SPLIT_PATTERN = re.compile(r"[_\-+.]+")
 RRF_K = 60
 SEMANTIC_RESOURCE_WEIGHT = 0.20
@@ -136,7 +137,7 @@ NEGATIVE_SUPPORT_PATTERNS = tuple(
 
 def tokenize_for_search(text: str) -> List[str]:
     """Extract technical tokens without rewriting natural-language phrases."""
-    return [token.lower() for token in SEARCH_TOKEN_PATTERN.findall(text or "")]
+    return raw_tokens(text)
 
 
 def _evidence_tokens(tokens: Iterable[str]) -> List[str]:
@@ -188,7 +189,7 @@ def tokenize_url_content_for_search(
 ) -> List[str]:
     parsed = urlparse(text or "")
     return tokenize_url_for_search(
-        f"{parsed.path} ? {parsed.query} # {parsed.fragment}", synonyms, name_evidence,
+        unquote(f"{parsed.path} ? {parsed.query} # {parsed.fragment}"), synonyms, name_evidence,
     )
 
 
@@ -362,12 +363,27 @@ def is_navigation_only(metadata: Dict[str, Any]) -> bool:
 def _metadata_text(metadata: Dict[str, Any], fields: Iterable[str]) -> str:
     values: List[str] = []
     for field in fields:
+        if field == "search_text":
+            values.append(_search_text(metadata))
+            continue
         value = metadata.get(field)
         if isinstance(value, list):
             values.extend(searchable_text(str(item)) for item in value)
         elif value:
             values.append(searchable_text(str(value)))
     return "\n\n".join(values)
+
+
+def _search_text(metadata: dict[str, Any]) -> str:
+    """Rebuild lexical evidence from independent fields, including older snapshots."""
+    body = next((field for field in ("original_text", "content")
+                 if isinstance(metadata.get(field), str)), None)
+    if body is None:
+        # Minimal callers may supply only search_text; no original body is available.
+        return searchable_text(metadata.get("search_text") or "")
+    return _metadata_text(metadata, (
+        "title", "heading_path", "heading", "doc_type", "product", "version", "keywords", body,
+    ))
 
 
 def _token_match_count(query_tokens: set[str], document_tokens: set[str]) -> int:
@@ -429,7 +445,7 @@ def _support_evidence_score(query_tokens: set[str], text_tokens: set[str], text:
 
 
 def _body_tokens(candidate: Dict[str, Any], bm25_index: Optional[BM25Okapi]) -> Optional[set[str]]:
-    """Analyzed search_text tokens, taken from the BM25 index when the row is known."""
+    """Structured document tokens, taken from the BM25 index when the row is known."""
     row_id = candidate.get("metadata_id")
     if bm25_index is None or row_id is None:
         return None
@@ -444,7 +460,7 @@ def _score_lexical_exactness(query: _QueryAnalysis, metadata: Dict[str, Any],
         return 0.0
 
     name_evidence = body_tokens if body_tokens is not None else set(
-        analyze(metadata.get("search_text", ""), query.synonyms)
+        analyze(_search_text(metadata), query.synonyms)
     )
     weighted_overlap = 0.0
     denominator = len(query.lexical_query_tokens)
@@ -569,7 +585,7 @@ def build_bm25_index(metadata: List[Dict], synonyms: Synonyms = EMPTY) -> Option
     corpus = []
     aliases = []
     for item in metadata:
-        tokens = _bm25_tokens(item.get("search_text", ""), synonyms)
+        tokens = _bm25_tokens(_search_text(item), synonyms)
         names = []
         if _normalized_doc_type(item.get("doc_type", "")) == "intrinsic":
             name = str(item.get("heading") or "").lower().replace("[", "").replace("]", "")
@@ -729,16 +745,21 @@ def _reference_record_bonus(
         name_tokens = set(_evidence_tokens(tokenize_for_search(str(package)))) - DIRECT_INTENT_STOPWORDS - {"arm"}
         platform = str(metadata.get("platform") or "").lower()
         named = False
+        known_label = False
         # Match whole labels or parenthetical aliases, not names mentioned within a label.
         for label in re.split(r"[()]", str(package)):
             tokens = basic_tokens(label)
             if not tokens:
                 continue
             size, key = query.synonyms._match(tokens, 0)
-            if size == len(tokens) and key in query.name_keys:
-                named = True
-                break
-        if not named and (not (name_tokens - GENERIC_ENTITY_TOKENS) or not name_tokens <= evidence_tokens):
+            if size == len(tokens):
+                known_label = True
+                if key in query.name_keys:
+                    named = True
+                    break
+        # Declared product names require canonical evidence, including at this bonus.
+        if not named and (known_label or not (name_tokens - GENERIC_ENTITY_TOKENS)
+                          or not name_tokens <= evidence_tokens):
             return 0.0
         if platform == "windows" and "windows" not in evidence_tokens:
             return 0.0
@@ -852,7 +873,7 @@ def _rerank_candidates(
         metadata = candidate["metadata"]
         if is_navigation_only(metadata):
             continue
-        full_text = searchable_text(metadata.get("search_text", ""))
+        full_text = _search_text(metadata)
         body_tokens = _body_tokens(candidate, bm25_index)
         full_text_tokens = _query_field_tokens(
             set(body_tokens) if body_tokens is not None else set(analyze(full_text, query.synonyms)), query_tokens)

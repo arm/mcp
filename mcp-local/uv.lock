@@ -71,6 +71,7 @@ dependencies = [
     { name = "numkong" },
     { name = "numpy" },
     { name = "rank-bm25" },
+    { name = "regex" },
     { name = "sentence-transformers" },
     { name = "usearch" },
 ]
@@ -81,6 +82,7 @@ requires-dist = [
     { name = "numkong", specifier = "==7.8.3" },
     { name = "numpy" },
     { name = "rank-bm25" },
+    { name = "regex" },
     { name = "sentence-transformers", specifier = ">=6.1.0" },
     { name = "usearch", specifier = "==2.26.2" },
 ]
