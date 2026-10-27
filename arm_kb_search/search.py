@@ -23,7 +23,7 @@ from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 from usearch.index import Index, search as search_vectors
 
-from .analysis import EMPTY, Synonyms, analyze, analyze_tokens, canonical_key, name_keys
+from .analysis import EMPTY, Synonyms, analyze, analyze_tokens, basic_tokens, name_keys
 from .config import DISTANCE_THRESHOLD, K_RESULTS
 
 
@@ -711,7 +711,16 @@ def _reference_record_bonus(
         package = heading_path[1] if isinstance(heading_path, list) and len(heading_path) > 1 else heading
         name_tokens = set(_evidence_tokens(tokenize_for_search(str(package)))) - DIRECT_INTENT_STOPWORDS - {"arm"}
         platform = str(metadata.get("platform") or "").lower()
-        named = canonical_key(re.sub(r"\s*\([^()]*\)\s*$", "", str(package))) in query.name_keys
+        named = False
+        # Match whole labels or parenthetical aliases, not names mentioned within a label.
+        for label in re.split(r"[()]", str(package)):
+            tokens = basic_tokens(label)
+            if not tokens:
+                continue
+            size, key = query.synonyms._match(tokens, 0)
+            if size == len(tokens) and key in query.name_keys:
+                named = True
+                break
         if not named and (not (name_tokens - GENERIC_ENTITY_TOKENS) or not name_tokens <= evidence_tokens):
             return 0.0
         if platform == "windows" and "windows" not in evidence_tokens:
