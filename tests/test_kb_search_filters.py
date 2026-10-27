@@ -749,8 +749,9 @@ SYNONYM_RULES = {
 }
 
 
-def synonym_resources(metadata, rules=SYNONYM_RULES):
-    metadata = [*metadata, *[chunk(f"background-{i}", search_text="background") for i in range(8)]]
+def synonym_resources(metadata, rules=SYNONYM_RULES, *, background=True):
+    if background:
+        metadata = [*metadata, *[chunk(f"background-{i}", search_text="background") for i in range(8)]]
     table = Synonyms(rules)
     return SearchResources(
         metadata, None, None, build_bm25_index(metadata, table),
@@ -818,11 +819,12 @@ def test_synonym_loading_rejects_invalid_or_ambiguous_tables(tmp_path, rules):
 @pytest.mark.parametrize("query", ["sklearn", "Scikit-learn", "scikit_learn"])
 def test_alias_retrieval_matches_both_spellings_and_respects_filters(query):
     state = synonym_resources([
-        chunk(0, title="Scikit-learn", search_text="Scikit-learn reference", platform="linux"),
-        chunk(1, title="Training guide", search_text="Train a model using sklearn", platform="windows"),
-    ])
+        chunk(0, title="Scikit-learn", search_text="sklearn", platform="linux"),
+        chunk(1, title="Training guide", search_text="Scikit-learn", platform="windows"),
+        chunk(2, title="Reference", search_text="Scikit-learn", platform="linux"),
+    ], background=False)
     assert {hit["url"] for hit in search(query, state, k=5)} == {
-        "https://example.com/0", "https://example.com/1"}
+        "https://example.com/0", "https://example.com/1", "https://example.com/2"}
     assert [hit["url"] for hit in search(query, state, filters={"platform": "windows"})] == [
         "https://example.com/1"]
 
@@ -860,12 +862,22 @@ def test_name_recognition_does_not_add_a_separate_ranking_bonus():
 
 
 def test_query_names_preserve_raw_intent_and_complete_identifier_matching():
-    table = Synonyms({"googlekubernetesengine": ["google kubernetes engine", "gke"], **SYNONYM_RULES})
+    table = Synonyms({"googlekubernetesengine": ["google kubernetes engine", "gke"],
+                      "redhatenterpriselinux": ["red hat enterprise linux", "rhel"],
+                      "armperformancelibraries": ["arm performance libraries", "armpl"], **SYNONYM_RULES})
     query = search_module._analyze_query("gke autopilot", table)
     assert "gke" in query.raw_query_tokens and atom("googlekubernetesengine") in query.query_tokens
     assert "gke" not in query.query_tokens
     assert not search_module._analyze_query("install aws_cli", table).code_identifiers
     assert search_module._analyze_query("aws_cli()", table).code_identifiers == {"aws_cli"}
+    for platform in ["RHEL", "Red Hat Enterprise Linux"]:
+        query = search_module._analyze_query(f"install sklearn on {platform}", table)
+        assert query.salient_query_tokens == {atom("scikitlearn"), atom("redhatenterpriselinux")}
+    for name in ["Arm Performance Libraries", "armpl"]:
+        query = search_module._analyze_query(f"Is {name} supported on Linux?", table)
+        assert query.support_question and not query.prefers_tuning_guide
+    assert search_module._analyze_query("optimize Arm Performance Libraries", table).prefers_tuning_guide
+    assert search_module._analyze_query("install sklearn on gke", table).salient_query_tokens == {atom("scikitlearn")}
 
 
 def test_synonym_resource_loading_is_explicit_and_independent(tmp_path, monkeypatch):
@@ -898,5 +910,5 @@ def test_committed_synonym_map_recognizes_every_declared_form():
         for form in forms:
             assert name_keys(analyze(form, table, query=True), table) == {key}, form
             assert key in name_keys(analyze(form, table), table), form
-    for ambiguous in ["ecs", "oci", "mcp", "spe", "gcs", "rmm"]:
+    for ambiguous in ["acl", "ecs", "oci", "mcp", "spe", "gcs", "rmm"]:
         assert not name_keys(analyze(ambiguous, table, query=True), table), ambiguous

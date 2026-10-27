@@ -101,8 +101,9 @@ COMPILER_GUIDE_TOKENS = {
     "compiler", "compilers", "gcc", "llvm", "clang",
 }
 PLATFORM_TOKENS = {
-    "aarch64", "amd64", "android", "arm64", "armv8", "armv9", "centos", "debian", "fedora",
-    "ios", "linux", "mac", "macos", "os", "rhel", "ubuntu", "windows", "x86", "x86_64", "x86-64",
+    "aarch64", "almalinux", "amd64", "android", "arm64", "armv8", "armv9", "centos", "debian", "fedora",
+    "ios", "linux", "mac", "macos", "os", "rhel", "sles", "ubuntu", "windows", "wsl", "wsl2",
+    "x86", "x86_64", "x86-64",
 }
 # Query tokens that never identify a product or page on their own.
 GENERIC_ENTITY_TOKENS = (
@@ -263,13 +264,15 @@ def _analyze_query(query: str, synonyms: Synonyms = EMPTY) -> _QueryAnalysis:
             salient_query_tokens -= {"set", "up"}
         subject_tokens = _installation_subject_tokens(query, synonyms)
         if subject_tokens:
-            salient_query_tokens = subject_tokens | (salient_query_tokens & PLATFORM_TOKENS)
+            # Compare platform words and aliases in the same analyzed form as the query.
+            platforms = {token for word in PLATFORM_TOKENS for token in analyze(word, synonyms, query=True)}
+            salient_query_tokens = subject_tokens | (salient_query_tokens & platforms)
     direct_query_terms = [term for term in terms if term not in DIRECT_INTENT_STOPWORDS]
     direct_query_tokens = query_tokens - DIRECT_INTENT_STOPWORDS
     scoring_query_tokens = direct_query_tokens or salient_query_tokens or query_tokens
     # Query length rules count the words the user typed, not analyzer expansions.
     short_query = len(set(direct_query_terms) or set(salient_query_terms) or set(terms)) <= 3
-    prefers_tuning_guide = bool(raw_query_tokens & TUNING_INTENT_TOKENS)
+    prefers_tuning_guide = bool(query_tokens & TUNING_INTENT_TOKENS)
     prefers_reference_architecture = bool(
         raw_query_tokens & REFERENCE_ARCHITECTURE_INTENT_TOKENS
     )
@@ -304,7 +307,7 @@ def _analyze_query(query: str, synonyms: Synonyms = EMPTY) -> _QueryAnalysis:
         asks_for_learning_path=asks_for_learning_path,
         compiler_guide_query=compiler_guide_query,
         support_question=bool(SUPPORT_QUESTION_PATTERN.search(" ".join(query.split()))) and not bool(
-            evidence_tokens & (TUNING_INTENT_TOKENS - {"config", "configure", "configured", "configuration"})
+            query_tokens & (TUNING_INTENT_TOKENS - {"config", "configure", "configured", "configuration"})
         ),
         intrinsic_query=bool(acle_types or evidence_tokens & {"intrinsic", "intrinsics"}),
         acle_types=acle_types,
@@ -518,12 +521,19 @@ def _bm25_tokens(text: str, synonyms: Synonyms = EMPTY) -> List[str]:
     return ["arm64" if token == "aarch64" else token for token in analyze(text, synonyms)]
 
 
-class _IntrinsicBM25(BM25Okapi):
+class _NameBM25(BM25Okapi):
     """Keep canonical-name evidence separate from the shared prose statistics."""
 
-    def __init__(self, corpus, aliases):
+    def __init__(self, corpus, aliases, synonyms: Synonyms = EMPTY):
         super().__init__(corpus)
-        # Each populated name field has one token; empty fields must not dilute it.
+        # Small collections can give names zero weight or cancel them with negative prose.
+        fallback_names = {"__name_" + key for key in name_keys(self.idf, synonyms)
+                      if self.average_idf < 0 or self.idf["__name_" + key] <= 0}
+        if fallback_names:
+            aliases = [list(set(names) | (freq.keys() & fallback_names))
+                       for names, freq in zip(aliases, self.doc_freqs)]
+            self.idf.update(dict.fromkeys(fallback_names, 0.0))
+        # Fixed-length name evidence must not be diluted by empty fields.
         self.alias_index = BM25Okapi(aliases, b=0.0) if any(aliases) else None
         if self.alias_index:
             # Exact names remain useful even when most records share a name.
@@ -562,7 +572,7 @@ def build_bm25_index(metadata: List[Dict], synonyms: Synonyms = EMPTY) -> Option
         aliases.append(names)
     if not any(corpus):
         return None
-    return _IntrinsicBM25(corpus, aliases)
+    return _NameBM25(corpus, aliases, synonyms)
 
 
 def embedding_search(

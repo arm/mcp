@@ -113,7 +113,6 @@
     "arm compiler for linux"
   ],
   "armcomputelibrary": [
-    "acl",
     "arm compute library"
   ],
   "armconfidentialcomputearchitecture": [
