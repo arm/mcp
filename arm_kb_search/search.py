@@ -14,7 +14,7 @@
 
 from collections import Counter
 from dataclasses import dataclass, field as dataclass_field
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Collection, Dict, Iterable, List, Optional
 import re
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -165,19 +165,30 @@ def _query_field_tokens(tokens: set[str], query_tokens: set[str]) -> set[str]:
     return tokens
 
 
-def tokenize_url_for_search(text: str, synonyms: Synonyms = EMPTY) -> List[str]:
-    """Split separators in URL content while retaining each original token."""
-    tokens: List[str] = []
+def tokenize_url_for_search(
+    text: str, synonyms: Synonyms = EMPTY, name_evidence: Collection[str] = (),
+) -> List[str]:
+    """Match hyphenated slugs; identifier fragments need document name evidence."""
+    tokens = []
     for token in tokenize_for_search(text):
         tokens.append(token)
         if TOKEN_SPLIT_PATTERN.search(token):
             tokens.extend(part for part in TOKEN_SPLIT_PATTERN.split(token) if part)
-    return list(dict.fromkeys(analyze_tokens(tokens, synonyms)))
+    names = analyze(text.replace("-", " "), synonyms)
+    if synonyms.keys and name_evidence:
+        # Fragments may reinforce a name independently recognized in the document.
+        names.extend(token for token in analyze_tokens(tokens, synonyms)
+                     if token.startswith("__name_") and token in name_evidence)
+    return list(dict.fromkeys([*names, *tokens]))
 
 
-def tokenize_url_content_for_search(text: str, synonyms: Synonyms = EMPTY) -> List[str]:
+def tokenize_url_content_for_search(
+    text: str, synonyms: Synonyms = EMPTY, name_evidence: Collection[str] = (),
+) -> List[str]:
     parsed = urlparse(text or "")
-    return tokenize_url_for_search(" ".join((parsed.path, parsed.query, parsed.fragment)), synonyms)
+    return tokenize_url_for_search(
+        f"{parsed.path} ? {parsed.query} # {parsed.fragment}", synonyms, name_evidence,
+    )
 
 
 def _normalized_doc_type(doc_type: str) -> str:
@@ -422,6 +433,9 @@ def _score_lexical_exactness(query: _QueryAnalysis, metadata: Dict[str, Any],
     if not query_tokens:
         return 0.0
 
+    name_evidence = body_tokens if body_tokens is not None else set(
+        analyze(metadata.get("search_text", ""), query.synonyms)
+    )
     weighted_overlap = 0.0
     denominator = len(query.lexical_query_tokens)
     field_weights = (
@@ -436,7 +450,7 @@ def _score_lexical_exactness(query: _QueryAnalysis, metadata: Dict[str, Any],
             field_tokens = {
                 token
                 for url in {str(metadata.get(field) or "") for field in fields}
-                for token in tokenize_url_content_for_search(url, query.synonyms)
+                for token in tokenize_url_content_for_search(url, query.synonyms, name_evidence)
             }
         elif fields == ("search_text",) and body_tokens is not None:
             field_tokens = set(body_tokens)
@@ -628,10 +642,11 @@ def bm25_search(
         return []
     # Brackets never occur in prose tokens, so these additions only reach the
     # canonical-name channel and leave the prose index's scores unchanged.
-    # Hybrid search deduplicates prose tokens; recover names from its raw query.
-    names = _bracketed_identifiers(query if original_query is None else original_query)
+    # Recognize complete names before deduplicating query terms.
+    query = query if original_query is None else original_query
+    names = _bracketed_identifiers(query)
     tokens = ["arm64" if token == "aarch64" else token for token in analyze(query, synonyms, query=True)]
-    tokens += list(dict.fromkeys(names))
+    tokens = list(dict.fromkeys(tokens + names))
     if not tokens:
         return []
     if eligible_ids is None:
@@ -823,10 +838,10 @@ def _rerank_candidates(
         title_tokens = _query_field_tokens(set(analyze(title_text, query.synonyms)), query_tokens)
         heading_tokens = _query_field_tokens(set(analyze(heading_text, query.synonyms)), query_tokens)
         url_tokens = _query_field_tokens(
-            set(tokenize_url_content_for_search(source_url, query.synonyms)), query_tokens
+            set(tokenize_url_content_for_search(source_url, query.synonyms, full_text_tokens)), query_tokens
         )
         resolved_url_tokens = _query_field_tokens(
-            set(tokenize_url_content_for_search(metadata.get("resolved_url", ""), query.synonyms)), query_tokens
+            set(tokenize_url_content_for_search(metadata.get("resolved_url", ""), query.synonyms, full_text_tokens)), query_tokens
         )
         title_url_tokens = title_tokens | url_tokens | resolved_url_tokens
         support_evidence_bonus = _support_evidence_score(

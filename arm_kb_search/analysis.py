@@ -24,8 +24,11 @@ from typing import Iterable, Mapping, Sequence
 _DELIMITERS = re.compile(r"[_\-.]+")
 _PROSE_COMPOUND = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)+[.]?")
 _RAW_TOKEN = re.compile(r"(?:_+)?[a-z0-9][a-z0-9_\-+.]*", re.IGNORECASE)
-# Keep identifier punctuation; separate punctuation remains a phrase boundary.
-_TOKEN = re.compile(r"(?:[._]+)?[a-z0-9][a-z0-9_\-+.#:\[\]]*\(?|[^\w\s]", re.IGNORECASE)
+# Keep identifier punctuation; a terminal prose colon is a phrase boundary.
+_TOKEN = re.compile(
+    r"(?:[._]+)?[a-z0-9](?:[a-z0-9_\-+.#\[\]]|:(?=[a-z0-9_\-+.#:\[\]]))*\(?|[^\w\s]",
+    re.IGNORECASE,
+)
 _FORM = re.compile(r"[a-z0-9]+(?:[ \t_\-.]+[a-z0-9]+)*", re.IGNORECASE)
 _CODE_PART = re.compile(r"^(?:(?:sv)?(?:u?int|float|poly|bfloat|mfloat|[subfp]|bf|mf)?\d+|[a-z])$")
 
