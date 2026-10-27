@@ -16,10 +16,9 @@
 
 from pathlib import Path
 
+import yaml
 from fastmcp import FastMCP
 from fastmcp.server.providers.skills import SkillsDirectoryProvider
-import yaml
-
 
 SKILLS_ROOT = Path(__file__).resolve().parent / "skills"
 

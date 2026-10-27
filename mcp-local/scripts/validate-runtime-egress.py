@@ -16,7 +16,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 NETWORK_SYSCALL_RE = re.compile(r"\b(connect|sendto|sendmsg|sendmmsg)\(")
 ADDRESS_RE = re.compile(

@@ -12,8 +12,10 @@ ships their instructions as portable Agent Skills:
 
 ## How the server publishes skills
 
-The canonical files live in `mcp-local/skills/` and are copied to `/app/skills`
-in the image. Each has Agent Skills YAML frontmatter (`name`, `description`).
+The canonical files live in
+`arm-mcp-definitions/arm_mcp_definitions/skills/` and are copied to
+`/app/arm_mcp_definitions/skills` in the image. Each has Agent Skills YAML
+frontmatter (`name`, `description`).
 FastMCP's built-in
 [SkillsDirectoryProvider](https://gofastmcp.com/servers/providers/skills)
 publishes them through `resources/list` and `resources/read`, including a
@@ -48,15 +50,15 @@ filesystem access. The server does not execute commands when a skill is read.
 
 ## Installing the same skills locally
 
-Copy the three skill directories from `mcp-local/skills/` into the skill directory
+Copy the three skill directories from `arm-mcp-definitions/arm_mcp_definitions/skills/` into the skill directory
 supported by your client. For example, from a repository checkout:
 
 ```sh
 # Codex user skills; choose your client's directory if using a different host.
 mkdir -p "$HOME/.agents/skills"
-cp -R mcp-local/skills/arm-container-inspect \
-  mcp-local/skills/arm-migration-scan \
-  mcp-local/skills/arm-assembly-analyze "$HOME/.agents/skills/"
+cp -R arm-mcp-definitions/arm_mcp_definitions/skills/arm-container-inspect \
+  arm-mcp-definitions/arm_mcp_definitions/skills/arm-migration-scan \
+  arm-mcp-definitions/arm_mcp_definitions/skills/arm-assembly-analyze "$HOME/.agents/skills/"
 ```
 
 For an image-only installation, extract the same files to a fresh staging
@@ -66,7 +68,7 @@ directory. Set the image to the version/digest used by the project:
 ```sh
 skill_stage="$(mktemp -d)"
 docker run --rm --entrypoint tar "${ARM_MCP_IMAGE:-armlimited/arm-mcp:latest}" \
-  -C /app/skills -cf - . | tar -xf - -C "$skill_stage"
+  -C /app/arm_mcp_definitions/skills -cf - . | tar -xf - -C "$skill_stage"
 ```
 
 Restart or reload the client's skills after installation. The CLI skills are
@@ -86,10 +88,7 @@ can be selected the same way. Scans retain output files for review and validatio
 
 ## Validation
 
-`tests/test_server_skills.py` uses the real FastMCP client/server with a stubbed
-knowledge backend to test legacy and modern negotiation, the exact one-tool
-catalog, removed-tool rejection, resource/prompt content, manifest hashes, and
-invalid resource paths. The container integration suite checks the legacy stdio
-wire format, real knowledge retrieval, bundled skills, and CLI execution.
+The container integration suite checks the legacy stdio wire format, real
+knowledge retrieval, bundled skills, and CLI execution.
 Client-specific UI behavior should be checked in the client versions used for
 a release; protocol tests do not automate those UIs.

@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 REPOSITORY = Path(__file__).resolve().parents[2]
 WORKFLOW = (
     REPOSITORY / ".github/workflows/withdraw-mcp-release.yml"

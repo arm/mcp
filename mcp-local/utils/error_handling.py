@@ -12,16 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, Optional
-import traceback
 import os
+import traceback
 import uuid
 from datetime import datetime, timezone
+from typing import Any, Optional
 
 import yaml
 
 from .config import WORKSPACE_DIR
-
 
 LOG_FILE_NAME = "error_logging.yaml"
 
@@ -30,7 +29,7 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _log_error(tool: str, exc: Exception, args: Optional[Dict[str, Any]] = None) -> None:
+def _log_error(tool: str, exc: Exception, args: Optional[dict[str, Any]] = None) -> None:
     """Append a structured error entry to /workspace/error_logging.yaml.
     """
     entry = {
@@ -54,7 +53,7 @@ def _log_error(tool: str, exc: Exception, args: Optional[Dict[str, Any]] = None)
         pass
 
 
-def format_tool_error(tool: str, exc: Exception, args: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def format_tool_error(tool: str, exc: Exception, args: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """Return a structured error payload for the calling model.
 
     Includes exception metadata, traceback, provided args, and guidance text for next steps.
