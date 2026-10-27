@@ -15,7 +15,9 @@
 """Query ranking, filter contracts, and retrieval eligibility."""
 
 import importlib
+import json
 from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -23,6 +25,7 @@ from rank_bm25 import BM25Okapi
 from usearch.index import Index
 
 from arm_kb_search import SearchFilters, SearchResources, resources, search
+from arm_kb_search.analysis import Synonyms, analyze, atom, name_keys
 from arm_kb_search.filters import MetadataFilterIndex
 from arm_kb_search.search import (
     bm25_search,
@@ -42,6 +45,9 @@ class QueryModel:
     def encode(self, queries):
         self.calls += 1
         return np.zeros((len(queries), 2), dtype=np.float32)
+
+    def get_sentence_embedding_dimension(self):
+        return 2
 
 
 def chunk(row_id, **metadata):
@@ -337,7 +343,8 @@ def test_query_tokenization_does_not_grow_with_rerank_candidate_count(monkeypatc
     assert query_calls == single_candidate_calls
 
 
-def test_embedding_keeps_original_cli_query():
+@pytest.mark.parametrize("rules", [{}, {"awscli": ["aws cli", "awscli"]}])
+def test_embedding_keeps_original_cli_query(rules):
     class Model:
         def encode(self, texts):
             assert texts == ["Install AWS-CLI!"]
@@ -349,7 +356,9 @@ def test_embedding_keeps_original_cli_query():
             return (np.array([0]), np.array([0.1]))
 
     metadata = [candidate("aws-cli", "AWS CLI")["metadata"]]
-    results = search_module.hybrid_search("Install AWS-CLI!", Index(), metadata, Model(), None, k=1)
+    results = search_module.hybrid_search(
+        "Install AWS-CLI!", Index(), metadata, Model(), None, k=1, synonyms=Synonyms(rules),
+    )
     assert results[0]["metadata"]["chunk_uuid"] == "aws-cli"
 
 
@@ -731,3 +740,162 @@ def test_preserving_catalog_names_does_not_repeat_prose_query_terms():
     assert {r["metadata"]["chunk_uuid"]: r["bm25_score"] for r in actual} == {
         r["metadata"]["chunk_uuid"]: r["bm25_score"] for r in expected
     }
+
+SYNONYM_RULES = {
+    "awscli": ["aws cli", "awscli"],
+    "scikitlearn": ["scikit learn", "sklearn"],
+    "visualstudiocode": ["visual studio code", "vs code", "vscode"],
+    "vscodetunnels": ["vs code tunnels"],
+}
+
+
+def synonym_resources(metadata, rules=SYNONYM_RULES):
+    metadata = [*metadata, *[chunk(f"background-{i}", search_text="background") for i in range(8)]]
+    table = Synonyms(rules)
+    return SearchResources(
+        metadata, None, None, build_bm25_index(metadata, table),
+        include_disclaimers=False, synonyms=table,
+    )
+
+
+@pytest.mark.parametrize("text,key", [
+    ("AWS CLI", "awscli"), ("aws-cli", "awscli"), ("aws_cli", "awscli"),
+    ("AWS.CLI.", "awscli"), ("AWS - CLI", "awscli"), ("awscli", "awscli"),
+    ("visual-studio_code", "visualstudiocode"), ("vs code tunnels", "vscodetunnels"),
+])
+def test_synonyms_match_declared_names_and_component_separators(text, key):
+    table = Synonyms(SYNONYM_RULES)
+    for query in [False, True]:
+        assert name_keys(analyze(text, table, query=query), table) == {key}
+
+
+def test_synonyms_keep_document_words_and_balance_mixed_queries():
+    table = Synonyms(SYNONYM_RULES)
+    assert analyze("sklearn", table) == ["sklearn", atom("scikitlearn")]
+    assert analyze("sklearn", table, query=True) == [atom("scikitlearn")]
+    assert analyze("scikit learn", table, query=True) == ["scikit", "learn", atom("scikitlearn")]
+    assert analyze("configure heap for scikit-learn", table, query=True) == [
+        "configure", "heap", "for", atom("scikitlearn")]
+
+
+@pytest.mark.parametrize("text", [
+    "visualstudiocode", "VisualStudio Code", "aw_scli", "aws/cli", "aws:cli",
+    "aws_cli_extra", "awscli()", "awscli[0]", ".awscli",
+])
+def test_synonyms_do_not_match_unlisted_joins_or_identifier_fragments(text):
+    table = Synonyms(SYNONYM_RULES)
+    for query in [False, True]:
+        assert not name_keys(analyze(text, table, query=query), table)
+
+
+@pytest.mark.parametrize("text,document_tokens,query_tokens", [
+    ("open-source", ["open-source", "open", "source"], ["open-source", "open", "source"]),
+    ("torch.nn", ["torch.nn", "torch", "nn"], ["torch.nn"]),
+    ("pthread_create", ["pthread_create", "pthread", "create"], ["pthread_create"]),
+    ("vld1q_f32", ["vld1q_f32"], ["vld1q_f32"]),
+    ("svadd_n_u8", ["svadd_n_u8"], ["svadd_n_u8"]),
+    ("_n_u8", ["_n_u8"], ["_n_u8"]),
+    ("x86_64", ["x86_64"], ["x86_64"]),
+])
+def test_literal_analysis_preserves_identifiers_and_exposes_prose(text, document_tokens, query_tokens):
+    table = Synonyms({"pytorch": ["pytorch", "torch"]})
+    assert analyze(text, table) == document_tokens
+    assert analyze(text, table, query=True) == query_tokens
+
+
+@pytest.mark.parametrize("rules", [
+    [], {"awscli": "aws cli"}, {"": ["aws cli"]}, {"awscli": [1]},
+    {"maplenet": ["Maple .NET"]}, {"first": ["abc"], "second": ["abc"]},
+])
+def test_synonym_loading_rejects_invalid_or_ambiguous_tables(tmp_path, rules):
+    path = tmp_path / "names.json"
+    path.write_text(json.dumps(rules), encoding="utf-8")
+    with pytest.raises(ValueError):
+        Synonyms.load(path)
+
+
+@pytest.mark.parametrize("query", ["sklearn", "Scikit-learn", "scikit_learn"])
+def test_alias_retrieval_matches_both_spellings_and_respects_filters(query):
+    state = synonym_resources([
+        chunk(0, title="Scikit-learn", search_text="Scikit-learn reference", platform="linux"),
+        chunk(1, title="Training guide", search_text="Train a model using sklearn", platform="windows"),
+    ])
+    assert {hit["url"] for hit in search(query, state, k=5)} == {
+        "https://example.com/0", "https://example.com/1"}
+    assert [hit["url"] for hit in search(query, state, filters={"platform": "windows"})] == [
+        "https://example.com/1"]
+
+
+def test_alias_retrieval_does_not_treat_identifier_parts_as_names():
+    state = synonym_resources([
+        chunk(0, title="PyTorch", search_text="PyTorch documentation"),
+        chunk(1, title="API reference", search_text="torch.nn documentation"),
+    ], {"pytorch": ["pytorch", "torch"]})
+    assert [hit["url"] for hit in search("torch", state)] == ["https://example.com/0"]
+    assert [hit["url"] for hit in search("torch.nn", state)] == ["https://example.com/1"]
+
+
+def test_unlisted_join_cannot_find_a_name_through_literal_expansion():
+    state = synonym_resources([chunk(0, title="Visual Studio Code", search_text="Visual-Studio-Code editor")])
+    assert search("visualstudiocode", state) == []
+    assert [hit["url"] for hit in search("vscode", state)] == ["https://example.com/0"]
+
+
+def test_symbol_parts_support_prose_but_identifier_queries_remain_literal():
+    state = synonym_resources([
+        chunk(0, title="Linker symbols", search_text="ARM_LIB_HEAP"),
+        chunk(1, title="Concepts", search_text="arm lib heap"),
+    ])
+    assert "https://example.com/0" in {hit["url"] for hit in search("heap", state)}
+    assert [hit["url"] for hit in search("ARM_LIB_HEAP", state)] == ["https://example.com/0"]
+
+
+def test_name_recognition_does_not_add_a_separate_ranking_bonus():
+    query = search_module._analyze_query("AWS CLI", Synonyms(SYNONYM_RULES))
+    item = candidate("guide", "AWS CLI")
+    score = search_module._rerank_candidates(query, [item])[0]["rerank_score"]
+    same_tokens = replace(query, name_keys=frozenset())
+    assert score == pytest.approx(search_module._rerank_candidates(same_tokens, [item])[0]["rerank_score"])
+
+
+def test_query_names_preserve_raw_intent_and_complete_identifier_matching():
+    table = Synonyms({"googlekubernetesengine": ["google kubernetes engine", "gke"], **SYNONYM_RULES})
+    query = search_module._analyze_query("gke autopilot", table)
+    assert "gke" in query.raw_query_tokens and atom("googlekubernetesengine") in query.query_tokens
+    assert "gke" not in query.query_tokens
+    assert not search_module._analyze_query("install aws_cli", table).code_identifiers
+    assert search_module._analyze_query("aws_cli()", table).code_identifiers == {"aws_cli"}
+
+
+def test_synonym_resource_loading_is_explicit_and_independent(tmp_path, monkeypatch):
+    metadata = [chunk(0, title="AWS CLI", search_text="AWS CLI documentation")]
+    metadata += [chunk(i, search_text="background") for i in range(1, 9)]
+    monkeypatch.setattr(resources, "load_metadata", lambda path: metadata)
+    monkeypatch.setattr(resources, "load_usearch_index", lambda *args: None)
+    monkeypatch.setattr(resources, "load_embedding_model", lambda *args, **kwargs: QueryModel())
+    path = tmp_path / "names.json"
+    path.write_text(json.dumps(SYNONYM_RULES), encoding="utf-8")
+    loaded = resources.load_search_resources("meta", "index", synonyms_path=str(path), include_disclaimers=False)
+    before = search("awscli", loaded)
+    assert [hit["url"] for hit in before] == ["https://example.com/0"]
+    plain = resources.load_search_resources("meta", "index")
+    assert search("awscli", plain) == []
+    assert search("awscli", loaded) == before
+    with pytest.raises(FileNotFoundError):
+        resources.load_search_resources("meta", "index", synonyms_path=str(tmp_path / "missing.json"))
+    path.write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError):
+        resources.load_search_resources("meta", "index", synonyms_path=str(path))
+
+
+def test_committed_synonym_map_recognizes_every_declared_form():
+    path = Path(__file__).resolve().parents[1] / "mcp-local" / "name-synonyms.json"
+    rules = json.loads(path.read_text(encoding="utf-8"))
+    table = Synonyms.load(path)
+    assert rules
+    for key, forms in rules.items():
+        for form in forms:
+            for query in [False, True]:
+                assert name_keys(analyze(form, table, query=query), table) == {key}, form
+    for ambiguous in ["ecs", "oci", "mcp", "spe", "gcs", "rmm"]:
+        assert not name_keys(analyze(ambiguous, table, query=True), table), ambiguous

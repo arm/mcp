@@ -20,7 +20,7 @@ from utils.config import (
     METADATA_PATH,
     MODEL_NAME,
     MODEL_PATH,
-    NAME_INDEX_PATH,
+    NAME_SYNONYMS_PATH,
     SUPPORTED_SCANNERS,
     USEARCH_INDEX_PATH,
 )
@@ -41,7 +41,7 @@ SEARCH_RESOURCES = arm_kb_search.load_search_resources(
     usearch_index_path=USEARCH_INDEX_PATH,
     model_name=MODEL_NAME,
     model_path=MODEL_PATH,
-    name_index_path=NAME_INDEX_PATH,
+    synonyms_path=NAME_SYNONYMS_PATH,
     utm_source="arm-mcp",
 )
 
