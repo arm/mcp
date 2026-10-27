@@ -253,26 +253,28 @@ def _analyze_query(query: str, synonyms: Synonyms = EMPTY) -> _QueryAnalysis:
     terms = tokenize_for_search(query)
     raw_query_tokens = frozenset(terms)
     query_tokens = set(analyze(query, synonyms, query=True))
+    query_evidence = set(_evidence_tokens(query_tokens))
     recognized_names = name_keys(query_tokens, synonyms)
     salient_query_terms = [term for term in terms if term not in SEARCH_STOPWORDS]
     salient_query_tokens = query_tokens - SEARCH_STOPWORDS
     lexical_query_tokens = salient_query_tokens.copy() or query_tokens
     setup_phrase = bool(re.search(r"\bset\s+up\b", query, re.IGNORECASE))
     installation_query = bool(raw_query_tokens & INSTALL_INTENT_TOKENS) or setup_phrase
+    platforms = set()
     if installation_query:
+        # Installation platforms constrain scoring without identifying the requested product.
+        platforms = {token for word in PLATFORM_TOKENS for token in analyze(word, synonyms, query=True)}
         if setup_phrase:
             salient_query_tokens -= {"set", "up"}
         subject_tokens = _installation_subject_tokens(query, synonyms)
         if subject_tokens:
-            # Compare platform words and aliases in the same analyzed form as the query.
-            platforms = {token for word in PLATFORM_TOKENS for token in analyze(word, synonyms, query=True)}
             salient_query_tokens = subject_tokens | (salient_query_tokens & platforms)
     direct_query_terms = [term for term in terms if term not in DIRECT_INTENT_STOPWORDS]
     direct_query_tokens = query_tokens - DIRECT_INTENT_STOPWORDS
     scoring_query_tokens = direct_query_tokens or salient_query_tokens or query_tokens
     # Query length rules count the words the user typed, not analyzer expansions.
     short_query = len(set(direct_query_terms) or set(salient_query_terms) or set(terms)) <= 3
-    prefers_tuning_guide = bool(query_tokens & TUNING_INTENT_TOKENS)
+    prefers_tuning_guide = bool(query_evidence & TUNING_INTENT_TOKENS)
     prefers_reference_architecture = bool(
         raw_query_tokens & REFERENCE_ARCHITECTURE_INTENT_TOKENS
     )
@@ -281,7 +283,7 @@ def _analyze_query(query: str, synonyms: Synonyms = EMPTY) -> _QueryAnalysis:
         "lp" in raw_query_tokens
         or {"learning", "path"}.issubset(raw_query_tokens)
     )
-    entity_query_tokens = salient_query_tokens - GENERIC_ENTITY_TOKENS
+    entity_query_tokens = salient_query_tokens - GENERIC_ENTITY_TOKENS - platforms
     # In a short execution request, the named tool carries more information
     # than the generic action and Arm context shared by most documents.
     if (len(set(direct_query_terms)) <= 3 and entity_query_tokens
@@ -307,7 +309,7 @@ def _analyze_query(query: str, synonyms: Synonyms = EMPTY) -> _QueryAnalysis:
         asks_for_learning_path=asks_for_learning_path,
         compiler_guide_query=compiler_guide_query,
         support_question=bool(SUPPORT_QUESTION_PATTERN.search(" ".join(query.split()))) and not bool(
-            query_tokens & (TUNING_INTENT_TOKENS - {"config", "configure", "configured", "configuration"})
+            query_evidence & (TUNING_INTENT_TOKENS - {"config", "configure", "configured", "configuration"})
         ),
         intrinsic_query=bool(acle_types or evidence_tokens & {"intrinsic", "intrinsics"}),
         acle_types=acle_types,

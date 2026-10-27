@@ -873,11 +873,16 @@ def test_query_names_preserve_raw_intent_and_complete_identifier_matching():
     for platform in ["RHEL", "Red Hat Enterprise Linux"]:
         query = search_module._analyze_query(f"install sklearn on {platform}", table)
         assert query.salient_query_tokens == {atom("scikitlearn"), atom("redhatenterpriselinux")}
+        assert query.entity_query_tokens == {atom("scikitlearn")}
+        assert atom("redhatenterpriselinux") in search_module._analyze_query(platform, table).entity_query_tokens
     for name in ["Arm Performance Libraries", "armpl"]:
         query = search_module._analyze_query(f"Is {name} supported on Linux?", table)
         assert query.support_question and not query.prefers_tuning_guide
     assert search_module._analyze_query("optimize Arm Performance Libraries", table).prefers_tuning_guide
     assert search_module._analyze_query("install sklearn on gke", table).salient_query_tokens == {atom("scikitlearn")}
+    for punctuation in ["", ".", "!", "?"]:
+        query = search_module._analyze_query("Is Redis supported for low latency" + punctuation, table)
+        assert query.prefers_tuning_guide and not query.support_question
 
 
 def test_synonym_resource_loading_is_explicit_and_independent(tmp_path, monkeypatch):
