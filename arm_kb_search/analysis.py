@@ -137,6 +137,18 @@ class Synonyms:
                 break
         return best
 
+    @lru_cache(maxsize=8192)
+    def _nested_names(self, tokens: tuple[str, ...]) -> tuple[str, ...]:
+        # Only expand an already recognized name, never arbitrary identifier fragments.
+        parts = re.split(r"[ \t_\-.]+", " ".join(tokens).rstrip("."))
+        names = []
+        for start in range(len(parts)):
+            for end in range(start + 1, len(parts) + 1):
+                size, key = self._match(parts[start:end], 0)
+                if size == end - start:
+                    names.append(atom(key))
+        return tuple(dict.fromkeys(names))
+
     def apply(self, tokens: Sequence[str], *, replace_aliases: bool = False) -> list[str]:
         """Keep name words for documents and name-only queries; balance mixed queries."""
         out = []
@@ -159,7 +171,8 @@ class Synonyms:
             words = [] if replace_aliases and (alias or size < len(tokens)) else [
                 word for token in tokens[i:i + size] for word in delimit(token.rstrip("."))
                 if word not in {canonical, "-", "_", "", "."}]
-            out.extend(dict.fromkeys([*words, atom(canonical)]))
+            nested = self._nested_names(tuple(tokens[i:i + size])) if not replace_aliases else ()
+            out.extend(dict.fromkeys([*words, atom(canonical), *nested]))
             i += size
         return out
 
