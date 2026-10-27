@@ -34,7 +34,22 @@ _LINK_LABEL = re.compile(
     r"(?<![\w\\.\]\)])\[([^\[\]\\\n]+)\](?:"
     r"(?=\([^\n)]*\))|\[[^\[\]\\\n]*\])"
 )
-_REFERENCE_DEFINITION = re.compile(r"^ {0,3}\[([^\[\]\\\n]+)\]:[ \t]*\S[^\n]*", re.MULTILINE)
+# Reference titles may use quotes or parentheses and span nonblank lines.
+# Require the closing delimiter at the end of its line, so malformed titles
+# and subsequent visible paragraphs are not consumed as link metadata.
+_REFERENCE_TITLE = (
+    r'"(?:\\[^\r\n]|[^"\\\r\n]|\r?\n(?![ \t]*(?:\r?\n|$)))*"'
+    r"|'(?:\\[^\r\n]|[^'\\\r\n]|\r?\n(?![ \t]*(?:\r?\n|$)))*'"
+    r"|\((?:\\[^\r\n]|[^()\\\r\n]|\r?\n(?![ \t]*(?:\r?\n|$)))*\)"
+)
+_REFERENCE_DEFINITION = re.compile(
+    r"^ {0,3}\[(?![ \t\r\n]*\])"
+    r"((?:\\[^\r\n]|[^\[\]\\\r\n]|\r?\n(?![ \t]*(?:\r?\n|$))){1,999})\]:"
+    r"[ \t]*(?:\r?\n[ \t]*)?"
+    r"(?:<(?:\\[^\r\n]|[^<>\\\r\n])*>|[^\s<>]+)"
+    rf"(?:(?:[ \t]+(?:\r?\n[ \t]*)?|\r?\n[ \t]*)(?:{_REFERENCE_TITLE}))?"
+    r"[ \t]*(?=\r?$)", re.MULTILINE,
+)
 _SHORTCUT_LABEL = re.compile(r"(?<![\w\\.\[\]\)])\[([^\[\]\\\n]+)\](?![\[(:])")
 _FORM = re.compile(r"[a-z0-9]+(?:[ \t_\-.]+[a-z0-9]+)*", re.IGNORECASE)
 _CODE_PART = re.compile(r"^(?:(?:sv)?(?:u?int|float|poly|bfloat|mfloat|[subfp]|bf|mf)?\d+|[a-z])$")
@@ -42,18 +57,18 @@ _CODE_PART = re.compile(r"^(?:(?:sv)?(?:u?int|float|poly|bfloat|mfloat|[subfp]|b
 
 def basic_tokens(text: str) -> list[str]:
     text = text or ""
-    if "](" in text or "][" in text:
-        text = _LINK_LABEL.sub(r"[ \1 ]", text)
     if "]:" in text:
         # A bare [name] is prose only when a matching reference is defined.
         definitions = {" ".join(label.lower().split()) for label in _REFERENCE_DEFINITION.findall(text)}
         if definitions:
+            # Remove complete definitions before interpreting inline link syntax.
+            text = _REFERENCE_DEFINITION.sub("", text)
             text = _SHORTCUT_LABEL.sub(
                 lambda match: f"[ {match[1]} ]" if " ".join(match[1].lower().split()) in definitions else match[0],
                 text,
             )
-            # Definitions are link metadata, not visible name or URL evidence.
-            text = _REFERENCE_DEFINITION.sub("", text)
+    if "](" in text or "][" in text:
+        text = _LINK_LABEL.sub(r"[ \1 ]", text)
     return [token.lower() for token in _TOKEN.findall(text)]
 
 

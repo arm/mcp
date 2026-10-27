@@ -906,6 +906,66 @@ def test_shortcut_labels_contribute_evidence_but_their_definitions_do_not():
     assert name_keys(analyze(text, table, query=True), table) == {"awscli"}
 
 
+@pytest.mark.parametrize("definition", [
+    '[AWS CLI]: https://example.org/guide\n  "Scikit-learn documentation"',
+    "[AWS CLI]: https://example.org/guide\n  'Scikit-learn documentation'",
+    '[AWS CLI]: https://example.org/guide\n  (Scikit-learn documentation)',
+    '[AWS CLI]: https://example.org/guide\n"Scikit-learn documentation"',
+    '[AWS CLI]: https://example.org/guide\n\t"Scikit-learn documentation"',
+    '[AWS CLI]: https://example.org/guide\r\n  "Scikit-learn documentation"',
+    '[AWS CLI]: https://example.org/guide "Scikit-learn\ndocumentation"',
+    "[AWS CLI]: https://example.org/guide\n  'Scikit-learn\n  documentation'",
+    '[AWS CLI]: https://example.org/guide\n  (Scikit-learn\n  documentation)',
+    '[AWS CLI]: https://example.org/guide\n  "Scikit-learn \\"documentation\\""',
+    "[AWS CLI]: https://example.org/guide\n  'Scikit-learn \\'documentation\\''",
+    '[AWS CLI]: https://example.org/guide\n  (Scikit-learn \\(documentation\\))',
+    '[AWS CLI]:\n  https://example.org/guide\n  "Scikit-learn documentation"',
+    '[AWS CLI]:\n  <https://example.org/a guide>\n  "Scikit-learn documentation"',
+    '[AWS\n CLI]: /guide\n  "Scikit-learn documentation"',
+    '[\nAWS CLI\n]: /guide\n  "Scikit-learn documentation"',
+    '[AWS \\[CLI\\]]: /guide\n  "Scikit-learn documentation"',
+])
+def test_multiline_reference_metadata_cannot_match_names_or_discard_visible_prose(definition):
+    rules = json.loads((Path(__file__).resolve().parents[1] / "mcp-local" / "name-synonyms.json").read_text())
+    state = synonym_resources([
+        chunk(0, search_text=definition + "\nUse PyTorch."),
+    ], rules, background=False)
+    assert analyze(definition, state.synonyms) == []
+    assert analyze(definition + "\nUse PyTorch.", state.synonyms) == analyze("Use PyTorch.", state.synonyms)
+    for query in ["awscli", "sklearn"]:
+        assert search(query, state) == [], (definition, query)
+        analyzed = search_module._analyze_query(query, state.synonyms)
+        assert search_module._score_lexical_exactness(analyzed, state.metadata[0]) == 0
+    assert [hit["url"] for hit in search("torch", state)] == ["https://example.com/0"]
+
+
+@pytest.mark.parametrize("definition,visible", [
+    ('[AWS CLI]: /guide "hidden title"', '"Scikit-learn documentation"'),
+    ('[AWS CLI]: /guide', '\n"Scikit-learn documentation"'),
+    ('[AWS CLI]: /guide', '"Scikit-learn documentation" is visible prose.'),
+    ('[AWS CLI]: /guide', '"Scikit-learn documentation is unclosed.'),
+    ('[AWS CLI]: /guide', '"Scikit-learn\n\ndocumentation"'),
+    ('[AWS CLI]: /guide', '    Use Scikit-learn documentation.'),
+    ('[AWS CLI]: /guide\n  "hidden\n  title"', 'Scikit-learn documentation follows.'),
+])
+def test_reference_titles_do_not_consume_following_visible_text(definition, visible):
+    rules = json.loads((Path(__file__).resolve().parents[1] / "mcp-local" / "name-synonyms.json").read_text())
+    state = synonym_resources([chunk(0, search_text=definition + "\n" + visible)], rules, background=False)
+    assert analyze(definition + "\n" + visible, state.synonyms) == analyze(visible, state.synonyms)
+    assert [hit["url"] for hit in search("sklearn", state)] == ["https://example.com/0"]
+
+
+def test_multiline_reference_definitions_still_resolve_visible_shortcut_labels():
+    rules = json.loads((Path(__file__).resolve().parents[1] / "mcp-local" / "name-synonyms.json").read_text())
+    text = ('Use [AWS CLI].\n\n[AWS\n CLI]:\n  /guide\n  "Scikit-learn documentation"\n'
+            '[GNU Compiler Collection]: /gcc\n  (Redis documentation)\nUse PyTorch.')
+    state = synonym_resources([chunk(0, search_text=text)], rules, background=False)
+    for query in ["awscli", "torch"]:
+        assert [hit["url"] for hit in search(query, state)] == ["https://example.com/0"]
+    for query in ["sklearn", "gcc", "redis"]:
+        assert search(query, state) == []
+
+
 @pytest.mark.parametrize("boundary", [". ", " . "])
 def test_synonyms_do_not_cross_sentence_boundaries(boundary):
     state = synonym_resources([
