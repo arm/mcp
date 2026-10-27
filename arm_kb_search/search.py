@@ -212,7 +212,7 @@ def _installation_subject_tokens(query: str, synonyms: Synonyms = EMPTY) -> set[
     )
     if not match:
         return set()
-    # Recognize complete names before interpreting their words as context separators.
+    # Query analysis collapses complete names even when the suffix is only a name.
     terms = analyze(query[match.end():], synonyms, query=True)
     for end, term in enumerate(terms):
         if term in {"on", "in", "for", "using", "with"}:

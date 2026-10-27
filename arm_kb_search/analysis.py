@@ -34,7 +34,7 @@ _LINK_LABEL = re.compile(
     r"(?<![\w\\.\]\)])\[([^\[\]\\\n]+)\](?:"
     r"(?=\([^\n)]*\))|\[[^\[\]\\\n]*\])"
 )
-_REFERENCE_DEFINITION = re.compile(r"^ {0,3}\[([^\[\]\\\n]+)\]:[ \t]*\S", re.MULTILINE)
+_REFERENCE_DEFINITION = re.compile(r"^ {0,3}\[([^\[\]\\\n]+)\]:[ \t]*\S[^\n]*", re.MULTILINE)
 _SHORTCUT_LABEL = re.compile(r"(?<![\w\\.\[\]\)])\[([^\[\]\\\n]+)\](?![\[(:])")
 _FORM = re.compile(r"[a-z0-9]+(?:[ \t_\-.]+[a-z0-9]+)*", re.IGNORECASE)
 _CODE_PART = re.compile(r"^(?:(?:sv)?(?:u?int|float|poly|bfloat|mfloat|[subfp]|bf|mf)?\d+|[a-z])$")
@@ -52,6 +52,8 @@ def basic_tokens(text: str) -> list[str]:
                 lambda match: f"[ {match[1]} ]" if " ".join(match[1].lower().split()) in definitions else match[0],
                 text,
             )
+            # Definitions are link metadata, not visible name or URL evidence.
+            text = _REFERENCE_DEFINITION.sub("", text)
     return [token.lower() for token in _TOKEN.findall(text)]
 
 
@@ -164,7 +166,7 @@ class Synonyms:
         return tuple(dict.fromkeys(names))
 
     def apply(self, tokens: Sequence[str], *, replace_aliases: bool = False) -> list[str]:
-        """Keep name words for documents and name-only queries; balance mixed queries."""
+        """Keep document words; represent every recognized query name by its atom."""
         out = []
         i = 0
         while i < len(tokens):
@@ -181,8 +183,7 @@ class Synonyms:
                 out.extend(_literal_tokens(token, expand))
                 i += 1
                 continue
-            alias = size == 1 and canonical_key(tokens[i]) != canonical
-            words = [] if replace_aliases and (alias or size < len(tokens)) else [
+            words = [] if replace_aliases else [
                 word for token in tokens[i:i + size] for word in delimit(token.rstrip("."))
                 if word not in {canonical, "-", "_", "", "."}]
             nested = self._nested_names(tuple(tokens[i:i + size])) if not replace_aliases else ()

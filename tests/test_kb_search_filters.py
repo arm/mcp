@@ -771,11 +771,11 @@ def test_synonyms_match_declared_names_and_component_separators(text, key):
         assert name_keys(analyze(text, table, query=query), table) == expected
 
 
-def test_synonyms_keep_document_words_and_balance_mixed_queries():
+def test_synonyms_keep_document_words_and_canonicalize_all_query_names():
     table = Synonyms(SYNONYM_RULES)
     assert analyze("sklearn", table) == ["sklearn", atom("scikitlearn")]
     assert analyze("sklearn", table, query=True) == [atom("scikitlearn")]
-    assert analyze("scikit learn", table, query=True) == ["scikit", "learn", atom("scikitlearn")]
+    assert analyze("scikit learn", table, query=True) == [atom("scikitlearn")]
     assert analyze("configure heap for scikit-learn", table, query=True) == [
         "configure", "heap", "for", atom("scikitlearn")]
 
@@ -829,6 +829,18 @@ def test_alias_retrieval_matches_both_spellings_and_respects_filters(query):
         "https://example.com/1"]
 
 
+def test_sparse_alias_scores_stay_positive_without_background_documents():
+    table = Synonyms.load(Path(__file__).resolve().parents[1] / "mcp-local" / "name-synonyms.json")
+    for texts in [["sklearn"], ["sklearn", "Scikit-learn"], ["sklearn", "Scikit-learn", "Scikit-learn"]]:
+        metadata = [chunk(i, search_text=text) for i, text in enumerate(texts)]
+        index = build_bm25_index(metadata, table)
+        for spelling in ["sklearn", "Scikit-learn", "scikit_learn"]:
+            for ids in [None, (0,)]:
+                hits = bm25_search(spelling, metadata, index, synonyms=table, eligible_ids=ids)
+                assert len(hits) == (len(texts) if ids is None else len(ids))
+                assert all(hit["bm25_score"] > 0 for hit in hits)
+
+
 def test_alias_retrieval_does_not_treat_identifier_parts_as_names():
     state = synonym_resources([
         chunk(0, title="PyTorch", search_text="PyTorch documentation"),
@@ -879,6 +891,21 @@ def test_shortcut_links_require_unattached_labels_and_leave_definitions_unindexe
     assert not name_keys(analyze(text, table), table)
 
 
+@pytest.mark.parametrize("label", ["AWS CLI", "GNU Compiler Collection", "Arm Compiler for Linux"])
+def test_unused_reference_definitions_emit_no_search_evidence(label):
+    table = Synonyms.load(Path(__file__).resolve().parents[1] / "mcp-local" / "name-synonyms.json")
+    text = f'[{label}]: https://example.org/sklearn "PyTorch documentation"'
+    assert analyze(text, table) == []
+    assert build_bm25_index([chunk(0, search_text=text)], table) is None
+
+
+def test_shortcut_labels_contribute_evidence_but_their_definitions_do_not():
+    table = Synonyms.load(Path(__file__).resolve().parents[1] / "mcp-local" / "name-synonyms.json")
+    text = "Use [AWS CLI].\n\n[AWS CLI]: https://example.org/sklearn\n[GNU Compiler Collection]: /pytorch"
+    assert name_keys(analyze(text, table), table) == {"awscli", "amazonwebservices"}
+    assert name_keys(analyze(text, table, query=True), table) == {"awscli"}
+
+
 @pytest.mark.parametrize("boundary", [". ", " . "])
 def test_synonyms_do_not_cross_sentence_boundaries(boundary):
     state = synonym_resources([
@@ -892,20 +919,24 @@ def test_synonyms_do_not_cross_sentence_boundaries(boundary):
     ("Arm Compiler for Linux", "armcompilerforlinux"),
     ("Arm Toolchain for Embedded", "armtoolchainforembedded"),
 ])
-def test_installation_subject_preserves_prepositions_inside_product_names(name, key):
+@pytest.mark.parametrize("context", ["", " on RHEL"])
+def test_installation_subject_preserves_prepositions_inside_product_names(name, key, context):
     table = Synonyms.load(Path(__file__).resolve().parents[1] / "mcp-local" / "name-synonyms.json")
-    query = search_module._analyze_query(f"install {name} on RHEL", table)
+    query = search_module._analyze_query(f"install {name}{context}", table)
     assert query.entity_query_tokens == {atom(key)}
-    assert query.salient_query_tokens == {atom(key), atom("redhatenterpriselinux")}
+    assert atom(key) in query.salient_query_tokens
+    if context:
+        assert query.salient_query_tokens == {atom(key), atom("redhatenterpriselinux")}
 
 
-def test_full_compiler_name_and_alias_both_prefer_the_requested_install_guide():
+@pytest.mark.parametrize("context", ["", " on RHEL"])
+def test_full_compiler_name_and_alias_both_prefer_the_requested_install_guide(context):
     table = Synonyms.load(Path(__file__).resolve().parents[1] / "mcp-local" / "name-synonyms.json")
     candidates = [{"metadata": chunk(i, title=title, heading=title, doc_type="Install Guide",
                                      search_text=f"{title} installation on RHEL")}
                   for i, title in enumerate(["ACFL", "GNU Compiler"])]
     for name in ["ACFL", "Arm Compiler for Linux"]:
-        ranked = search_module.rerank_candidates(f"install {name} on RHEL", candidates, synonyms=table)
+        ranked = search_module.rerank_candidates(f"install {name}{context}", candidates, synonyms=table)
         assert ranked[0]["metadata"]["title"] == "ACFL"
 
 
@@ -1018,3 +1049,19 @@ def test_single_token_synonyms_do_not_escape_identifier_boundaries():
                 text = context.format(form)
                 for query in [False, True]:
                     assert key not in name_keys(analyze(text, table, query=query), table), (text, query)
+
+
+def test_every_synonym_spelling_retrieves_names_without_matching_identifier_components():
+    path = Path(__file__).resolve().parents[1] / "mcp-local" / "name-synonyms.json"
+    rules = json.loads(path.read_text(encoding="utf-8"))
+    for key, forms in rules.items():
+        identifiers = " ".join(form.replace(" ", "_").replace("-", "_").replace(".", "_") + "_extra"
+                               for form in forms)
+        state = synonym_resources([
+            chunk(0, search_text="; ".join(forms)),
+            chunk(1, search_text=identifiers),
+        ], {key: forms}, background=False)
+        for form in forms:
+            assert [hit["url"] for hit in search(form, state)] == ["https://example.com/0"], form
+            query = search_module._analyze_query(form, state.synonyms)
+            assert search_module._score_lexical_exactness(query, state.metadata[1]) == 0, form
