@@ -29,12 +29,17 @@ _TOKEN = re.compile(
     r"(?:[._]+)?[a-z0-9](?:[a-z0-9_\-+.#\[\]]|:(?=[a-z0-9_\-+.#:\[\]]))*\(?|[^\w\s]",
     re.IGNORECASE,
 )
+# Inline link labels are prose; brackets attached to identifiers stay protected.
+_LINK_LABEL = re.compile(r"(?<![\w\\.\]\)])\[([^\[\]\\\n]+)\](?=\([^\n)]*\))")
 _FORM = re.compile(r"[a-z0-9]+(?:[ \t_\-.]+[a-z0-9]+)*", re.IGNORECASE)
 _CODE_PART = re.compile(r"^(?:(?:sv)?(?:u?int|float|poly|bfloat|mfloat|[subfp]|bf|mf)?\d+|[a-z])$")
 
 
 def basic_tokens(text: str) -> list[str]:
-    return [token.lower() for token in _TOKEN.findall(text or "")]
+    text = text or ""
+    if "](" in text:
+        text = _LINK_LABEL.sub(r"[ \1 ]", text)
+    return [token.lower() for token in _TOKEN.findall(text)]
 
 
 def delimit(token: str) -> list[str]:
