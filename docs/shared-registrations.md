@@ -1,6 +1,6 @@
 # MCP capability definitions
 
-`arm-mcp-definitions/arm_mcp_definitions/` contains the knowledge-search tool
+`arm_mcp_definitions/` contains the knowledge-search tool
 contract, server instructions, and bundled skill resources and prompts. Each
 server supplies its own search handler and owns retrieval initialization,
 logging, and error handling.
@@ -8,7 +8,7 @@ logging, and error handling.
 ## Using the definitions
 
 Copy the `arm_mcp_definitions/` module, including `skills/`, beside your server
-entry point, or add `arm-mcp-definitions/` to the Python import path. It uses
+entry point, or add its parent directory to the Python import path. It uses
 FastMCP and PyYAML, already included in the local server's dependencies.
 
 ```python

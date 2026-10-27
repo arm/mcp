@@ -17,9 +17,8 @@ from pathlib import Path
 
 # Also support running this file directly from a source checkout. In the image,
 # arm_mcp_definitions is copied next to server.py and is already on the import path.
-sys.path.append(str(Path(__file__).resolve().parents[1] / "arm-mcp-definitions"))
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from arm_mcp_definitions import SERVER_INSTRUCTIONS, register_capabilities
 from fastmcp import FastMCP
 from utils.config import (
     METADATA_PATH,
@@ -31,6 +30,7 @@ from utils.error_handling import format_tool_error
 from utils.invocation_logger import log_invocation_reason, log_tool_result
 
 import arm_kb_search
+from arm_mcp_definitions import SERVER_INSTRUCTIONS, register_capabilities
 
 mcp = FastMCP("arm-mcp", instructions=SERVER_INSTRUCTIONS)
 

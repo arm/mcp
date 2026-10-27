@@ -10,7 +10,7 @@ reproducible build inputs, and the reviewed release workflows.
   - `utils/`: Helper modules for each tool
   - `data/`: Pre-built knowledge base (embeddings and metadata)
   - `Dockerfile`: Multi-stage Docker build
-- **`arm-mcp-definitions/`**: Knowledge-search contract, server instructions, skill
+- **`arm_mcp_definitions/`**: Knowledge-search contract, server instructions, skill
   resources/prompts, and canonical CLI Agent Skills. Each server supplies its own
   search handler; see [sharing registrations](docs/shared-registrations.md).
 - **`embedding-generation/`**: Scripts for regenerating the knowledge base from source documents

@@ -90,7 +90,7 @@ COPY --from=embeddings /embedding-data/usearch_index.bin /app/data/usearch_index
 COPY mcp-local/utils/ /app/utils/
 COPY arm_kb_search/ /app/arm_kb_search/
 COPY mcp-local/server.py /app/
-COPY arm-mcp-definitions/ /app/
+COPY arm_mcp_definitions/ /app/arm_mcp_definitions/
 
 FROM ${UBUNTU_IMAGE} AS runtime
 

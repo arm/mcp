@@ -33,7 +33,7 @@ STAGE_INPUTS = (MCP_LOCAL / "scripts/stage-build-inputs.py").read_text()
 INPUT_DOCKERIGNORE = (MCP_LOCAL / ".dockerignore").read_text()
 ROOT_DOCKERIGNORE = (REPOSITORY / ".dockerignore").read_text()
 SERVER = (MCP_LOCAL / "server.py").read_text()
-SHARED_REGISTRATION = (REPOSITORY / "arm-mcp-definitions/arm_mcp_definitions/registration.py").read_text()
+SHARED_REGISTRATION = (REPOSITORY / "arm_mcp_definitions/registration.py").read_text()
 SHARED_TOOL_DESCRIPTION = ast.literal_eval(next(
     node.value for node in ast.parse(SHARED_REGISTRATION).body
     if isinstance(node, ast.Assign)

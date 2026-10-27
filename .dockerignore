@@ -10,11 +10,10 @@
 !mcp-local/utils/**
 !arm_kb_search/
 !arm_kb_search/**
-!arm-mcp-definitions/
-!arm-mcp-definitions/arm_mcp_definitions/
-!arm-mcp-definitions/arm_mcp_definitions/*.py
-!arm-mcp-definitions/arm_mcp_definitions/skills/
-!arm-mcp-definitions/arm_mcp_definitions/skills/**
+!arm_mcp_definitions/
+!arm_mcp_definitions/*.py
+!arm_mcp_definitions/skills/
+!arm_mcp_definitions/skills/**
 !mcp-local/uv.lock
 
 # Exclude Python bytecode caches re-included by the recursive directory allow rules above.

@@ -187,7 +187,7 @@ def test_mcp_stdio_transport_responds(platform):
                 "params": {"uri": f"skill://{name}/SKILL.md"},
             }))
             document = _read_response(request_id)["result"]["contents"][0]["text"]
-            bundled_file = repo_root.parent / "arm-mcp-definitions/arm_mcp_definitions/skills" / name / "SKILL.md"
+            bundled_file = repo_root.parent / "arm_mcp_definitions/skills" / name / "SKILL.md"
             assert document == bundled_file.read_text()
             raw_socket.sendall(_encode_mcp_message({
                 "jsonrpc": "2.0", "id": request_id + 1, "method": "prompts/get",
