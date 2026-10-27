@@ -91,6 +91,56 @@ def test_name_fragments_do_not_join_across_metadata_fields(synonyms):
     assert scoring._score_lexical_exactness(query, {"heading_path": ["AWS", "CLI"]}) == 0
 
 
+@pytest.mark.parametrize("text,query,key", [
+    ("λsklearn", "sklearn", "scikitlearn"),
+    ("sklearné", "sklearn", "scikitlearn"),
+    ("awsλcli", "awscli", "awscli"),
+    ("工具sklearn", "sklearn", "scikitlearn"),
+    ("sklearn工具", "sklearn", "scikitlearn"),
+    ("aws工具cli", "awscli", "awscli"),
+    ("２sklearn", "sklearn", "scikitlearn"),
+    ("sklearn２", "sklearn", "scikitlearn"),
+    ("aws２cli", "awscli", "awscli"),
+])
+def test_unicode_identifiers_cannot_become_product_aliases(text, query, key, synonyms):
+    for is_query in [False, True]:
+        tokens = analyze(text, synonyms, query=is_query)
+        assert text.lower() in tokens
+        assert key not in name_keys(tokens, synonyms)
+    assert search(query, resource(text, synonyms)) == []
+    assert search(text, resource(query, synonyms)) == []
+    # Ordinary literal terms need background rows for positive BM25 IDF.
+    rows = [{"chunk_uuid": str(i), "url": f"https://example.org/{i}", "search_text": value}
+            for i, value in enumerate([text, "unrelated guide", "background reference"])]
+    state = SearchResources(rows, None, None, build_bm25_index(rows, synonyms),
+                            include_disclaimers=False, synonyms=synonyms)
+    assert [hit["url"] for hit in search(text, state)] == ["https://example.org/0"]
+    assert scoring._score_lexical_exactness(
+        scoring._analyze_query(query, synonyms), {"search_text": text, "title": text}) == 0
+
+
+@pytest.mark.parametrize("text", ["AWS λ CLI", "AWS 工具 CLI"])
+def test_unicode_words_keep_name_components_separate(text, synonyms):
+    assert "awscli" not in name_keys(analyze(text, synonyms), synonyms)
+    assert search("awscli", resource(text, synonyms)) == []
+
+
+@pytest.mark.parametrize("text", [
+    "- AWS\n- CLI", "+ AWS\n+ CLI", "* AWS\n* CLI", "1. AWS\n2. CLI",
+    "> - AWS\n> - CLI", "- AWS\n  - CLI", "AWS\n- CLI", "# AWS\n# CLI",
+])
+def test_markdown_blocks_do_not_assemble_product_names_without_links(text, synonyms):
+    for content in [text, text + "\n\n[unused]: /guide"]:
+        assert "awscli" not in name_keys(analyze(content, synonyms), synonyms)
+        assert search("awscli", resource(content, synonyms)) == []
+
+
+@pytest.mark.parametrize("text", ["AWS\nCLI", "- AWS CLI\n- other", "- AWS\n  CLI"])
+def test_names_survive_within_a_single_markdown_paragraph(text, synonyms):
+    assert "awscli" in name_keys(analyze(text, synonyms), synonyms)
+    assert search("awscli", resource(text, synonyms))
+
+
 def test_literal_identifier_cannot_impersonate_a_canonical_name(synonyms):
     rows = [{"chunk_uuid": str(i), "url": f"https://example.org/{i}", "search_text": text}
             for i, text in enumerate(["__name_scikitlearn", "Scikit-learn", "background"])]

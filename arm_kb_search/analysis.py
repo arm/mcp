@@ -27,10 +27,11 @@ from markdown_it.rules_inline import image, link
 
 _DELIMITERS = re.compile(r"[_\-.]+")
 _PROSE_COMPOUND = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)+[.]?")
-_RAW_TOKEN = re.compile(r"(?:_+)?[a-z0-9][a-z0-9_\-+.]*", re.IGNORECASE)
-# Keep identifier punctuation; a terminal prose colon is a phrase boundary.
+_RAW_TOKEN = re.compile(r"(?:_+)?[^\W_][\w\-+.]*", re.IGNORECASE)
+# Keep Unicode identifier characters intact so fragments cannot become aliases.
+# A terminal prose colon and blank lines remain phrase boundaries.
 _TOKEN = re.compile(
-    r"\r?\n[ \t]*\r?\n|(?:[._]+)?[a-z0-9](?:[a-z0-9_\-+.#\[\]]|:(?=[a-z0-9_\-+.#:\[\]]))*\(?|[^\w\s]",
+    r"\r?\n[ \t]*\r?\n|(?:[._]+)?[^\W_](?:[\w\-+.#\[\]]|:(?=[\w\-+.#:\[\]]))*\(?|[^\w\s]",
     re.IGNORECASE,
 )
 _FORM = re.compile(r"[a-z0-9]+(?:[ \t_\-.]+[a-z0-9]+)*", re.IGNORECASE)
@@ -113,7 +114,8 @@ def _markdown_text(text):
 def searchable_text(text: str) -> str:
     """Exclude hidden Markdown link metadata from name and phrase evidence."""
     text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
-    return _markdown_text(text) if any(marker in text for marker in ("]:", "](", "][")) else text
+    # Multiline text can contain separate Markdown blocks even without links.
+    return _markdown_text(text) if any(marker in text for marker in ("\n", "]:", "](", "][")) else text
 
 
 def basic_tokens(text: str) -> list[str]:
