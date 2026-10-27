@@ -23,8 +23,7 @@ from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 from usearch.index import Index, search as search_vectors
 
-from .analysis import EMPTY, Synonyms, analyze, analyze_tokens, basic_tokens, literal_term, name_keys
-from .markdown import searchable_text
+from .analysis import EMPTY, Synonyms, analyze, analyze_tokens, basic_tokens, literal_term, name_keys, searchable_text
 from .config import DISTANCE_THRESHOLD, K_RESULTS
 
 

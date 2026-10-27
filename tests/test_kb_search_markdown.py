@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from arm_kb_search import SearchResources, search
-from arm_kb_search.analysis import Synonyms, analyze, atom, name_keys
+from arm_kb_search.analysis import Synonyms, analyze, atom, name_keys, searchable_text
 from arm_kb_search.search import bm25_search, build_bm25_index
 
 scoring = importlib.import_module("arm_kb_search.search")
@@ -149,8 +149,6 @@ def test_installation_bonus_requires_the_named_product(suffix, context, synonyms
 
 
 def test_markdown_cleanup_is_idempotent(synonyms):
-    from arm_kb_search.markdown import searchable_text
-
     for text in [
         'Use [AWS CLI](/guide "Scikit-learn").',
         '```text\n[reference]: Scikit-learn\n```\n\n[AWS CLI]: /guide',
