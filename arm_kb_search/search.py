@@ -207,16 +207,19 @@ def salient_tokens(text: str) -> List[str]:
 def _installation_subject_tokens(query: str, synonyms: Synonyms = EMPTY) -> set[str]:
     """Identify a short tool name before an installation's platform context."""
     match = re.search(
-        r"\b(?:install(?:ing|ation)?|set\s+up|setup)\s+(.+?)\s+(?:on|in|for|using|with)\b",
+        r"\b(?:install(?:ing|ation)?|set\s+up|setup)\s+",
         query, re.IGNORECASE,
     )
     if not match:
         return set()
-    terms = [term for term in salient_tokens(match.group(1)) if term not in GENERIC_ENTITY_TOKENS
-             and term not in {"tool", "tools", "package", "packages", "software", "instructions"}]
-    return (set(analyze(match.group(1), synonyms, query=True)) - GENERIC_ENTITY_TOKENS
-            - {"tool", "tools", "package", "packages", "software", "instructions"}
-            if 0 < len(set(terms)) <= 3 else set())
+    # Recognize complete names before interpreting their words as context separators.
+    terms = analyze(query[match.end():], synonyms, query=True)
+    for end, term in enumerate(terms):
+        if term in {"on", "in", "for", "using", "with"}:
+            subject = (set(terms[:end]) - GENERIC_ENTITY_TOKENS
+                       - {"tool", "tools", "package", "packages", "software", "instructions"})
+            return subject if 0 < len(subject) <= 3 else set()
+    return set()
 
 
 @dataclass(frozen=True)

@@ -29,16 +29,29 @@ _TOKEN = re.compile(
     r"(?:[._]+)?[a-z0-9](?:[a-z0-9_\-+.#\[\]]|:(?=[a-z0-9_\-+.#:\[\]]))*\(?|[^\w\s]",
     re.IGNORECASE,
 )
-# Inline link labels are prose; brackets attached to identifiers stay protected.
-_LINK_LABEL = re.compile(r"(?<![\w\\.\]\)])\[([^\[\]\\\n]+)\](?=\([^\n)]*\))")
+# Inline and reference link labels are prose; attached identifier brackets stay protected.
+_LINK_LABEL = re.compile(
+    r"(?<![\w\\.\]\)])\[([^\[\]\\\n]+)\](?:"
+    r"(?=\([^\n)]*\))|\[[^\[\]\\\n]*\])"
+)
+_REFERENCE_DEFINITION = re.compile(r"^ {0,3}\[([^\[\]\\\n]+)\]:[ \t]*\S", re.MULTILINE)
+_SHORTCUT_LABEL = re.compile(r"(?<![\w\\.\[\]\)])\[([^\[\]\\\n]+)\](?![\[(:])")
 _FORM = re.compile(r"[a-z0-9]+(?:[ \t_\-.]+[a-z0-9]+)*", re.IGNORECASE)
 _CODE_PART = re.compile(r"^(?:(?:sv)?(?:u?int|float|poly|bfloat|mfloat|[subfp]|bf|mf)?\d+|[a-z])$")
 
 
 def basic_tokens(text: str) -> list[str]:
     text = text or ""
-    if "](" in text:
+    if "](" in text or "][" in text:
         text = _LINK_LABEL.sub(r"[ \1 ]", text)
+    if "]:" in text:
+        # A bare [name] is prose only when a matching reference is defined.
+        definitions = {" ".join(label.lower().split()) for label in _REFERENCE_DEFINITION.findall(text)}
+        if definitions:
+            text = _SHORTCUT_LABEL.sub(
+                lambda match: f"[ {match[1]} ]" if " ".join(match[1].lower().split()) in definitions else match[0],
+                text,
+            )
     return [token.lower() for token in _TOKEN.findall(text)]
 
 
@@ -121,7 +134,7 @@ class Synonyms:
         best = (0, None)
         for end in range(start, len(tokens)):
             token = tokens[end].rstrip(".")
-            if joined and tokens[end] in {"-", "_", "."}:
+            if joined and tokens[end] in {"-", "_"}:
                 continue
             if not valid_form(token):
                 break
@@ -133,7 +146,8 @@ class Synonyms:
             joined += part
             if joined in self._single and frozenset(gaps) in self._gaps[joined]:
                 best = (end - start + 1, self._single[joined])
-            if joined not in self._prefixes:
+            # A period can end a complete name, but cannot join two sentences.
+            if tokens[end].endswith(".") or joined not in self._prefixes:
                 break
         return best
 

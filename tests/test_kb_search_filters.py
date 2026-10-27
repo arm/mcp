@@ -838,6 +838,77 @@ def test_alias_retrieval_does_not_treat_identifier_parts_as_names():
     assert [hit["url"] for hit in search("torch.nn", state)] == ["https://example.com/1"]
 
 
+@pytest.mark.parametrize("label,query", [
+    ("[Scikit-learn][guide]", "sklearn"),
+    ("[Visual Studio Code][editor]", "vscode"),
+    ("[sklearn][]", "sklearn"),
+    ("[sklearn](https://example.org/guide)", "sklearn"),
+])
+def test_markdown_link_labels_retain_sparse_alias_matches(label, query):
+    state = synonym_resources([chunk(0, search_text=f"Use {label} to get started.")])
+    assert [hit["url"] for hit in search(query, state)] == ["https://example.com/0"]
+
+
+@pytest.mark.parametrize("text", [
+    "array[sklearn][guide]", "sklearn[0][1]", r"\[sklearn][guide]",
+])
+def test_reference_link_normalization_preserves_identifier_boundaries(text):
+    table = Synonyms(SYNONYM_RULES)
+    assert not name_keys(analyze(text, table), table)
+
+
+@pytest.mark.parametrize("name,definition,query", [
+    ("sklearn", "SKLEARN", "sklearn"),
+    ("Visual Studio Code", "visual   studio code", "vscode"),
+])
+def test_shortcut_reference_labels_retain_sparse_alias_matches(name, definition, query):
+    text = f"Use [{name}] to get started.\n\n[{definition}]: https://example.org/guide"
+    state = synonym_resources([chunk(0, search_text=text)])
+    assert [hit["url"] for hit in search(query, state)] == ["https://example.com/0"]
+
+
+@pytest.mark.parametrize("text", [
+    "Use [sklearn] without a reference definition.",
+    "array[sklearn]\n\n[sklearn]: https://example.org/guide",
+    "sklearn[0]\n\n[0]: https://example.org/guide",
+    "\\[sklearn]\n\n[sklearn]: https://example.org/guide",
+    "[sklearn]: https://example.org/guide",
+])
+def test_shortcut_links_require_unattached_labels_and_leave_definitions_unindexed(text):
+    table = Synonyms(SYNONYM_RULES)
+    assert not name_keys(analyze(text, table), table)
+
+
+@pytest.mark.parametrize("boundary", [". ", " . "])
+def test_synonyms_do_not_cross_sentence_boundaries(boundary):
+    state = synonym_resources([
+        chunk(0, search_text="Use AWS CLI. It provides command-line access."),
+        chunk(1, search_text=f"The provider is AWS{boundary}CLI tools from other vendors also work."),
+    ])
+    assert [hit["url"] for hit in search("awscli", state)] == ["https://example.com/0"]
+
+
+@pytest.mark.parametrize("name,key", [
+    ("Arm Compiler for Linux", "armcompilerforlinux"),
+    ("Arm Toolchain for Embedded", "armtoolchainforembedded"),
+])
+def test_installation_subject_preserves_prepositions_inside_product_names(name, key):
+    table = Synonyms.load(Path(__file__).resolve().parents[1] / "mcp-local" / "name-synonyms.json")
+    query = search_module._analyze_query(f"install {name} on RHEL", table)
+    assert query.entity_query_tokens == {atom(key)}
+    assert query.salient_query_tokens == {atom(key), atom("redhatenterpriselinux")}
+
+
+def test_full_compiler_name_and_alias_both_prefer_the_requested_install_guide():
+    table = Synonyms.load(Path(__file__).resolve().parents[1] / "mcp-local" / "name-synonyms.json")
+    candidates = [{"metadata": chunk(i, title=title, heading=title, doc_type="Install Guide",
+                                     search_text=f"{title} installation on RHEL")}
+                  for i, title in enumerate(["ACFL", "GNU Compiler"])]
+    for name in ["ACFL", "Arm Compiler for Linux"]:
+        ranked = search_module.rerank_candidates(f"install {name} on RHEL", candidates, synonyms=table)
+        assert ranked[0]["metadata"]["title"] == "ACFL"
+
+
 def test_unlisted_join_cannot_find_a_name_through_literal_expansion():
     state = synonym_resources([chunk(0, title="Visual Studio Code", search_text="Visual-Studio-Code editor")])
     assert search("visualstudiocode", state) == []
@@ -917,3 +988,33 @@ def test_committed_synonym_map_recognizes_every_declared_form():
             assert key in name_keys(analyze(form, table), table), form
     for ambiguous in ["acl", "ecs", "oci", "mcp", "spe", "gcs", "rmm"]:
         assert not name_keys(analyze(ambiguous, table, query=True), table), ambiguous
+
+
+def test_all_declared_synonyms_survive_prose_and_markdown_contexts():
+    path = Path(__file__).resolve().parents[1] / "mcp-local" / "name-synonyms.json"
+    rules = json.loads(path.read_text(encoding="utf-8"))
+    table = Synonyms(rules)
+    for key, forms in rules.items():
+        for form in forms:
+            for context in [
+                "Use {}.", "Use {}:", "Use **{}**.", "Use ({}) here.",
+                "Use [{}](https://example.org/docs).", "Use [{}][guide].", "Use [{}][].",
+                "Use [{0}].\n\n[{0}]: https://example.org/docs",
+            ]:
+                text = context.format(form)
+                for query in [False, True]:
+                    assert key in name_keys(analyze(text, table, query=query), table), (text, query)
+
+
+def test_single_token_synonyms_do_not_escape_identifier_boundaries():
+    path = Path(__file__).resolve().parents[1] / "mcp-local" / "name-synonyms.json"
+    rules = json.loads(path.read_text(encoding="utf-8"))
+    table = Synonyms(rules)
+    for key, forms in rules.items():
+        for form in forms:
+            if " " in form:
+                continue
+            for context in ["{}()", "{}[0]", "{}::member", "{}.extra", "{}_extra", ".{}", "_{}"]:
+                text = context.format(form)
+                for query in [False, True]:
+                    assert key not in name_keys(analyze(text, table, query=query), table), (text, query)
