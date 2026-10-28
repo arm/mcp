@@ -317,6 +317,7 @@ def test_benchmark_runs_exact_candidate_offline(
     assert run[run.index("--model-path") + 1] == "/corpus/embedding-model"
     assert run[run.index("--index-path") + 1] == "/corpus/usearch_index.bin"
     assert run[run.index("--metadata-path") + 1] == "/corpus/metadata.json"
+    assert run[run.index("--synonyms-path") + 1] == "/workspace/mcp-local/name-synonyms.json"
     mounts = [run[i + 1] for i, arg in enumerate(run) if arg == "--mount"]
     for target in ("/workspace", "/corpus", "/baseline"):
         assert any(f"dst={target},readonly" in mount for mount in mounts)

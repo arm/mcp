@@ -273,7 +273,8 @@ def test_unavailable_baseline_still_reports_current_results(
     assert "Comparison unavailable" in capsys.readouterr().out
 
 
-def test_synonym_path_is_passed_to_resource_loader(inputs, monkeypatch, tmp_path):
+@pytest.mark.parametrize("suite,exit_code", [("smoke", 1), ("benchmark", 0)])
+def test_synonym_path_is_passed_to_resource_loader(inputs, monkeypatch, tmp_path, suite, exit_code):
     received = {}
 
     def load(**kwargs):
@@ -282,5 +283,5 @@ def test_synonym_path_is_passed_to_resource_loader(inputs, monkeypatch, tmp_path
 
     monkeypatch.setattr(runner, "load_search_resources", load)
     table = tmp_path / "synonyms.json"
-    assert runner.main([*inputs[2], "--synonyms-path", str(table)]) == 0
+    assert runner.main([*inputs[2], "--suite", suite, "--synonyms-path", str(table)]) == exit_code
     assert received["synonyms_path"] == str(table)

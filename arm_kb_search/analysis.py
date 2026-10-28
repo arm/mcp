@@ -30,7 +30,16 @@ _RAW_TOKEN = regex.compile(r"(?:_+)?[^\W_][\w\p{XID_Continue}\-+.]*", regex.IGNO
 # Retain them in both stages so identifier fragments cannot become aliases.
 # A terminal prose colon and blank lines remain phrase boundaries.
 _TOKEN = regex.compile(
-    r"\r?\n[ \t]*\r?\n|(?:[._]+)?[^\W_](?:[\w\p{XID_Continue}\-+.#\[\]]|:(?=[\w\p{XID_Continue}\-+.#:\[\]]))*\(?|[^\w\s]",
+    # Blank-line boundaries.
+    r"\r?\n[ \t]*\r?\n"
+
+    # Complete words and identifiers.
+    r"|(?:[._]+)?[^\W_]"
+    r"(?:[\w\p{XID_Continue}\-+.#\[\]]"
+    r"|:(?=[\w\p{XID_Continue}\-+.#:\[\]]))*\(?"
+
+    # Other punctuation.
+    r"|[^\w\s]",
     regex.IGNORECASE,
 )
 _FORM = re.compile(r"[a-z0-9]+(?:[ \t_\-.]+[a-z0-9]+)*", re.IGNORECASE)
@@ -66,10 +75,6 @@ def literal_term(token: str) -> str:
 def _literal_tokens(token: str, expand: bool) -> tuple[str, ...]:
     return tuple(literal_term(part) for word in raw_tokens(token)
                  for part in (delimit(word) if expand else [word]))
-
-
-def canonical_key(name: str) -> str:
-    return "".join(re.findall(r"[a-z0-9]+", name.lower()))
 
 
 def atom(key: str) -> str:

@@ -14,8 +14,10 @@
 
 """Query ranking, filter contracts, and retrieval eligibility."""
 
+import gzip
 import importlib
 import json
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 
@@ -826,7 +828,7 @@ SYNONYM_RULES = {
 def synonym_resources(metadata, rules=SYNONYM_RULES, *, background=True):
     if background:
         metadata = [*metadata, *[chunk(f"background-{i}", search_text="background") for i in range(8)]]
-    table = Synonyms(rules)
+    table = rules if isinstance(rules, Synonyms) else Synonyms(rules)
     return SearchResources(
         metadata, None, None, build_bm25_index(metadata, table),
         include_disclaimers=False, synonyms=table,
@@ -912,8 +914,8 @@ def test_alias_retrieval_does_not_treat_identifier_parts_as_names():
     assert [hit["url"] for hit in search("torch.nn", state)] == ["https://example.com/1"]
 
 
-@pytest.mark.parametrize("boundary", [". ", " . "])
-def test_synonyms_do_not_cross_sentence_boundaries(boundary):
+@pytest.mark.parametrize("boundary", [". ", " . ", "\n\n", "\r\n \r\n", " λ "])
+def test_synonyms_do_not_cross_text_boundaries(boundary):
     state = synonym_resources([
         chunk(0, search_text="Use AWS CLI. It provides command-line access."),
         chunk(1, search_text=f"The provider is AWS{boundary}CLI tools from other vendors also work."),
@@ -1014,6 +1016,89 @@ def test_synonym_resource_loading_is_explicit_and_independent(tmp_path, monkeypa
         resources.load_search_resources("meta", "index", synonyms_path=str(path))
 
 
+@pytest.fixture
+def keyword_snapshot(tmp_path, monkeypatch):
+    rows = [
+        chunk(0, title="AWS", heading="CLI", original_text="Use sklearn."),
+        chunk(1, original_text="AWS CLI"),
+        chunk(2, heading="vaddq_s32", doc_type="Intrinsic", original_text="Use vaddq_s32 on AArch64."),
+    ]
+    metadata, synonyms = tmp_path / "metadata.json", tmp_path / "names.json"
+    metadata.write_text(json.dumps(rows))
+    synonyms.write_text(json.dumps(SYNONYM_RULES))
+    monkeypatch.setattr(resources, "load_embedding_model", lambda *args, **kwargs: QueryModel())
+    monkeypatch.setattr(resources, "load_usearch_index", lambda *args: None)
+    return rows, metadata, synonyms
+
+
+def _load_keyword_resources(metadata, synonyms, **kwargs):
+    return resources.load_search_resources(
+        str(metadata), "unused", synonyms_path=str(synonyms) if synonyms else None,
+        include_disclaimers=False, **kwargs,
+    )
+
+
+def test_keyword_cache_preserves_retrieval_without_tokenizing(keyword_snapshot, monkeypatch):
+    rows, metadata, synonyms = keyword_snapshot
+    before = _load_keyword_resources(metadata, synonyms)
+    resources.write_keyword_cache(str(metadata), synonyms_path=str(synonyms))
+
+    def unexpected_tokenization(*args, **kwargs):
+        pytest.fail("A matching keyword cache must avoid document tokenization")
+
+    monkeypatch.setattr(search_module, "_bm25_tokens", unexpected_tokenization)
+    after = _load_keyword_resources(metadata, synonyms)
+    assert after.bm25_index.doc_freqs == before.bm25_index.doc_freqs
+    assert after.bm25_index.doc_len == before.bm25_index.doc_len
+    assert after.bm25_index.idf == before.bm25_index.idf
+    for query in ("awscli", "AWS CLI", "sklearn", "vaddq_s32", "arm64"):
+        assert search(query, after) == search(query, before)
+    assert [hit["url"] for hit in search("awscli", after)] == [rows[1]["url"]]
+
+
+@pytest.mark.parametrize("change", ["metadata", "synonyms", "disabled", "analyzer"])
+def test_keyword_cache_invalidates_when_inputs_change(keyword_snapshot, monkeypatch, change):
+    rows, metadata, synonyms = keyword_snapshot
+    cache = resources.write_keyword_cache(str(metadata), synonyms_path=str(synonyms))
+    if change == "metadata":
+        metadata.write_text(json.dumps(list(reversed(rows))))
+    elif change == "synonyms":
+        synonyms.write_text(json.dumps({"awscli": ["AWS CLI", "awscli"]}))
+    elif change == "disabled":
+        synonyms = None
+    else:
+        original = resources._keyword_fingerprint
+        monkeypatch.setattr(resources, "_keyword_fingerprint",
+                            lambda *args: {**original(*args), "source": {"analysis.py": "changed"}})
+    path = str(synonyms) if synonyms else None
+    assert resources._load_keyword_cache(cache, str(metadata), path, len(rows)) is None
+    actual = _load_keyword_resources(metadata, synonyms)
+    expected = _load_keyword_resources(metadata, synonyms, keyword_cache_path=str(metadata.parent / "missing"))
+    assert actual.bm25_index.doc_freqs == expected.bm25_index.doc_freqs
+    assert actual.bm25_index.idf == expected.bm25_index.idf
+
+
+@pytest.mark.parametrize("corruption", ["truncated", "rows", "token"])
+def test_invalid_keyword_cache_falls_back(keyword_snapshot, corruption):
+    _, metadata, synonyms = keyword_snapshot
+    expected = _load_keyword_resources(metadata, synonyms)
+    cache = resources.write_keyword_cache(str(metadata), synonyms_path=str(synonyms))
+    if corruption == "truncated":
+        cache.write_bytes(cache.read_bytes()[:-12])
+    else:
+        with gzip.open(cache, "rt") as stream:
+            header, data = stream.readline(), json.load(stream)
+        if corruption == "rows":
+            data["documents"].pop()
+        else:
+            data["documents"][0][0] = -1
+        with gzip.open(cache, "wt") as stream:
+            stream.write(header + json.dumps(data))
+    actual = _load_keyword_resources(metadata, synonyms)
+    assert actual.bm25_index.doc_freqs == expected.bm25_index.doc_freqs
+    assert actual.bm25_index.idf == expected.bm25_index.idf
+
+
 def test_committed_synonym_map_recognizes_every_declared_form():
     path = Path(__file__).resolve().parents[1] / "mcp-local" / "name-synonyms.json"
     rules = json.loads(path.read_text(encoding="utf-8"))
@@ -1069,3 +1154,135 @@ def test_every_synonym_spelling_retrieves_names_without_matching_identifier_comp
             assert [hit["url"] for hit in search(form, state)] == ["https://example.com/0"], form
             query = search_module._analyze_query(form, state.synonyms)
             assert search_module._score_lexical_exactness(query, state.metadata[1]) == 0, form
+
+
+@pytest.fixture(scope="module")
+def synonyms():
+    return Synonyms.load(Path(__file__).resolve().parents[1] / "mcp-local/name-synonyms.json")
+
+
+@pytest.mark.parametrize("text", ["sklearné", "sklearn\u0301", "sklearn\u00b7"])
+def test_unicode_identifiers_remain_literal(text):
+    state = synonym_resources([chunk(0, search_text=text), chunk(1, search_text="Scikit-learn")])
+    for is_query in (False, True):
+        tokens = analyze(text, state.synonyms, query=is_query)
+        assert text in tokens
+        assert not name_keys(tokens, state.synonyms)
+    assert [hit["url"] for hit in search("sklearn", state)] == ["https://example.com/1"]
+    assert [hit["url"] for hit in search(text, state)] == ["https://example.com/0"]
+    query = search_module._analyze_query("sklearn", state.synonyms)
+    assert search_module._score_lexical_exactness(query, state.metadata[0]) == 0
+
+
+def test_literal_identifier_cannot_impersonate_a_canonical_name(synonyms):
+    rows = [{"chunk_uuid": str(i), "url": f"https://example.org/{i}", "search_text": text}
+            for i, text in enumerate(["__name_scikitlearn", "Scikit-learn", "background"])]
+    state = synonym_resources(rows, synonyms, background=False)
+    assert not name_keys(analyze("__name_scikitlearn", synonyms), synonyms)
+    for query in ["sklearn", "Scikit-learn"]:
+        assert [row["url"] for row in search(query, state)] == ["https://example.org/1"]
+    assert [row["url"] for row in search("__name_scikitlearn", state)] == ["https://example.org/0"]
+
+
+def test_url_identifiers_cannot_impersonate_name_atoms(synonyms):
+    metadata = {"url": "https://example.org/__name_scikitlearn", "search_text": "neutral"}
+    for query in ["sklearn", "Scikit learn"]:
+        assert search_module._score_lexical_exactness(search_module._analyze_query(query, synonyms), metadata) == 0
+
+
+def test_intrinsic_name_channel_cannot_impersonate_product_atoms(synonyms):
+    rows = [{"chunk_uuid": "0", "url": "https://example.org/guide", "search_text": "neutral",
+             "heading": "__name_scikitlearn", "doc_type": "Intrinsic"}]
+    state = synonym_resources(rows, synonyms, background=False)
+    assert search("sklearn", state) == []
+    assert [row["url"] for row in search("__name_scikitlearn", state)] == ["https://example.org/guide"]
+
+
+def test_positive_name_scores_across_small_corpora_and_filters(synonyms):
+    for size in range(1, 7):
+        for named in range(1, size + 1):
+            rows = [{"search_text": "sklearn" if i < named else "background"} for i in range(size)]
+            index = build_bm25_index(rows, synonyms)
+            for query in ["sklearn", "Scikit-learn", "scikit_learn", "Scikit learn"]:
+                for ids in [None, tuple(range(size)), (0,), (size - 1,)]:
+                    hits = bm25_search(query, rows, index, k=size, synonyms=synonyms, eligible_ids=ids)
+                    expected = set(range(named)) & (set(ids) if ids is not None else set(range(size)))
+                    assert {hit["metadata_id"] for hit in hits} == expected
+                    assert all(hit["bm25_score"] > 0 for hit in hits)
+
+
+@pytest.mark.parametrize("fields,query", [
+    ({"title": "AWS", "heading": "CLI"}, "awscli"),
+    ({"heading_path": ["AWS", "CLI"]}, "awscli"),
+    ({"title": "AWS", "heading": "CLI", "original_text": "neutral", "search_text": "AWS CLI neutral"}, "awscli"),
+    ({"heading_path": ["AWS", "CLI"], "original_text": "neutral", "search_text": "AWS CLI neutral"}, "awscli"),
+    ({"title": "AWS", "original_text": "CLI", "search_text": "AWS CLI"}, "awscli"),
+    ({"product": "AWS", "version": "CLI", "original_text": "", "search_text": "AWS CLI"}, "awscli"),
+    ({"keywords": ["AWS", "CLI"], "original_text": "", "search_text": "AWS CLI"}, "awscli"),
+    ({"original_text": "", "search_text": "sklearn"}, "sklearn"),
+])
+def test_existing_snapshots_keep_field_and_body_evidence_separate(tmp_path, fields, query, synonyms):
+    row = {"chunk_uuid": "0", "url": "https://example.org/guide", **fields}
+    path = tmp_path / "metadata.json"
+    path.write_text(json.dumps([row]))
+    rows = resources.load_metadata(str(path))
+    original = deepcopy(rows)
+    index = build_bm25_index(rows, synonyms)
+    state = SearchResources(rows, None, None, index, include_disclaimers=False, synonyms=synonyms)
+    assert search(query, state) == []
+    analyzed = search_module._analyze_query(query, synonyms)
+    candidate = {"metadata": rows[0], "metadata_id": 0, "distance": 0.2}
+    for cached in [None, search_module._body_tokens(candidate, index)]:
+        assert search_module._score_lexical_exactness(analyzed, rows[0], cached) == 0
+    direct = search_module.rerank_candidates(query, [candidate], synonyms=synonyms)
+    indexed = search_module._rerank_candidates(analyzed, [candidate], index)
+    assert direct[0]["rerank_score"] == indexed[0]["rerank_score"]
+    assert rows == original
+
+
+@pytest.mark.parametrize("fields", [
+    {"title": "AWS CLI", "original_text": "neutral"},
+    {"heading_path": ["neutral", "AWS CLI"], "original_text": "neutral"},
+    {"title": "neutral", "original_text": "Use AWS CLI."},
+    {"title": "neutral", "content": "Use AWS CLI."},
+])
+def test_structured_fields_preserve_real_names_without_flattened_search_text(fields, synonyms):
+    state = synonym_resources([chunk(0, search_text="", **fields)], synonyms, background=False)
+    assert [hit["url"] for hit in search("awscli", state)] == ["https://example.com/0"]
+
+
+def test_markup_is_analyzed_as_source_text(synonyms):
+    text = '[reference]: /guide "Scikit-learn"\n\nAWS [CLI](/guide)'
+    state = synonym_resources([chunk(0, search_text=text)], synonyms, background=False)
+    assert search("sklearn", state)
+    assert search("awscli", state) == []
+
+
+def test_installation_bonus_requires_the_named_product(synonyms):
+    query = search_module._analyze_query("install Arm Compiler for Linux latest release", synonyms)
+    assert query.entity_query_tokens == {atom("armcompilerforlinux")}
+    descriptors = {"latest", "release"}
+    _, unrelated_bonus = search_module._document_type_bonuses(
+        query, {"doc_type": "Install Guide"}, title_tokens=descriptors,
+        heading_tokens=set(), url_tokens=set(), title_url_tokens=descriptors,
+    )
+    assert unrelated_bonus < search_module.INSTALL_GUIDE_BONUS
+
+
+@pytest.mark.parametrize("suffix", ["\u0301", "()"])
+def test_identifier_boundaries_cannot_grant_a_product_support_bonus(suffix, synonyms):
+    query = search_module._analyze_query(f"Is sklearn{suffix} supported on Arm Linux?", synonyms)
+    row = {"heading": "sklearn", "platform": "linux"}
+    assert search_module._reference_record_bonus(query, row, "ecosystem dashboard") == 0
+
+
+@pytest.mark.parametrize("url,expected_match", [
+    ("https://example.org/sklearn%CC%81", False),
+    ("https://example.org/?tool=sklearn%CC%81", False),
+    ("https://example.org/#sklearn%CC%81", False),
+    ("https://example.org/Scikit%20learn", True),
+])
+def test_url_name_evidence_preserves_encoded_identifier_boundaries(url, expected_match, synonyms):
+    query = search_module._analyze_query("sklearn", synonyms)
+    score = search_module._score_lexical_exactness(query, {"url": url, "original_text": "neutral"})
+    assert score > 0 if expected_match else score == 0

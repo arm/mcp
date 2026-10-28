@@ -503,6 +503,7 @@ jobs:
               --metadata-path /corpus/metadata.json \
               --index-path /corpus/usearch_index.bin \
               --model-path /corpus/embedding-model \
+              --synonyms-path /workspace/mcp-local/name-synonyms.json \
               --baseline /baseline/benchmark.json \
               --output /reports/benchmark.json || status=$?
 

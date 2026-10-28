@@ -31,27 +31,17 @@ the corpus; metadata and indexes are treated as a fixed snapshot.
 
 ## Startup preparation
 
-MCP images prepare keyword tokens during the image build, alongside the supplied
-vector index. At startup the library loads `metadata.keywords.json.gz` next to
-`metadata.json` and constructs the in-memory BM25 statistics from those tokens.
-A valid cache avoids repeating name analysis across the corpus.
-
-Library users can prepare the same optional artifact before starting a service:
+MCP images cache keyword tokens in `metadata.keywords.json.gz` beside
+`metadata.json`. Startup builds BM25 statistics from these tokens.
+Library users can prepare the cache with the same synonym map:
 
 ```python
 from arm_kb_search.resources import write_keyword_cache
-
 write_keyword_cache("data/metadata.json", synonyms_path="mcp-local/name-synonyms.json")
 ```
 
-Use the same synonym map when loading resources. `cache_path` on the writer and
-`keyword_cache_path` on `load_search_resources()` allow a different artifact
-location. The compressed JSON contains vocabulary IDs, not executable objects.
-It is validated against metadata order/content, the synonym file, analyzer source,
-Python version and the tokenizer version. Missing, stale or damaged artifacts fall
-back to normal indexing; startup will be slower until the artifact is rebuilt.
-Runtime loading never writes files, so read-only containers remain supported.
-Metadata and synonym inputs must remain unchanged while resources are loading.
+Missing, stale or damaged caches fall back to slower indexing in memory.
+Runtime loading writes no files. Keep metadata and synonyms unchanged during loading.
 
 ## Filters
 
@@ -70,45 +60,27 @@ uses exact search over the full corpus, or only eligible vectors when filtered.
 
 ## Name synonyms
 
-Name synonyms connect alternative names and spellings, so a query using one
-can match documents using another in the same group. Spaces, hyphens,
-underscores and dots can separate the same name parts; joined spellings must
-be listed explicitly.
+Edit `mcp-local/name-synonyms.json` directly, e.g. `{"awscli": ["aws cli", "awscli"]}`.
+Names in a group match each other. Spaces, hyphens, underscores and dots are
+equivalent separators; joined forms must be listed explicitly.
 
-Edit `mcp-local/name-synonyms.json` directly; no generation step is needed.
-For example, one group can contain:
-
-```json
-{"awscli": ["aws cli", "awscli"]}
-```
-
-Keys identify groups; lists contain the accepted names and aliases.
-The MCP server loads the map at startup. Set `NAME_SYNONYMS_PATH` to override
-its location. For library use, pass `synonyms_path` to `load_search_resources()`;
-omitting it disables aliases. Missing or invalid configured files fail loading.
+The MCP server loads this map; override it with `NAME_SYNONYMS_PATH`.
+Library users opt in with `synonyms_path`. Missing or invalid configured maps fail loading.
 
 ## Retrieval behavior
 
-Keyword search analyzes metadata fields, heading-path elements and the original
-body separately, so adjacent fields cannot form a product name. `original_text`
-(or legacy `content`) is authoritative even when empty; `search_text` is used as
-a fallback only when neither body field is available. Existing snapshots that
-retain these fields need no vector regeneration. Name-related keyword and phrase
-scores require complete names; Unicode identifier continuations stay literal.
+Keyword analysis keeps fields separate and matches complete names without
+splitting Unicode identifiers. It uses `original_text` or legacy `content`
+(including empty values), falling back to `search_text` only if neither is available.
 
-Keyword analysis reads source text, including Markdown link/reference metadata.
-It does not render Markdown or reconstruct names in or across links. Normalize
-documents before indexing if rendered-text matching is required.
+Markdown is analyzed as source text: link metadata remains searchable and names
+inside or across links may not match. Normalize documents first if needed.
 
-Vector search embeds the original query. Keyword matching and field scoring
-recognize Arm64/AArch64 equivalents.
-Short execution requests prioritize the named tool over generic action words.
+Vector search embeds the original query; keyword scoring recognizes Arm64/AArch64.
+Short execution requests prioritize the named tool.
 
-Installation intent includes "set up". Scoring emphasizes a short installation
-subject with or without platform context, retaining operating-system and architecture
-terms. Complete names are recognized before context separators. Installation queries
-consider at least 200 dense candidates to reduce candidate-cutoff misses; metadata
-filters still restrict both retrieval channels before scoring.
+Installation queries (including "set up") prioritize the named product while
+retaining platform context. They consider at least 200 dense candidates.
 
 The extra installation-guide bonus requires matching product evidence.
 Learning-path overview bonuses depend on query intent and title/URL overlap.

@@ -677,14 +677,12 @@ def bm25_search(
     *,
     eligible_ids: Optional[tuple[int, ...]] = None,
     synonyms: Synonyms = EMPTY,
-    original_query: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     if bm25_index is None or eligible_ids == ():
         return []
     # Brackets never occur in prose tokens, so these additions only reach the
     # canonical-name channel and leave the prose index's scores unchanged.
     # Recognize complete names before deduplicating query terms.
-    query = query if original_query is None else original_query
     names = _bracketed_identifiers(query)
     tokens = ["arm64" if token == "aarch64" else token for token in analyze(query, synonyms, query=True)]
     tokens = list(dict.fromkeys(tokens + names))
@@ -1064,8 +1062,7 @@ def hybrid_search(
 ) -> List[Dict[str, Any]]:
     if eligible_ids == ():
         return []
-    lexical_query = " ".join(dict.fromkeys(tokenize_for_search(query)))
-    if not lexical_query:
+    if not tokenize_for_search(query):
         return []
     query_analysis = _analyze_query(query, synonyms)
 
@@ -1075,12 +1072,11 @@ def hybrid_search(
 
     # Share one BM25 ranking between the lexical prepass and sparse search.
     bm25_results = bm25_search(
-        lexical_query,
+        query,
         metadata,
         bm25_index,
         k=bm25_depth,
         eligible_ids=eligible_ids,
-        original_query=query,
         synonyms=synonyms,
     )
 
