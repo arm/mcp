@@ -17,14 +17,11 @@ from __future__ import annotations
 
 import json
 import re
-from functools import lru_cache, partial
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 import regex
-from markdown_it import MarkdownIt
-from markdown_it.rules_block import reference
-from markdown_it.rules_inline import image, link
 
 _DELIMITERS = re.compile(r"[_\-.]+")
 _PROSE_COMPOUND = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)+[.]?")
@@ -38,111 +35,11 @@ _TOKEN = regex.compile(
 )
 _FORM = re.compile(r"[a-z0-9]+(?:[ \t_\-.]+[a-z0-9]+)*", re.IGNORECASE)
 _CODE_PART = re.compile(r"^(?:(?:sv)?(?:u?int|float|poly|bfloat|mfloat|[subfp]|bf|mf)?\d+|[a-z])$")
-_ATTACHED = re.compile(r"[\w\\.\]\)]")
-_REFERENCE_LINK = re.compile(r"\[([^\[\]\\\n]+)\]\[[^\[\]\\\n]*\]")
-
-
-def _markdown_reference(state, start, end, silent):
-    pos = state.bMarks[start] + state.tShift[start]
-    # In the source corpus, GitHub footnotes contain visible explanatory prose.
-    if state.src.startswith("[^", pos):
-        return False
-    return reference(state, start, end, silent)
-
-
-def _markdown_link(state, silent, *, is_image=False):
-    start = state.pos
-    depth = state.env.get("search_link_depth", 0)
-    if depth >= state.md.options["maxNesting"]:
-        return False
-    attached = not is_image and start and _ATTACHED.fullmatch(state.src[start - 1])
-    bracket = start + int(is_image)
-    if bracket >= state.posMax or state.src[bracket] != "[":
-        return False
-    label_end = state.md.helpers.parseLinkLabel(state, bracket, not is_image)
-    if label_end < 0:
-        return False
-    if not (image if is_image else link)(state, True):
-        # Chunks can retain a full/collapsed label without its definition.
-        # Keep the established label behavior, never invent a shortcut link.
-        match = _REFERENCE_LINK.match(state.src, bracket, state.posMax)
-        if not match or attached:
-            state.pos = start
-            return False
-        state.pos = match.end()
-    if not silent:
-        label = state.src[bracket + 1:label_end]
-        if "](" in label or "][" in label:
-            children = []
-            state.md.inline.parse(label, state.md, {**state.env, "search_link_depth": depth + 1}, children)
-            label = _markdown_inline_text(label, children)
-        token = state.push("search_link", "", 0)
-        # A link label is inline prose; synthetic brackets would split names.
-        # Retain brackets only where they protect an attached identifier.
-        token.content = "[" + label + "]" if attached else label
-        token.meta = {"start": start, "end": state.pos}
-    return True
-
-
-_MARKDOWN = MarkdownIt("commonmark", {"inline_definitions": True})
-_MARKDOWN.block.ruler.at("reference", _markdown_reference)
-_MARKDOWN.inline.ruler.at("link", _markdown_link)
-_MARKDOWN.inline.ruler.at("image", partial(_markdown_link, is_image=True))
-
-
-def _markdown_inline_text(content, children):
-    parts = []
-    start = 0
-    for child in children or ():
-        if child.type == "search_link":
-            parts.extend((content[start:child.meta["start"]], child.content))
-            start = child.meta["end"]
-    parts.append(content[start:])
-    return "".join(parts)
-
-
-@lru_cache(maxsize=2048)
-def _markdown_text(text):
-    lines = text.splitlines(keepends=True)
-    parts = []
-    for token in _MARKDOWN.parse(text):
-        if token.type == "inline":
-            parts.append(_markdown_inline_text(token.content, token.children))
-        elif token.type in {"fence", "code_block", "html_block"}:
-            # Code and HTML examples are literal evidence, including their markers.
-            parts.append("".join(lines[token.map[0]:token.map[1]]))
-    return "\n\n".join(parts)
-
-
-class _SearchableText(str):
-    """Internal visible text, no longer Markdown source to parse again.
-
-    Use join_searchable_text when combining cleaned fields. Ordinary string
-    operations discard this marker; persisted metadata must remain raw source.
-    """
-
-    __slots__ = ()
-
-
-def searchable_text(text: str) -> str:
-    """Exclude hidden Markdown link metadata from name and phrase evidence."""
-    if isinstance(text, _SearchableText):
-        return text
-    text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
-    # Multiline text can contain separate Markdown blocks even without links.
-    visible = _markdown_text(text) if any(marker in text for marker in ("\n", "]:", "](", "][")) else text
-    return _SearchableText(visible)
-
-
-def join_searchable_text(values: Iterable[object]) -> str:
-    """Clean independent fields once, then retain their paragraph boundaries."""
-    return _SearchableText("\n\n".join(
-        searchable_text(value if isinstance(value, str) else str(value)) for value in values
-    ))
 
 
 def basic_tokens(text: str) -> list[str]:
-    return [token.lower() for token in _TOKEN.findall(searchable_text(text))]
+    text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+    return [token.lower() for token in _TOKEN.findall(text)]
 
 
 def raw_tokens(text: str) -> list[str]:

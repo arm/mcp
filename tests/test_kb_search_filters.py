@@ -317,6 +317,77 @@ def test_phrase_alias_normalization_preserves_larger_names(name):
     assert search_module._field_phrase_bonus(["download", name], title) == pytest.approx(0.10)
 
 
+@pytest.mark.parametrize("name,alias", [
+    ("Scikit learn", "sklearn"), ("AWS CLI", "awscli"),
+    ("Visual Studio Code", "vscode"), ("Arm Compiler for Linux", "ACFL"),
+])
+@pytest.mark.parametrize("template", [
+    "{}é", "{}_extra", "λ{}", "{}\u0301", "{}()", "{}[0]", "array[{}]", ".{}",
+])
+def test_name_phrase_bonuses_require_valid_identifier_boundaries(name, alias, template):
+    table = Synonyms.load(Path(__file__).resolve().parents[1] / "mcp-local/name-synonyms.json")
+    text = template.format(name)
+    row = {"title": text, "original_text": text, "url": "https://example.org/guide"}
+    for spelling in (name, alias):
+        query = search_module._analyze_query(spelling, table)
+        assert not query.name_keys & name_keys(analyze(text, table), table)
+        assert search_module._score_lexical_exactness(query, row) == 0
+        candidate = {"metadata": row, "lexical_exactness_score": 0.0}
+        assert search_module.rerank_candidates(spelling, [candidate], synonyms=table)[0]["rerank_score"] == 0
+
+
+@pytest.mark.parametrize("text", [
+    "AWS CLI", "Use AWS CLI.", "(AWS CLI)",
+])
+def test_name_phrase_bonus_preserves_visible_complete_names(text):
+    table = Synonyms({"awscli": ["AWS CLI", "awscli"]})
+    query = search_module._analyze_query("AWS CLI", table)
+    row = {"title": text, "original_text": text}
+    assert search_module._score_lexical_exactness(query, row) > 0
+    assert search_module._field_phrase_bonus(["aws", "cli"], text) == pytest.approx(0.10)
+
+
+@pytest.mark.parametrize("name,alias", [
+    ("Scikit learn", "sklearn"), ("AWS CLI", "awscli"),
+    ("Visual Studio Code", "vscode"), ("Arm Compiler for Linux", "ACFL"),
+])
+@pytest.mark.parametrize("suffix", ["é", "_extra"])
+def test_valid_alias_elsewhere_does_not_authorize_an_embedded_phrase(name, alias, suffix):
+    table = Synonyms({"product": [name, alias]})
+    text = f"{name}{suffix}; {alias}"
+    row = {"title": text, "original_text": text}
+    scores = [search_module._score_lexical_exactness(search_module._analyze_query(query, table), row)
+              for query in (name, alias)]
+    assert scores[0] == pytest.approx(scores[1])
+
+
+def test_missing_product_does_not_suppress_unrelated_phrase_evidence():
+    table = Synonyms({"awscli": ["AWS CLI", "awscli"]})
+    for spelling in ("AWS CLI", "awscli"):
+        query = search_module._analyze_query(f"{spelling} memory access", table)
+        forward = search_module._score_lexical_exactness(query, {"title": "memory access"})
+        reverse = search_module._score_lexical_exactness(query, {"title": "access memory"})
+        assert forward - reverse == pytest.approx(0.08)
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("Install AWS CLI", 0.10), ("Install awscli", 0.10), ("Install AWS CLI.", 0.10),
+    ("Install\n\nAWS CLI", 0), ("Install. AWS CLI", 0), ("Install AWS CLI_extra; awscli", 0),
+    ("AWS CLI. Install", 0), ("Install __name_awscli", 0), ("Install\0AWS CLI", 0),
+])
+def test_product_phrase_evidence_preserves_order_and_boundaries(text, expected):
+    table = Synonyms({"awscli": ["AWS CLI", "awscli"]})
+    for spelling in ("AWS CLI", "awscli"):
+        terms = search_module._analyze_query(f"install {spelling}", table).direct_query_terms
+        assert search_module._field_phrase_bonus(terms, text, synonyms=table) == pytest.approx(expected)
+    assert search_module._field_phrase_bonus(["__name_awscli", "install"], "AWS CLI. Install", synonyms=table) == 0
+
+
+@pytest.mark.parametrize("architecture", ["arm64", "aarch64"])
+def test_phrase_scoring_preserves_terminal_prose_period(architecture):
+    assert search_module._field_phrase_bonus(["download", architecture + "."], "Download AARCH64.") == pytest.approx(0.10)
+
+
 def test_query_tokenization_does_not_grow_with_rerank_candidate_count(monkeypatch):
     query = "install docker on linux"
     original_tokenize = search_module.tokenize_for_search
@@ -956,7 +1027,7 @@ def test_committed_synonym_map_recognizes_every_declared_form():
         assert not name_keys(analyze(ambiguous, table, query=True), table), ambiguous
 
 
-def test_all_declared_synonyms_survive_prose_and_markdown_contexts():
+def test_all_declared_synonyms_survive_prose_contexts():
     path = Path(__file__).resolve().parents[1] / "mcp-local" / "name-synonyms.json"
     rules = json.loads(path.read_text(encoding="utf-8"))
     table = Synonyms(rules)
@@ -964,8 +1035,6 @@ def test_all_declared_synonyms_survive_prose_and_markdown_contexts():
         for form in forms:
             for context in [
                 "Use {}.", "Use {}:", "Use **{}**.", "Use ({}) here.",
-                "Use [{}](https://example.org/docs).", "Use [{}][guide].", "Use [{}][].",
-                "Use [{0}].\n\n[{0}]: https://example.org/docs",
             ]:
                 text = context.format(form)
                 for query in [False, True]:

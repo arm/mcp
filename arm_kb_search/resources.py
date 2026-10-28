@@ -67,7 +67,7 @@ def _keyword_fingerprint(metadata_path: str, synonyms_path: str | None) -> dict:
         "source": {name: _file_digest(Path(__file__).with_name(name))
                    for name in ("analysis.py", "search.py", "resources.py")},
         "python": list(sys.version_info[:2]),
-        "dependencies": {name: version(name) for name in ("regex", "markdown-it-py")},
+        "dependencies": {"regex": version("regex")},
     }
 
 

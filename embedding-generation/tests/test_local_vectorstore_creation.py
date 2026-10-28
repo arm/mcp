@@ -44,7 +44,7 @@ def test_load_local_yaml_files_requires_intrinsic_chunks(tmp_path, monkeypatch):
 
 
 def test_serialized_search_text_preserves_field_and_body_boundaries(tmp_path, monkeypatch):
-    body = '[AWS CLI]: /guide\n  "Scikit-learn documentation"\n\nUse PyTorch.'
+    body = 'CLI\n\nUse PyTorch.'
     record = {"uuid": "a", "chunk_uuid": "a", "url": "https://example.org/guide", "title": "AWS",
               "heading": "CLI", "heading_path": ["AWS", "CLI"], "keywords": "", "content": body}
     monkeypatch.chdir(tmp_path)
@@ -54,7 +54,7 @@ def test_serialized_search_text_preserves_field_and_body_boundaries(tmp_path, mo
                         lambda metadata, *args: (np.eye(1, dtype=np.float32), metadata))
     vectorstore.main()
     row = json.loads((tmp_path / "metadata.json").read_text())[0]
-    table = Synonyms({"awscli": ["AWS CLI"], "scikitlearn": ["Scikit-learn"], "pytorch": ["PyTorch"]})
+    table = Synonyms({"awscli": ["AWS CLI"], "pytorch": ["PyTorch"]})
     assert name_keys(analyze(row["search_text"], table), table) == {"pytorch"}
     assert row["original_text"] == body
     assert vectorstore.embedding_input(row) == body

@@ -16,15 +16,15 @@ scoring = importlib.import_module("arm_kb_search.search")
 def snapshot(tmp_path, monkeypatch):
     rows = [
         {"chunk_uuid": "0", "url": "https://example.org/0", "title": "AWS", "heading": "CLI",
-         "original_text": '[unused]: /guide "Scikit-learn"\n\nUse PyTorch.'},
+         "original_text": 'Use PyTorch.'},
         {"chunk_uuid": "1", "url": "https://example.org/1", "original_text": "Scikit-learn"},
         {"chunk_uuid": "2", "url": "https://example.org/2", "original_text": "sklearn\u0301"},
         {"chunk_uuid": "3", "url": "https://example.org/3", "heading": "vaddq_s32",
          "doc_type": "Intrinsic", "original_text": "Use vaddq_s32 on AArch64."},
     ]
     rows.extend({"chunk_uuid": str(i), "url": f"https://example.org/{i}", "original_text": text}
-                for i, text in enumerate(("AWS [CLI](/guide)", "[AWS](/guide) CLI",
-                                          "[AWS CLI](/guide): Installation"), start=len(rows)))
+                for i, text in enumerate(("AWS CLI", "Install awscli.",
+                                          "AWS-CLI: Installation"), start=len(rows)))
     metadata = tmp_path / "metadata.json"
     metadata.write_text(json.dumps(rows))
     synonyms = tmp_path / "names.json"

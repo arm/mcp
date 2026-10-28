@@ -14,6 +14,7 @@
 
 from collections import Counter
 from dataclasses import dataclass, field as dataclass_field
+from functools import lru_cache
 from typing import Any, Collection, Dict, Iterable, List, Optional
 import re
 from urllib.parse import parse_qsl, unquote, urlencode, urlparse, urlunparse
@@ -24,8 +25,7 @@ from sentence_transformers import SentenceTransformer
 from usearch.index import Index, search as search_vectors
 
 from .analysis import (
-    EMPTY, Synonyms, analyze, analyze_tokens, basic_tokens, join_searchable_text, literal_term,
-    name_keys, raw_tokens, searchable_text,
+    EMPTY, Synonyms, analyze, analyze_tokens, basic_tokens, literal_term, name_keys, raw_tokens,
 )
 from .config import DISTANCE_THRESHOLD, K_RESULTS
 
@@ -255,7 +255,8 @@ class _QueryAnalysis:
 def _analyze_query(query: str, synonyms: Synonyms = EMPTY) -> _QueryAnalysis:
     terms = tokenize_for_search(query)
     raw_query_tokens = frozenset(terms)
-    query_tokens = set(analyze(query, synonyms, query=True))
+    analyzed_terms = analyze(query, synonyms, query=True)
+    query_tokens = set(analyzed_terms)
     query_evidence = set(_evidence_tokens(query_tokens))
     recognized_names = name_keys(query_tokens, synonyms)
     salient_query_terms = [term for term in terms if term not in SEARCH_STOPWORDS]
@@ -307,8 +308,8 @@ def _analyze_query(query: str, synonyms: Synonyms = EMPTY) -> _QueryAnalysis:
         direct_query_tokens=direct_query_tokens,
         scoring_query_tokens=scoring_query_tokens,
         entity_query_tokens=entity_query_tokens,
-        salient_query_terms=salient_query_terms,
-        direct_query_terms=direct_query_terms,
+        salient_query_terms=[term for term in analyzed_terms if term not in SEARCH_STOPWORDS],
+        direct_query_terms=[term for term in analyzed_terms if term not in DIRECT_INTENT_STOPWORDS],
         installation_query=installation_query,
         prefers_tuning_guide=prefers_tuning_guide,
         prefers_reference_architecture=prefers_reference_architecture,
@@ -372,7 +373,7 @@ def _metadata_text(metadata: Dict[str, Any], fields: Iterable[str]) -> str:
             values.extend(value)
         elif value:
             values.append(value)
-    return join_searchable_text(values)
+    return "\n\n".join(str(value) for value in values)
 
 
 def _search_text(metadata: dict[str, Any]) -> str:
@@ -381,7 +382,7 @@ def _search_text(metadata: dict[str, Any]) -> str:
                  if isinstance(metadata.get(field), str)), None)
     if body is None:
         # Minimal callers may supply only search_text; no original body is available.
-        return searchable_text(metadata.get("search_text") or "")
+        return metadata.get("search_text") or ""
     return _metadata_text(metadata, (
         "title", "heading_path", "heading", "doc_type", "product", "version", "keywords", body,
     ))
@@ -498,7 +499,7 @@ def _score_lexical_exactness(query: _QueryAnalysis, metadata: Dict[str, Any],
         ("title", "heading", "heading_path", "url", "resolved_url", "keywords", "search_text"),
     )
     phrase_bonus = _field_phrase_bonus(
-        query.salient_query_terms, all_text, weights=(0.08, 0.12), limit=None,
+        query.salient_query_terms, all_text, synonyms=query.synonyms, weights=(0.08, 0.12), limit=None,
     )
     support_bonus = 0.0
     # Support evidence needs a capability term in the query; skip the token union otherwise.
@@ -725,17 +726,47 @@ def _is_learning_path_root_url(url: str) -> bool:
     return len(path_parts) == 3 and path_parts[0] == "learning-paths"
 
 
+@lru_cache(maxsize=1024)
+def _phrase_field_text(field_text: str, synonyms: Synonyms) -> str:
+    """Cache ordered phrase evidence with complete names and literal boundaries."""
+    tokens = basic_tokens(field_text)
+    field_terms = []
+    start = 0
+    while start < len(tokens):
+        size, key = synonyms._match(tokens, start)
+        term = "__name_" + key if size else literal_term(tokens[start].rstrip("."))
+        field_terms.append("arm64" if term == "aarch64" else term)
+        if tokens[start + (size or 1) - 1].endswith("."):
+            field_terms.append(".")
+        start += size or 1
+    # Separators enforce complete tokens; punctuation and block markers stay inside.
+    return "\x1f" + "\x1f".join(field_terms) + "\x1f"
+
+
 def _field_phrase_bonus(
     query_terms: List[str], field_text: str, *,
+    synonyms: Synonyms = EMPTY,
     weights: tuple[float, float] = (0.10, 0.16), limit: Optional[float] = 0.40,
 ) -> float:
-    """Score adjacent pairs/triples in order, with the caller's weights and cap."""
-    query_terms = [re.sub(r"\baarch64\b", "arm64", term.lower()) for term in query_terms]
-    field_text = re.sub(r"\baarch64\b", "arm64", searchable_text(field_text).lower())
+    """Score complete terms, keeping recognized names atomic and block boundaries intact."""
+    if len(query_terms) < 2:
+        return 0.0
+    query_terms = [term.lower() for term in query_terms]
+    query_terms = ["arm64" + term[len("aarch64"):] if term.rstrip(".") == "aarch64" else term
+                   for term in query_terms]
+    visible = field_text.lower()
+    phrase_text = None
     bonus = 0.0
     for size, weight in enumerate(weights, start=2):
         for index in range(len(query_terms) - size + 1):
-            if " ".join(query_terms[index:index + size]) in field_text:
+            terms = query_terms[index:index + size]
+            literals = [term.rstrip(".").removeprefix("\0") for term in terms if not term.startswith("__name_")]
+            if not all(term in visible or term == "arm64" and "aarch64" in visible for term in literals):
+                continue
+            if phrase_text is None:
+                phrase_text = _phrase_field_text(field_text, synonyms)
+            phrase = "\x1f" + "\x1f".join(terms).rstrip(".") + "\x1f"
+            if phrase in phrase_text:
                 bonus += weight
     return min(limit, bonus) if limit is not None else bonus
 
@@ -927,7 +958,8 @@ def _rerank_candidates(
             intent_bonus = 0.35 * title_url_overlap
             intent_bonus += 0.15 * _overlap_ratio(scoring_query_tokens, url_tokens | resolved_url_tokens)
             intent_bonus += _field_phrase_bonus(
-                direct_query_terms or list(scoring_query_tokens), join_searchable_text((title_text, url_text)),
+                direct_query_terms or list(scoring_query_tokens), title_text + "\n\n" + url_text,
+                synonyms=query.synonyms,
             )
             if title_url_overlap >= 0.75:
                 intent_bonus += 0.20

@@ -33,7 +33,7 @@ the corpus; metadata and indexes are treated as a fixed snapshot.
 MCP images prepare keyword tokens during the image build, alongside the supplied
 vector index. At startup the library loads `metadata.keywords.json.gz` next to
 `metadata.json` and constructs the in-memory BM25 statistics from those tokens.
-It does not repeat Markdown parsing or name analysis across the corpus.
+It does not repeat name analysis across the corpus.
 
 Library users can prepare the same optional artifact before starting a service:
 
@@ -47,7 +47,7 @@ Use the same synonym map when loading resources. `cache_path` on the writer and
 `keyword_cache_path` on `load_search_resources()` allow a different artifact
 location. The compressed JSON contains vocabulary IDs, not executable objects.
 It is validated against metadata order/content, the synonym file, analyzer source,
-Python version and parser dependencies. Missing, stale or damaged artifacts fall
+Python version and the tokenizer version. Missing, stale or damaged artifacts fall
 back to normal indexing; startup will be slower until the artifact is rebuilt.
 Runtime loading never writes files, so read-only containers remain supported.
 Metadata and synonym inputs must remain unchanged while resources are loading.
@@ -92,9 +92,12 @@ Keyword search analyzes metadata fields, heading-path elements and the original
 body separately, so adjacent fields cannot form a product name. `original_text`
 (or legacy `content`) is authoritative even when empty; `search_text` is used as
 a fallback only when neither body field is available. Existing snapshots that
-retain these fields need no vector regeneration. Markdown link metadata is
-excluded independently within each field, and Unicode identifier continuations
+retain these fields need no vector regeneration. Unicode identifier continuations
 remain literal rather than becoming product-name fragments.
+
+Keyword analysis treats supplied fields as source text; it does not render Markdown,
+interpret its blocks, hide link/reference metadata, or reconstruct names inside or across links.
+Applications needing rendered-text matching should normalize documents before indexing.
 
 Vector search embeds the original query. Keyword matching and field scoring
 recognize Arm64/AArch64 equivalents.
