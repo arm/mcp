@@ -77,7 +77,9 @@ def _markdown_link(state, silent, *, is_image=False):
             state.md.inline.parse(label, state.md, {**state.env, "search_link_depth": depth + 1}, children)
             label = _markdown_inline_text(label, children)
         token = state.push("search_link", "", 0)
-        token.content = "[" + label + "]" if attached else r"\[ " + label + r" \]"
+        # A link label is inline prose; synthetic brackets would split names.
+        # Retain brackets only where they protect an attached identifier.
+        token.content = "[" + label + "]" if attached else label
         token.meta = {"start": start, "end": state.pos}
     return True
 
@@ -107,17 +109,36 @@ def _markdown_text(text):
         if token.type == "inline":
             parts.append(_markdown_inline_text(token.content, token.children))
         elif token.type in {"fence", "code_block", "html_block"}:
-            # Keep code markers as well as their content: cleanup is idempotent,
-            # and reference-like examples cannot become definitions on a second pass.
+            # Code and HTML examples are literal evidence, including their markers.
             parts.append("".join(lines[token.map[0]:token.map[1]]))
     return "\n\n".join(parts)
 
 
+class _SearchableText(str):
+    """Internal visible text, no longer Markdown source to parse again.
+
+    Use join_searchable_text when combining cleaned fields. Ordinary string
+    operations discard this marker; persisted metadata must remain raw source.
+    """
+
+    __slots__ = ()
+
+
 def searchable_text(text: str) -> str:
     """Exclude hidden Markdown link metadata from name and phrase evidence."""
+    if isinstance(text, _SearchableText):
+        return text
     text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
     # Multiline text can contain separate Markdown blocks even without links.
-    return _markdown_text(text) if any(marker in text for marker in ("\n", "]:", "](", "][")) else text
+    visible = _markdown_text(text) if any(marker in text for marker in ("\n", "]:", "](", "][")) else text
+    return _SearchableText(visible)
+
+
+def join_searchable_text(values: Iterable[object]) -> str:
+    """Clean independent fields once, then retain their paragraph boundaries."""
+    return _SearchableText("\n\n".join(
+        searchable_text(value if isinstance(value, str) else str(value)) for value in values
+    ))
 
 
 def basic_tokens(text: str) -> list[str]:

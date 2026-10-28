@@ -24,7 +24,8 @@ from sentence_transformers import SentenceTransformer
 from usearch.index import Index, search as search_vectors
 
 from .analysis import (
-    EMPTY, Synonyms, analyze, analyze_tokens, basic_tokens, literal_term, name_keys, raw_tokens, searchable_text,
+    EMPTY, Synonyms, analyze, analyze_tokens, basic_tokens, join_searchable_text, literal_term,
+    name_keys, raw_tokens, searchable_text,
 )
 from .config import DISTANCE_THRESHOLD, K_RESULTS
 
@@ -361,17 +362,17 @@ def is_navigation_only(metadata: Dict[str, Any]) -> bool:
     )
 
 def _metadata_text(metadata: Dict[str, Any], fields: Iterable[str]) -> str:
-    values: List[str] = []
+    values: List[Any] = []
     for field in fields:
         if field == "search_text":
             values.append(_search_text(metadata))
             continue
         value = metadata.get(field)
         if isinstance(value, list):
-            values.extend(searchable_text(str(item)) for item in value)
+            values.extend(value)
         elif value:
-            values.append(searchable_text(str(value)))
-    return "\n\n".join(values)
+            values.append(value)
+    return join_searchable_text(values)
 
 
 def _search_text(metadata: dict[str, Any]) -> str:
@@ -926,7 +927,7 @@ def _rerank_candidates(
             intent_bonus = 0.35 * title_url_overlap
             intent_bonus += 0.15 * _overlap_ratio(scoring_query_tokens, url_tokens | resolved_url_tokens)
             intent_bonus += _field_phrase_bonus(
-                direct_query_terms or list(scoring_query_tokens), f"{title_text}\n\n{url_text}",
+                direct_query_terms or list(scoring_query_tokens), join_searchable_text((title_text, url_text)),
             )
             if title_url_overlap >= 0.75:
                 intent_bonus += 0.20

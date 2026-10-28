@@ -213,6 +213,12 @@ def test_installation_bonus_requires_the_named_product(suffix, context, synonyms
 def test_markdown_cleanup_is_idempotent(synonyms):
     for text in [
         'Use [AWS CLI](/guide "Scikit-learn").',
+        '[AWS CLI](/guide): Installation',
+        'AWS [CLI](/guide)',
+        '[AWS](/guide) CLI',
+        '[1](/guide). AWS CLI',
+        '[# AWS CLI](/guide)',
+        '[[AWS CLI]](/guide): visible label',
         '```text\n[reference]: Scikit-learn\n```\n\n[AWS CLI]: /guide',
         '> Use [AWS CLI].\n>\n> [AWS CLI]: /guide "Scikit-learn"',
         '    [reference]: Scikit-learn\n\n[AWS CLI]: /guide',
@@ -220,6 +226,79 @@ def test_markdown_cleanup_is_idempotent(synonyms):
         visible = searchable_text(text)
         assert searchable_text(visible) == visible
         assert analyze(text, synonyms) == analyze(visible, synonyms)
+        for field in ("title", "original_text", "search_text"):
+            row = {field: text}
+            combined = scoring._metadata_text(row, (field,))
+            assert combined == visible
+            assert analyze(combined, synonyms) == analyze(text, synonyms)
+
+
+@pytest.mark.parametrize("text", [
+    'AWS [CLI](/guide)', '[AWS](/guide) CLI', '[AWS](/aws) [CLI](/cli)',
+    '[AWS CLI](/guide): Installation', '> AWS [CLI](/guide)', '- [AWS](/guide) CLI',
+    'AWS\n[CLI](/guide)', 'AWS [CLI][guide]\n\n[guide]: /guide "Scikit-learn"',
+    '[AWS][guide] CLI\n\n[guide]: /guide', 'AWS [CLI][]\n\n[CLI]: /guide',
+    'AWS [CLI]\n\n[CLI]: /guide', '[AWS](/guide)CLI',
+])
+def test_partial_links_preserve_name_adjacency(text, synonyms, tmp_path, monkeypatch):
+    from arm_kb_search import resources
+
+    visible = searchable_text(text)
+    assert searchable_text(visible) == visible
+    for query_mode in (False, True):
+        assert atom("awscli") in analyze(text, synonyms, query=query_mode)
+        assert analyze(visible, synonyms, query=query_mode) == analyze(text, synonyms, query=query_mode)
+    rows = [{"chunk_uuid": "0", "url": "https://example.org/guide", "original_text": text}]
+    metadata = tmp_path / "metadata.json"
+    metadata.write_text(json.dumps(rows))
+    table = str(Path(__file__).resolve().parents[1] / "mcp-local/name-synonyms.json")
+    monkeypatch.setattr(resources, "load_embedding_model", lambda *args, **kwargs: None)
+    monkeypatch.setattr(resources, "embedding_dimension", lambda model: 3)
+    monkeypatch.setattr(resources, "load_usearch_index", lambda *args: None)
+    for cached in (False, True):
+        if cached:
+            resources.write_keyword_cache(str(metadata), synonyms_path=table)
+        state = resources.load_search_resources(str(metadata), "unused", synonyms_path=table,
+                                                include_disclaimers=False)
+        assert [hit["url"] for hit in search("awscli", state)] == ["https://example.org/guide"]
+        assert search("sklearn", state) == []
+        query = scoring._analyze_query("awscli", synonyms)
+        assert scoring._score_lexical_exactness(query, rows[0]) > 0
+        candidate = {"metadata": rows[0], "metadata_id": 0, "distance": 0.2}
+        direct = scoring.rerank_candidates("awscli", [candidate], synonyms=synonyms)
+        indexed = scoring._rerank_candidates(query, [candidate], state.bm25_index)
+        assert direct[0]["rerank_score"] == indexed[0]["rerank_score"]
+
+
+@pytest.mark.parametrize("text", [
+    'array[AWS](/guide) CLI', 'AWS[CLI](/guide)', '[AWS](/guide)\n\nCLI',
+    '- [AWS](/guide)\n- CLI', '[AWS](/guide)_extra CLI', '[sklearn](/guide)\u0301',
+    'AWS [CLI](/guide)\u0301', 'AWS [CLI](/guide)()',
+])
+def test_partial_links_do_not_erase_identifier_or_block_boundaries(text, synonyms):
+    visible = searchable_text(text)
+    for query_mode in (False, True):
+        assert not {"awscli", "scikitlearn"} & name_keys(analyze(text, synonyms, query=query_mode), synonyms)
+        assert analyze(visible, synonyms, query=query_mode) == analyze(text, synonyms, query=query_mode)
+    rows = [{"chunk_uuid": "0", "url": "https://example.org/guide", "original_text": text}]
+    state = SearchResources(rows, None, None, build_bm25_index(rows, synonyms),
+                            include_disclaimers=False, synonyms=synonyms)
+    assert search("awscli", state) == []
+    assert search("sklearn", state) == []
+
+
+def test_declared_multiword_names_survive_partial_links(synonyms):
+    rules = json.loads((Path(__file__).resolve().parents[1] / "mcp-local/name-synonyms.json").read_text())
+    for key, forms in rules.items():
+        for form in forms:
+            words = form.split()
+            if len(words) < 2:
+                continue
+            for start in range(len(words)):
+                for end in range(start + 1, len(words) + 1):
+                    linked = " ".join([*words[:start], "[" + " ".join(words[start:end]) + "](/guide)", *words[end:]])
+                    assert atom(key) in analyze(linked, synonyms), linked
+                    assert atom(key) in analyze(linked, synonyms, query=True), linked
 
 
 @pytest.mark.parametrize("fields,query", [
