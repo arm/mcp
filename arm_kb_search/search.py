@@ -581,11 +581,17 @@ class _NameBM25(BM25Okapi):
         return scores
 
 
-def build_bm25_index(metadata: List[Dict], synonyms: Synonyms = EMPTY) -> Optional[BM25Okapi]:
+def build_bm25_index(
+    metadata: List[Dict], synonyms: Synonyms = EMPTY, *,
+    tokenized_corpus: Optional[List[List[str]]] = None,
+) -> Optional[BM25Okapi]:
+    if tokenized_corpus is not None and len(tokenized_corpus) != len(metadata):
+        raise ValueError("Keyword corpus and metadata have different row counts")
     corpus = []
     aliases = []
-    for item in metadata:
-        tokens = _bm25_tokens(_search_text(item), synonyms)
+    for position, item in enumerate(metadata):
+        tokens = (tokenized_corpus[position] if tokenized_corpus is not None
+                  else _bm25_tokens(_search_text(item), synonyms))
         names = []
         if _normalized_doc_type(item.get("doc_type", "")) == "intrinsic":
             name = str(item.get("heading") or "").lower().replace("[", "").replace("]", "")

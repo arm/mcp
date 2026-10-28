@@ -12,9 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gzip
+import hashlib
+import io
+import json
+import logging
 import os
+import sys
+import tempfile
+import zlib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from importlib.metadata import version
+from pathlib import Path
 from typing import Any
 
 from rank_bm25 import BM25Okapi
@@ -28,11 +38,97 @@ from .loaders import load_metadata, load_usearch_index
 from .response import add_disclaimer_to_arm_results, add_utm_source_to_results
 from .search import (
     LEXICAL_PREPASS_DEPTH,
+    _bm25_tokens,
+    _search_text,
     build_bm25_index,
     deduplication_candidate_count,
     hybrid_search,
     tokenize_for_search,
 )
+
+
+def _file_digest(path: str | Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _keyword_cache_path(metadata_path: str) -> Path:
+    return Path(metadata_path).with_suffix(".keywords.json.gz")
+
+
+def _keyword_fingerprint(metadata_path: str, synonyms_path: str | None) -> dict:
+    return {
+        "format": 1,
+        "metadata": _file_digest(metadata_path),
+        "synonyms": _file_digest(synonyms_path) if synonyms_path else None,
+        "source": {name: _file_digest(Path(__file__).with_name(name))
+                   for name in ("analysis.py", "search.py", "resources.py")},
+        "python": list(sys.version_info[:2]),
+        "dependencies": {name: version(name) for name in ("regex", "markdown-it-py")},
+    }
+
+
+def write_keyword_cache(
+    metadata_path: str, *, synonyms_path: str | None = None, cache_path: str | None = None,
+) -> Path:
+    """Prepare portable keyword tokens without loading a model or vector index."""
+    fingerprint = _keyword_fingerprint(metadata_path, synonyms_path)
+    metadata = load_metadata(metadata_path)
+    synonyms = analysis.Synonyms.load(synonyms_path) if synonyms_path else analysis.EMPTY
+    vocabulary: dict[str, int] = {}
+    documents = []
+    for row in metadata:
+        documents.append([vocabulary.setdefault(term, len(vocabulary))
+                          for term in _bm25_tokens(_search_text(row), synonyms)])
+    if _keyword_fingerprint(metadata_path, synonyms_path) != fingerprint:
+        raise ValueError("Keyword inputs changed while preparing the cache")
+    output = Path(cache_path) if cache_path else _keyword_cache_path(metadata_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=output.parent, delete=False) as stream:
+            temporary = Path(stream.name)
+            with gzip.GzipFile(filename="", fileobj=stream, mode="wb", compresslevel=1, mtime=0) as compressed:
+                with io.TextIOWrapper(compressed, encoding="utf-8") as text:
+                    text.write(json.dumps(fingerprint, separators=(",", ":")) + "\n")
+                    json.dump({"vocabulary": list(vocabulary), "documents": documents}, text,
+                              separators=(",", ":"))
+        temporary.chmod(Path(metadata_path).stat().st_mode & 0o666)
+        temporary.replace(output)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return output
+
+
+def _load_keyword_cache(
+    cache_path: Path, metadata_path: str, synonyms_path: str | None, row_count: int,
+) -> list[list[str]] | None:
+    if not cache_path.is_file():
+        return None
+    try:
+        with gzip.open(cache_path, "rt", encoding="utf-8") as stream:
+            if json.loads(stream.readline()) != _keyword_fingerprint(metadata_path, synonyms_path):
+                logging.getLogger(__name__).info("Keyword cache is stale; rebuilding from source fields")
+                return None
+            data = json.load(stream)
+        vocabulary, documents = data["vocabulary"], data["documents"]
+        if (not isinstance(vocabulary, list) or not all(isinstance(term, str) for term in vocabulary)
+                or not isinstance(documents, list) or len(documents) != row_count):
+            raise ValueError("Invalid keyword cache vocabulary or row count")
+        corpus = []
+        for document in documents:
+            if (not isinstance(document, list)
+                    or any(type(token) is not int or not 0 <= token < len(vocabulary) for token in document)):
+                raise ValueError("Invalid keyword cache token IDs")
+            corpus.append([vocabulary[token] for token in document])
+        return corpus
+    except (OSError, EOFError, ValueError, TypeError, KeyError, zlib.error) as exc:
+        logging.getLogger(__name__).warning("Cannot load keyword cache; rebuilding from source fields: %s", exc)
+        return None
 
 
 @dataclass
@@ -128,6 +224,7 @@ def load_search_resources(
     utm_source: str | None = None,
     model_path: str | None = None,
     synonyms_path: str | None = None,
+    keyword_cache_path: str | None = None,
 ) -> SearchResources:
     """Load search resources, treating an explicit model path as local-only."""
     metadata = load_metadata(metadata_path)
@@ -141,7 +238,12 @@ def load_search_resources(
         usearch_index_path,
         embedding_dimension(embedding_model),
     )
-    bm25_index = build_bm25_index(metadata, synonyms)
+    corpus = _load_keyword_cache(
+        Path(keyword_cache_path) if keyword_cache_path else _keyword_cache_path(metadata_path),
+        metadata_path, synonyms_path, len(metadata),
+    )
+    bm25_index = (build_bm25_index(metadata, synonyms) if corpus is None
+                  else build_bm25_index(metadata, synonyms, tokenized_corpus=corpus))
     return SearchResources(
         metadata=metadata,
         embedding_model=embedding_model,

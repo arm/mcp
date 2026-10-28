@@ -28,6 +28,30 @@ results = search(
 Reuse the loaded resources across requests. Create new resources when replacing
 the corpus; metadata and indexes are treated as a fixed snapshot.
 
+## Startup preparation
+
+MCP images prepare keyword tokens during the image build, alongside the supplied
+vector index. At startup the library loads `metadata.keywords.json.gz` next to
+`metadata.json` and constructs the in-memory BM25 statistics from those tokens.
+It does not repeat Markdown parsing or name analysis across the corpus.
+
+Library users can prepare the same optional artifact before starting a service:
+
+```python
+from arm_kb_search.resources import write_keyword_cache
+
+write_keyword_cache("data/metadata.json", synonyms_path="name-synonyms.json")
+```
+
+Use the same synonym map when loading resources. `cache_path` on the writer and
+`keyword_cache_path` on `load_search_resources()` allow a different artifact
+location. The compressed JSON contains vocabulary IDs, not executable objects.
+It is validated against metadata order/content, the synonym file, analyzer source,
+Python version and parser dependencies. Missing, stale or damaged artifacts fall
+back to normal indexing; startup will be slower until the artifact is rebuilt.
+Runtime loading never writes files, so read-only containers remain supported.
+Metadata and synonym inputs must remain unchanged while resources are loading.
+
 ## Filters
 
 `filters` accepts a `SearchFilters` instance or a dictionary with optional
