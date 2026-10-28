@@ -139,6 +139,14 @@ def test_os_package_bundles_are_hash_locked() -> None:
             )
 
 
+def test_runtime_brotli_has_cve_2026_111497_fix() -> None:
+    for architecture in ("amd64", "arm64"):
+        artifacts = LOCK["os_packages"]["bundles"][architecture]["runtime"][
+            "artifacts"
+        ]
+        assert f"libbrotli1_1.1.0-2ubuntu0.1_{architecture}.deb" in artifacts
+
+
 def test_external_inputs_are_immutable_and_have_digests() -> None:
     migration = LOCK["migrate_ease"]
     assert migration["repository"] == "https://github.com/migrate-ease/migrate-ease"

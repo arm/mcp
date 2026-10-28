@@ -65,7 +65,7 @@
     "verification": "uv lock exported by pinned uv, then pip --require-hashes from a local wheelhouse"
   },
   "os_packages": {
-    "snapshot": "20261021T000000Z",
+    "snapshot": "20261027T000000Z",
     "roles": {
       "builder": [
         "ca-certificates",
@@ -129,7 +129,7 @@
             "gpgv_2.4.4-2ubuntu17.6_amd64.deb": "c8810069e98cd343c4c5c64b3ef5a0bb1f526419cff3266cd99ed4c87ad99868",
             "iptables_1.8.10-3ubuntu2_amd64.deb": "d341e8ffc42ca035f5aa0fd9a798c8d2b2edb019225dc11f4dac16edf9c57840",
             "keyboxd_2.4.4-2ubuntu17.6_amd64.deb": "1bb5f40735b55a17abfb587607816724771fb38fd123b083b7d24bc606c2ecda",
-            "libbrotli1_1.1.0-2build2_amd64.deb": "74492419b8fda803774b8c9acef6afc5d2f9ff31782635aae212906adae7b277",
+            "libbrotli1_1.1.0-2ubuntu0.1_amd64.deb": "70b188a86d81f30d7510aab30e25d638ed5037dded6691af1533952b71ac61de",
             "libbsd0_0.12.1-1build1.1_amd64.deb": "f3857b0863ac5cfd4263e9bf6cfb1d4be88d5321e4070d5bc2b62b0949e6c86f",
             "libcurl3t64-gnutls_8.5.0-2ubuntu10.16_amd64.deb": "f3993897876cd03ea10941c9b364965ff95d0226459f31f6c5f5b93562c80798",
             "libcurl4t64_8.5.0-2ubuntu10.16_amd64.deb": "8196381b41f0078083a2a52b43f7e7ca9b0b79e5325451bf3948e4af7693cd8d",
@@ -239,7 +239,7 @@
             "gpgv_2.4.4-2ubuntu17.6_arm64.deb": "38b5965d0eba9d75ea1c946127f3df8ef66cf0b26801df766ef1c9c481b2bb15",
             "iptables_1.8.10-3ubuntu2_arm64.deb": "cbaacdb34f19a9b29f569205cdbf1e5851f63fde60777c5cf539a2b46c0c2fc7",
             "keyboxd_2.4.4-2ubuntu17.6_arm64.deb": "33bfd8018afa1fb499723c598ec2507b15eeaa076db1024c9ee7e1fb5bd8fb24",
-            "libbrotli1_1.1.0-2build2_arm64.deb": "cabf3462d908e72f2e594f19ae87c581c4614f099947e38fbd865bf8eae27014",
+            "libbrotli1_1.1.0-2ubuntu0.1_arm64.deb": "911411fb6fdfb4ab91dd4242f5a0a5e1f47b38e003a25c8dc7730238cb323e18",
             "libbsd0_0.12.1-1build1.1_arm64.deb": "cdf9ff601244e64482584d9d9b98aa54a573c081ab5956227c737307196c1ce3",
             "libcurl3t64-gnutls_8.5.0-2ubuntu10.16_arm64.deb": "057490ffc9901df7fe09913e381442fc7615bb972a1dc4198e38bcf840447e77",
             "libcurl4t64_8.5.0-2ubuntu10.16_arm64.deb": "41fa5964da7f422e0729d2355317254e3ee1a28eda9eba70423ed43f77cc7477",
