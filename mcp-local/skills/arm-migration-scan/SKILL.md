@@ -26,10 +26,14 @@ description: Run migrate-ease compatibility scans via Docker CLI to assess Arm p
    ```sh
    jq -s 'reduce .[] as \$item ({}; . * \$item)' \$report_dir/*.json > \$report_dir/consolidated_report.json
    ```
-6. **Interactive HTML View:** If the user confirms they want to open the report visually in a web browser, start the native Web UI app component to host the consolidated JSON profile:
+6. **Interactive HTML View:** If the user confirms they want to open the report visually in a web browser, start the native Web UI app component to host the consolidated JSON profile. If `web/server.py` is absent, report and continue using the consolidated JSON report; do not treat the scan as failed.
    ```sh
-   python3 web/server.py --port 8080 &
-   echo "Interactive view serving at: http://localhost:8080"
+   if [ -f web/server.py ]; then
+     python3 web/server.py --port 8080 &
+     echo "Interactive view serving at: http://localhost:8080"
+   else
+     echo "Interactive view unavailable: web/server.py was not found."
+   fi
    ```
 
 ## Operational Rules
