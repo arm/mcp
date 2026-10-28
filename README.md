@@ -15,7 +15,7 @@ If your goal is to migrate an application from x86 to Arm as quickly as possible
 
 This MCP server equips AI assistants with specialized tools for Arm development:
 
-- **Knowledge Base Search**: Semantic search across Arm documentation, learning resources, intrinsics, and software compatibility information
+- **[Knowledge Base Search](arm_kb_search/README.md)**: Keyword and semantic search across Arm documentation, learning resources, intrinsics, and software compatibility information, with technical-name aliases
 - **Code Migration Analysis**: Scan codebases for Arm compatibility using [migrate-ease](https://github.com/migrate-ease/migrate-ease) (supports C++, Python, Go, JavaScript, Java)
 - **Container Architecture Inspection**: Check Docker image architecture support using integrated [Skopeo](https://github.com/containers/skopeo) and check-image tools.
 - **Assembly Performance Analysis**: Analyze assembly code performance using LLVM-MCA

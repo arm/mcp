@@ -149,6 +149,12 @@ uv run --locked python evaluate_retrieval.py --suite benchmark \
   --output reports/benchmark-next.json
 ```
 
+Direct evaluator commands leave aliases disabled unless you add
+`--synonyms-path ../mcp-local/name-synonyms.json`. The wrapper and recurring
+embedding benchmark omit the map; use the evaluator directly for alias comparisons.
+MCP integration smoke uses the bundled map. Keep corpus, model, and questions fixed
+when comparing runs.
+
 For local experiments, pass `--eval-path` to use a custom question file without
 editing the checked-in datasets. It must meet the selected suite's validation
 requirements; `--suite` still controls URL matching and pass/fail behavior:

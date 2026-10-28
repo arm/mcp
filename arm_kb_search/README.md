@@ -16,6 +16,7 @@ resources = load_search_resources(
     metadata_path="data/metadata.json",
     usearch_index_path="data/usearch_index.bin",
     model_path="data/embedding-model",
+    synonyms_path="mcp-local/name-synonyms.json",  # Optional; enables name aliases.
 )
 results = search(
     "deploy containers",
@@ -33,14 +34,14 @@ the corpus; metadata and indexes are treated as a fixed snapshot.
 MCP images prepare keyword tokens during the image build, alongside the supplied
 vector index. At startup the library loads `metadata.keywords.json.gz` next to
 `metadata.json` and constructs the in-memory BM25 statistics from those tokens.
-It does not repeat name analysis across the corpus.
+A valid cache avoids repeating name analysis across the corpus.
 
 Library users can prepare the same optional artifact before starting a service:
 
 ```python
 from arm_kb_search.resources import write_keyword_cache
 
-write_keyword_cache("data/metadata.json", synonyms_path="name-synonyms.json")
+write_keyword_cache("data/metadata.json", synonyms_path="mcp-local/name-synonyms.json")
 ```
 
 Use the same synonym map when loading resources. `cache_path` on the writer and
@@ -92,22 +93,22 @@ Keyword search analyzes metadata fields, heading-path elements and the original
 body separately, so adjacent fields cannot form a product name. `original_text`
 (or legacy `content`) is authoritative even when empty; `search_text` is used as
 a fallback only when neither body field is available. Existing snapshots that
-retain these fields need no vector regeneration. Unicode identifier continuations
-remain literal rather than becoming product-name fragments.
+retain these fields need no vector regeneration. Name-related keyword and phrase
+scores require complete names; Unicode identifier continuations stay literal.
 
-Keyword analysis treats supplied fields as source text; it does not render Markdown,
-interpret its blocks, hide link/reference metadata, or reconstruct names inside or across links.
-Applications needing rendered-text matching should normalize documents before indexing.
+Keyword analysis reads source text, including Markdown link/reference metadata.
+It does not render Markdown or reconstruct names in or across links. Normalize
+documents before indexing if rendered-text matching is required.
 
 Vector search embeds the original query. Keyword matching and field scoring
 recognize Arm64/AArch64 equivalents.
 Short execution requests prioritize the named tool over generic action words.
 
-Installation intent includes "set up". When a short installation subject precedes
-platform context, scoring emphasizes that subject while retaining explicit
-operating-system and architecture terms. Installation queries consider at least
-200 dense candidates to reduce candidate-cutoff misses; metadata filters still
-restrict both retrieval channels before scoring.
+Installation intent includes "set up". Scoring emphasizes a short installation
+subject with or without platform context, retaining operating-system and architecture
+terms. Complete names are recognized before context separators. Installation queries
+consider at least 200 dense candidates to reduce candidate-cutoff misses; metadata
+filters still restrict both retrieval channels before scoring.
 
 The extra installation-guide bonus requires matching product evidence.
 Learning-path overview bonuses depend on query intent and title/URL overlap.
