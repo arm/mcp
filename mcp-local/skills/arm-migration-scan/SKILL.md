@@ -24,19 +24,27 @@ description: Run migrate-ease compatibility scans via Docker CLI to assess Arm p
 4. **Scale Control (Repositories > 1 GB):** Split scopes by independent sub-directories. Execute parallel containers and surface completed partial chunks dynamically.
 5. **Report Consolidation:** For multi-directory or multi-language split scans, consolidate individual JSON results using `jq` into a unified report array before rendering:
    ```sh
-   jq -s 'reduce .[] as \$item ({}; . * \$item)' \$report_dir/*.json > \$report_dir/consolidated_report.json
+   jq -s '.' \$report_dir/*.json > \$report_dir/consolidated_report.json
    ```
-6. **Interactive HTML View:** If the user confirms they want to open the report visually in a web browser, start the native Web UI app component to host the consolidated JSON profile. If `web/server.py` is absent, report and continue using the consolidated JSON report; do not treat the scan as failed.
+6. **Interactive HTML View:** After presenting the scan summary, explicitly ask the user whether they want the report opened in a web browser, then end the turn and wait for their response. Only after the user explicitly confirms may the agent start a report server and open the consolidated profile.
+   * If `web/server.py` exists, use the native Web UI app component.
+   * If `web/server.py` is absent, convert `consolidated_report.json` into `consolidated_report.html`. The HTML must present the scan summary, coverage, findings, scanner errors, and source-file details; it may load the JSON as a companion file from the same directory. Preserve the original JSON as the source of truth.
+   * Serve the report directory with a loopback-only localhost server and open the HTML URL with the platform's browser opener. Choose an unused port if the example port is occupied. Confirm that the server returns the HTML successfully; if the browser does not appear, give the user the localhost URL.
    ```sh
    if [ -f web/server.py ]; then
      python3 web/server.py --port 8080 &
      echo "Interactive view serving at: http://localhost:8080"
    else
-     echo "Interactive view unavailable: web/server.py was not found."
+     # First generate \$report_dir/consolidated_report.html from the JSON.
+     python3 -m http.server 8765 --bind 127.0.0.1 --directory "\$report_dir" &
+     open "http://127.0.0.1:8765/consolidated_report.html"
    fi
    ```
 
 ## Operational Rules
-* **Strict Confirmation Gate:** Never open a web browser, start the local `web/server.py` utility, or convert files to HTML automatically. The agent must present the text-based summary of `consolidated_report.json` first, explicitly ask for permission, and wait for confirmation.
+* **Mandatory Post-Scan Prompt:** Every scan that produces a consolidated report must end with an explicit question such as, "Would you like me to open the report in your browser?"
+* **Strict Confirmation Gate:** A request to run a scan is not permission to open its report. Do not convert the JSON to HTML, start `web/server.py` or another localhost server, launch a browser, or otherwise present the interactive view until the user gives an explicit affirmative response to the post-scan prompt.
+* **Localhost HTML Fallback:** When `web/server.py` is unavailable and the user has confirmed, generate the HTML fallback, bind its server to `127.0.0.1` rather than all interfaces, and open `consolidated_report.html` through the localhost URL instead of relying on a local-file association.
 * **Strict Fail-Fast:** If a container command fails, a report is missing, or formatting breaks, mark the segment as failed/incomplete. Never synthesize arbitrary metrics or metrics counts.
 * **Exclusion Targets:** Automatically exclude standard dependency targets (`.venv`, `node_modules`), caches (`__pycache__`), and version control metadata (`.git`) via scanner arguments or directory skipping.
+* **Arm-Specific Guidance:** Use `knowledge_base_search` for Arm-specific dependency guidance.
