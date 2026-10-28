@@ -77,7 +77,7 @@ def _markdown_link(state, silent, *, is_image=False):
             state.md.inline.parse(label, state.md, {**state.env, "search_link_depth": depth + 1}, children)
             label = _markdown_inline_text(label, children)
         token = state.push("search_link", "", 0)
-        token.content = "[" + label + "]" if attached else "[ " + label + " ]"
+        token.content = "[" + label + "]" if attached else r"\[ " + label + r" \]"
         token.meta = {"start": start, "end": state.pos}
     return True
 
