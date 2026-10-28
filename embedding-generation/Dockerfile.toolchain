@@ -17,13 +17,13 @@
 # These platform-specific manifests make the current toolchain image an
 # explicitly ARM64 build. Update both digests deliberately when upgrading.
 ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.13.4@sha256:c5db7ca63be4f24dd6e5924d0c27e57e54e1ab9d172dc805c63741f777a23551
-ARG PYTHON_IMAGE=docker.io/library/python:3.13.16-slim@sha256:ff089de2ebe52f328c4834221097e20eae7f7e4148ea06ac42bd8440d3c79094
+ARG PYTHON_IMAGE=docker.io/library/python:3.13.18-slim@sha256:7b58e4266b99c869d2225c050345f7c7fec255d9e3baeca19ea7de9411411c91
 
 FROM ${UV_IMAGE} AS uv
 
 FROM ${PYTHON_IMAGE} AS python-runtime
 
-RUN python -c "import sys, xml.etree.ElementTree as ET; assert sys.version_info[:3] == (3, 13, 16); ET.fromstring('<root/>')"
+RUN python -c "import sys, xml.etree.ElementTree as ET; assert sys.version_info[:3] == (3, 13, 18); ET.fromstring('<root/>')"
 
 # uv installs the locked environment without pip. Remove pip and ensurepip
 # to keep their unused bundled dependencies out of the runtime filesystem.
