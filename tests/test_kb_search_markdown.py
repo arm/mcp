@@ -20,8 +20,8 @@ def synonyms():
     return Synonyms.load(Path(__file__).resolve().parents[1] / "mcp-local/name-synonyms.json")
 
 
-def resource(text, synonyms):
-    rows = [{"chunk_uuid": "0", "url": "https://example.org/guide", "search_text": text}]
+def resource(text, synonyms, **fields):
+    rows = [{"chunk_uuid": "0", "url": "https://example.org/guide", "search_text": text, **fields}]
     return SearchResources(rows, None, None, build_bm25_index(rows, synonyms),
                            include_disclaimers=False, synonyms=synonyms)
 
@@ -55,19 +55,26 @@ def test_hidden_link_metadata_has_no_sparse_or_field_scoring_evidence(text, syno
         assert actual["rerank_score"] == expected["rerank_score"]
 
 
-@pytest.mark.parametrize("text", [
-    '```text\n[reference]: Scikit-learn\n```',
-    '~~~text\n[reference]: Scikit-learn\n~~~',
-    '    [reference]: Scikit-learn',
-    'This is visible prose.\n[reference]: Scikit-learn',
-    '[^note]: Scikit-learn',
-    '[Scikit-learn](/guide "AWS CLI")',
-    '> Use [Scikit-learn].\n>\n> [Scikit-learn]: /guide "AWS CLI"',
-    '- Use [Scikit-learn].\n\n  [Scikit-learn]: /guide "AWS CLI"',
+@pytest.mark.parametrize("text,query", [
+    ('```text\n[reference]: Scikit-learn\n```', 'sklearn'),
+    ('~~~text\n[reference]: Scikit-learn\n~~~', 'sklearn'),
+    ('    [reference]: Scikit-learn', 'sklearn'),
+    ('This is visible prose.\n[reference]: Scikit-learn', 'sklearn'),
+    ('[^note]: Scikit-learn', 'sklearn'),
+    ('[Scikit-learn](/guide "AWS CLI")', 'sklearn'),
+    ('> Use [Scikit-learn].\n>\n> [Scikit-learn]: /guide "AWS CLI"', 'sklearn'),
+    ('- Use [Scikit-learn].\n\n  [Scikit-learn]: /guide "AWS CLI"', 'sklearn'),
+    ('Use [Scikit-learn][guide] to get started.', 'sklearn'),
+    ('Use [Visual Studio Code][editor] to get started.', 'vscode'),
+    ('Use [sklearn][] to get started.', 'sklearn'),
+    ('Use [sklearn](https://example.org/guide) to get started.', 'sklearn'),
+    ('Use [sklearn] to get started.\n\n[SKLEARN]: https://example.org/guide', 'sklearn'),
+    ('Use [Visual Studio Code] to get started.\n\n[visual   studio code]: https://example.org/guide', 'vscode'),
 ])
-def test_visible_names_survive_markdown_contexts(text, synonyms):
-    assert atom("scikitlearn") in analyze(text, synonyms)
-    assert [row["url"] for row in search("sklearn", resource(text, synonyms))] == ["https://example.org/guide"]
+def test_visible_names_survive_markdown_contexts(text, query, synonyms):
+    key = {"sklearn": "scikitlearn", "vscode": "visualstudiocode"}[query]
+    assert atom(key) in analyze(text, synonyms)
+    assert [row["url"] for row in search(query, resource(text, synonyms))] == ["https://example.org/guide"]
 
 
 @pytest.mark.parametrize("text", [
@@ -76,10 +83,15 @@ def test_visible_names_survive_markdown_contexts(text, synonyms):
     r'\[sklearn](/guide)',
     r'\[sklearn][guide]',
     'array[sklearn](/guide)',
-    'array[sklearn][guide]',
+    'array[sklearn][guide]', 'sklearn[0][1]',
+    'Use [sklearn] without a reference definition.',
+    'array[sklearn]\n\n[sklearn]: https://example.org/guide',
+    'sklearn[0]\n\n[0]: https://example.org/guide',
+    r'\[sklearn]' + '\n\n[sklearn]: https://example.org/guide',
+    '[sklearn]: https://example.org/guide',
 ])
 def test_nonlinks_do_not_authorize_product_names(text, synonyms):
-    assert atom("scikitlearn") not in analyze(text, synonyms)
+    assert not name_keys(analyze(text, synonyms), synonyms)
 
 
 @pytest.mark.parametrize("text", ["AWS\n\nCLI", "AWS\r\n \r\nCLI", "AWS\r\rCLI"])
@@ -88,13 +100,8 @@ def test_names_do_not_join_across_paragraphs(text, synonyms):
     assert search("awscli", resource(text, synonyms)) == []
 
 
-def test_name_fragments_do_not_join_across_metadata_fields(synonyms):
-    query = scoring._analyze_query("AWS CLI", synonyms)
-    assert scoring._score_lexical_exactness(query, {"title": "AWS", "heading": "CLI"}) == 0
-    assert scoring._score_lexical_exactness(query, {"heading_path": ["AWS", "CLI"]}) == 0
-
-
 @pytest.mark.parametrize("text,query,key", [
+    ("किताब", "sklearn", "scikitlearn"),
     ("λsklearn", "sklearn", "scikitlearn"),
     ("sklearné", "sklearn", "scikitlearn"),
     ("awsλcli", "awscli", "awscli"),
@@ -122,7 +129,7 @@ def test_unicode_identifiers_cannot_become_product_aliases(text, query, key, syn
     assert search(query, resource(text, synonyms)) == []
     assert search(text, resource(query, synonyms)) == []
     # Ordinary literal terms need background rows for positive BM25 IDF.
-    rows = [{"chunk_uuid": str(i), "url": f"https://example.org/{i}", "search_text": value}
+    rows = [{"chunk_uuid": str(i), "url": f"https://example.org/{i}", "original_text": value}
             for i, value in enumerate([text, "unrelated guide", "background reference"])]
     state = SearchResources(rows, None, None, build_bm25_index(rows, synonyms),
                             include_disclaimers=False, synonyms=synonyms)
@@ -211,14 +218,15 @@ def test_installation_bonus_requires_the_named_product(suffix, context, synonyms
 
 
 def test_markdown_cleanup_is_idempotent(synonyms):
+    # A second parse must not turn visible link labels into lists or definitions.
     for text in [
         'Use [AWS CLI](/guide "Scikit-learn").',
         '[AWS CLI](/guide): Installation',
         'AWS [CLI](/guide)',
         '[AWS](/guide) CLI',
-        '[1](/guide). AWS CLI',
+        '[1](/guide). AWS CLI\n\nMore visible prose.',
         '[# AWS CLI](/guide)',
-        '[[AWS CLI]](/guide): visible label',
+        '[[AWS CLI]](/guide): /install',
         '```text\n[reference]: Scikit-learn\n```\n\n[AWS CLI]: /guide',
         '> Use [AWS CLI].\n>\n> [AWS CLI]: /guide "Scikit-learn"',
         '    [reference]: Scikit-learn\n\n[AWS CLI]: /guide',
@@ -240,34 +248,22 @@ def test_markdown_cleanup_is_idempotent(synonyms):
     '[AWS][guide] CLI\n\n[guide]: /guide', 'AWS [CLI][]\n\n[CLI]: /guide',
     'AWS [CLI]\n\n[CLI]: /guide', '[AWS](/guide)CLI',
 ])
-def test_partial_links_preserve_name_adjacency(text, synonyms, tmp_path, monkeypatch):
-    from arm_kb_search import resources
-
+def test_partial_links_preserve_name_adjacency(text, synonyms):
     visible = searchable_text(text)
     assert searchable_text(visible) == visible
     for query_mode in (False, True):
         assert atom("awscli") in analyze(text, synonyms, query=query_mode)
         assert analyze(visible, synonyms, query=query_mode) == analyze(text, synonyms, query=query_mode)
-    rows = [{"chunk_uuid": "0", "url": "https://example.org/guide", "original_text": text}]
-    metadata = tmp_path / "metadata.json"
-    metadata.write_text(json.dumps(rows))
-    table = str(Path(__file__).resolve().parents[1] / "mcp-local/name-synonyms.json")
-    monkeypatch.setattr(resources, "load_embedding_model", lambda *args, **kwargs: None)
-    monkeypatch.setattr(resources, "embedding_dimension", lambda model: 3)
-    monkeypatch.setattr(resources, "load_usearch_index", lambda *args: None)
-    for cached in (False, True):
-        if cached:
-            resources.write_keyword_cache(str(metadata), synonyms_path=table)
-        state = resources.load_search_resources(str(metadata), "unused", synonyms_path=table,
-                                                include_disclaimers=False)
-        assert [hit["url"] for hit in search("awscli", state)] == ["https://example.org/guide"]
-        assert search("sklearn", state) == []
-        query = scoring._analyze_query("awscli", synonyms)
-        assert scoring._score_lexical_exactness(query, rows[0]) > 0
-        candidate = {"metadata": rows[0], "metadata_id": 0, "distance": 0.2}
-        direct = scoring.rerank_candidates("awscli", [candidate], synonyms=synonyms)
-        indexed = scoring._rerank_candidates(query, [candidate], state.bm25_index)
-        assert direct[0]["rerank_score"] == indexed[0]["rerank_score"]
+    state = resource(text, synonyms, original_text=text)
+    assert [hit["url"] for hit in search("awscli", state)] == ["https://example.org/guide"]
+    assert search("sklearn", state) == []
+    query = scoring._analyze_query("awscli", synonyms)
+    row = state.metadata[0]
+    candidate = {"metadata": row, "metadata_id": 0, "distance": 0.2}
+    assert scoring._score_lexical_exactness(query, row) > 0
+    direct = scoring.rerank_candidates("awscli", [candidate], synonyms=synonyms)
+    indexed = scoring._rerank_candidates(query, [candidate], state.bm25_index)
+    assert direct[0]["rerank_score"] == indexed[0]["rerank_score"]
 
 
 @pytest.mark.parametrize("text", [
@@ -280,9 +276,7 @@ def test_partial_links_do_not_erase_identifier_or_block_boundaries(text, synonym
     for query_mode in (False, True):
         assert not {"awscli", "scikitlearn"} & name_keys(analyze(text, synonyms, query=query_mode), synonyms)
         assert analyze(visible, synonyms, query=query_mode) == analyze(text, synonyms, query=query_mode)
-    rows = [{"chunk_uuid": "0", "url": "https://example.org/guide", "original_text": text}]
-    state = SearchResources(rows, None, None, build_bm25_index(rows, synonyms),
-                            include_disclaimers=False, synonyms=synonyms)
+    state = resource(text, synonyms, original_text=text)
     assert search("awscli", state) == []
     assert search("sklearn", state) == []
 
@@ -302,6 +296,8 @@ def test_declared_multiword_names_survive_partial_links(synonyms):
 
 
 @pytest.mark.parametrize("fields,query", [
+    ({"title": "AWS", "heading": "CLI"}, "awscli"),
+    ({"heading_path": ["AWS", "CLI"]}, "awscli"),
     ({"title": "AWS", "heading": "CLI", "original_text": "neutral", "search_text": "AWS CLI neutral"}, "awscli"),
     ({"heading_path": ["AWS", "CLI"], "original_text": "neutral", "search_text": "AWS CLI neutral"}, "awscli"),
     ({"title": "AWS", "original_text": "CLI", "search_text": "AWS CLI"}, "awscli"),
@@ -344,9 +340,7 @@ def test_existing_snapshots_keep_field_and_body_evidence_separate(tmp_path, fiel
     {"original_text": "Use [AWS CLI].\n\n[AWS CLI]: /guide"},
 ])
 def test_structured_fields_preserve_real_names_without_flattened_search_text(fields, synonyms):
-    rows = [{"chunk_uuid": "0", "url": "https://example.org/guide", **fields}]
-    state = SearchResources(rows, None, None, build_bm25_index(rows, synonyms),
-                            include_disclaimers=False, synonyms=synonyms)
+    state = resource("", synonyms, **fields)
     assert [hit["url"] for hit in search("awscli", state)] == ["https://example.org/guide"]
 
 
@@ -374,10 +368,65 @@ def test_encoded_whole_product_names_still_supply_url_evidence(synonyms):
     assert scoring._score_lexical_exactness(query, row) > 0
 
 
-def test_non_latin_literal_identifier_remains_searchable(synonyms):
-    text = "किताब"
-    rows = [{"chunk_uuid": str(i), "url": f"https://example.org/{i}", "original_text": value}
-            for i, value in enumerate([text, "background", "unrelated"])]
-    state = SearchResources(rows, None, None, build_bm25_index(rows, synonyms),
-                            include_disclaimers=False, synonyms=synonyms)
-    assert [hit["url"] for hit in search(text, state)] == ["https://example.org/0"]
+@pytest.mark.parametrize("definition", [
+    '[AWS CLI]: https://example.org/guide\n  "Scikit-learn documentation"',
+    "[AWS CLI]: https://example.org/guide\n  'Scikit-learn documentation'",
+    '[AWS CLI]: https://example.org/guide\n  (Scikit-learn documentation)',
+    '[AWS CLI]: https://example.org/guide\n"Scikit-learn documentation"',
+    '[AWS CLI]: https://example.org/guide\n\t"Scikit-learn documentation"',
+    '[AWS CLI]: https://example.org/guide\r\n  "Scikit-learn documentation"',
+    '[AWS CLI]: https://example.org/guide "Scikit-learn\ndocumentation"',
+    "[AWS CLI]: https://example.org/guide\n  'Scikit-learn\n  documentation'",
+    '[AWS CLI]: https://example.org/guide\n  (Scikit-learn\n  documentation)',
+    '[AWS CLI]: https://example.org/guide\n  "Scikit-learn \\"documentation\\""',
+    "[AWS CLI]: https://example.org/guide\n  'Scikit-learn \\'documentation\\''",
+    '[AWS CLI]: https://example.org/guide\n  (Scikit-learn \\(documentation\\))',
+    '[AWS CLI]:\n  https://example.org/guide\n  "Scikit-learn documentation"',
+    '[AWS CLI]:\n  <https://example.org/a guide>\n  "Scikit-learn documentation"',
+    '[AWS\n CLI]: /guide\n  "Scikit-learn documentation"',
+    '[\nAWS CLI\n]: /guide\n  "Scikit-learn documentation"',
+    '[AWS \\[CLI\\]]: /guide\n  "Scikit-learn documentation"',
+    *[f'[{label}]: https://example.org/sklearn "PyTorch documentation"'
+      for label in ("AWS CLI", "GNU Compiler Collection", "Arm Compiler for Linux")],
+])
+def test_reference_definitions_hide_metadata_and_preserve_visible_prose(definition, synonyms):
+    assert analyze(definition, synonyms) == []
+    assert resource(definition, synonyms).bm25_index is None
+    text = definition + "\nUse PyTorch."
+    assert analyze(text, synonyms) == analyze("Use PyTorch.", synonyms)
+    state = resource(text, synonyms)
+    for query in ("awscli", "sklearn"):
+        assert search(query, state) == []
+        assert scoring._score_lexical_exactness(scoring._analyze_query(query, synonyms), state.metadata[0]) == 0
+    assert [hit["url"] for hit in search("torch", state)] == [state.metadata[0]["url"]]
+
+
+@pytest.mark.parametrize("definition,visible", [
+    ('[AWS CLI]: /guide "hidden title"', '"Scikit-learn documentation"'),
+    ('[AWS CLI]: /guide', '\n"Scikit-learn documentation"'),
+    ('[AWS CLI]: /guide', '"Scikit-learn documentation" is visible prose.'),
+    ('[AWS CLI]: /guide', '"Scikit-learn documentation is unclosed.'),
+    ('[AWS CLI]: /guide', '"Scikit-learn\n\ndocumentation"'),
+    ('[AWS CLI]: /guide', '    Use Scikit-learn documentation.'),
+    ('[AWS CLI]: /guide\n  "hidden\n  title"', 'Scikit-learn documentation follows.'),
+])
+def test_reference_titles_do_not_consume_following_visible_text(definition, visible, synonyms):
+    text = definition + "\n" + visible
+    assert analyze(text, synonyms) == analyze(visible, synonyms)
+    assert [hit["url"] for hit in search("sklearn", resource(text, synonyms))] == ["https://example.org/guide"]
+
+
+@pytest.mark.parametrize("text,queries", [
+    ("Use [AWS CLI].\n\n[AWS CLI]: https://example.org/sklearn\n[GNU Compiler Collection]: /pytorch", ("awscli",)),
+    ('Use [AWS CLI].\n\n[AWS\n CLI]:\n  /guide\n  "Scikit-learn documentation"\n'
+     '[GNU Compiler Collection]: /gcc\n  (Redis documentation)\nUse PyTorch.', ("awscli", "torch")),
+])
+def test_shortcut_labels_use_only_visible_name_evidence(text, queries, synonyms):
+    expected = {"awscli"} | ({"pytorch"} if "torch" in queries else set())
+    assert name_keys(analyze(text, synonyms, query=True), synonyms) == expected
+    assert name_keys(analyze(text, synonyms), synonyms) == expected | {"amazonwebservices"}
+    state = resource(text, synonyms)
+    for query in queries:
+        assert [hit["url"] for hit in search(query, state)] == ["https://example.org/guide"]
+    for query in ("sklearn", "gcc", "redis"):
+        assert search(query, state) == []

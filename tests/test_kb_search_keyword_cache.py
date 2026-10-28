@@ -22,6 +22,9 @@ def snapshot(tmp_path, monkeypatch):
         {"chunk_uuid": "3", "url": "https://example.org/3", "heading": "vaddq_s32",
          "doc_type": "Intrinsic", "original_text": "Use vaddq_s32 on AArch64."},
     ]
+    rows.extend({"chunk_uuid": str(i), "url": f"https://example.org/{i}", "original_text": text}
+                for i, text in enumerate(("AWS [CLI](/guide)", "[AWS](/guide) CLI",
+                                          "[AWS CLI](/guide): Installation"), start=len(rows)))
     metadata = tmp_path / "metadata.json"
     metadata.write_text(json.dumps(rows))
     synonyms = tmp_path / "names.json"
@@ -54,7 +57,7 @@ def test_keyword_cache_matches_uncached_retrieval_without_tokenizing(snapshot, m
     assert after.bm25_index.idf == before.bm25_index.idf
     for query in ("awscli", "pytorch", "sklearn", "Scikit-learn", "sklearn\u0301", "vaddq_s32", "arm64"):
         assert resources.search(query, after) == resources.search(query, before)
-    assert resources.search("awscli", after) == []
+    assert {hit["url"] for hit in resources.search("awscli", after)} == {row["url"] for row in rows[4:]}
     assert [hit["url"] for hit in resources.search("sklearn", after)] == [rows[1]["url"]]
 
 
