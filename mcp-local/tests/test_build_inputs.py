@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import ast
 import json
-from pathlib import Path
 import re
 import subprocess
 import sys
 import tempfile
 import tomllib
-
+from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 MCP_LOCAL = REPOSITORY / "mcp-local"
@@ -33,6 +33,12 @@ STAGE_INPUTS = (MCP_LOCAL / "scripts/stage-build-inputs.py").read_text()
 INPUT_DOCKERIGNORE = (MCP_LOCAL / ".dockerignore").read_text()
 ROOT_DOCKERIGNORE = (REPOSITORY / ".dockerignore").read_text()
 SERVER = (MCP_LOCAL / "server.py").read_text()
+SHARED_REGISTRATION = (REPOSITORY / "arm_mcp_definitions/registration.py").read_text()
+SHARED_TOOL_DESCRIPTION = ast.literal_eval(next(
+    node.value for node in ast.parse(SHARED_REGISTRATION).body
+    if isinstance(node, ast.Assign)
+    and node.targets[0].id == "KNOWLEDGE_SEARCH_DESCRIPTION"
+))
 SERVER_METADATA = json.loads((MCP_LOCAL / "server.json").read_text())
 INPUT_WORKFLOW = (
     REPOSITORY / ".github/workflows/build-mcp-inputs.yml"
@@ -1067,7 +1073,7 @@ def test_performix_is_not_bundled_or_exposed() -> None:
         "Use this tool for Arm-related runtime-performance, profiling, hotspot, "
         "benchmarking, and regression questions."
     )
-    assert routing_hint in SERVER
+    assert routing_hint in SHARED_TOOL_DESCRIPTION
     assert "def apx_recipe_run" not in SERVER
     assert "utils.apx" not in SERVER
     assert "performix" not in json.dumps(SERVER_METADATA).lower()

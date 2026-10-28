@@ -60,6 +60,12 @@ jobs:
           version: "0.10.2"
           enable-cache: false
 
+      - name: Lint MCP definitions and local integration
+        run: |
+          uv run --project embedding-generation --locked --only-group dev \
+            ruff check --config embedding-generation/pyproject.toml --target-version py312 \
+            arm_mcp_definitions mcp-local
+
       - name: Run unit tests
         run: |
           uv run --directory mcp-local --locked --only-group test \
