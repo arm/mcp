@@ -21,6 +21,11 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(os.path.dirname(BASE_DIR), "data")
 USEARCH_INDEX_PATH = os.path.join(DATA_DIR, "usearch_index.bin")
 METADATA_PATH = os.path.join(DATA_DIR, "metadata.json")
+# Reviewed name synonym table maintained directly in name-synonyms.json.
+# A configured missing or malformed table fails resource loading.
+NAME_SYNONYMS_PATH = os.getenv("NAME_SYNONYMS_PATH") or os.path.join(
+    os.path.dirname(BASE_DIR), "name-synonyms.json"
+)
 MODEL_NAME = "all-MiniLM-L6-v2"
 MODEL_PATH = os.getenv("SENTENCE_TRANSFORMER_MODEL_PATH")
 

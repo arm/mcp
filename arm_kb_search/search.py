@@ -14,19 +14,22 @@
 
 from collections import Counter
 from dataclasses import dataclass, field as dataclass_field
-from typing import Any, Dict, Iterable, List, Optional
+from functools import lru_cache
+from typing import Any, Collection, Dict, Iterable, List, Optional
 import re
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 import numpy as np
 from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 from usearch.index import Index, search as search_vectors
 
+from .analysis import (
+    EMPTY, Synonyms, analyze, analyze_tokens, basic_tokens, literal_term, name_keys, raw_tokens,
+)
 from .config import DISTANCE_THRESHOLD, K_RESULTS
 
 
-SEARCH_TOKEN_PATTERN = re.compile(r"(?:_+)?[a-z0-9][a-z0-9_\-+.]*", re.IGNORECASE)
 TOKEN_SPLIT_PATTERN = re.compile(r"[_\-+.]+")
 RRF_K = 60
 SEMANTIC_RESOURCE_WEIGHT = 0.20
@@ -100,8 +103,9 @@ COMPILER_GUIDE_TOKENS = {
     "compiler", "compilers", "gcc", "llvm", "clang",
 }
 PLATFORM_TOKENS = {
-    "aarch64", "amd64", "android", "arm64", "armv8", "armv9", "centos", "debian", "fedora",
-    "ios", "linux", "mac", "macos", "os", "rhel", "ubuntu", "windows", "x86", "x86_64", "x86-64",
+    "aarch64", "almalinux", "amd64", "android", "arm64", "armv8", "armv9", "centos", "debian", "fedora",
+    "ios", "linux", "mac", "macos", "os", "rhel", "sles", "ubuntu", "windows", "wsl", "wsl2",
+    "x86", "x86_64", "x86-64",
 }
 # Query tokens that never identify a product or page on their own.
 GENERIC_ENTITY_TOKENS = (
@@ -134,7 +138,7 @@ NEGATIVE_SUPPORT_PATTERNS = tuple(
 
 def tokenize_for_search(text: str) -> List[str]:
     """Extract technical tokens without rewriting natural-language phrases."""
-    return [token.lower() for token in SEARCH_TOKEN_PATTERN.findall(text or "")]
+    return raw_tokens(text)
 
 
 def _evidence_tokens(tokens: Iterable[str]) -> List[str]:
@@ -164,19 +168,30 @@ def _query_field_tokens(tokens: set[str], query_tokens: set[str]) -> set[str]:
     return tokens
 
 
-def tokenize_url_for_search(text: str) -> List[str]:
-    """Split separators in URL content while retaining each original token."""
-    tokens: List[str] = []
+def tokenize_url_for_search(
+    text: str, synonyms: Synonyms = EMPTY, name_evidence: Collection[str] = (),
+) -> List[str]:
+    """Match hyphenated slugs; identifier fragments need document name evidence."""
+    tokens = []
     for token in tokenize_for_search(text):
         tokens.append(token)
         if TOKEN_SPLIT_PATTERN.search(token):
             tokens.extend(part for part in TOKEN_SPLIT_PATTERN.split(token) if part)
-    return list(dict.fromkeys(tokens))
+    names = analyze(text.replace("-", " "), synonyms)
+    if synonyms.keys and name_evidence:
+        # Fragments may reinforce a name independently recognized in the document.
+        names.extend(token for token in analyze_tokens(tokens, synonyms)
+                     if token.startswith("__name_") and token in name_evidence)
+    return list(dict.fromkeys([*names, *(literal_term(token) for token in tokens)]))
 
 
-def tokenize_url_content_for_search(text: str) -> List[str]:
+def tokenize_url_content_for_search(
+    text: str, synonyms: Synonyms = EMPTY, name_evidence: Collection[str] = (),
+) -> List[str]:
     parsed = urlparse(text or "")
-    return tokenize_url_for_search(" ".join((parsed.path, parsed.query, parsed.fragment)))
+    return tokenize_url_for_search(
+        unquote(f"{parsed.path} ? {parsed.query} # {parsed.fragment}"), synonyms, name_evidence,
+    )
 
 
 def _normalized_doc_type(doc_type: str) -> str:
@@ -191,17 +206,20 @@ def salient_tokens(text: str) -> List[str]:
     return [token for token in tokenize_for_search(text) if token not in SEARCH_STOPWORDS]
 
 
-def _installation_subject_tokens(query: str) -> set[str]:
+def _installation_subject_tokens(query: str, synonyms: Synonyms = EMPTY) -> set[str]:
     """Identify a short tool name before an installation's platform context."""
     match = re.search(
-        r"\b(?:install(?:ing|ation)?|set\s+up|setup)\s+(.+?)\s+(?:on|in|for|using|with)\b",
+        r"\b(?:install(?:ing|ation)?|set\s+up|setup)\s+",
         query, re.IGNORECASE,
     )
     if not match:
         return set()
-    tokens = set(salient_tokens(match.group(1))) - GENERIC_ENTITY_TOKENS
-    tokens -= {"tool", "tools", "package", "packages", "software", "instructions"}
-    return tokens if 0 < len(tokens) <= 3 else set()
+    # Query analysis collapses complete names even when the suffix is only a name.
+    terms = analyze(query[match.end():], synonyms, query=True)
+    end = next((i for i, term in enumerate(terms) if term in {"on", "in", "for", "using", "with"}), len(terms))
+    subject = (set(terms[:end]) - GENERIC_ENTITY_TOKENS
+               - {"tool", "tools", "package", "packages", "software", "instructions"})
+    return subject if 0 < len(subject) <= 3 else set()
 
 
 @dataclass(frozen=True)
@@ -228,42 +246,59 @@ class _QueryAnalysis:
     intrinsic_isas: set[str] = dataclass_field(default_factory=set)
     code_identifiers: set[str] = dataclass_field(default_factory=set)
     evidence_tokens: set[str] = dataclass_field(default_factory=set)
+    short_query: bool = False
+    name_keys: frozenset[str] = frozenset()
+    raw_query_tokens: frozenset[str] = frozenset()
+    synonyms: Synonyms = EMPTY
 
 
-def _analyze_query(query: str) -> _QueryAnalysis:
+def _analyze_query(query: str, synonyms: Synonyms = EMPTY) -> _QueryAnalysis:
     terms = tokenize_for_search(query)
-    query_tokens = set(terms)
+    raw_query_tokens = frozenset(terms)
+    analyzed_terms = analyze(query, synonyms, query=True)
+    query_tokens = set(analyzed_terms)
+    query_evidence = set(_evidence_tokens(query_tokens))
+    recognized_names = name_keys(query_tokens, synonyms)
     salient_query_terms = [term for term in terms if term not in SEARCH_STOPWORDS]
-    salient_query_tokens = set(salient_query_terms)
+    salient_query_tokens = query_tokens - SEARCH_STOPWORDS
     lexical_query_tokens = salient_query_tokens.copy() or query_tokens
     setup_phrase = bool(re.search(r"\bset\s+up\b", query, re.IGNORECASE))
-    installation_query = bool(query_tokens & INSTALL_INTENT_TOKENS) or setup_phrase
+    installation_query = bool(raw_query_tokens & INSTALL_INTENT_TOKENS) or setup_phrase
+    platforms = set()
     if installation_query:
+        # Installation platforms constrain scoring without identifying the requested product.
+        platforms = {token for word in PLATFORM_TOKENS for token in analyze(word, synonyms, query=True)}
         if setup_phrase:
             salient_query_tokens -= {"set", "up"}
-        subject_tokens = _installation_subject_tokens(query)
+        subject_tokens = _installation_subject_tokens(query, synonyms)
         if subject_tokens:
-            salient_query_tokens = subject_tokens | (salient_query_tokens & PLATFORM_TOKENS)
+            salient_query_tokens = subject_tokens | (salient_query_tokens & platforms)
     direct_query_terms = [term for term in terms if term not in DIRECT_INTENT_STOPWORDS]
-    direct_query_tokens = set(direct_query_terms)
+    direct_query_tokens = query_tokens - DIRECT_INTENT_STOPWORDS
     scoring_query_tokens = direct_query_tokens or salient_query_tokens or query_tokens
-    prefers_tuning_guide = bool(query_tokens & TUNING_INTENT_TOKENS)
+    # Query length rules count the words the user typed, not analyzer expansions.
+    short_query = len(set(direct_query_terms) or set(salient_query_terms) or set(terms)) <= 3
+    prefers_tuning_guide = bool(query_evidence & TUNING_INTENT_TOKENS)
     prefers_reference_architecture = bool(
-        query_tokens & REFERENCE_ARCHITECTURE_INTENT_TOKENS
+        raw_query_tokens & REFERENCE_ARCHITECTURE_INTENT_TOKENS
     )
-    prefers_tutorial = bool(query_tokens & TUTORIAL_INTENT_TOKENS)
+    prefers_tutorial = bool(raw_query_tokens & TUTORIAL_INTENT_TOKENS)
     asks_for_learning_path = (
-        "lp" in query_tokens
-        or {"learning", "path"}.issubset(query_tokens)
+        "lp" in raw_query_tokens
+        or {"learning", "path"}.issubset(raw_query_tokens)
     )
-    entity_query_tokens = salient_query_tokens - GENERIC_ENTITY_TOKENS
+    entity_query_tokens = salient_query_tokens - GENERIC_ENTITY_TOKENS - platforms
+    if installation_query:
+        # Descriptors such as "latest release" cannot substitute for a named product.
+        named_entities = {term for term in entity_query_tokens if term.startswith("__name_")}
+        entity_query_tokens = named_entities or entity_query_tokens
     # In a short execution request, the named tool carries more information
     # than the generic action and Arm context shared by most documents.
-    if (len(direct_query_tokens) <= 3 and entity_query_tokens
+    if (len(set(direct_query_terms)) <= 3 and entity_query_tokens
             and direct_query_tokens & {"run", "use", "using"}):
         scoring_query_tokens = direct_query_tokens - {"run", "use", "using", "arm"}
 
-    compiler_guide_query = bool(query_tokens & COMPILER_GUIDE_TOKENS) and "guide" in query_tokens
+    compiler_guide_query = bool(raw_query_tokens & COMPILER_GUIDE_TOKENS) and "guide" in raw_query_tokens
     evidence_tokens = _technical_evidence(query)
     acle_types = {token for token in evidence_tokens if ACLE_TYPE_PATTERN.fullmatch(token)}
     return _QueryAnalysis(
@@ -273,8 +308,8 @@ def _analyze_query(query: str) -> _QueryAnalysis:
         direct_query_tokens=direct_query_tokens,
         scoring_query_tokens=scoring_query_tokens,
         entity_query_tokens=entity_query_tokens,
-        salient_query_terms=salient_query_terms,
-        direct_query_terms=direct_query_terms,
+        salient_query_terms=[term for term in analyzed_terms if term not in SEARCH_STOPWORDS],
+        direct_query_terms=[term for term in analyzed_terms if term not in DIRECT_INTENT_STOPWORDS],
         installation_query=installation_query,
         prefers_tuning_guide=prefers_tuning_guide,
         prefers_reference_architecture=prefers_reference_architecture,
@@ -282,15 +317,21 @@ def _analyze_query(query: str) -> _QueryAnalysis:
         asks_for_learning_path=asks_for_learning_path,
         compiler_guide_query=compiler_guide_query,
         support_question=bool(SUPPORT_QUESTION_PATTERN.search(" ".join(query.split()))) and not bool(
-            evidence_tokens & (TUNING_INTENT_TOKENS - {"config", "configure", "configured", "configuration"})
+            query_evidence & (TUNING_INTENT_TOKENS - {"config", "configure", "configured", "configuration"})
         ),
         intrinsic_query=bool(acle_types or evidence_tokens & {"intrinsic", "intrinsics"}),
         acle_types=acle_types,
         intrinsic_isas={INTRINSIC_ISAS[token] for token in evidence_tokens if token in INTRINSIC_ISAS},
         code_identifiers={token for token in evidence_tokens
                           if CODE_IDENTIFIER_PATTERN.fullmatch(token)
-                          and not token.endswith("_t") and token not in GENERIC_ENTITY_TOKENS},
+                          and not token.endswith("_t") and token not in GENERIC_ENTITY_TOKENS
+                          # aws_cli is a spelling of a product name, not a code symbol.
+                          and not (name_keys(analyze(token, synonyms), synonyms) & recognized_names)},
         evidence_tokens=evidence_tokens,
+        short_query=short_query,
+        name_keys=recognized_names,
+        raw_query_tokens=raw_query_tokens,
+        synonyms=synonyms,
     )
 
 
@@ -322,14 +363,29 @@ def is_navigation_only(metadata: Dict[str, Any]) -> bool:
     )
 
 def _metadata_text(metadata: Dict[str, Any], fields: Iterable[str]) -> str:
-    values: List[str] = []
+    values: List[Any] = []
     for field in fields:
+        if field == "search_text":
+            values.append(_search_text(metadata))
+            continue
         value = metadata.get(field)
         if isinstance(value, list):
-            values.append(" ".join(str(item) for item in value))
+            values.extend(value)
         elif value:
-            values.append(str(value))
-    return " ".join(values)
+            values.append(value)
+    return "\n\n".join(str(value) for value in values)
+
+
+def _search_text(metadata: dict[str, Any]) -> str:
+    """Rebuild lexical evidence from independent fields, including older snapshots."""
+    body = next((field for field in ("original_text", "content")
+                 if isinstance(metadata.get(field), str)), None)
+    if body is None:
+        # Minimal callers may supply only search_text; no original body is available.
+        return metadata.get("search_text") or ""
+    return _metadata_text(metadata, (
+        "title", "heading_path", "heading", "doc_type", "product", "version", "keywords", body,
+    ))
 
 
 def _token_match_count(query_tokens: set[str], document_tokens: set[str]) -> int:
@@ -390,12 +446,24 @@ def _support_evidence_score(query_tokens: set[str], text_tokens: set[str], text:
     return score
 
 
-def _score_lexical_exactness(query: _QueryAnalysis, metadata: Dict[str, Any]) -> float:
+def _body_tokens(candidate: Dict[str, Any], bm25_index: Optional[BM25Okapi]) -> Optional[set[str]]:
+    """Structured document tokens, taken from the BM25 index when the row is known."""
+    row_id = candidate.get("metadata_id")
+    if bm25_index is None or row_id is None:
+        return None
+    return bm25_index.doc_freqs[row_id].keys()
+
+
+def _score_lexical_exactness(query: _QueryAnalysis, metadata: Dict[str, Any],
+                             body_tokens: Optional[set[str]] = None) -> float:
     """Score field overlap, phrases, and support evidence independently of BM25."""
     query_tokens = query.query_tokens
     if not query_tokens:
         return 0.0
 
+    name_evidence = body_tokens if body_tokens is not None else set(
+        analyze(_search_text(metadata), query.synonyms)
+    )
     weighted_overlap = 0.0
     denominator = len(query.lexical_query_tokens)
     field_weights = (
@@ -409,14 +477,14 @@ def _score_lexical_exactness(query: _QueryAnalysis, metadata: Dict[str, Any]) ->
         if fields == ("url", "resolved_url"):
             field_tokens = {
                 token
-                for field in fields
-                for token in tokenize_url_content_for_search(
-                    str(metadata.get(field) or "")
-                )
+                for url in {str(metadata.get(field) or "") for field in fields}
+                for token in tokenize_url_content_for_search(url, query.synonyms, name_evidence)
             }
+        elif fields == ("search_text",) and body_tokens is not None:
+            field_tokens = set(body_tokens)
         else:
             field_text = _metadata_text(metadata, fields)
-            field_tokens = set(tokenize_for_search(field_text))
+            field_tokens = set(analyze(field_text, query.synonyms))
         field_tokens = _query_field_tokens(field_tokens, query_tokens)
         if not field_tokens:
             continue
@@ -430,17 +498,24 @@ def _score_lexical_exactness(query: _QueryAnalysis, metadata: Dict[str, Any]) ->
         metadata,
         ("title", "heading", "heading_path", "url", "resolved_url", "keywords", "search_text"),
     )
-    all_tokens = set(tokenize_for_search(all_text))
     phrase_bonus = _field_phrase_bonus(
-        query.salient_query_terms, all_text, weights=(0.08, 0.12), limit=None,
+        query.salient_query_terms, all_text, synonyms=query.synonyms, weights=(0.08, 0.12), limit=None,
     )
-
-    support_bonus = _support_evidence_score(query_tokens, all_tokens, all_text)
+    support_bonus = 0.0
+    # Support evidence needs a capability term in the query; skip the token union otherwise.
+    if query_tokens & SUPPORT_INTENT_TOKENS and _capability_tokens(query_tokens):
+        if body_tokens is None:
+            all_tokens = set(analyze(all_text, query.synonyms))
+        else:
+            all_tokens = set(body_tokens) | set(analyze(_metadata_text(
+                metadata, ("title", "heading", "heading_path", "url", "resolved_url", "keywords")), query.synonyms))
+        support_bonus = _support_evidence_score(query_tokens, all_tokens, all_text)
     return weighted_overlap + phrase_bonus + support_bonus
 
 
 def _rank_lexical_candidates(
     query: _QueryAnalysis, candidates: List[Dict[str, Any]], k: int,
+    bm25_index: Optional[BM25Okapi] = None,
 ) -> List[Dict[str, Any]]:
     """Rerank shared BM25 candidates by lexical evidence without rescoring BM25."""
     if not candidates:
@@ -448,7 +523,7 @@ def _rank_lexical_candidates(
 
     scored_candidates: List[Dict[str, Any]] = []
     for candidate in candidates:
-        exactness = _score_lexical_exactness(query, candidate["metadata"])
+        exactness = _score_lexical_exactness(query, candidate["metadata"], _body_tokens(candidate, bm25_index))
         lexical_score = exactness + min(1.0, candidate.get("bm25_score", 0.0) / 25.0)
         if lexical_score <= 0:
             continue
@@ -466,17 +541,24 @@ def _rank_lexical_candidates(
         pinned.append({**candidate, "lexical_prepass_rank": rank, "pinned_lexical": True})
     return pinned
 
-def _bm25_tokens(text: str) -> List[str]:
+def _bm25_tokens(text: str, synonyms: Synonyms = EMPTY) -> List[str]:
     """Use one sparse-search term for the Arm64/AArch64 architecture aliases."""
-    return ["arm64" if token == "aarch64" else token for token in tokenize_for_search(text)]
+    return ["arm64" if token == "aarch64" else token for token in analyze(text, synonyms)]
 
 
-class _IntrinsicBM25(BM25Okapi):
+class _NameBM25(BM25Okapi):
     """Keep canonical-name evidence separate from the shared prose statistics."""
 
-    def __init__(self, corpus, aliases):
+    def __init__(self, corpus, aliases, synonyms: Synonyms = EMPTY):
         super().__init__(corpus)
-        # Each populated name field has one token; empty fields must not dilute it.
+        # Small collections can give names zero weight or cancel them with negative prose.
+        fallback_names = {"__name_" + key for key in name_keys(self.idf, synonyms)
+                      if self.average_idf < 0 or self.idf["__name_" + key] <= 0}
+        if fallback_names:
+            aliases = [list(set(names) | (freq.keys() & fallback_names))
+                       for names, freq in zip(aliases, self.doc_freqs)]
+            self.idf.update(dict.fromkeys(fallback_names, 0.0))
+        # Fixed-length name evidence must not be diluted by empty fields.
         self.alias_index = BM25Okapi(aliases, b=0.0) if any(aliases) else None
         if self.alias_index:
             # Exact names remain useful even when most records share a name.
@@ -501,21 +583,27 @@ class _IntrinsicBM25(BM25Okapi):
         return scores
 
 
-def build_bm25_index(metadata: List[Dict]) -> Optional[BM25Okapi]:
+def build_bm25_index(
+    metadata: List[Dict], synonyms: Synonyms = EMPTY, *,
+    tokenized_corpus: Optional[List[List[str]]] = None,
+) -> Optional[BM25Okapi]:
+    if tokenized_corpus is not None and len(tokenized_corpus) != len(metadata):
+        raise ValueError("Keyword corpus and metadata have different row counts")
     corpus = []
     aliases = []
-    for item in metadata:
-        tokens = _bm25_tokens(item.get("search_text", ""))
+    for position, item in enumerate(metadata):
+        tokens = (tokenized_corpus[position] if tokenized_corpus is not None
+                  else _bm25_tokens(_search_text(item), synonyms))
         names = []
         if _normalized_doc_type(item.get("doc_type", "")) == "intrinsic":
             name = str(item.get("heading") or "").lower().replace("[", "").replace("]", "")
             if re.fullmatch(r"[a-z_][a-z0-9_]*", name):
-                names.append(name)
+                names.append(literal_term(name))
         corpus.append(tokens)
         aliases.append(names)
     if not any(corpus):
         return None
-    return _IntrinsicBM25(corpus, aliases)
+    return _NameBM25(corpus, aliases, synonyms)
 
 
 def embedding_search(
@@ -573,6 +661,7 @@ def embedding_search(
                         "rank": rank,
                         "distance": distance,
                         "metadata": metadata[metadata_id],
+                        "metadata_id": metadata_id,
                     }
                 )
     except Exception as exc:
@@ -587,15 +676,16 @@ def bm25_search(
     k: int = K_RESULTS,
     *,
     eligible_ids: Optional[tuple[int, ...]] = None,
-    original_query: Optional[str] = None,
+    synonyms: Synonyms = EMPTY,
 ) -> List[Dict[str, Any]]:
     if bm25_index is None or eligible_ids == ():
         return []
     # Brackets never occur in prose tokens, so these additions only reach the
     # canonical-name channel and leave the prose index's scores unchanged.
-    # Hybrid search deduplicates prose tokens; recover names from its raw query.
-    names = _bracketed_identifiers(query if original_query is None else original_query)
-    tokens = _bm25_tokens(query) + list(dict.fromkeys(names))
+    # Recognize complete names before deduplicating query terms.
+    names = _bracketed_identifiers(query)
+    tokens = ["arm64" if token == "aarch64" else token for token in analyze(query, synonyms, query=True)]
+    tokens = list(dict.fromkeys(tokens + names))
     if not tokens:
         return []
     if eligible_ids is None:
@@ -615,6 +705,7 @@ def bm25_search(
                 "rank": rank,
                 "bm25_score": score,
                 "metadata": metadata[metadata_id],
+                "metadata_id": metadata_id,
             }
         )
     return results
@@ -633,17 +724,47 @@ def _is_learning_path_root_url(url: str) -> bool:
     return len(path_parts) == 3 and path_parts[0] == "learning-paths"
 
 
+@lru_cache(maxsize=1024)
+def _phrase_field_text(field_text: str, synonyms: Synonyms) -> str:
+    """Cache ordered phrase evidence with complete names and literal boundaries."""
+    tokens = basic_tokens(field_text)
+    field_terms = []
+    start = 0
+    while start < len(tokens):
+        size, key = synonyms._match(tokens, start)
+        term = "__name_" + key if size else literal_term(tokens[start].rstrip("."))
+        field_terms.append("arm64" if term == "aarch64" else term)
+        if tokens[start + (size or 1) - 1].endswith("."):
+            field_terms.append(".")
+        start += size or 1
+    # Separators enforce complete tokens; punctuation and block markers stay inside.
+    return "\x1f" + "\x1f".join(field_terms) + "\x1f"
+
+
 def _field_phrase_bonus(
     query_terms: List[str], field_text: str, *,
+    synonyms: Synonyms = EMPTY,
     weights: tuple[float, float] = (0.10, 0.16), limit: Optional[float] = 0.40,
 ) -> float:
-    """Score adjacent pairs/triples in order, with the caller's weights and cap."""
-    query_terms = [re.sub(r"\baarch64\b", "arm64", term.lower()) for term in query_terms]
-    field_text = re.sub(r"\baarch64\b", "arm64", field_text.lower())
+    """Score complete terms, keeping recognized names atomic and block boundaries intact."""
+    if len(query_terms) < 2:
+        return 0.0
+    query_terms = [term.lower() for term in query_terms]
+    query_terms = ["arm64" + term[len("aarch64"):] if term.rstrip(".") == "aarch64" else term
+                   for term in query_terms]
+    visible = field_text.lower()
+    phrase_text = None
     bonus = 0.0
     for size, weight in enumerate(weights, start=2):
         for index in range(len(query_terms) - size + 1):
-            if " ".join(query_terms[index:index + size]) in field_text:
+            terms = query_terms[index:index + size]
+            literals = [term.rstrip(".").removeprefix("\0") for term in terms if not term.startswith("__name_")]
+            if not all(term in visible or term == "arm64" and "aarch64" in visible for term in literals):
+                continue
+            if phrase_text is None:
+                phrase_text = _phrase_field_text(field_text, synonyms)
+            phrase = "\x1f" + "\x1f".join(terms).rstrip(".") + "\x1f"
+            if phrase in phrase_text:
                 bonus += weight
     return min(limit, bonus) if limit is not None else bonus
 
@@ -659,7 +780,22 @@ def _reference_record_bonus(
         package = heading_path[1] if isinstance(heading_path, list) and len(heading_path) > 1 else heading
         name_tokens = set(_evidence_tokens(tokenize_for_search(str(package)))) - DIRECT_INTENT_STOPWORDS - {"arm"}
         platform = str(metadata.get("platform") or "").lower()
-        if not (name_tokens - GENERIC_ENTITY_TOKENS) or not name_tokens <= evidence_tokens:
+        named = False
+        known_label = False
+        # Match whole labels or parenthetical aliases, not names mentioned within a label.
+        for label in re.split(r"[()]", str(package)):
+            tokens = basic_tokens(label)
+            if not tokens:
+                continue
+            size, key = query.synonyms._match(tokens, 0)
+            if size == len(tokens):
+                known_label = True
+                if key in query.name_keys:
+                    named = True
+                    break
+        # Declared product names require canonical evidence, including at this bonus.
+        if not named and (known_label or not (name_tokens - GENERIC_ENTITY_TOKENS)
+                          or not name_tokens <= evidence_tokens):
             return 0.0
         if platform == "windows" and "windows" not in evidence_tokens:
             return 0.0
@@ -695,7 +831,7 @@ def _document_type_bonuses(
     """Return provider and document-type preferences as separate score terms."""
     doc_type = _normalized_doc_type(metadata.get("doc_type", ""))
     provider_doc_bonus = 0.0
-    if query.query_tokens & PROVIDER_DOCUMENTATION_TOKENS and doc_type == "google cloud documentation":
+    if query.raw_query_tokens & PROVIDER_DOCUMENTATION_TOKENS and doc_type == "google cloud documentation":
         provider_doc_bonus = 0.18
 
     doc_type_bonus = 0.0
@@ -732,11 +868,7 @@ def _document_type_bonuses(
             title_tokens
             | heading_tokens
             | url_tokens
-            | set(
-                tokenize_for_search(
-                    _metadata_text(metadata, ("keywords", "product"))
-                )
-            )
+            | set(analyze(_metadata_text(metadata, ("keywords", "product")), query.synonyms))
         )
         if query.entity_query_tokens & (
             guide_entity_tokens - GENERIC_INSTALL_GUIDE_KEYWORDS
@@ -750,14 +882,16 @@ def _document_type_bonuses(
 def rerank_candidates(
     query: str,
     candidates: List[Dict[str, Any]],
+    *, synonyms: Synonyms = EMPTY,
 ) -> List[Dict[str, Any]]:
     """Rerank candidates using the same query analysis as hybrid search."""
-    return _rerank_candidates(_analyze_query(query), candidates)
+    return _rerank_candidates(_analyze_query(query, synonyms), candidates)
 
 
 def _rerank_candidates(
     query: _QueryAnalysis,
     candidates: List[Dict[str, Any]],
+    bm25_index: Optional[BM25Okapi] = None,
 ) -> List[Dict[str, Any]]:
     query_tokens = query.query_tokens
     if not query_tokens:
@@ -767,32 +901,30 @@ def _rerank_candidates(
     direct_query_tokens = query.direct_query_tokens
     scoring_query_tokens = query.scoring_query_tokens
     entity_query_tokens = query.entity_query_tokens
-    short_query = len(scoring_query_tokens) <= 3
+    short_query = query.short_query
+    if short_query and query.name_keys and query.installation_query:
+        scoring_query_tokens = salient_query_tokens
     reranked: List[Dict[str, Any]] = []
     for candidate in candidates:
         metadata = candidate["metadata"]
         if is_navigation_only(metadata):
             continue
-        full_text = metadata.get("search_text", "")
+        full_text = _search_text(metadata)
+        body_tokens = _body_tokens(candidate, bm25_index)
         full_text_tokens = _query_field_tokens(
-            set(tokenize_for_search(full_text)), query_tokens
-        )
+            set(body_tokens) if body_tokens is not None else set(analyze(full_text, query.synonyms)), query_tokens)
         title_text = _metadata_text(metadata, ("title",))
         heading_text = _metadata_text(metadata, ("heading", "heading_path"))
         url_text = _metadata_text(metadata, ("url", "resolved_url"))
         source_url = metadata.get("url") or metadata.get("resolved_url") or ""
 
-        title_tokens = _query_field_tokens(
-            set(tokenize_for_search(title_text)), query_tokens
-        )
-        heading_tokens = _query_field_tokens(
-            set(tokenize_for_search(heading_text)), query_tokens
-        )
+        title_tokens = _query_field_tokens(set(analyze(title_text, query.synonyms)), query_tokens)
+        heading_tokens = _query_field_tokens(set(analyze(heading_text, query.synonyms)), query_tokens)
         url_tokens = _query_field_tokens(
-            set(tokenize_url_content_for_search(source_url)), query_tokens
+            set(tokenize_url_content_for_search(source_url, query.synonyms, full_text_tokens)), query_tokens
         )
         resolved_url_tokens = _query_field_tokens(
-            set(tokenize_url_content_for_search(metadata.get("resolved_url", ""))), query_tokens
+            set(tokenize_url_content_for_search(metadata.get("resolved_url", ""), query.synonyms, full_text_tokens)), query_tokens
         )
         title_url_tokens = title_tokens | url_tokens | resolved_url_tokens
         support_evidence_bonus = _support_evidence_score(
@@ -824,13 +956,14 @@ def _rerank_candidates(
             intent_bonus = 0.35 * title_url_overlap
             intent_bonus += 0.15 * _overlap_ratio(scoring_query_tokens, url_tokens | resolved_url_tokens)
             intent_bonus += _field_phrase_bonus(
-                direct_query_terms or list(scoring_query_tokens), f"{title_text} {url_text}",
+                direct_query_terms or list(scoring_query_tokens), title_text + "\n\n" + url_text,
+                synonyms=query.synonyms,
             )
             if title_url_overlap >= 0.75:
                 intent_bonus += 0.20
             if title_url_overlap >= 0.60:
                 intent_bonus += 0.15
-            if "guide" in query_tokens and "guide" in title_url_tokens:
+            if "guide" in query.raw_query_tokens and "guide" in title_url_tokens:
                 intent_bonus += 0.12
 
             if _is_learning_path_root_url(source_url):
@@ -855,7 +988,7 @@ def _rerank_candidates(
 
         lexical_exactness_score = candidate.get("lexical_exactness_score")
         if lexical_exactness_score is None:
-            lexical_exactness_score = _score_lexical_exactness(query, metadata)
+            lexical_exactness_score = _score_lexical_exactness(query, metadata, body_tokens)
         lexical_prepass_bonus = min(1.0, lexical_exactness_score / 2.0)
         if candidate.get("pinned_lexical"):
             lexical_prepass_bonus += 1 / (
@@ -925,13 +1058,13 @@ def hybrid_search(
     candidate_depth: Optional[int] = None,
     *,
     eligible_ids: Optional[tuple[int, ...]] = None,
+    synonyms: Synonyms = EMPTY,
 ) -> List[Dict[str, Any]]:
     if eligible_ids == ():
         return []
-    lexical_query = " ".join(dict.fromkeys(tokenize_for_search(query)))
-    if not lexical_query:
+    if not tokenize_for_search(query):
         return []
-    query_analysis = _analyze_query(query)
+    query_analysis = _analyze_query(query, synonyms)
 
     candidate_depth = candidate_depth or max(k * 20, 100)
     lexical_limit = max(k * 3, PINNED_LEXICAL_CANDIDATES)
@@ -939,16 +1072,16 @@ def hybrid_search(
 
     # Share one BM25 ranking between the lexical prepass and sparse search.
     bm25_results = bm25_search(
-        lexical_query,
+        query,
         metadata,
         bm25_index,
         k=bm25_depth,
         eligible_ids=eligible_ids,
-        original_query=query,
+        synonyms=synonyms,
     )
 
     lexical_results = _rank_lexical_candidates(
-        query_analysis, bm25_results, k=lexical_limit
+        query_analysis, bm25_results, k=lexical_limit, bm25_index=bm25_index,
     )
     sparse_results = bm25_results[:candidate_depth]
 
@@ -971,13 +1104,14 @@ def hybrid_search(
     for results, score_field in ((dense_results, "distance"), (sparse_results, "bm25_score")):
         for result in results:
             existing = candidates.setdefault(
-                _candidate_key(result), {"metadata": result["metadata"], "rrf_score": 0.0},
+                _candidate_key(result),
+                {"metadata": result["metadata"], "metadata_id": result.get("metadata_id"), "rrf_score": 0.0},
             )
             existing["rank"] = min(existing.get("rank", result["rank"]), result["rank"])
             existing[score_field] = result[score_field]
             existing["rrf_score"] += 1 / (RRF_K + result["rank"])
 
-    combined = _rerank_candidates(query_analysis, list(candidates.values()))
+    combined = _rerank_candidates(query_analysis, list(candidates.values()), bm25_index=bm25_index)
     return fuse_semantic_resource_ranks(combined)[:k]
 
 

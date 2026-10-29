@@ -84,6 +84,8 @@ COPY --from=embeddings /embedding-data/usearch_index.bin /app/data/usearch_index
 COPY mcp-local/utils/ /app/utils/
 COPY arm_kb_search/ /app/arm_kb_search/
 COPY mcp-local/server.py /app/server.py
+COPY mcp-local/name-synonyms.json /app/name-synonyms.json
+RUN --network=none python -c 'from arm_kb_search.resources import write_keyword_cache; write_keyword_cache("/app/data/metadata.json", synonyms_path="/app/name-synonyms.json")'
 
 FROM ${UBUNTU_IMAGE} AS runtime
 

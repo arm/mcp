@@ -20,5 +20,7 @@ FROM ${BASE_IMAGE}
 # RUN python -m pip install --no-cache-dir 'your-package==1.2.3'
 
 COPY mcp-local/server.py /app/server.py
+COPY mcp-local/name-synonyms.json /app/name-synonyms.json
 COPY mcp-local/utils/ /app/utils/
 COPY arm_kb_search/ /app/arm_kb_search/
+RUN --network=none python -c 'from arm_kb_search.resources import write_keyword_cache; write_keyword_cache("/app/data/metadata.json", synonyms_path="/app/name-synonyms.json")'

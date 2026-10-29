@@ -25,6 +25,7 @@ import pytest
 import torch
 import yaml
 from arm_kb_search import resources
+from arm_kb_search.analysis import Synonyms, analyze, name_keys
 from transformers import AutoTokenizer
 
 import document_chunking as intrinsic_source
@@ -40,6 +41,24 @@ def test_load_local_yaml_files_requires_intrinsic_chunks(tmp_path, monkeypatch):
 
     with pytest.raises(FileNotFoundError, match="No intrinsic chunk YAML files found"):
         load_local_yaml_files()
+
+
+def test_serialized_search_text_preserves_field_and_body_boundaries(tmp_path, monkeypatch):
+    body = 'CLI\n\nUse PyTorch.'
+    record = {"uuid": "a", "chunk_uuid": "a", "url": "https://example.org/guide", "title": "AWS",
+              "heading": "CLI", "heading_path": ["AWS", "CLI"], "keywords": "", "content": body}
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["local_vectorstore_creation.py", "--model-path", "unused"])
+    monkeypatch.setattr(vectorstore, "load_local_yaml_files", lambda: [record])
+    monkeypatch.setattr(vectorstore, "create_embeddings",
+                        lambda metadata, *args: (np.eye(1, dtype=np.float32), metadata))
+    vectorstore.main()
+    row = json.loads((tmp_path / "metadata.json").read_text())[0]
+    table = Synonyms({"awscli": ["AWS CLI"], "pytorch": ["PyTorch"]})
+    assert name_keys(analyze(row["search_text"], table), table) == {"pytorch"}
+    assert row["original_text"] == body
+    assert vectorstore.embedding_input(row) == body
+    assert row["search_text"].endswith(body)
 
 
 def test_vectorstore_serialization_preserves_dashboard_scope(tmp_path, monkeypatch):

@@ -1,0 +1,661 @@
+{
+  "5gral": [
+    "5g ral",
+    "arm ran acceleration library",
+    "armral",
+    "ran acceleration library"
+  ],
+  "7zip": [
+    "7-zip",
+    "7zip"
+  ],
+  "adobeaftereffects": [
+    "adobe after effects",
+    "after effects"
+  ],
+  "adobeaudition": [
+    "adobe audition",
+    "audition"
+  ],
+  "adobelightroom": [
+    "adobe lightroom",
+    "lightroom"
+  ],
+  "adobemediaencoder": [
+    "adobe media encoder",
+    "media encoder"
+  ],
+  "adobephotoshop": [
+    "adobe photoshop",
+    "photoshop"
+  ],
+  "adobepremierepro": [
+    "adobe premier pro",
+    "adobe premiere pro",
+    "premiere pro"
+  ],
+  "almalinux": [
+    "alma linux",
+    "almalinux"
+  ],
+  "amazonelasticcomputecloud": [
+    "amazon elastic compute cloud",
+    "ec2",
+    "elastic compute cloud"
+  ],
+  "amazonelasticcontainerregistry": [
+    "amazon elastic container registry",
+    "ecr",
+    "elastic container registry"
+  ],
+  "amazonelasticcontainerservice": [
+    "amazon ecs",
+    "amazon elastic container service",
+    "aws ecs",
+    "elastic container service"
+  ],
+  "amazonelastickubernetesservice": [
+    "amazon elastic kubernetes service",
+    "eks",
+    "elastic kubernetes service"
+  ],
+  "amazonrelationaldatabaseservice": [
+    "amazon relational database service",
+    "rds",
+    "relational database service"
+  ],
+  "amazonsimplenotificationservice": [
+    "amazon simple notification service",
+    "simple notification service",
+    "sns"
+  ],
+  "amazonsimplestorageservice": [
+    "amazon simple storage service",
+    "s3",
+    "simple storage service"
+  ],
+  "amazonwebservices": [
+    "amazon web services",
+    "aws"
+  ],
+  "androiddebugbridge": [
+    "adb",
+    "android debug bridge"
+  ],
+  "androidnativedevelopmentkit": [
+    "android native development kit",
+    "native development kit",
+    "ndk"
+  ],
+  "apachehttpd": [
+    "apache http server",
+    "apache httpd",
+    "httpd"
+  ],
+  "apacheportableruntime": [
+    "apache portable runtime",
+    "apr"
+  ],
+  "apachetomcat": [
+    "apache tomcat",
+    "tomcat"
+  ],
+  "armclanguageextensions": [
+    "acle",
+    "arm c language extensions"
+  ],
+  "armcompilerforembedded": [
+    "acfe",
+    "arm compiler for embedded"
+  ],
+  "armcompilerforlinux": [
+    "acfl",
+    "arm compiler for linux"
+  ],
+  "armcomputelibrary": [
+    "arm compute library"
+  ],
+  "armconfidentialcomputearchitecture": [
+    "arm confidential compute architecture",
+    "cca",
+    "confidential compute architecture",
+    "confidential computing architecture"
+  ],
+  "armdevelopmentstudio": [
+    "arm development studio",
+    "arm ds",
+    "armds"
+  ],
+  "arminstructionemulator": [
+    "arm instruction emulator",
+    "armie"
+  ],
+  "armmlinferenceadvisor": [
+    "arm ml inference advisor",
+    "mlia"
+  ],
+  "armperformancelibraries": [
+    "arm performance libraries",
+    "armpl"
+  ],
+  "armproductdownloadhub": [
+    "arm product download hub",
+    "pdh"
+  ],
+  "armstreamline": [
+    "arm streamline",
+    "streamline"
+  ],
+  "armsystemcharacterizationtool": [
+    "arm system characterization tool",
+    "asct"
+  ],
+  "armtoolchainforembedded": [
+    "arm toolchain for embedded",
+    "atfe"
+  ],
+  "armtoolchainforlinux": [
+    "arm toolchain for linux",
+    "atfl"
+  ],
+  "armvirtualhardware": [
+    "arm virtual hardware",
+    "avh"
+  ],
+  "awscdkcli": [
+    "aws cdk cli",
+    "cdk cli"
+  ],
+  "awscli": [
+    "aws cli",
+    "awscli"
+  ],
+  "awsclouddevelopmentkit": [
+    "aws cdk",
+    "aws cloud development kit",
+    "cdk"
+  ],
+  "awsiotgreengrass": [
+    "aws iot greengrass",
+    "greengrass"
+  ],
+  "awssamcli": [
+    "aws sam cli",
+    "sam cli"
+  ],
+  "azurecli": [
+    "az",
+    "azure cli",
+    "microsoft azure cli"
+  ],
+  "azurekubernetesservice": [
+    "aks",
+    "azure kubernetes service"
+  ],
+  "betterremoteprocedurecall": [
+    "better remote procedure call",
+    "brpc"
+  ],
+  "branchtargetidentification": [
+    "branch target identification",
+    "bti"
+  ],
+  "canonicallxd": [
+    "canonical lxd",
+    "lxd"
+  ],
+  "canonicalmaas": [
+    "canonical maas",
+    "maas",
+    "metal as a service"
+  ],
+  "canonicalmultipass": [
+    "canonical multipass",
+    "multipass"
+  ],
+  "canonicalnetplan": [
+    "canonical netplan",
+    "netplan"
+  ],
+  "canonicalsnapcraft": [
+    "canonical snapcraft",
+    "snapcraft"
+  ],
+  "commonmicrocontrollersoftwareinterfacestandard": [
+    "cmsis",
+    "common microcontroller software interface standard"
+  ],
+  "computationalgeometryalgorithmslibrary": [
+    "cgal",
+    "computational geometry algorithms library"
+  ],
+  "containernetworkinterface": [
+    "cni",
+    "container network interface"
+  ],
+  "crio": [
+    "cri-o",
+    "crio"
+  ],
+  "cudacorecomputelibraries": [
+    "cccl",
+    "cuda core compute libraries"
+  ],
+  "debianelts": [
+    "debian elts",
+    "extended long term support"
+  ],
+  "dhcp": [
+    "dhcp",
+    "dynamic host configuration protocol"
+  ],
+  "distributedreplicatedblockdevice": [
+    "distributed replicated block device",
+    "drbd"
+  ],
+  "dvc": [
+    "data version control",
+    "dvc"
+  ],
+  "eksctl": [
+    "amazon eks cli",
+    "eksctl"
+  ],
+  "emqtt": [
+    "emqtt",
+    "erlang message queue telemetry transport"
+  ],
+  "enca": [
+    "enca",
+    "extremely naive charset analyser"
+  ],
+  "extendedpythondebugger": [
+    "epdb",
+    "extended python debugger"
+  ],
+  "fastlighttoolkit": [
+    "fast light toolkit",
+    "fltk"
+  ],
+  "fixedvirtualplatforms": [
+    "fixed virtual platform",
+    "fixed virtual platforms",
+    "fvp",
+    "fvps"
+  ],
+  "fontawesome": [
+    "font awesome",
+    "fontawesome"
+  ],
+  "genomeanalysistoolkit": [
+    "gatk",
+    "genome analysis toolkit"
+  ],
+  "geospatialdataabstractionlibrary": [
+    "gdal",
+    "geospatial data abstraction library"
+  ],
+  "githubcli": [
+    "gh",
+    "github cli"
+  ],
+  "gnucompiler": [
+    "gcc",
+    "gnu compiler",
+    "gnu compiler collection"
+  ],
+  "gnudebugger": [
+    "gdb",
+    "gnu debugger"
+  ],
+  "gnumultipleprecisionarithmeticlibrary": [
+    "gmp",
+    "gnu multiple precision arithmetic library"
+  ],
+  "googlecloudplatform": [
+    "gcp",
+    "google cloud platform"
+  ],
+  "googlekubernetesengine": [
+    "gke",
+    "google kubernetes engine"
+  ],
+  "googlelogging": [
+    "glog",
+    "google logging"
+  ],
+  "googletest": [
+    "google-test",
+    "googletest",
+    "gtest"
+  ],
+  "identityandaccessmanagement": [
+    "iam",
+    "identity and access management"
+  ],
+  "intellijidea": [
+    "intellij",
+    "intellij idea"
+  ],
+  "internationalcomponentsforunicode": [
+    "icu",
+    "international components for unicode"
+  ],
+  "isal": [
+    "intelligent storage acceleration library",
+    "isa-l"
+  ],
+  "javadevelopmentkit": [
+    "java development kit",
+    "jdk"
+  ],
+  "javanativeinterface": [
+    "java native interface",
+    "jni"
+  ],
+  "javaruntimeenvironment": [
+    "java runtime environment",
+    "jre"
+  ],
+  "javavirtualmachine": [
+    "java virtual machine",
+    "jvm"
+  ],
+  "kernelbasedvirtualmachine": [
+    "kernel-based virtual machine",
+    "kvm"
+  ],
+  "kubernetes": [
+    "k8s",
+    "kubernetes"
+  ],
+  "kunpengaccelerationengine": [
+    "kae",
+    "kunpeng acceleration engine"
+  ],
+  "lapack": [
+    "lapack",
+    "linear algebra package"
+  ],
+  "largelanguagemodel": [
+    "large language model",
+    "llm"
+  ],
+  "largesystemextensions": [
+    "large system extensions",
+    "lse"
+  ],
+  "latentaiefficientinferenceplatform": [
+    "latent ai efficient inference platform",
+    "leip"
+  ],
+  "linktimeoptimization": [
+    "link-time optimization",
+    "lto"
+  ],
+  "livesyncingdaemon": [
+    "live syncing daemon",
+    "lsyncd"
+  ],
+  "llvmflang": [
+    "flang",
+    "llvm flang"
+  ],
+  "memorytaggingextension": [
+    "memory tagging extension",
+    "mte"
+  ],
+  "messagequeuingtelemetrytransport": [
+    "message queuing telemetry transport",
+    "mqtt"
+  ],
+  "microsoftinternetinformationservices": [
+    "iis",
+    "microsoft internet information services",
+    "ms iis"
+  ],
+  "microsoftplaywright": [
+    "microsoft playwright",
+    "playwright"
+  ],
+  "microsoftvcpkg": [
+    "microsoft vcpkg",
+    "vcpkg"
+  ],
+  "microsoftwsl2": [
+    "microsoft wsl 2",
+    "windows subsystem for linux 2",
+    "wsl 2",
+    "wsl2"
+  ],
+  "modularacceleratedxecution": [
+    "modular accelerated xecution",
+    "modular max"
+  ],
+  "mopac": [
+    "molecular orbital package",
+    "mopac"
+  ],
+  "networkmapper": [
+    "network mapper",
+    "nmap"
+  ],
+  "neuralmodules": [
+    "nemo",
+    "neural modules"
+  ],
+  "newrelic": [
+    "new relic",
+    "newrelic"
+  ],
+  "nextjs": [
+    "next.js",
+    "nextjs"
+  ],
+  "nfs": [
+    "network file system",
+    "nfs"
+  ],
+  "nodejs": [
+    "node.js",
+    "nodejs"
+  ],
+  "npm": [
+    "node package manager",
+    "npm"
+  ],
+  "onnxruntime": [
+    "onnx runtime",
+    "onnxruntime",
+    "ort"
+  ],
+  "opencomponentmodel": [
+    "ocm",
+    "open component model"
+  ],
+  "opencv": [
+    "cv2",
+    "opencv"
+  ],
+  "openneuralnetworkexchange": [
+    "onnx",
+    "open neural network exchange"
+  ],
+  "openpolicyagent": [
+    "opa",
+    "open policy agent"
+  ],
+  "openshiftcli": [
+    "oc",
+    "openshift cli"
+  ],
+  "openucx": [
+    "openucx",
+    "ucx",
+    "unified communication x"
+  ],
+  "openvswitch": [
+    "open vswitch",
+    "ovs"
+  ],
+  "perfforlinuxonarm": [
+    "linuxperf",
+    "perf",
+    "perf for linux on arm"
+  ],
+  "perlcompatibleregularexpressions": [
+    "pcre",
+    "perl compatible regular expressions"
+  ],
+  "pmdk": [
+    "persistent memory development kit",
+    "pmdk"
+  ],
+  "postgresql": [
+    "postgres",
+    "postgresql"
+  ],
+  "profileguidedoptimization": [
+    "pgo",
+    "profile-guided optimization"
+  ],
+  "psmc": [
+    "pairwise sequentially markovian coalescent",
+    "psmc"
+  ],
+  "pytorch": [
+    "pytorch",
+    "torch"
+  ],
+  "rancherkubernetesengine": [
+    "rancher kubernetes engine",
+    "rke"
+  ],
+  "rancherkubernetesengine2": [
+    "rancher kubernetes engine 2",
+    "rke2"
+  ],
+  "realmmanagementextension": [
+    "realm management extension",
+    "rme"
+  ],
+  "redhatenterpriselinux": [
+    "red hat enterprise linux",
+    "rhel"
+  ],
+  "retrievalaugmentedgeneration": [
+    "rag",
+    "retrieval-augmented generation"
+  ],
+  "robotoperatingsystem": [
+    "robot operating system",
+    "ros"
+  ],
+  "robotoperatingsystem2": [
+    "robot operating system 2",
+    "ros 2",
+    "ros2"
+  ],
+  "scikitlearn": [
+    "scikit-learn",
+    "sklearn"
+  ],
+  "simplerealtimeserver": [
+    "simple real-time server",
+    "srs"
+  ],
+  "springboot": [
+    "spring boot",
+    "springboot"
+  ],
+  "suselinuxenterpriseserver": [
+    "sles",
+    "suse linux enterprise server"
+  ],
+  "swig": [
+    "simplified wrapper and interface generator",
+    "swig"
+  ],
+  "tandemrepeatsfinder": [
+    "tandem repeats finder",
+    "trf"
+  ],
+  "tensorflowlite": [
+    "tensorflow lite",
+    "tflite"
+  ],
+  "tensoroperatorsetarchitecture": [
+    "tensor operator set architecture",
+    "tosa"
+  ],
+  "theupdateframework": [
+    "the update framework",
+    "tuf"
+  ],
+  "thevascularfluidstructureinteractionpipeline": [
+    "the vascular fluid structure interaction pipeline",
+    "vasp"
+  ],
+  "thevisualizationtoolkit": [
+    "the visualization toolkit",
+    "vtk"
+  ],
+  "trustedfirmwarea": [
+    "tf-a",
+    "trusted firmware-a"
+  ],
+  "trustedfirmwarem": [
+    "tf-m",
+    "trusted firmware-m"
+  ],
+  "unifiedextensiblefirmwareinterface": [
+    "uefi",
+    "unified extensible firmware interface"
+  ],
+  "virtualprivatecloud": [
+    "virtual private cloud",
+    "vpc"
+  ],
+  "visualstudiocode": [
+    "visual studio code",
+    "vs code",
+    "vscode"
+  ],
+  "vlcmediaplayer": [
+    "vlc",
+    "vlc media player"
+  ],
+  "vue": [
+    "vue",
+    "vue.js",
+    "vuejs"
+  ],
+  "vulkangraphformat": [
+    "vgf",
+    "vulkan graph format"
+  ],
+  "weatherresearchandforecasting": [
+    "weather research and forecasting",
+    "wrf"
+  ],
+  "windowsperf": [
+    "windowsperf",
+    "wperf"
+  ],
+  "windowsperformanceanalyzer": [
+    "windows performance analyzer",
+    "wpa"
+  ],
+  "windowsperformancerecorder": [
+    "windows performance recorder",
+    "wpr"
+  ],
+  "windowspresentationfoundation": [
+    "windows presentation foundation",
+    "wpf"
+  ],
+  "windowssubsystemforlinux": [
+    "windows subsystem for linux",
+    "wsl"
+  ]
+}

@@ -124,5 +124,6 @@ echo "Evaluating retrieval questions"
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
   "$python_bin" evaluate_retrieval.py \
     --model-path "$embedding_model_dir" \
+    --synonyms-path "$script_dir/../mcp-local/name-synonyms.json" \
     --top-k "$top_k" \
     "${eval_args[@]}"

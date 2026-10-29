@@ -258,11 +258,11 @@ def main():
                     "Regenerate the chunk artifact with the updated acquisition stage."
                 )
         heading_path = yaml_content.get("heading_path", []) or []
-        search_text = " ".join(
+        search_text = "\n\n".join(
             str(value)
             for value in [
                 yaml_content.get("title", ""),
-                " ".join(heading_path),
+                *heading_path,
                 yaml_content.get("heading", ""),
                 yaml_content.get("doc_type", ""),
                 yaml_content.get("product", ""),
