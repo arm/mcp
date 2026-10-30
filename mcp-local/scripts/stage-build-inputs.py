@@ -11,13 +11,12 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 from urllib.request import urlopen
-
 
 MCP_LOCAL = Path(__file__).resolve().parents[1]
 REPOSITORY = MCP_LOCAL.parent

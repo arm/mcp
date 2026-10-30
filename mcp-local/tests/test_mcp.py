@@ -13,16 +13,17 @@
 # limitations under the License.
 
 import json
-import constants
 import os
 import subprocess
 import time
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
+import constants
 import pytest
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.waiting_utils import wait_for_logs
+
 
 def _encode_mcp_message(payload: dict) -> bytes:
     # FastMCP stdio expects raw JSON per message (newline-delimited).
@@ -186,7 +187,8 @@ def test_mcp_stdio_transport_responds(platform):
                 "params": {"uri": f"skill://{name}/SKILL.md"},
             }))
             document = _read_response(request_id)["result"]["contents"][0]["text"]
-            assert document.startswith("---\n")
+            bundled_file = repo_root.parent / "arm_mcp_definitions/skills" / name / "SKILL.md"
+            assert document == bundled_file.read_text()
             raw_socket.sendall(_encode_mcp_message({
                 "jsonrpc": "2.0", "id": request_id + 1, "method": "prompts/get",
                 "params": {"name": name},

@@ -16,10 +16,9 @@ import json
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Any, Optional
 
 from .config import WORKSPACE_DIR
-
 
 LOG_FILE_NAME = "mcp-traffic.jsonl"
 
@@ -31,7 +30,7 @@ def _now_iso() -> str:
 def log_invocation_reason(
     tool: str,
     reason: Optional[str],
-    args: Optional[Dict[str, Any]] = None,
+    args: Optional[dict[str, Any]] = None,
 ) -> str:
     """
     Append a JSONL call entry to the workspace traffic log.

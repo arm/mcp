@@ -7,11 +7,12 @@ reproducible build inputs, and the reviewed release workflows.
 
 - **`mcp-local/`**: The MCP server implementation
   - `server.py`: FastMCP server with knowledge-base search and skill registration
-  - `skills/`: Canonical CLI Agent Skills, also served as MCP resources and prompts
-  - `skill_catalog.py`: FastMCP skill provider and prompt registration
   - `utils/`: Helper modules for each tool
   - `data/`: Pre-built knowledge base (embeddings and metadata)
   - `Dockerfile`: Multi-stage Docker build
+- **`arm_mcp_definitions/`**: Knowledge-search contract, server instructions, skill
+  resources/prompts, and canonical CLI Agent Skills. Each server supplies its own
+  search handler; see [sharing registrations](docs/shared-registrations.md).
 - **`embedding-generation/`**: Scripts for regenerating the knowledge base from source documents
 - **`arm_kb_search/`**: The independently versioned Python package used by
   other applications
@@ -156,7 +157,7 @@ docker run --rm \
       llvm-mca --version
       git --version
       migrate-ease-cpp --help >/dev/null
-      python -c "import magic, requests; from utils.docker_utils import check_docker_image_architectures"'
+      python -c "import magic, requests; from arm_mcp_definitions import register_capabilities"'
 ```
 
 The packaged embedding model can be checked separately without network
