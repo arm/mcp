@@ -11,14 +11,14 @@ description: Download and run migrate-ease compatibility scanners to assess Arm 
 
 ## Execution Workflow
 
-1. **Target Setup: & Parameter Mapping**
+1. **Target Setup & Parameter Mapping:**
 * Map target `--march` from user input (defaults to `armv8-a`). 
 * If the user specifies cloud hosting, map via `--vendor` (e.g., AWS, GCP) and `--instance-type` (e.g., c7g) instead of `--march`.
 
 2. **Isolate Environment:** 
 Run all tool setup tasks outside the current workspace tree (inside `/tmp`) to protect local Git change tracking from context bloat and trailing artifacts.
 
-3. **Install Migrate Ease from GitHub**
+3. **Install Migrate Ease from GitHub:**
 Download Migrate Ease from its canonical GitHub repository into the isolated temporary area, install its Python requirements in a dedicated virtual environment, and record the resolved Git commit. Do not install into the system Python environment or use `sudo`.
 
 ```sh
@@ -26,18 +26,15 @@ source_dir="/tmp/target-checkout"
 tool_root="$(mktemp -d)"
 report_dir="$(mktemp -d)"
 
-
-# Clone and setup tool environment
 git clone --depth 1 https://github.com/migrate-ease/migrate-ease.git "$tool_root/migrate-ease"
 python3 -m venv "$tool_root/venv"
 "$tool_root/venv/bin/python" -m pip install -r "$tool_root/migrate-ease/requirements.txt"
 
-# Log version control state for reproducibility
 git -C "$tool_root/migrate-ease" rev-parse HEAD
 export PYTHONPATH="$tool_root/migrate-ease"
 ```
 
-4. **Execute Scanner Environment**
+4. **Execute Scanner Environment:**
 Invoke the module using its specific language-scanner designation. 
 
 * **For Local Directories:**
@@ -73,5 +70,5 @@ jq -s '.' "$report_dir"/*.json > "$report_dir/consolidated_report.json"
 * **Strict Confirmation Gate:** Do not start the native web server or attempt to launch a local browser window until the user gives an explicit affirmative response.
 * **Localhost HTML Report:** When the user has confirmed, generate the HTML report, bind its server to `127.0.0.1` rather than all interfaces, and open `consolidated_report.html` through the localhost URL instead of relying on a local-file association.
 * **Strict Fail-Fast:** If downloading or installing Migrate Ease fails, a scanner command fails, a report is missing, or formatting breaks, mark the segment as failed/incomplete. Never synthesize arbitrary metrics or metrics counts.
-* **Exclusion Targets:** Automatically exclude standard dependency targets (`.venv`, `node_modules`), caches (`__pycache__`), and version control metadata (`.git`) via scanner arguments or directory skipping.
+* **Exclusion Targets:** Automatically exclude & report out standard dependency targets (`.venv`, `node_modules`), caches (`__pycache__`), and version control metadata (`.git`) via scanner arguments or directory skipping.
 * **Arm-Specific Guidance:** Use `knowledge_base_search` for Arm-specific dependency guidance.
