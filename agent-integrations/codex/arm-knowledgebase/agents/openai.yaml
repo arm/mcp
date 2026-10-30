@@ -1,0 +1,10 @@
+interface:
+  display_name: "Arm Knowledge Base"
+  short_description: "Search Arm guidance with sourced answers"
+  default_prompt: "Use $arm-knowledgebase to answer this Arm technical question with sources from the Arm knowledge base."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "arm-mcp"
+      description: "Arm MCP Server knowledge-base search"
