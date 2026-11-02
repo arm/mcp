@@ -356,12 +356,18 @@ def test_nonintrinsic_chunk_is_unchanged():
 
 
 @pytest.mark.parametrize("legacy_views", [False, True])
-def test_prepared_chunks_roundtrip_without_reparsing(tmp_path, monkeypatch, gc, legacy_views):
+@pytest.mark.parametrize("isa,fallback", [
+    ("Neon", False), ("SME and SME2 / SVE2", False), ("SME and SME2 / SVE2", True),
+])
+def test_prepared_chunks_roundtrip_without_reparsing(tmp_path, monkeypatch, gc, legacy_views, isa, fallback):
     source = tmp_path / "intrinsics"
     source.mkdir()
     monkeypatch.setenv("INTRINSIC_CHUNKS_DIR", str(source))
     monkeypatch.setenv("YAML_DATA_DIR", str(tmp_path / "guides"))
-    raw = {**chunk(), "uuid": "a", "title": "Arm Intrinsics - vaddq_u8"}
+    raw = {**chunk(isa), "uuid": "a", "title": "Arm Intrinsics - vaddq_u8"}
+    if fallback:
+        raw["product"] = isa
+        raw["content"] = raw["content"].split("architecture. ", 1)[1]
     if legacy_views:
         raw["embedding_texts"] = {"compact": "stale compact text", "detailed": "stale detailed text"}
     path = source / "chunk_a.yaml"
@@ -384,6 +390,9 @@ def test_prepared_chunks_roundtrip_without_reparsing(tmp_path, monkeypatch, gc, 
     gc.prepare_intrinsic_chunks()
     assert path.read_text() == prepared
     record = yaml.safe_load(prepared)
+    assert record["product"] == isa
+    assert record["heading_path"] == [isa, "vaddq_u8"]
+    assert record["embedding_text"].startswith(f"{isa} intrinsic vaddq_u8.")
     assert record["keywords"] == "vaddq_u8, neon, addition"
     assert isinstance(record.get("embedding_text"), str)
     assert "16 lanes of 8-bit unsigned integer" in record["embedding_text"]
@@ -398,6 +407,8 @@ def test_prepared_chunks_roundtrip_without_reparsing(tmp_path, monkeypatch, gc, 
     saved = json.loads((tmp_path / "metadata.json").read_text())[0]
     assert saved["original_text"] == record["content"]
     assert saved["doc_type"] == "Intrinsic"
+    assert saved["product"] == isa
+    assert saved["heading_path"] == [isa, "vaddq_u8"]
     assert "embedding_text" not in saved
 
 
