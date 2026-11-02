@@ -18,7 +18,6 @@ import datetime
 import json
 import os
 import re
-import sys
 import uuid
 from pathlib import Path
 
@@ -366,141 +365,6 @@ def reconcile_ecosystem_sources(discover=True):
     ]
     all_sources = remaining[:position] + replacements + remaining[position:]
     known_source_urls = {row["url"] for row in all_sources}
-
-
-def createIntrinsicsDatabaseChunks():
-    def htmlToMarkdown(html_string):
-        # Step 0: Remove '<h4>Operation</h4>' as it isn't needed
-        html_string = re.sub(r"^<h4>Operation</h4>", "", html_string)
-
-        # Step 1: Replace <pre> tags with backticks for code block
-        html_string = re.sub(r"<pre>(.*?)</pre>", r"`\1`", html_string, flags=re.DOTALL)
-
-        # Step 2: Add newline after headers (like <h1>, <h2>, <h3>, etc.)
-        html_string = re.sub(r"<h[1-6]>(.*?)</h[1-6]>", r"\1\n", html_string)
-
-        # Step 3: Remove all other HTML tags
-        html_string = re.sub(r"<.*?>", "", html_string)
-
-        return html_string
-
-    # What devs care about:
-    #    What is this?              Description
-    #    Signature (code)           int8x8_t vadd_s8 (int8x8_t a, int8x8_t b);      Inputs and outputs
-    #    How to use it?             Add header file & compiler flag
-    #    Sudocode of how it works   'Operation' ID to then operation.json
-    #    URL to get more info       https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=vadd_s8
-
-    # Read in .json files
-    intrinsics_directory_path = os.getenv("INTRINSICS_DATAPATH")
-    with open(intrinsics_directory_path + "/intrinsics.json", "r") as file:
-        intrinsics = json.load(file)
-    with open(intrinsics_directory_path + "/operations.json", "r") as file:
-        operations = json.load(file)
-
-    for intrinsic in intrinsics:
-        intrinsic_content = f"The `{intrinsic['name']}` intrinsic is part of the {intrinsic['SIMD_ISA']} instruction set architecture."
-
-        # Only include aarch64 intrinsics
-        if "A64" in intrinsic["Architectures"]:
-            description = intrinsic["description"]
-            # Exclude descriptions that don't exist or are simply 'Add' or 'Vector move'
-            if len(description.split(" ")) > 5:
-                intrinsic_content += (
-                    f" Here is a brief intrinsic description: {description}\n\n"
-                )
-
-            # Define signature:
-            signature = f"{intrinsic['return_type']['value']} {intrinsic['name']} ({', '.join(intrinsic['arguments'])});"
-            intrinsic_content += f"The signature for this intrinsic function is as follows:\n`{signature}`\n\n"
-
-            # Tell how to use:
-            intrinsic_content += f"To use this {intrinsic['SIMD_ISA']} intrinsic, add the following to your C/C++ project:\n"
-            intrinsic_content += "1. Add compiler flags to ensure architecture-specific optimizations are present (for both GCC and ArmClang):\n"
-            if intrinsic["SIMD_ISA"] == "Neon":
-                intrinsic_content += "`-march=armv8-a+simd`"
-            elif intrinsic["SIMD_ISA"] == "sve":
-                intrinsic_content += "`-march=armv8-a+sve`"
-            elif intrinsic["SIMD_ISA"] == "sve2":
-                intrinsic_content += "`-march=armv8-a+sve2`"
-            else:
-                print(
-                    "Intrinsic processing issue. resolve and run script again. Intrinsic SIMD_ISA: ",
-                    intrinsic["SIMD_ISA"],
-                )
-                sys.exit(0)
-            intrinsic_content += (
-                "\n2. Add the now included .h header file containing the intrinsic:\n"
-            )
-            if intrinsic["SIMD_ISA"] == "Neon":
-                intrinsic_content += "`#include <arm_neon.h>`"
-            else:
-                intrinsic_content += "`#include <arm_sve.h>`"
-            intrinsic_content += "\nYou can enable more specific microarchitectural optimizations (such as instruction scheduling, vectorization, and cache usage patterns) using the -mcpu flag and specifying the CPU in your machine.\n\n"
-
-            # Sudocode if present
-            if "Operation" in intrinsic:
-                op_id = intrinsic["Operation"]
-                operation_text = next(
-                    (
-                        item["item"]["content"]
-                        for item in operations
-                        if item["item"]["id"] == op_id
-                    ),
-                    None,
-                )
-                if operation_text:
-                    intrinsic_content += f"This is the sudocode for how the {intrinsic['name']} intrinsic operates:\n"
-                    intrinsic_content += htmlToMarkdown(operation_text)
-                else:
-                    print(
-                        "Operation matching issue. Resolve and run script again. Operation ID: ",
-                        op_id,
-                    )
-                    sys.exit(0)
-
-            keywords = [
-                intrinsic["name"],
-                intrinsic["SIMD_ISA"],
-                intrinsic["instruction_group"].replace("|", ", "),
-                "Intrinsic",
-            ]
-
-            url = "https://developer.arm.com/architectures/instruction-sets/intrinsics/"
-
-            chunk = Chunk(
-                title=f"Arm Intrinsics - {intrinsic['name']}",
-                url=f"{url}#q={intrinsic['name']}",
-                uuid=str(uuid.uuid4()),
-                keywords=keywords,
-                content=intrinsic_content,
-            )
-
-            chunkSaveAndTrack(url, chunk)
-
-    """
-    content:
-        <description> if more than 5 words...otherwise leave out.
-    SIGNATURE
-        The signature for this inrinsic function is as follows:
-        <return_type[value]> <name> (<'arguments' as comma seperated list>);
-        
-    HOW TO USE
-        To use this <SIMD_ISA> intrinsic, do the following:
-        1. Add the now included .h header file containing the intrinsic:
-        `#include <arm_neon.h>`
-        `#include <arm_sve.h>`
-
-        2. Add compiler flags to ensure architecture-specific optimizations are present (for both GCC and ArmClang)
-        `-march=armv8-a+simd`
-        `-march=armv8-a+sve`
-        `-march=armv8-a+sve+sve2`
-        You can enable more specific microarchitectural optimizations (such as instruction scheduling, vectorization, and cache usage patterns) using the -mcpu flag and specifying your machine's CPU.
-
-    SUDOCODE
-        This is the sudocode for how the <name> intrinsic operates.
-        <sudocode>
-    """
 
 
 def processLearningPath(url, type, emit_chunks=True):
@@ -1123,9 +987,6 @@ def main():
         writer.writerow(
             ["URL", "Date", "Number of Words", "Number of Chunks", "Chunk IDs"]
         )
-
-    # c) Intrinsics
-    # createIntrinsicsDatabaseChunks()
 
     # 1) Get URLs and details from CSV
     csv_dict, csv_length = readInCSV(sources_file)
