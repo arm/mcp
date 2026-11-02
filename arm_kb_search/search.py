@@ -84,11 +84,11 @@ SUPPORT_QUESTION_PATTERN = re.compile(
 )
 # Numeric widths are syntax; the type bonus requires an actual signature match.
 ACLE_TYPE_PATTERN = re.compile(
-    r"^(?:sv)?(?:u?int|float|poly|bfloat|mfloat)\d+(?:x\d+){0,2}_t$|^svbool_t$"
+    r"^(?:sv)?(?:u?int|float|poly|bfloat|mfloat)\d+(?:x\d+){0,2}_t$|^(?:svbool_t|svcount_t|mve_pred16_t)$"
 )
 CODE_IDENTIFIER_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
 INTRINSIC_ISAS = {"neon": "neon", "asimd": "neon", "sve": "sve", "sve2": "sve2",
-                  "sme": "sme", "sme2": "sme", "za": "sme"}
+                  "sme": "sme", "sme2": "sme", "za": "sme", "helium": "helium", "mve": "helium"}
 # Acquisition adds these keywords to every install guide; they identify no product.
 GENERIC_INSTALL_GUIDE_KEYWORDS = {"build", "download"}
 SUPPORT_INTENT_TOKENS = {
@@ -149,7 +149,16 @@ def _evidence_tokens(tokens: Iterable[str]) -> List[str]:
 def _bracketed_identifiers(text: str) -> list[str]:
     """Keep complete catalog spellings as extra evidence, not fragments."""
     return [token for token in re.findall(r"[a-z0-9_.+\[\]-]+", text.lower())
-            if re.fullmatch(r"[a-z]\w*(?:\[\w+\]\w*)+", token.rstrip("."))]
+            if re.fullmatch(r"(?:[a-z_]\w*)?(?:\[\w+\]\w*)+", token.rstrip("."))]
+
+
+def _intrinsic_name_forms(heading: str) -> set[str]:
+    """Recognize catalog, typed and overloaded names, with optional MVE prefixes."""
+    name = heading.removeprefix("[__arm_]")
+    forms = {name.replace("[", "").replace("]", ""), re.sub(r"\[\w+\]", "", name)}
+    if heading.startswith("[__arm_]"):
+        forms |= {"__arm_" + form for form in forms}
+    return forms | {heading}
 
 
 def _technical_evidence(text: str | None) -> set[str]:
@@ -596,9 +605,9 @@ def build_bm25_index(
                   else _bm25_tokens(_search_text(item), synonyms))
         names = []
         if _normalized_doc_type(item.get("doc_type", "")) == "intrinsic":
-            name = str(item.get("heading") or "").lower().replace("[", "").replace("]", "")
-            if re.fullmatch(r"[a-z_][a-z0-9_]*", name):
-                names.append(literal_term(name))
+            for name in sorted(_intrinsic_name_forms(str(item.get("heading") or "").lower())):
+                if re.fullmatch(r"[a-z_][a-z0-9_]*", name):
+                    names.append(literal_term(name))
         corpus.append(tokens)
         aliases.append(names)
     if not any(corpus):
@@ -804,12 +813,16 @@ def _reference_record_bonus(
         return ECOSYSTEM_SUPPORT_BONUS
     if doc_type != "intrinsic":
         return 0.0
-    if heading and ({heading, heading.replace("[", "").replace("]", "")} & evidence_tokens):
+    if heading and (_intrinsic_name_forms(heading) & evidence_tokens):
         return INTRINSIC_EXACT_NAME_BONUS
     product = str(metadata.get("product") or "").lower()
-    if "sme" in query.intrinsic_isas and not product.startswith("sme"):
+    product_isas = {INTRINSIC_ISAS[token] for token in re.findall(r"[a-z0-9]+", product)
+                    if token in INTRINSIC_ISAS}
+    if "sve2" in product_isas:
+        product_isas.add("sve")
+    if "sme" in query.intrinsic_isas and "sme" not in product_isas:
         return 0.0
-    if not query.intrinsic_query or not any(product.startswith(isa) for isa in query.intrinsic_isas):
+    if not query.intrinsic_query or not (product_isas & query.intrinsic_isas):
         return 0.0
     signature = re.search(r"follows:\s*`([^`]+)`", str(metadata.get("original_text") or ""))
     signature_types = {token.removeprefix("sv") for token in tokenize_for_search(signature.group(1) if signature else "")

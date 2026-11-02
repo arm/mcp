@@ -748,9 +748,10 @@ def test_partial_catalog_names_do_not_receive_exact_bonus(query):
 
 
 @pytest.mark.parametrize("count", [1, 2])
-def test_exact_names_have_positive_scores_when_all_records_share_a_name(count):
+@pytest.mark.parametrize("name", ["svadd_f32_m.", "svadd_m."])
+def test_exact_names_have_positive_scores_when_all_records_share_a_name(count, name):
     metadata = [intrinsic("svadd[_f32]_m")["metadata"] for _ in range(count)]
-    hits = bm25_search("svadd_f32_m.", metadata, build_bm25_index(metadata))
+    hits = bm25_search(name, metadata, build_bm25_index(metadata))
     assert len(hits) == count
     assert all(hit["bm25_score"] > 0 for hit in hits)
 
@@ -761,7 +762,7 @@ def test_canonical_name_indexing_does_not_rewrite_other_document_types():
     assert bm25_search("example_s32", metadata, build_bm25_index(metadata)) == []
 
 
-@pytest.mark.parametrize("query", ["SVE load vector.", "svqrdmulh", "svmissing_s32.", "svqrdmulh_s32.extra"])
+@pytest.mark.parametrize("query", ["SVE load vector.", "svqrdmul", "svmissing_s32.", "svqrdmulh_s32.extra"])
 def test_alias_channel_leaves_nonmatching_sparse_scores_identical(query):
     metadata = [intrinsic("svqrdmulh[_s32]")["metadata"], chunk(1, search_text="SVE load vector examples")]
     # Compare the alias channel with ordinary BM25 over the same structured fields.
@@ -1286,3 +1287,49 @@ def test_url_name_evidence_preserves_encoded_identifier_boundaries(url, expected
     query = search_module._analyze_query("sklearn", synonyms)
     score = search_module._score_lexical_exactness(query, {"url": url, "original_text": "neutral"})
     assert score > 0 if expected_match else score == 0
+
+
+@pytest.mark.parametrize("question,isa,result_type", [
+    ("Which Helium intrinsic returns mve_pred16_t?", "Helium", "mve_pred16_t"),
+    ("Which MVE intrinsic returns mve_pred16_t?", "Helium", "mve_pred16_t"),
+    ("Which SVE intrinsic returns svcount_t?", "SME and SME2 / SVE2", "svcount_t"),
+    ("Which SVE2 intrinsic returns svuint8_t?", "SME and SME2 / SVE2", "svuint8_t"),
+    ("Which SME intrinsic returns svuint8_t?", "SME and SME2 / SVE2", "svuint8_t"),
+    ("Which SVE intrinsic returns svuint8_t?", "SVE2", "svuint8_t"),
+])
+def test_extended_catalog_families_use_existing_signature_bonus(question, isa, result_type):
+    query = search_module._analyze_query(question)
+    row = intrinsic("matching", isa, f"{result_type} matching(void);")["metadata"]
+    assert search_module._reference_record_bonus(query, row, "intrinsic") == pytest.approx(.35)
+
+
+@pytest.mark.parametrize("heading,isa,name", [
+    ("[__arm_]vcreateq_f16", "Helium", "[__arm_]vcreateq_f16"),
+    ("[__arm_]vcreateq_f16", "Helium", "__arm_vcreateq_f16"),
+    ("[__arm_]vcreateq_f16", "Helium", "vcreateq_f16"),
+    ("[__arm_]vaddq[_s8]", "Helium", "__arm_vaddq"),
+    ("[__arm_]vaddq[_s8]", "Helium", "vaddq"),
+    ("svadd[_f32]_m", "SVE", "svadd_m"),
+    ("svadd[_n_f32]_m", "SVE", "svadd_m"),
+    ("svmopa_za32[_f32]_m", "SME and SME2", "svmopa_za32_m"),
+])
+def test_intrinsic_name_forms_have_exact_name_and_sparse_evidence(heading, isa, name):
+    row = intrinsic(heading, isa, f"void {heading}(void);")["metadata"]
+    row["search_text"] = "Vector operation"
+    distractor = intrinsic("another", isa, "void another(void);")["metadata"]
+    query = search_module._analyze_query(f"How do I use {name}?")
+    assert search_module._reference_record_bonus(query, row, "intrinsic") == pytest.approx(.45)
+    result = bm25_search(name, [distractor, row], build_bm25_index([distractor, row]), k=1)
+    assert result[0]["metadata"]["heading"] == row["heading"]
+
+
+def test_overloaded_name_keeps_all_typed_variants_without_matching_other_operations():
+    rows = [intrinsic(name, "SVE", f"void {name}(void);")["metadata"]
+            for name in ["svadd[_f32]_m", "svadd[_s32]_m", "svsub[_f32]_m"]]
+    for row in rows:
+        row["search_text"] = "Vector operation"
+    query = search_module._analyze_query("svadd_m")
+    bonuses = [search_module._reference_record_bonus(query, row, "intrinsic") for row in rows]
+    assert bonuses == pytest.approx([.45, .45, 0])
+    results = bm25_search("svadd_m", rows, build_bm25_index(rows), k=3)
+    assert {result["metadata"]["heading"] for result in results} == {"svadd[_f32]_m", "svadd[_s32]_m"}

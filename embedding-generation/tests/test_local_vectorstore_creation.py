@@ -273,6 +273,10 @@ def test_intrinsics_embed_one_source_card_without_splitting_full_text(tokenizer,
     ("uint8_t **", "uint8_t **"),
     ("const uint8_t *const *", "const uint8_t *const *"),
     ("svbool_t", "scalable predicate mask"),
+    ("mve_pred16_t", "16-bit MVE predicate mask"),
+    ("svcount_t", "scalable predicate-as-counter"),
+    ("mfloat8x16_t", "16 lanes of 8-bit modal floating point, 128-bit vector"),
+    ("svmfloat8_t", "scalable vector of 8-bit modal floating point elements"),
 ])
 def test_intrinsic_source_type_descriptions(ctype, description):
     assert intrinsic_source.intrinsic_type_description(ctype) == description
@@ -335,14 +339,14 @@ def test_card_preserves_operation_and_signature_but_omits_shared_template():
 
 
 def test_card_preserves_unexpanded_types_and_full_signature():
-    signature = "svcount_t example(enum future_pattern pattern, const int lane, mfloat8_t value);"
+    signature = "future_vector_t example(enum future_pattern pattern, const int lane, future_float_t value);"
     record = {"heading": "example", "product": "SVE", "keywords": "",
               "original_text": "The signature is as follows:\n`" + signature + "`\n"}
     text = intrinsic_source.intrinsic_embedding_text(record)
-    assert "Returns: svcount_t." in text
+    assert "Returns: future_vector_t." in text
     assert "Input pattern: enum future_pattern." in text
     assert "Input lane: signed integer scalar." in text
-    assert "Input value: mfloat8_t." in text
+    assert "Input value: future_float_t." in text
     assert text.endswith("Signature: " + signature)
 
 
