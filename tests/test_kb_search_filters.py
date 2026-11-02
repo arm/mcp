@@ -741,9 +741,15 @@ def test_canonical_names_survive_public_search_and_filters(catalog_name, query_f
                    hybrid_search(query, None, metadata, object(), index, eligible_ids=tuple(range(1, count))))
 
 
-@pytest.mark.parametrize("query", ["svadd[_f32]_m.extra", "svadd[_f32]_missing", "svadd[_f32_m"])
-def test_partial_catalog_names_do_not_receive_exact_bonus(query):
-    record = intrinsic("svadd[_f32]_m")["metadata"]
+@pytest.mark.parametrize("catalog_name,query", [
+    ("svadd[_f32]_m", "svadd[_f32]_m.extra"),
+    ("svadd[_f32]_m", "svadd[_f32]_missing"),
+    ("svadd[_f32]_m", "svadd[_f32_m"),
+    ("svqrdmulh[_s32]", "svqrdmulh[_s32].extra"),
+    ("svqrdmulh[_s32]", "svqrdmulh[_s32_missing"),
+])
+def test_partial_catalog_names_do_not_receive_exact_bonus(catalog_name, query):
+    record = intrinsic(catalog_name)["metadata"]
     assert search_module._reference_record_bonus(search_module._analyze_query(query), record, "intrinsic") == 0
 
 

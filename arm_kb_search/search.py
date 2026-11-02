@@ -165,7 +165,11 @@ def _technical_evidence(text: str | None) -> set[str]:
     text = (text or "").lower()
     for name in _bracketed_identifiers(text):
         text = text.replace(name, name.replace("[", "").replace("]", ""))
-    return set(_evidence_tokens(tokenize_for_search(text)))
+    # Remaining bracketed identifiers are invalid; do not score their fragments.
+    return set(_evidence_tokens(
+        token for word in basic_tokens(text) if "[" not in word and "]" not in word
+        for token in tokenize_for_search(word)
+    ))
 
 
 def _query_field_tokens(tokens: set[str], query_tokens: set[str]) -> set[str]:
