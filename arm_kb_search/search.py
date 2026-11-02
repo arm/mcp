@@ -165,11 +165,16 @@ def _technical_evidence(text: str | None) -> set[str]:
     text = (text or "").lower()
     for name in _bracketed_identifiers(text):
         text = text.replace(name, name.replace("[", "").replace("]", ""))
-    # Remaining bracketed identifiers are invalid; do not score their fragments.
-    return set(_evidence_tokens(
-        token for word in basic_tokens(text) if "[" not in word and "]" not in word
-        for token in tokenize_for_search(word)
-    ))
+    evidence = []
+    for word in basic_tokens(text):
+        # Accept empty array suffixes only on complete, recognized ACLE types.
+        base = re.sub(r"(?:\[\])+$", "", word.rstrip("."))
+        if ACLE_TYPE_PATTERN.fullmatch(base):
+            word = base
+        # Remaining bracketed identifiers are invalid; do not score their fragments.
+        if "[" not in word and "]" not in word:
+            evidence.extend(tokenize_for_search(word))
+    return set(_evidence_tokens(evidence))
 
 
 def _query_field_tokens(tokens: set[str], query_tokens: set[str]) -> set[str]:

@@ -660,6 +660,8 @@ def test_typed_intrinsic_question_prefers_reference_to_general_guide():
 
 @pytest.mark.parametrize("question,isa,matching_type,other_type,argument,other_bonus", [
     ("SVE intrinsic loading uint8_t into svuint32_t.", "SVE", "svuint32_t", "svint32_t", "uint8_t a", .225),
+    ("Which SVE intrinsic loads uint8_t[] into svuint32_t?", "SVE", "svuint32_t", "svint32_t", "uint8_t a", .225),
+    ("SVE intrinsic for uint8_t[][].", "SVE", "uint8_t", "uint16_t", "void", .10),
     ("SVE intrinsic for uint32_t.", "SVE", "svuint32_t", "svint32_t", "void", .10),
     ("Neon intrinsic returning poly128_t.", "Neon", "poly128_t", "poly16x8_t", "void", .10),
     ("Neon intrinsic returning float32x4_t.", "Neon", "float32x4_t", "float16x8_t", "void", .10),
@@ -672,6 +674,8 @@ def test_signature_types_distinguish_candidates(question, isa, matching_type, ot
     assert search_module._reference_record_bonus(query, matching["metadata"], "intrinsic") == pytest.approx(.35)
     assert search_module._reference_record_bonus(query, other["metadata"], "intrinsic") == pytest.approx(other_bonus)
     # Equal prose evidence makes ordering depend on the signature types.
+    for record in (matching, other):
+        record["metadata"]["original_text"] += f"\nTypes: {matching_type} {other_type}"
     matching["metadata"]["search_text"] = other["metadata"]["search_text"] = f"{isa} operations"
     assert search_module._rerank_candidates(query, [other, matching])[0]["metadata"] == matching["metadata"]
     control = replace(query, acle_types=set())
@@ -683,6 +687,7 @@ def test_signature_types_distinguish_candidates(question, isa, matching_type, ot
     ("Which SME intrinsic works with SVE uint8_t vectors?", 0),
     ("Which intrinsic loads bytes?", 0), ("Which SVE load reads bytes?", 0),
     ("Which SVE intrinsic returns svuint256_t?", .10),
+    ("Which SVE intrinsic loads uint8_t[].extra?", .10), ("Which SVE intrinsic loads uint8_t[?", .10),
 ])
 def test_intrinsic_bonus_requires_intent_isa_and_signature_evidence(question, expected):
     query = search_module._analyze_query(question)
@@ -747,6 +752,7 @@ def test_canonical_names_survive_public_search_and_filters(catalog_name, query_f
     ("svadd[_f32]_m", "svadd[_f32_m"),
     ("svqrdmulh[_s32]", "svqrdmulh[_s32].extra"),
     ("svqrdmulh[_s32]", "svqrdmulh[_s32_missing"),
+    ("svqrdmulh[_s32]", "svqrdmulh[]"),
 ])
 @pytest.mark.parametrize("prose", ["", " vector"])
 def test_partial_catalog_names_do_not_receive_exact_bonus(catalog_name, query, prose):
