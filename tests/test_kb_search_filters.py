@@ -1352,6 +1352,8 @@ def test_explicit_isa_keeps_shared_intrinsic_names_in_the_requested_family(isa, 
     rows = [intrinsic("vaddq_s8", "Neon")["metadata"],
             intrinsic("[__arm_]vaddq[_s8]", "Helium")["metadata"]]
     rows += [chunk(i, search_text="Unrelated reference") for i in range(2, 7)]
+    if isa == "Helium" and name == "vaddq_s8":
+        name = "__arm_vaddq_s8"
     query = f"{isa} {name}"
     index = build_bm25_index(rows)
     wrong = rows[1 - expected]
@@ -1367,6 +1369,38 @@ def test_explicit_isa_keeps_shared_intrinsic_names_in_the_requested_family(isa, 
     assert hybrid_search(query, None, rows, object(), index, eligible_ids=(1 - expected,)) == []
     reranked = search_module.rerank_candidates(query, [{"metadata": row} for row in rows[:2]])
     assert [hit["metadata"] for hit in reranked] == [rows[expected]]
+
+
+@pytest.mark.parametrize("query,expected,bonuses", [
+    ("SVE2 svadd_f32_m", {2, 3}, [0, 0, .45, 0]),
+    ("SVE2 svadd_m", {2, 3}, [0, 0, .45, .45]),
+    ("SVE2 intrinsic", {2, 3}, [0, 0, .10, .10]),
+    ("Compare vaddq_u8 with SVE svadd_u8_m", {0, 2, 3}, [.45, 0, 0, .45]),
+    ("Helium vaddq_u8", {0, 1}, [.45, .45, 0, 0]),
+    ("Compare [__arm_]vaddq[_u8] with SVE svadd[_u8]_m", {1, 2, 3}, [0, .45, 0, .45]),
+    ("Compare vaddq_u8[] with SVE svadd_u8_m", {2, 3}, [0, 0, 0, .45]),
+])
+@pytest.mark.parametrize("eligible_ids", [None, (3, 2, 1, 0)])
+def test_isa_scope_keeps_compatible_and_explicitly_named_intrinsics(query, expected, bonuses, eligible_ids):
+    rows = [intrinsic("vaddq_u8", "Neon")["metadata"],
+            intrinsic("[__arm_]vaddq[_u8]", "Helium")["metadata"],
+            intrinsic("svadd[_f32]_m", "SVE")["metadata"],
+            intrinsic("svadd[_u8]_m", "SVE")["metadata"]]
+    rows += [chunk(i, search_text="Unrelated reference") for i in range(4, 10)]
+    analysis = search_module._analyze_query(query)
+    assert [search_module._reference_record_bonus(analysis, row, "intrinsic") for row in rows[:4]] == pytest.approx(bonuses)
+    index = build_bm25_index(rows)
+    sparse = bm25_search(query, rows, index, k=10, eligible_ids=eligible_ids)
+    hits = hybrid_search(query, index_for([[0, 0]] * len(rows)), rows, QueryModel(), index,
+                         k=10, eligible_ids=eligible_ids)
+    named = {i for i, bonus in enumerate(bonuses) if bonus == .45} or expected
+    assert named <= {hit["metadata_id"] for hit in sparse if hit["metadata_id"] < 4} <= expected
+    assert {hit["metadata_id"] for hit in hits if hit["metadata_id"] < 4} == expected
+    reranked = search_module.rerank_candidates(query, [{"metadata": row} for row in rows[:4]])
+    assert {hit["metadata"]["heading"] for hit in reranked} == {rows[i]["heading"] for i in expected}
+    rejected = tuple(i for i in range(4) if i not in expected)
+    assert bm25_search(query, rows, index, eligible_ids=rejected) == []
+    assert hybrid_search(query, None, rows, object(), index, eligible_ids=rejected) == []
 
 
 @pytest.mark.parametrize("query", ["vaddq_s8", "Neon and Helium vaddq_s8"])

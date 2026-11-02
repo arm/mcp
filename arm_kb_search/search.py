@@ -161,26 +161,35 @@ def _intrinsic_name_forms(heading: str) -> set[str]:
     return forms | {heading}
 
 
-@lru_cache(maxsize=128)
-def _intrinsic_product_isas(product: str) -> frozenset[str]:
-    isas = {INTRINSIC_ISAS[token] for token in re.findall(r"[a-z0-9]+", product.lower())
-            if token in INTRINSIC_ISAS}
+def _intrinsic_isas(tokens: Iterable[str]) -> set[str]:
+    isas = {INTRINSIC_ISAS[token] for token in tokens if token in INTRINSIC_ISAS}
     if "sve2" in isas:
         isas.add("sve")
-    return frozenset(isas)
+    return isas
 
 
-def _intrinsic_matches_isa(metadata: dict, query_isas: set[str]) -> bool:
+@lru_cache(maxsize=128)
+def _intrinsic_product_isas(product: str) -> frozenset[str]:
+    return frozenset(_intrinsic_isas(re.findall(r"[a-z0-9]+", product.lower())))
+
+
+def _intrinsic_full_name(heading: str) -> str:
+    """Retain type suffixes and the __arm_ prefix when removing catalog brackets."""
+    return heading.lower().replace("[", "").replace("]", "")
+
+
+def _intrinsic_matches_isa(metadata: dict, query_isas: set[str], evidence: set[str]) -> bool:
     return (not query_isas or _normalized_doc_type(metadata.get("doc_type", "")) != "intrinsic"
-            or bool(query_isas & _intrinsic_product_isas(str(metadata.get("product") or ""))))
+            or bool(query_isas & _intrinsic_product_isas(str(metadata.get("product") or "")))
+            or _intrinsic_full_name(str(metadata.get("heading") or "")) in evidence)
 
 
-def _intrinsic_eligible_ids(metadata, query_isas, eligible_ids):
-    """Apply an explicit ISA only to intrinsic records, preserving other documents."""
+def _intrinsic_eligible_ids(metadata, query_isas, evidence, eligible_ids):
+    """Keep compatible or explicitly named intrinsics, preserving other documents."""
     if not query_isas:
         return eligible_ids
     candidates = range(len(metadata)) if eligible_ids is None else eligible_ids
-    selected = tuple(i for i in candidates if _intrinsic_matches_isa(metadata[i], query_isas))
+    selected = tuple(i for i in candidates if _intrinsic_matches_isa(metadata[i], query_isas, evidence))
     return eligible_ids if len(selected) == len(candidates) else selected
 
 
@@ -362,7 +371,7 @@ def _analyze_query(query: str, synonyms: Synonyms = EMPTY) -> _QueryAnalysis:
         ),
         intrinsic_query=bool(acle_types or evidence_tokens & {"intrinsic", "intrinsics"}),
         acle_types=acle_types,
-        intrinsic_isas={INTRINSIC_ISAS[token] for token in evidence_tokens if token in INTRINSIC_ISAS},
+        intrinsic_isas=_intrinsic_isas(evidence_tokens),
         code_identifiers={token for token in evidence_tokens
                           if CODE_IDENTIFIER_PATTERN.fullmatch(token)
                           and not token.endswith("_t") and token not in GENERIC_ENTITY_TOKENS
@@ -724,8 +733,8 @@ def bm25_search(
     if bm25_index is None or eligible_ids == ():
         return []
     query_evidence = _technical_evidence(query)
-    query_isas = {INTRINSIC_ISAS[token] for token in query_evidence if token in INTRINSIC_ISAS}
-    eligible_ids = _intrinsic_eligible_ids(metadata, query_isas, eligible_ids)
+    query_isas = _intrinsic_isas(query_evidence)
+    eligible_ids = _intrinsic_eligible_ids(metadata, query_isas, query_evidence, eligible_ids)
     if eligible_ids == ():
         return []
     tokens = ["arm64" if token == "aarch64" else token for token in analyze(query, synonyms, query=True)]
@@ -855,6 +864,8 @@ def _reference_record_bonus(
         return ECOSYSTEM_SUPPORT_BONUS
     if doc_type != "intrinsic":
         return 0.0
+    if _intrinsic_full_name(heading) in evidence_tokens:
+        return INTRINSIC_EXACT_NAME_BONUS
     product_isas = _intrinsic_product_isas(str(metadata.get("product") or ""))
     if query.intrinsic_isas and not (product_isas & query.intrinsic_isas):
         return 0.0
@@ -960,7 +971,8 @@ def _rerank_candidates(
     reranked: List[Dict[str, Any]] = []
     for candidate in candidates:
         metadata = candidate["metadata"]
-        if is_navigation_only(metadata) or not _intrinsic_matches_isa(metadata, query.intrinsic_isas):
+        if is_navigation_only(metadata) or not _intrinsic_matches_isa(
+                metadata, query.intrinsic_isas, query.evidence_tokens):
             continue
         full_text = _search_text(metadata)
         body_tokens = _body_tokens(candidate, bm25_index)
@@ -1118,7 +1130,8 @@ def hybrid_search(
     if not tokenize_for_search(query):
         return []
     query_analysis = _analyze_query(query, synonyms)
-    eligible_ids = _intrinsic_eligible_ids(metadata, query_analysis.intrinsic_isas, eligible_ids)
+    eligible_ids = _intrinsic_eligible_ids(
+        metadata, query_analysis.intrinsic_isas, query_analysis.evidence_tokens, eligible_ids)
     if eligible_ids == ():
         return []
 
