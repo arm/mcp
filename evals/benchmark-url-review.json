@@ -1,0 +1,353 @@
+[
+  {
+    "id": "B001",
+    "topic": "cloud-server",
+    "intent": "setup",
+    "question": "I want an Ubuntu EC2 instance that runs on Graviton. Which image architecture should I select in the launch wizard?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/csp/aws/#select-os-image",
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arcee-foundation-model-on-aws/01_launching_a_graviton4_instance/#launch-and-configure-the-ec2-instance"
+    ]
+  },
+  {
+    "id": "B007",
+    "topic": "cloud-server",
+    "intent": "troubleshooting",
+    "question": "SSH to my Ubuntu EC2 VM returns Permission denied (publickey), and I have been using root as the login name. What username and key arguments should I check?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/csp/aws/#ssh-client-connect",
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/aws-terraform/terraform/#ssh-into-ec2-instance"
+    ]
+  },
+  {
+    "id": "B236",
+    "topic": "simd-matrix-extensions",
+    "intent": "comparison",
+    "question": "When moving a Neon algorithm to SVE, do I have to choose a fixed wider vector size, or can one binary adapt to different SVE implementations?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sve/sve_basics/#arm-sve",
+      "https://learn.arm.com/insights/sve/#vector-length-agnostic"
+    ]
+  },
+  {
+    "id": "B241",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "Can an SME function have a different SVE vector length in streaming mode than the rest of my program?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/3-streaming-mode/#streaming-mode-behavior-and-compiler-handling",
+      "https://developer.arm.com/documentation/109246/0101/SME-Overview/Streaming-SVE-mode?lang=en",
+      "https://learn.arm.com/insights/sme/#streaming-sve-mode"
+    ]
+  },
+  {
+    "id": "B243",
+    "topic": "simd-matrix-extensions",
+    "intent": "comparison",
+    "question": "What does SME2 add for processing multiple vectors that was not part of the original SME feature set?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/overview/#key-architectural-features-of-sme2",
+      "https://developer.arm.com/documentation/109974/0100/What-is-SME-SME2-?lang=en"
+    ]
+  },
+  {
+    "id": "B250",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "Why does using C[i-1] to compute C[i] make straightforward SIMD vectorization of a loop difficult?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/loop-reflowing/autovectorization-limits/#no-data-inter-dependency-between-iterations",
+      "https://learn.arm.com/insights/sve/#compiler-auto-vectorize",
+      "https://learn.arm.com/insights/sve/#code-patterns-difficult"
+    ]
+  },
+  {
+    "id": "B255",
+    "topic": "simd-matrix-extensions",
+    "intent": "optimization",
+    "question": "I use SVE2 MATCH to search long arrays. What loop-level changes should I try to improve throughput?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sve2-match/implement-search/#create-an-optimized-sve2-match-implementation"
+    ]
+  },
+  {
+    "id": "B261",
+    "topic": "intrinsics",
+    "intent": "reference",
+    "question": "What SVE intrinsic should I use for the runtime loop increment when each iteration processes one vector of 32-bit elements?",
+    "expected_urls": [
+      "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=svcntw",
+      "https://learn.arm.com/insights/sve/#svcntb-svcnth-svcntw",
+      "https://learn.arm.com/insights/sve/#better-compiler-auto"
+    ]
+  },
+  {
+    "id": "B262",
+    "topic": "intrinsics",
+    "intent": "reference",
+    "question": "How do I create an SVE predicate for 32-bit lanes whose indexes are below an unsigned 64-bit loop bound?",
+    "expected_urls": [
+      "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=svwhilelt_b32[_u64]",
+      "https://learn.arm.com/insights/sve/#svwhilelt-work-important"
+    ]
+  },
+  {
+    "id": "B263",
+    "topic": "intrinsics",
+    "intent": "conceptual",
+    "question": "In svadd_f32_m(pg, a, b), where do the values of inactive result lanes come from?",
+    "expected_urls": [
+      "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=svadd[_f32]_m",
+      "https://learn.arm.com/insights/sve/#merging-m-zeroing",
+      "https://learn.arm.com/insights/sve/#add-subtract-multiply"
+    ]
+  },
+  {
+    "id": "B264",
+    "topic": "intrinsics",
+    "intent": "reference",
+    "question": "Which SVE load intrinsic reads uint8_t values and zero-extends them directly into uint32_t vector lanes under a predicate?",
+    "expected_urls": [
+      "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=svld1ub_u32",
+      "https://learn.arm.com/insights/sve/#load-values-smaller",
+      "https://learn.arm.com/insights/sve/#svcntb-svcnth-svcntw"
+    ]
+  },
+  {
+    "id": "B265",
+    "topic": "intrinsics",
+    "intent": "conceptual",
+    "question": "What does svptest_any return when none of the lanes selected by its governing predicate are active?",
+    "expected_urls": [
+      "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=svptest_any",
+      "https://learn.arm.com/insights/sve/#test-if-lane"
+    ]
+  },
+  {
+    "id": "B266",
+    "topic": "intrinsics",
+    "intent": "reference",
+    "question": "Which SME intrinsic gives the number of 32-bit elements in a streaming vector for sizing an FP32 ZA tile?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/7-sme2-matmul-intr/#implementation",
+      "https://learn.arm.com/insights/sme/#tile-matrix-operations",
+      "https://learn.arm.com/insights/sme/#write-custom-sme2"
+    ]
+  },
+  {
+    "id": "B268",
+    "topic": "intrinsics",
+    "intent": "reference",
+    "question": "Which SME intrinsic stores a horizontal 32-bit ZA tile slice directly to memory under a predicate?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/7-sme2-matmul-intr/#outer-product-multiplication",
+      "https://learn.arm.com/insights/sme/#dump-za-tile",
+      "https://learn.arm.com/insights/sme/#write-custom-sme2"
+    ]
+  },
+  {
+    "id": "B269",
+    "topic": "intrinsics",
+    "intent": "conceptual",
+    "question": "Why does the FP32 svmopa_za32_m call take separate predicates for the two input vectors?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/7-sme2-matmul-intr/#outer-product-multiplication",
+      "https://learn.arm.com/insights/sme/#outer-product-instruction"
+    ]
+  },
+  {
+    "id": "B270",
+    "topic": "intrinsics",
+    "intent": "troubleshooting",
+    "question": "After reusing a ZA tile, my svmopa_za32_m results include values from the previous multiplication. What initialization step should I check before starting a fresh accumulation?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/cross-platform/multiplying-matrices-with-sme2/7-sme2-matmul-intr/#outer-product-multiplication",
+      "https://learn.arm.com/insights/sme/#tile-matrix-operations",
+      "https://learn.arm.com/insights/sme/#manage-za-tile"
+    ]
+  },
+  {
+    "id": "B314",
+    "topic": "containers-kubernetes-ci",
+    "intent": "setup",
+    "question": "How do you request Arm nodes in GKE Autopilot, and what does kubernetes.io/arch=arm64 select on newer versus older cluster versions?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/kubernetes-engine/docs/how-to/autopilot-arm-workloads#how-to-request-arm"
+    ]
+  },
+  {
+    "id": "B318",
+    "topic": "performance",
+    "intent": "setup",
+    "question": "How can I collect a quick report of my Arm Linux system configuration for performance analysis?",
+    "expected_urls": [
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/sysreport/run-sysreport/#run-sysreport"
+    ]
+  },
+  {
+    "id": "B352",
+    "topic": "cloud-server",
+    "intent": "reference",
+    "question": "What C4A bare metal instance options does Compute Engine provide, including the machine type, vCPU count, memory, and network bandwidth?",
+    "expected_urls": [
+      "https://docs.cloud.google.com/compute/docs/instances/bare-metal-instances#c4a-metal"
+    ]
+  },
+  {
+    "id": "B410",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "Why can't I put svfloat32_t members in a persistent C struct even though local vector variables compile?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/sve/#sizeless-sve-types"
+    ]
+  },
+  {
+    "id": "B411",
+    "topic": "simd-matrix-extensions",
+    "intent": "troubleshooting",
+    "question": "My SVE gather-increment-scatter histogram loses updates when several lanes choose the same bucket. Why?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/sve/#scatter-store-svst1",
+      "https://learn.arm.com/insights/sve/#gather-scatter-restructuring"
+    ]
+  },
+  {
+    "id": "B412",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "Why can an SVE floating-point reduction change its low bits when vector length changes, despite identical inputs?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/sve/#reductions-like-summing",
+      "https://learn.arm.com/insights/sve/#sum-active-elements"
+    ]
+  },
+  {
+    "id": "B413",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "Can svldff1 suppress a fault on its first active element when earlier lanes are inactive?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/sve/#first-faulting-load",
+      "https://learn.arm.com/insights/sve/#non-faulting-load"
+    ]
+  },
+  {
+    "id": "B414",
+    "topic": "simd-matrix-extensions",
+    "intent": "troubleshooting",
+    "question": "My library contains SVE instructions but might select a fallback. How can I prove my hot function executes SVE?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/sve/#verify-application-actually"
+    ]
+  },
+  {
+    "id": "B415",
+    "topic": "simd-matrix-extensions",
+    "intent": "reference",
+    "question": "Must a valid float buffer begin on a whole-vector boundary before I can use SVE contiguous loads?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/sve/#handle-data-s"
+    ]
+  },
+  {
+    "id": "B416",
+    "topic": "simd-matrix-extensions",
+    "intent": "setup",
+    "question": "Which function attribute lets my shared-library kernel use streaming mode while keeping an ordinary caller interface?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/sme/#abi-considerations-calling"
+    ]
+  },
+  {
+    "id": "B417",
+    "topic": "simd-matrix-extensions",
+    "intent": "conceptual",
+    "question": "My device exposes SME2. Can I dispatch non-streaming SVE2 code without checking SVE2 separately?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/sme/#relationship-neon-sve2"
+    ]
+  },
+  {
+    "id": "B418",
+    "topic": "simd-matrix-extensions",
+    "intent": "optimization",
+    "question": "Adding a non-streaming logging callback inside my SME loop increases overhead. Which mode-boundary costs should I investigate?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/sme/#common-performance-pitfalls"
+    ]
+  },
+  {
+    "id": "B419",
+    "topic": "simd-matrix-extensions",
+    "intent": "optimization",
+    "question": "My SME kernel loses to Neon on tiny matrices despite fast inner-loop arithmetic. What should I measure?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/sme/#common-performance-pitfalls",
+      "https://learn.arm.com/insights/sme/#types-workloads-see"
+    ]
+  },
+  {
+    "id": "B420",
+    "topic": "simd-matrix-extensions",
+    "intent": "reference",
+    "question": "Does ZA's lazy-save protocol preserve an SME2 caller's ZT0 lookup table across helper calls?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/sme/#abi-considerations-calling"
+    ]
+  },
+  {
+    "id": "B421",
+    "topic": "simd-matrix-extensions",
+    "intent": "reference",
+    "question": "Our processor supports SME. Is FP64 outer-product accumulation guaranteed, or does it require another architectural feature?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/sme/#instructions-sme2-add"
+    ]
+  },
+  {
+    "id": "B422",
+    "topic": "ai-ml",
+    "intent": "setup",
+    "question": "Does torch.inference_mode() disable dropout before ExecuTorch export, or must I change the model's mode separately?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/executorch/#prepare-pretrained-pytorch"
+    ]
+  },
+  {
+    "id": "B423",
+    "topic": "ai-ml",
+    "intent": "setup",
+    "question": "After exporting external ExecuTorch weights, can I deploy a new .pte with an older .ptd having matching tensor shapes?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/executorch/#model-weights-stored"
+    ]
+  },
+  {
+    "id": "B424",
+    "topic": "ai-ml",
+    "intent": "troubleshooting",
+    "question": "ExecuTorch reports small planned tensor arenas, yet process memory stays high after XNNPACK delegation. What allocations can the plan omit?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/executorch/#executorch-memory-planning"
+    ]
+  },
+  {
+    "id": "B425",
+    "topic": "ai-ml",
+    "intent": "optimization",
+    "question": "Increasing ExecuTorch CPU threads helps one request but hurts latency under concurrent load. How should I choose the thread count?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/executorch/#configure-cpu-inference"
+    ]
+  },
+  {
+    "id": "B426",
+    "topic": "ai-ml",
+    "intent": "troubleshooting",
+    "question": "After an Android update, my bundled .pte changed but inference uses the previous model. What deployment cache should I check?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/executorch/#package-pte-model"
+    ]
+  }
+]
