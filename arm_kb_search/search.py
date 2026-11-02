@@ -152,11 +152,43 @@ def _bracketed_identifiers(text: str) -> list[str]:
             if re.fullmatch(r"(?:[a-z_]\w*)?(?:\[\w+\]\w*)+", token.rstrip("."))]
 
 
+def _intrinsic_name_forms(heading: str) -> set[str]:
+    """Recognize catalog, typed and overloaded names, with optional MVE prefixes."""
+    name = heading.removeprefix("[__arm_]")
+    forms = {name.replace("[", "").replace("]", ""), re.sub(r"\[\w+\]", "", name)}
+    if heading.startswith("[__arm_]"):
+        forms |= {"__arm_" + form for form in forms}
+    return forms | {heading}
+
+
+def _intrinsic_product_isas(product: str) -> set[str]:
+    isas = {INTRINSIC_ISAS[token] for token in re.findall(r"[a-z0-9]+", product.lower())
+            if token in INTRINSIC_ISAS}
+    if "sve2" in isas:
+        isas.add("sve")
+    return isas
+
+
+def _intrinsic_family_matches(query_isas: set[str], product_isas: Collection[str]) -> bool:
+    if "sme" in query_isas and "sme" not in product_isas:
+        return False
+    return not query_isas or not query_isas.isdisjoint(product_isas)
+
+
 def _technical_evidence(text: str | None) -> set[str]:
     text = (text or "").lower()
     for name in _bracketed_identifiers(text):
         text = text.replace(name, name.replace("[", "").replace("]", ""))
-    return set(_evidence_tokens(tokenize_for_search(text)))
+    evidence = []
+    for word in basic_tokens(text):
+        # Accept empty array suffixes only on complete, recognized ACLE types.
+        base = re.sub(r"(?:\[\])+$", "", word.rstrip("."))
+        if ACLE_TYPE_PATTERN.fullmatch(base):
+            word = base
+        # Remaining bracketed identifiers are invalid; do not score their fragments.
+        if "[" not in word and "]" not in word:
+            evidence.extend(tokenize_for_search(word))
+    return set(_evidence_tokens(evidence))
 
 
 def _query_field_tokens(tokens: set[str], query_tokens: set[str]) -> set[str]:
@@ -560,24 +592,41 @@ class _NameBM25(BM25Okapi):
             self.idf.update(dict.fromkeys(fallback_names, 0.0))
         # Fixed-length name evidence must not be diluted by empty fields.
         self.alias_index = BM25Okapi(aliases, b=0.0) if any(aliases) else None
+        self.intrinsic_scopes = ()
         if self.alias_index:
             # Exact names remain useful even when most records share a name.
             counts = Counter(name for names in aliases for name in names)
-            self.alias_index.idf = {
-                name: np.log1p((len(aliases) - count + 0.5) / (count + 0.5))
-                for name, count in counts.items()
-            }
+            self.intrinsic_scopes = sorted({name[1] for name in counts if isinstance(name, tuple)})
+            # Scoped aliases retain the global name's weight, regardless of family size.
+            self.alias_index.idf = {}
+            for name, count in counts.items():
+                if isinstance(name, tuple):
+                    count = counts[name[0]]
+                self.alias_index.idf[name] = np.log1p((len(aliases) - count + 0.5) / (count + 0.5))
 
-    def get_scores(self, query):
+    def _alias_terms(self, query, name_evidence):
+        if self.alias_index is None:
+            return []
+        terms = _evidence_tokens(query if name_evidence is None else name_evidence)
+        isas = {INTRINSIC_ISAS[term] for term in terms if term in INTRINSIC_ISAS}
+        scopes = [scope for scope in self.intrinsic_scopes if _intrinsic_family_matches(isas, scope)]
+        aliases = []
+        for term in terms:
+            # Synonym atoms are unrelated to intrinsic families.
+            keys = [(term, scope) for scope in scopes] if isas and not term.startswith("__name_") else [term]
+            aliases.extend(key for key in keys if key in self.alias_index.idf)
+        return aliases
+
+    def get_scores(self, query, *, name_evidence=None):
         scores = super().get_scores(query)
-        aliases = [term for term in _evidence_tokens(query) if self.alias_index and term in self.alias_index.idf]
+        aliases = self._alias_terms(query, name_evidence)
         if aliases:
             scores = np.maximum(scores, 0) + self.alias_index.get_scores(aliases)
         return scores
 
-    def get_batch_scores(self, query, doc_ids):
+    def get_batch_scores(self, query, doc_ids, *, name_evidence=None):
         scores = super().get_batch_scores(query, doc_ids)
-        aliases = [term for term in _evidence_tokens(query) if self.alias_index and term in self.alias_index.idf]
+        aliases = self._alias_terms(query, name_evidence)
         if aliases:
             scores = (np.maximum(scores, 0) + self.alias_index.get_batch_scores(aliases, doc_ids)).tolist()
         return scores
@@ -596,9 +645,11 @@ def build_bm25_index(
                   else _bm25_tokens(_search_text(item), synonyms))
         names = []
         if _normalized_doc_type(item.get("doc_type", "")) == "intrinsic":
-            name = str(item.get("heading") or "").lower().replace("[", "").replace("]", "")
-            if re.fullmatch(r"[a-z_][a-z0-9_]*", name):
-                names.append(literal_term(name))
+            scope = tuple(sorted(_intrinsic_product_isas(str(item.get("product") or ""))))
+            for name in sorted(_intrinsic_name_forms(str(item.get("heading") or "").lower())):
+                if re.fullmatch(r"[a-z_][a-z0-9_]*", name):
+                    # One scoped key per name avoids double-counting combined ISA labels.
+                    names.extend([literal_term(name), (literal_term(name), scope)])
         corpus.append(tokens)
         aliases.append(names)
     if not any(corpus):
@@ -680,19 +731,22 @@ def bm25_search(
 ) -> List[Dict[str, Any]]:
     if bm25_index is None or eligible_ids == ():
         return []
-    # Brackets never occur in prose tokens, so these additions only reach the
-    # canonical-name channel and leave the prose index's scores unchanged.
-    # Recognize complete names before deduplicating query terms.
-    names = _bracketed_identifiers(query)
     tokens = ["arm64" if token == "aarch64" else token for token in analyze(query, synonyms, query=True)]
-    tokens = list(dict.fromkeys(tokens + names))
+    tokens = list(dict.fromkeys(tokens))
     if not tokens:
         return []
+    name_options = {}
+    if isinstance(bm25_index, _NameBM25):
+        # Validate whole names separately from prose fragments, preserving
+        # product synonym atoms that also use the alias index.
+        evidence = {literal_term(name) for name in _technical_evidence(query)}
+        evidence.update(token for token in tokens if token.startswith("__name_"))
+        name_options["name_evidence"] = sorted(evidence)
     if eligible_ids is None:
-        scores = bm25_index.get_scores(tokens)
+        scores = bm25_index.get_scores(tokens, **name_options)
     else:
         # rank-bm25 uses NumPy indexing, where a tuple means multiple axes.
-        scores = bm25_index.get_batch_scores(tokens, list(eligible_ids))
+        scores = bm25_index.get_batch_scores(tokens, list(eligible_ids), **name_options)
     ranking = np.argsort(scores)[::-1]
     results: List[Dict[str, Any]] = []
     for rank, idx in enumerate(ranking[:k], start=1):
@@ -804,15 +858,11 @@ def _reference_record_bonus(
         return ECOSYSTEM_SUPPORT_BONUS
     if doc_type != "intrinsic":
         return 0.0
-    if heading and ({heading, heading.replace("[", "").replace("]", "")} & evidence_tokens):
-        return INTRINSIC_EXACT_NAME_BONUS
-    product = str(metadata.get("product") or "").lower()
-    product_isas = {INTRINSIC_ISAS[token] for token in re.findall(r"[a-z0-9]+", product)
-                    if token in INTRINSIC_ISAS}
-    if "sve2" in product_isas:
-        product_isas.add("sve")
-    if "sme" in query.intrinsic_isas and "sme" not in product_isas:
+    product_isas = _intrinsic_product_isas(str(metadata.get("product") or ""))
+    if not _intrinsic_family_matches(query.intrinsic_isas, product_isas):
         return 0.0
+    if heading and (_intrinsic_name_forms(heading) & evidence_tokens):
+        return INTRINSIC_EXACT_NAME_BONUS
     if not query.intrinsic_query or not (product_isas & query.intrinsic_isas):
         return 0.0
     signature = re.search(r"follows:\s*`([^`]+)`", str(metadata.get("original_text") or ""))
