@@ -161,6 +161,29 @@ def _intrinsic_name_forms(heading: str) -> set[str]:
     return forms | {heading}
 
 
+@lru_cache(maxsize=128)
+def _intrinsic_product_isas(product: str) -> frozenset[str]:
+    isas = {INTRINSIC_ISAS[token] for token in re.findall(r"[a-z0-9]+", product.lower())
+            if token in INTRINSIC_ISAS}
+    if "sve2" in isas:
+        isas.add("sve")
+    return frozenset(isas)
+
+
+def _intrinsic_matches_isa(metadata: dict, query_isas: set[str]) -> bool:
+    return (not query_isas or _normalized_doc_type(metadata.get("doc_type", "")) != "intrinsic"
+            or bool(query_isas & _intrinsic_product_isas(str(metadata.get("product") or ""))))
+
+
+def _intrinsic_eligible_ids(metadata, query_isas, eligible_ids):
+    """Apply an explicit ISA only to intrinsic records, preserving other documents."""
+    if not query_isas:
+        return eligible_ids
+    candidates = range(len(metadata)) if eligible_ids is None else eligible_ids
+    selected = tuple(i for i in candidates if _intrinsic_matches_isa(metadata[i], query_isas))
+    return eligible_ids if len(selected) == len(candidates) else selected
+
+
 def _technical_evidence(text: str | None) -> set[str]:
     text = (text or "").lower()
     for name in _bracketed_identifiers(text):
@@ -700,6 +723,11 @@ def bm25_search(
 ) -> List[Dict[str, Any]]:
     if bm25_index is None or eligible_ids == ():
         return []
+    query_evidence = _technical_evidence(query)
+    query_isas = {INTRINSIC_ISAS[token] for token in query_evidence if token in INTRINSIC_ISAS}
+    eligible_ids = _intrinsic_eligible_ids(metadata, query_isas, eligible_ids)
+    if eligible_ids == ():
+        return []
     tokens = ["arm64" if token == "aarch64" else token for token in analyze(query, synonyms, query=True)]
     tokens = list(dict.fromkeys(tokens))
     if not tokens:
@@ -708,7 +736,7 @@ def bm25_search(
     if isinstance(bm25_index, _NameBM25):
         # Validate whole names separately from prose fragments, preserving
         # product synonym atoms that also use the alias index.
-        evidence = {literal_term(name) for name in _technical_evidence(query)}
+        evidence = {literal_term(name) for name in query_evidence}
         evidence.update(token for token in tokens if token.startswith("__name_"))
         name_options["name_evidence"] = sorted(evidence)
     if eligible_ids is None:
@@ -827,15 +855,13 @@ def _reference_record_bonus(
         return ECOSYSTEM_SUPPORT_BONUS
     if doc_type != "intrinsic":
         return 0.0
-    if heading and (_intrinsic_name_forms(heading) & evidence_tokens):
-        return INTRINSIC_EXACT_NAME_BONUS
-    product = str(metadata.get("product") or "").lower()
-    product_isas = {INTRINSIC_ISAS[token] for token in re.findall(r"[a-z0-9]+", product)
-                    if token in INTRINSIC_ISAS}
-    if "sve2" in product_isas:
-        product_isas.add("sve")
+    product_isas = _intrinsic_product_isas(str(metadata.get("product") or ""))
+    if query.intrinsic_isas and not (product_isas & query.intrinsic_isas):
+        return 0.0
     if "sme" in query.intrinsic_isas and "sme" not in product_isas:
         return 0.0
+    if heading and (_intrinsic_name_forms(heading) & evidence_tokens):
+        return INTRINSIC_EXACT_NAME_BONUS
     if not query.intrinsic_query or not (product_isas & query.intrinsic_isas):
         return 0.0
     signature = re.search(r"follows:\s*`([^`]+)`", str(metadata.get("original_text") or ""))
@@ -934,7 +960,7 @@ def _rerank_candidates(
     reranked: List[Dict[str, Any]] = []
     for candidate in candidates:
         metadata = candidate["metadata"]
-        if is_navigation_only(metadata):
+        if is_navigation_only(metadata) or not _intrinsic_matches_isa(metadata, query.intrinsic_isas):
             continue
         full_text = _search_text(metadata)
         body_tokens = _body_tokens(candidate, bm25_index)
@@ -1092,6 +1118,9 @@ def hybrid_search(
     if not tokenize_for_search(query):
         return []
     query_analysis = _analyze_query(query, synonyms)
+    eligible_ids = _intrinsic_eligible_ids(metadata, query_analysis.intrinsic_isas, eligible_ids)
+    if eligible_ids == ():
+        return []
 
     candidate_depth = candidate_depth or max(k * 20, 100)
     lexical_limit = max(k * 3, PINNED_LEXICAL_CANDIDATES)

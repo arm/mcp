@@ -154,7 +154,7 @@ def intrinsic_embedding_text(record: dict) -> str:
             lines.append(sentence)
     lines.append("Returns: " + intrinsic_type_description(result_type.strip()) + ".")
     predicate_bits = sorted({int(bits) for bits in re.findall(r"(?:_|\[)b(8|16|32|64)(?=$|_|\]|\[)", name)})
-    if isa.lower().startswith("sve") and predicate_bits:
+    if {"sve", "sve2"} & set(re.findall(r"[a-z0-9]+", isa.lower())) and predicate_bits:
         lines.append(f"Predicate controls {predicate_bits[0]}-bit lanes.")
     counted_bits = sorted({int(bits) for bits in re.findall(
         r"number of (8|16|32|64)[- ]bit (?:data )?elements", description + " " + operation, re.I)})

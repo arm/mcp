@@ -1345,6 +1345,47 @@ def test_intrinsic_name_forms_have_exact_name_and_sparse_evidence(heading, isa, 
     assert result[0]["metadata"]["heading"] == row["heading"]
 
 
+@pytest.mark.parametrize("isa,expected", [("Neon", 0), ("Helium", 1)])
+@pytest.mark.parametrize("name", ["vaddq", "vaddq intrinsic", "vaddq_s8"])
+@pytest.mark.parametrize("eligible_ids", [None, (1, 0)])
+def test_explicit_isa_keeps_shared_intrinsic_names_in_the_requested_family(isa, expected, name, eligible_ids):
+    rows = [intrinsic("vaddq_s8", "Neon")["metadata"],
+            intrinsic("[__arm_]vaddq[_s8]", "Helium")["metadata"]]
+    rows += [chunk(i, search_text="Unrelated reference") for i in range(2, 7)]
+    query = f"{isa} {name}"
+    index = build_bm25_index(rows)
+    wrong = rows[1 - expected]
+    assert search_module._reference_record_bonus(search_module._analyze_query(query), wrong, "intrinsic") == 0
+    sparse = bm25_search(query, rows, index, eligible_ids=eligible_ids)
+    assert any(hit["metadata"] == rows[expected] for hit in sparse)
+    assert all(hit["metadata"] != wrong for hit in sparse)
+    hits = hybrid_search(query, index_for([[0, 0]] * len(rows)), rows, QueryModel(), index,
+                         k=3, eligible_ids=eligible_ids)
+    assert hits[0]["metadata"] == rows[expected]
+    assert all(hit["metadata"] != wrong for hit in hits)
+    assert bm25_search(query, rows, index, eligible_ids=(1 - expected,)) == []
+    assert hybrid_search(query, None, rows, object(), index, eligible_ids=(1 - expected,)) == []
+    reranked = search_module.rerank_candidates(query, [{"metadata": row} for row in rows[:2]])
+    assert [hit["metadata"] for hit in reranked] == [rows[expected]]
+
+
+@pytest.mark.parametrize("query", ["vaddq_s8", "Neon and Helium vaddq_s8"])
+def test_shared_intrinsic_names_remain_available_without_a_single_isa(query):
+    rows = [intrinsic("vaddq_s8", "Neon")["metadata"],
+            intrinsic("[__arm_]vaddq[_s8]", "Helium")["metadata"]]
+    hits = bm25_search(query, rows, build_bm25_index(rows))
+    assert {hit["metadata_id"] for hit in hits} == {0, 1}
+
+
+@pytest.mark.parametrize("query", ["SVE svadd_m", "SVE2 svadd_m", "SME svadd_m"])
+def test_isa_scope_preserves_combined_families_and_general_documentation(query):
+    rows = [intrinsic("svadd[_s32]_m", "SME and SME2 / SVE2")["metadata"],
+            chunk(1, doc_type="Documentation", product="Arm", search_text=query)]
+    rows += [chunk(i, search_text="Unrelated reference") for i in range(2, 7)]
+    hits = bm25_search(query, rows, build_bm25_index(rows))
+    assert {hit["metadata_id"] for hit in hits} == {0, 1}
+
+
 def test_overloaded_name_keeps_all_typed_variants_without_matching_other_operations():
     rows = [intrinsic(name, "SVE", f"void {name}(void);")["metadata"]
             for name in ["svadd[_f32]_m", "svadd[_s32]_m", "svsub[_f32]_m"]]
