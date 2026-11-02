@@ -165,8 +165,8 @@ def _intrinsic_name_forms(heading: str) -> set[str]:
 def _intrinsic_product_isas(product: str) -> frozenset[str]:
     isas = {INTRINSIC_ISAS[token] for token in re.findall(r"[a-z0-9]+", product.lower())
             if token in INTRINSIC_ISAS}
-    if "sve2" in isas:
-        isas.add("sve")
+    if isas & {"sve", "sve2"}:
+        isas.update({"sve", "sve2"})
     return frozenset(isas)
 
 
