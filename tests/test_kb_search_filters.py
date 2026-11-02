@@ -748,9 +748,19 @@ def test_canonical_names_survive_public_search_and_filters(catalog_name, query_f
     ("svqrdmulh[_s32]", "svqrdmulh[_s32].extra"),
     ("svqrdmulh[_s32]", "svqrdmulh[_s32_missing"),
 ])
-def test_partial_catalog_names_do_not_receive_exact_bonus(catalog_name, query):
+@pytest.mark.parametrize("prose", ["", " vector"])
+def test_partial_catalog_names_do_not_receive_exact_bonus(catalog_name, query, prose):
     record = intrinsic(catalog_name)["metadata"]
     assert search_module._reference_record_bonus(search_module._analyze_query(query), record, "intrinsic") == 0
+    metadata = [chunk(0, doc_type="Intrinsic", heading=catalog_name),
+                chunk(1, search_text="vector example"), chunk(2)]
+    index = build_bm25_index(metadata)
+    plain = BM25Okapi([search_module._bm25_tokens(search_module._search_text(row)) for row in metadata])
+    # Invalid names add no alias score, but surrounding prose remains searchable.
+    for eligible_ids in [None, (1, 0)]:
+        expected = bm25_search(query + prose, metadata, plain, eligible_ids=eligible_ids)
+        assert bool(expected) == bool(prose)
+        assert bm25_search(query + prose, metadata, index, eligible_ids=eligible_ids) == expected
 
 
 @pytest.mark.parametrize("count", [1, 2])

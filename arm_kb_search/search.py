@@ -581,16 +581,18 @@ class _NameBM25(BM25Okapi):
                 for name, count in counts.items()
             }
 
-    def get_scores(self, query):
+    def get_scores(self, query, *, name_evidence=None):
         scores = super().get_scores(query)
-        aliases = [term for term in _evidence_tokens(query) if self.alias_index and term in self.alias_index.idf]
+        names = query if name_evidence is None else name_evidence
+        aliases = [term for term in _evidence_tokens(names) if self.alias_index and term in self.alias_index.idf]
         if aliases:
             scores = np.maximum(scores, 0) + self.alias_index.get_scores(aliases)
         return scores
 
-    def get_batch_scores(self, query, doc_ids):
+    def get_batch_scores(self, query, doc_ids, *, name_evidence=None):
         scores = super().get_batch_scores(query, doc_ids)
-        aliases = [term for term in _evidence_tokens(query) if self.alias_index and term in self.alias_index.idf]
+        names = query if name_evidence is None else name_evidence
+        aliases = [term for term in _evidence_tokens(names) if self.alias_index and term in self.alias_index.idf]
         if aliases:
             scores = (np.maximum(scores, 0) + self.alias_index.get_batch_scores(aliases, doc_ids)).tolist()
         return scores
@@ -693,19 +695,22 @@ def bm25_search(
 ) -> List[Dict[str, Any]]:
     if bm25_index is None or eligible_ids == ():
         return []
-    # Brackets never occur in prose tokens, so these additions only reach the
-    # canonical-name channel and leave the prose index's scores unchanged.
-    # Recognize complete names before deduplicating query terms.
-    names = _bracketed_identifiers(query)
     tokens = ["arm64" if token == "aarch64" else token for token in analyze(query, synonyms, query=True)]
-    tokens = list(dict.fromkeys(tokens + names))
+    tokens = list(dict.fromkeys(tokens))
     if not tokens:
         return []
+    name_options = {}
+    if isinstance(bm25_index, _NameBM25):
+        # Validate whole names separately from prose fragments, preserving
+        # product synonym atoms that also use the alias index.
+        evidence = {literal_term(name) for name in _technical_evidence(query)}
+        evidence.update(token for token in tokens if token.startswith("__name_"))
+        name_options["name_evidence"] = sorted(evidence)
     if eligible_ids is None:
-        scores = bm25_index.get_scores(tokens)
+        scores = bm25_index.get_scores(tokens, **name_options)
     else:
         # rank-bm25 uses NumPy indexing, where a tuple means multiple axes.
-        scores = bm25_index.get_batch_scores(tokens, list(eligible_ids))
+        scores = bm25_index.get_batch_scores(tokens, list(eligible_ids), **name_options)
     ranking = np.argsort(scores)[::-1]
     results: List[Dict[str, Any]] = []
     for rank, idx in enumerate(ranking[:k], start=1):
