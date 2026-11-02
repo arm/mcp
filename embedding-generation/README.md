@@ -65,8 +65,9 @@ corresponding release action; it opens a separate reviewed version PR.
 ## Intrinsic Catalog Snapshot
 
 Builds reuse the snapshot pinned by `intrinsic_chunks_image` in `pipeline-inputs.lock.json`.
-To refresh it, prepare missing entries with `prepare_intrinsic_chunk`, preserve existing
-records, and publish the full snapshot at `/embedding-data/intrinsic_chunks/` in a new image.
+To refresh it, prepare new and updated catalog records with `prepare_intrinsic_chunk`,
+preserve their existing IDs and URLs, and publish the full snapshot at
+`/embedding-data/intrinsic_chunks/` in a new image.
 Update the pin to its published digest; builds use the previous snapshot until then.
 
 ## Add Documents
