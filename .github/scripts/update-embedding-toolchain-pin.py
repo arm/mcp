@@ -30,7 +30,7 @@ def update_pin(*, reference: str, lock_file: Path) -> None:
         )
 
     lock = json.loads(lock_file.read_text(encoding="utf-8"))
-    if set(lock) != {"generator_image", "intrinsic_chunks_image"}:
+    if set(lock) != {"generator_image"}:
         raise ValueError("pipeline input lock does not contain the expected keys")
 
     lock["generator_image"] = reference

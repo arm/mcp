@@ -64,10 +64,18 @@ corresponding release action; it opens a separate reviewed version PR.
 
 ## Intrinsic Catalog Snapshot
 
-Builds reuse the snapshot pinned by `intrinsic_chunks_image` in `pipeline-inputs.lock.json`.
-To refresh it, prepare missing entries with `prepare_intrinsic_chunk`, preserve existing
-records, and publish the full snapshot at `/embedding-data/intrinsic_chunks/` in a new image.
-Update the pin to its published digest; builds use the previous snapshot until then.
+`intrinsic-catalog.tar.gz` contains 16,032 prepared records under
+`embedding-data/intrinsic_chunks/`, including their keywords and embedding descriptions.
+`Dockerfile.acquire` adds this reviewed snapshot directly to the chunk artifact;
+the vector-store stage embeds it using the existing pinned model and toolchain.
+Merging a catalog update is sufficient for the next Sunday build to include it;
+no separate catalog upload or generator-pin update is needed for these prepared records.
+The resulting MCP release still requires review of the embedding promotion PR.
+
+To refresh the catalog, prepare new records with `prepare_intrinsic_chunk`, preserve
+existing records, and replace this archive in a reviewed PR. This snapshot preserves
+10,384 existing records and adds 5,648 from Arm's `intrinsics.json` catalog
+(SHA-256 `00d1dc088b56dd641d3f206a98da65afe45c65c606e03f1ab341d843a855fc89`).
 
 ## Add Documents
 

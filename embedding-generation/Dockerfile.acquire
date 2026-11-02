@@ -14,19 +14,15 @@
 
 # syntax=docker/dockerfile:1.7
 
-# The workflow supplies both named contexts as immutable image references.
+# The workflow supplies the pinned toolchain; the catalog is checked in.
 FROM toolchain AS acquisition
 
-ENV INTRINSIC_CHUNKS_DIR=/snapshot/intrinsic_chunks \
-    YAML_OUTPUT_DIR=/snapshot/yaml_data \
+ENV YAML_OUTPUT_DIR=/snapshot/yaml_data \
     CHUNK_DETAILS_FILE=/snapshot/chunk_details.csv
 
 WORKDIR /work
 
 COPY vector-db-sources.csv vector-db-sources.csv
-COPY --from=intrinsic-chunks \
-    /embedding-data/intrinsic_chunks/ \
-    /snapshot/intrinsic_chunks/
 
 RUN --network=none mkdir -p "${YAML_OUTPUT_DIR}" /work/info
 
@@ -36,9 +32,8 @@ RUN --network=default \
 
 FROM scratch AS chunks
 
-COPY --from=acquisition \
-    /snapshot/intrinsic_chunks/ \
-    /embedding-data/intrinsic_chunks/
+# These records already contain their prepared embedding descriptions.
+ADD intrinsic-catalog.tar.gz /
 COPY --from=acquisition \
     /snapshot/yaml_data/ \
     /embedding-data/yaml_data/
