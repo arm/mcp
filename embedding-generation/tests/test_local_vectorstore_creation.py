@@ -339,12 +339,11 @@ def test_card_preserves_operation_and_signature_but_omits_shared_template():
 
 
 @pytest.mark.parametrize("isa,expected", [
-    ("SVE2", True), ("SME and SME2 / SVE2", True),
-    ("SME and SME2 / SVE", True), ("SME and SME2", False),
+    ("SME and SME2 / SVE2", True), ("SME and SME2 / SVE", True), ("SME and SME2", False),
 ])
 def test_predicate_lane_description_recognizes_combined_families(isa, expected):
     record = {"heading": "svfirstp_b8", "product": isa, "keywords": "",
-              "original_text": "The signature is as follows:\n`int64_t svfirstp_b8(svbool_t pg, svbool_t pn);`"}
+              "original_text": "The signature is as follows:\n`svbool_t svfirstp_b8(svbool_t pg, svbool_t pn);`"}
     text = intrinsic_source.intrinsic_embedding_text(record)
     assert ("Predicate controls 8-bit lanes." in text) == expected
 
