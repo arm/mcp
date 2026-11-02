@@ -8,6 +8,7 @@ sources_file="vector-db-sources.csv"
 eval_args=(--suite benchmark)
 top_k="5"
 python_bin="${PYTHON:-python3}"
+embedding_base_image="${EMBEDDING_BASE_IMAGE:-armlimited/arm-mcp:mcp-embedding-base}"
 embedding_model_dir="${EMBEDDING_MODEL_DIR:-$script_dir/.cache/embedding-model}"
 refresh_intrinsic_chunks=0
 skip_intrinsic_copy=0
@@ -25,12 +26,14 @@ Options:
   --output FILE                  Save a new JSON report
   --baseline FILE                Compare with a previous compatible report
   --top-k N                      Number of search results to evaluate (default: 5)
-  --refresh-intrinsic-chunks     Re-extract the checked-in intrinsic catalog
+  --refresh-intrinsic-chunks     Re-copy intrinsic chunks from the embedding base image
   --skip-intrinsic-copy          Use the existing intrinsic_chunks directory as-is
   -h, --help                     Show this help
 
 Environment:
   PYTHON                         Python executable (default: python3)
+  EMBEDDING_BASE_IMAGE           Image with /embedding-data/intrinsic_chunks
+                                 (default: armlimited/arm-mcp:mcp-embedding-base)
   EMBEDDING_MODEL_DIR            Directory for the acquired embedding model
                                  (default: .cache/embedding-model)
 USAGE
@@ -92,8 +95,13 @@ if [[ "$skip_intrinsic_copy" -eq 0 ]]; then
   fi
 
   if ! compgen -G "intrinsic_chunks/*.yaml" >/dev/null; then
-    echo "Extracting checked-in intrinsic catalog"
-    tar -xzf intrinsic-catalog.tar.gz --strip-components=1
+    mkdir -p intrinsic_chunks
+    echo "Copying intrinsic chunks from $embedding_base_image"
+    docker run --rm \
+      --entrypoint sh \
+      -v "$PWD/intrinsic_chunks:/out" \
+      "$embedding_base_image" \
+      -c 'cp -a /embedding-data/intrinsic_chunks/. /out/'
   else
     echo "Using existing intrinsic_chunks directory"
   fi

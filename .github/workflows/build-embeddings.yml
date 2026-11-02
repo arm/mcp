@@ -47,21 +47,29 @@ jobs:
 
           if ! jq -e '
             type == "object" and
-            (keys | sort) == ["generator_image"]
+            (keys | sort) == ["generator_image", "intrinsic_chunks_image"]
           ' "${inputs_file}" > /dev/null; then
-            echo "::error::${inputs_file} must contain only the generator_image input."
+            echo "::error::${inputs_file} must contain only the two expected image inputs."
             exit 1
           fi
 
           generator_image="$(jq -er '.generator_image | select(type == "string")' "${inputs_file}")"
+          intrinsic_chunks_image="$(jq -er '.intrinsic_chunks_image | select(type == "string")' "${inputs_file}")"
           digest_pattern='^[A-Za-z0-9./:_-]+@sha256:[0-9a-f]{64}$'
 
           if [[ ! "${generator_image}" =~ ${digest_pattern} ]]; then
             echo "::error::generator_image is not an immutable sha256 reference."
             exit 1
           fi
+          if [[ ! "${intrinsic_chunks_image}" =~ ${digest_pattern} ]]; then
+            echo "::error::intrinsic_chunks_image is not an immutable sha256 reference."
+            exit 1
+          fi
 
-          printf 'generator_image=%s\n' "${generator_image}" >> "${GITHUB_OUTPUT}"
+          {
+            printf 'generator_image=%s\n' "${generator_image}"
+            printf 'intrinsic_chunks_image=%s\n' "${intrinsic_chunks_image}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Log in to GHCR
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
@@ -93,6 +101,7 @@ jobs:
           push: true
           build-contexts: |
             toolchain=docker-image://${{ steps.inputs.outputs.generator_image }}
+            intrinsic-chunks=docker-image://${{ steps.inputs.outputs.intrinsic_chunks_image }}
           tags: ${{ env.CHUNK_IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
           labels: |
             org.opencontainers.image.revision=${{ github.sha }}
@@ -114,6 +123,7 @@ jobs:
           outputs: type=local,dest=${{ runner.temp }}/embedding-chunks
           build-contexts: |
             toolchain=docker-image://${{ steps.inputs.outputs.generator_image }}
+            intrinsic-chunks=docker-image://${{ steps.inputs.outputs.intrinsic_chunks_image }}
 
       - name: Pass dry-run chunks to vectorstore build
         if: ${{ env.PUBLISH_IMAGES != 'true' }}

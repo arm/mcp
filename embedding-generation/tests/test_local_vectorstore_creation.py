@@ -15,7 +15,6 @@
 import json
 import os
 import sys
-import tarfile
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -455,25 +454,3 @@ def test_incomplete_intrinsic_metadata_is_rejected(field, monkeypatch):
     monkeypatch.setattr(vectorstore, "load_local_yaml_files", lambda: [record])
     with pytest.raises(ValueError, match="Regenerate.*acquisition"):
         vectorstore.main()
-
-
-def test_checked_in_intrinsic_catalog_is_complete_and_prepared():
-    archive = Path(__file__).resolve().parents[1] / "intrinsic-catalog.tar.gz"
-    headings = set()
-    urls = set()
-    with tarfile.open(archive) as catalog:
-        members = catalog.getmembers()
-        assert len(members) == 16032
-        for member in members:
-            assert member.isfile()
-            assert Path(member.name).parent.as_posix() == "embedding-data/intrinsic_chunks"
-            assert member.name.endswith(".yaml")
-            row = yaml.load(catalog.extractfile(member), Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))
-            assert row["doc_type"] == "Intrinsic"
-            assert row["heading_path"] == [row["product"], row["heading"]]
-            assert all(isinstance(row[key], str) and row[key].strip() for key in
-                       ("uuid", "heading", "product", "url", "content", "keywords", "embedding_text"))
-            assert row["url"].endswith("/instruction-sets/intrinsics/#q=" + row["heading"])
-            headings.add(row["heading"])
-            urls.add(row["url"])
-    assert len(headings) == len(urls) == 16032
