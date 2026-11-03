@@ -10,8 +10,11 @@ dependencies = [
     "flask==3.1.3",
     "gitpython==3.2.1",
     "jinja2==3.1.6",
+    "joserfc==1.8.0",
     "lxml==6.1.3",
     "mcp==1.30.0",
+    # Pin runtime pip explicitly instead of inheriting the venv bootstrap version.
+    "pip==26.3",
     "pycryptodome==3.23.0",
     "python-magic==0.4.27",
     "pyyaml==6.0.3",
@@ -23,7 +26,7 @@ dependencies = [
 
 [dependency-groups]
 acquisition = [
-    "pip==26.2.2",
+    "pip==26.3",
 ]
 test = [
     "pytest",
