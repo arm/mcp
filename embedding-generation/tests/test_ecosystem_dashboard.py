@@ -173,7 +173,7 @@ def test_unknown_platform_is_rejected_instead_of_mislabeled():
         chunks("---\nname: Example\n---\n", platform="macos")
 
 
-def test_frontmatter_split_and_generic_metadata_inference_remain_independent():
+def test_frontmatter_split_and_product_inference_remain_independent():
     markdown = "\ufeff---\r\nname: Hidden\r\n---\r\n# Guide v2.0\r\nUseful guidance."
     frontmatter, body = split_frontmatter(markdown)
     assert frontmatter == "name: Hidden"
@@ -186,7 +186,7 @@ def test_frontmatter_split_and_generic_metadata_inference_remain_independent():
     )
     result = chunk_parsed_document(parsed, "Guide", [])
     assert result[0]["product"] == "Arm"
-    assert result[0]["version"] == "v2.0"
+    assert result[0]["version"] == ""
     assert "Hidden" not in result[0]["content"]
     assert split_frontmatter("---\nnot closed")[0] is None
     parsed.product = "Explicit product"

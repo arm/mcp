@@ -50,10 +50,11 @@ def test_relative_link_evidence_is_retained_when_url_prefix_is_embedded():
     assert result == text + "\n\nLinked references: Home https://learn.arm.com/"
 
 
-def _arm_api_response(title, html):
+def _arm_api_response(title, html, **metadata):
     return json.dumps(
         {
             "title": title,
+            **metadata,
             "topic": {
                 "content": base64.b64encode(html.encode("utf-8")).decode("ascii"),
             },
@@ -186,6 +187,70 @@ class TestMarkdownFrontmatter:
 
         assert split_frontmatter(markdown) == (None, markdown)
         assert strip_frontmatter(markdown) == markdown
+
+
+class TestExplicitChunkVersions:
+    @pytest.mark.parametrize(
+        "title,url",
+        [
+            ("Cobalt 100", "https://example.com/cobalt"),
+            ("Arm guide", "https://developer.arm.com/documentation/109246/latest"),
+            (".NET 6 tests", "https://example.com/dotnet"),
+            ("Guide v2.0", "https://example.com/guide"),
+        ],
+    )
+    def test_unversioned_sources_do_not_infer_numbers(self, title, url):
+        parsed = parse_document_content(
+            source_url=url,
+            resolved_url=url,
+            response_content=f"# {title}\nRun 6 tests on the target.".encode(),
+            content_type="text/markdown",
+            fallback_title=title,
+        )
+        chunks = chunk_parsed_document(parsed, "Documentation", [])
+        assert chunks
+        assert all(chunk["version"] == "" for chunk in chunks)
+        assert all("Run 6 tests" in chunk["content"] for chunk in chunks)
+
+    @pytest.mark.parametrize("version", ["2026.3.0", "0100", "r1p0", "", None])
+    def test_explicit_version_is_preserved(self, version):
+        parsed = parse_document_content(
+            source_url="https://example.com/109246",
+            resolved_url="https://example.com/109246",
+            response_content=b"# Guide v2.0\nUseful guidance.",
+            content_type="text/markdown",
+            fallback_title="Guide",
+        )
+        parsed.version = version
+        chunks = chunk_parsed_document(parsed, "Documentation", [])
+        assert chunks
+        assert all(chunk["version"] == (version or "") for chunk in chunks)
+
+    @pytest.mark.parametrize(
+        "version_metadata",
+        [{}, {"versionLabel": None}, {"versionLabel": ""},
+         {"versionLabel": "2026.3.0"}, {"versionLabel": "0100"}],
+    )
+    @pytest.mark.parametrize(
+        "html", ["<main><h1>Performix guide</h1><p>Run 6 tests.</p></main>", ""]
+    )
+    def test_arm_api_parser_preserves_source_version(self, gc, version_metadata, html):
+        response = json.loads(_arm_api_response("Performix guide", html))
+        response.update(version_metadata)
+        parsed = gc.parse_arm_documentation_api_json(
+            response_content=json.dumps(response).encode(),
+            source_url="https://developer.arm.com/documentation/109246/latest",
+            resolved_url="https://documentation-service.arm.com/documentation/109246/latest",
+            fallback_title="Performix guide",
+        )
+        expected = version_metadata.get("versionLabel") or ""
+        assert parsed.version == expected
+        chunks = chunk_parsed_document(parsed, "Documentation", [])
+        if html:
+            assert chunks
+            assert all(chunk["version"] == expected for chunk in chunks)
+        else:
+            assert chunks == []
 
 
 class TestDocumentChunkingAnchors:
@@ -1256,8 +1321,10 @@ class TestArmDocumentationParsing:
         assert parsed.content_type == "html"
         assert parsed.sections == []
 
+    @pytest.mark.parametrize("version_label", [None, "", "0100", "2026.3.0"])
+    @pytest.mark.parametrize("topic_version", [None, "r1p0"])
     def test_create_arm_documentation_chunks_fetches_topics_and_maps_metadata(
-        self, gc, monkeypatch
+        self, gc, monkeypatch, version_label, topic_version
     ):
         """Arm docs should fetch API topic links and emit developer-facing chunks."""
         source_url = "https://developer.arm.com/documentation/102376/0100"
@@ -1274,7 +1341,7 @@ class TestArmDocumentationParsing:
                 content=json.dumps(
                     {
                         "title": "Arm Reference Manual",
-                        "versionLabel": "0100",
+                        "versionLabel": version_label,
                         "keywords": ["SVE"],
                         "products": ["Cortex-A"],
                         "topic": {
@@ -1317,6 +1384,7 @@ class TestArmDocumentationParsing:
                       <p>This overview explains how Arm systems expose scalable vector extension features.</p>
                     </main>
                     """,
+                    versionLabel=topic_version,
                 ),
             ),
             install_fetch_url: SimpleNamespace(
@@ -1330,6 +1398,7 @@ class TestArmDocumentationParsing:
                       <p>Install the Arm compiler package and configure the target CPU for Cortex-A builds.</p>
                     </main>
                     """,
+                    versionLabel=topic_version,
                 ),
             ),
         }
@@ -1354,7 +1423,7 @@ class TestArmDocumentationParsing:
         assert all(chunk.title == "Arm Reference Manual" for chunk in chunks)
         assert all(chunk.doc_type == "Reference" for chunk in chunks)
         assert all(chunk.product == "Arm" for chunk in chunks)
-        assert all(chunk.version == "0100" for chunk in chunks)
+        assert all(chunk.version == (version_label or topic_version or "") for chunk in chunks)
         assert all(chunk.content_type == "html" for chunk in chunks)
         assert (
             chunks[0].url

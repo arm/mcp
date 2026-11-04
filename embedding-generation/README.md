@@ -106,6 +106,11 @@ Educational Course,All rights reserved,Example Video,https://courses.edx.org/vid
 Leave the column empty for sources that are chunked from their primary `URL`.
 
 
+### Chunk versions
+
+Use the source's explicit version, such as the Arm API's `versionLabel`, or an
+empty string. Do not guess from titles, URLs, or content. Schemas stay unchanged.
+
 ## Test Locally
 
 Install dependencies once:
