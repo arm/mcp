@@ -17,7 +17,8 @@
 # The workflow supplies both named contexts as immutable image references.
 FROM toolchain AS acquisition
 
-ENV YAML_OUTPUT_DIR=/snapshot/yaml_data \
+ENV INTRINSIC_CHUNKS_DIR=/snapshot/intrinsic_chunks \
+    YAML_OUTPUT_DIR=/snapshot/yaml_data \
     CHUNK_DETAILS_FILE=/snapshot/chunk_details.csv
 
 WORKDIR /work

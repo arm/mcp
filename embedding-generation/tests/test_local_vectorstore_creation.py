@@ -12,8 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
+import json
+import os
+import sys
+from copy import deepcopy
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, call
 
+import numpy as np
+import pytest
+import torch
+import yaml
+from arm_kb_search import resources
+from arm_kb_search.analysis import Synonyms, analyze, name_keys
+from transformers import AutoTokenizer
+
+import document_chunking as intrinsic_source
+import local_vectorstore_creation as vectorstore
 from local_vectorstore_creation import load_local_yaml_files
 
 
@@ -25,3 +41,391 @@ def test_load_local_yaml_files_requires_intrinsic_chunks(tmp_path, monkeypatch):
 
     with pytest.raises(FileNotFoundError, match="No intrinsic chunk YAML files found"):
         load_local_yaml_files()
+
+
+def test_serialized_search_text_preserves_field_and_body_boundaries(tmp_path, monkeypatch):
+    body = 'CLI\n\nUse PyTorch.'
+    record = {"uuid": "a", "chunk_uuid": "a", "url": "https://example.org/guide", "title": "AWS",
+              "heading": "CLI", "heading_path": ["AWS", "CLI"], "keywords": "", "content": body}
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["local_vectorstore_creation.py", "--model-path", "unused"])
+    monkeypatch.setattr(vectorstore, "load_local_yaml_files", lambda: [record])
+    monkeypatch.setattr(vectorstore, "create_embeddings",
+                        lambda metadata, *args: (np.eye(1, dtype=np.float32), metadata))
+    vectorstore.main()
+    row = json.loads((tmp_path / "metadata.json").read_text())[0]
+    table = Synonyms({"awscli": ["AWS CLI"], "pytorch": ["PyTorch"]})
+    assert name_keys(analyze(row["search_text"], table), table) == {"pytorch"}
+    assert row["original_text"] == body
+    assert vectorstore.embedding_input(row) == body
+    assert row["search_text"].endswith(body)
+
+
+def test_vectorstore_serialization_preserves_dashboard_scope(tmp_path, monkeypatch):
+    records = [
+        dict(
+            uuid="a",
+            chunk_uuid="a",
+            url="https://example.com/linux",
+            title="Package",
+            keywords="package",
+            content="Useful software",
+            doc_type="Ecosystem Dashboard",
+            product="",
+            version="",
+            platform="linux",
+            edition="open-source",
+        ),
+        dict(
+            uuid="b",
+            chunk_uuid="b",
+            url="https://example.com/guide",
+            title="Guide",
+            keywords="guide",
+            content="Existing document",
+        ),
+    ]
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys, "argv", ["local_vectorstore_creation.py", "--model-path", "unused"]
+    )
+    monkeypatch.setattr(vectorstore, "load_local_yaml_files", lambda: records)
+    monkeypatch.setattr(
+        vectorstore, "create_embeddings", lambda metadata, *args: (np.eye(2, dtype=np.float32), metadata)
+    )
+    vectorstore.main()
+    metadata = json.loads((tmp_path / "metadata.json").read_text())
+    assert (
+        metadata[0]["platform"] == "linux" and metadata[0]["edition"] == "open-source"
+    )
+    assert metadata[0]["product"] == metadata[0]["version"] == ""
+    assert metadata[1]["platform"] == metadata[1]["edition"] == ""
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("renamed", [False, True])
+def test_chunk_order_ignores_file_order_and_generated_ids(tmp_path, monkeypatch, reverse, renamed):
+    monkeypatch.chdir(tmp_path)
+    for env, directory in [("INTRINSIC_CHUNKS_DIR", "intrinsic_chunks"), ("YAML_DATA_DIR", "yaml_data")]:
+        monkeypatch.setenv(env, directory)
+        (tmp_path / directory).mkdir()
+    for position, content in enumerate(["intrinsic", "beta", "alpha"]):
+        directory = "intrinsic_chunks" if position == 0 else "yaml_data"
+        identifier = f"new-{9 - position}" if renamed else f"old-{position}"
+        chunk = {"uuid": identifier, "url": "https://example.com", "content": content}
+        (tmp_path / directory / f"chunk_{identifier}.yaml").write_text(json.dumps(chunk))
+    original_glob = vectorstore.glob.glob
+    monkeypatch.setattr(
+        vectorstore.glob, "glob",
+        lambda pattern: sorted(original_glob(pattern), reverse=reverse),
+    )
+    assert [chunk["content"] for chunk in load_local_yaml_files()] == ["intrinsic", "alpha", "beta"]
+
+
+@pytest.fixture(scope="module")
+def tokenizer():
+    path = os.getenv("MINILM_MODEL_PATH", str(Path(__file__).parents[1] / ".cache/embedding-model"))
+    if not Path(path).is_dir():
+        pytest.skip("Acquire the locked MiniLM model or set MINILM_MODEL_PATH for tokenizer checks")
+    return AutoTokenizer.from_pretrained(path, local_files_only=True, use_fast=True)
+
+
+def record(text, identifier="doc"):
+    return dict(
+        uuid=identifier, chunk_uuid=identifier, original_text=text,
+        search_text="Metadata title keywords " + text,
+        url="https://example.com/guide?version=2#section",
+        resolved_url="https://example.com/source#original", title="Original title",
+        heading_path=["Chapter", "Section"], keywords="Arm", custom={"keep": True},
+    )
+
+
+@pytest.mark.parametrize("text", ["", " \t\n", "word " * 498])
+def test_fitting_input_is_unchanged(tokenizer, text):
+    row = record(text)
+    assert vectorstore.token_count(tokenizer, text) <= 500
+    assert vectorstore.split_embedding_inputs([row], tokenizer) == [row]
+
+
+@pytest.mark.parametrize("identifier", ["yaml_data_doc", "intrinsic_vadd"])
+@pytest.mark.parametrize("text", [
+    "word " * 499,
+    "Document Title: Code\n\n" + "\tint café = foo(a, b);  // 雪\r\n" * 400 + "  \n",
+    "a;" * 1500,
+])
+def test_cap_preserves_exact_text_metadata_and_piece_identity(tokenizer, identifier, text):
+    row = record(text, identifier)
+    pieces = vectorstore.split_embedding_inputs([row], tokenizer)
+    assert len(pieces) > 1
+    assert "".join(piece["original_text"] for piece in pieces) == text
+    assert all(vectorstore.token_count(tokenizer, piece["original_text"]) <= 500 for piece in pieces)
+    assert len({piece["uuid"] for piece in pieces}) == len(pieces)
+    assert len({piece["chunk_uuid"] for piece in pieces}) == len(pieces)
+    cursor = 0
+    for number, piece in enumerate(pieces, 1):
+        assert piece["source_start"] == cursor
+        cursor = piece["source_end"]
+        assert piece["original_text"] == text[piece["source_start"]:cursor]
+        assert piece["parent_uuid"] == piece["parent_chunk_uuid"] == identifier
+        assert piece["uuid"] != identifier and piece["chunk_uuid"] != identifier
+        assert (piece["source_part"], piece["source_parts"]) == (number, len(pieces))
+        assert piece["search_text"] == "Metadata title keywords " + piece["original_text"]
+        for key in ("url", "resolved_url", "title", "heading_path", "keywords", "custom"):
+            assert piece[key] == row[key]
+    assert cursor == len(text)
+    assert vectorstore.split_embedding_inputs([row], tokenizer) == pieces
+
+
+def test_bad_search_text_is_rejected(tokenizer):
+    row = record("word " * 499)
+    row["search_text"] = "missing body"
+    with pytest.raises(ValueError, match="search_text"):
+        vectorstore.split_embedding_inputs([row], tokenizer)
+
+
+def test_consecutive_calls_and_index_metadata_alignment(tokenizer, monkeypatch):
+    rows = [record(f"Record {i} " + "word " * (499 if i == 2 else 1), str(i)) for i in range(64)]
+    expected = vectorstore.split_embedding_inputs(rows, tokenizer)
+    texts = [row["original_text"] for row in expected]
+    # Each vector identifies its input position, including through the real USearch store.
+    expected_vectors = np.repeat(np.arange(len(expected), dtype=np.float32)[:, None], 384, axis=1)
+    model = Mock(tokenizer=tokenizer)
+    model.float.return_value = model.eval.return_value = model
+    model.encode.side_effect = [expected_vectors[i:i + 32] for i in range(0, len(expected), 32)]
+    load = Mock(return_value=model)
+    monkeypatch.setattr(vectorstore, "SentenceTransformer", load)
+    monkeypatch.setattr(vectorstore.torch, "set_num_interop_threads", lambda _: None)
+
+    vectors, metadata = vectorstore.create_embeddings(rows, "unused")
+
+    load.assert_called_once_with("unused", device="cpu", local_files_only=True, trust_remote_code=False)
+    assert model.max_seq_length == 512
+    assert len(expected) == 65  # Calls contain 32, 32, then 1 input.
+    assert model.encode.call_args_list == [
+        call(texts[i:i + 32], batch_size=32, show_progress_bar=False, convert_to_numpy=True,
+             precision="float32", normalize_embeddings=True)
+        for i in range(0, len(texts), 32)
+    ]
+    assert metadata == expected
+    index, metadata = vectorstore.create_usearch_index(vectors, metadata)
+    for position, row in enumerate(metadata):
+        assert row == expected[position]
+        np.testing.assert_array_equal(index.get(position), expected_vectors[position])
+    with pytest.raises(ValueError, match="counts differ"):
+        vectorstore.create_usearch_index(vectors[:-1], metadata)
+
+
+@pytest.mark.parametrize("cache_miss", [False, True])
+def test_query_loader_sets_512_on_local_and_download_paths(monkeypatch, cache_miss):
+    model = SimpleNamespace(max_seq_length=256)
+    load = Mock(side_effect=[OSError("cache miss"), model] if cache_miss else [model])
+    monkeypatch.setattr(resources, "SentenceTransformer", load)
+    assert resources.load_embedding_model("all-MiniLM-L6-v2") is model
+    assert model.max_seq_length == 512
+    assert load.call_args.kwargs["local_files_only"] is not cache_miss
+
+
+def test_real_query_window_and_builtin_normalization(tokenizer):
+    torch.set_num_threads(2)
+    model = resources.load_embedding_model(tokenizer.name_or_path, allow_download=False).to("cpu")
+    assert model.max_seq_length == 512
+    assert model.tokenize(["hello " * 510])["input_ids"].shape[1] == 512
+    assert model.get_embedding_dimension() == 384
+    assert type(model[-1]).__name__ == "Normalize"
+    vectors = model.encode(["Arm intrinsics", "hello " * 510], convert_to_numpy=True)
+    np.testing.assert_allclose(np.linalg.norm(vectors, axis=1), 1, atol=1e-6)
+
+
+def test_intrinsics_embed_one_source_card_without_splitting_full_text(tokenizer, monkeypatch):
+    text = ("Intrinsic description: Add unsigned bytes.\n\n"
+            "Signature follows:\n`uint8x16_t vaddq_u8(uint8x16_t a, uint8x16_t b);`\n"
+            + "Full pseudocode and compiler advice. " * 200)
+    row = {**record(text), "doc_type": "Intrinsic", "heading": "vaddq_u8",
+           "product": "Neon", "keywords": "vaddq_u8, neon, addition"}
+    row["embedding_text"] = intrinsic_source.intrinsic_embedding_text(row)
+    assert vectorstore.token_count(tokenizer, text) > 500
+    assert vectorstore.split_embedding_inputs([row], tokenizer) == [row]
+    # Use the real model: this checks which input was encoded, beyond a mock call.
+    monkeypatch.setattr(torch, "set_num_interop_threads", lambda _: None)
+    vectors, metadata = vectorstore.create_embeddings([row], tokenizer.name_or_path)
+    model = resources.load_embedding_model(tokenizer.name_or_path, allow_download=False).to("cpu").float().eval()
+    expected = model.encode([row["embedding_text"]], normalize_embeddings=True)
+    np.testing.assert_allclose(vectors, expected, atol=1e-6)
+    assert metadata == [row]
+    assert "compiler advice" not in vectorstore.embedding_input(row)
+
+
+@pytest.mark.parametrize("ctype,description", [
+    ("int", "signed integer scalar"),
+    ("const int", "signed integer scalar"),
+    ("enum svpattern", "predicate pattern selecting active elements"),
+    ("enum svprfop", "prefetch operation selecting access type, cache level and retention policy"),
+    ("void", "no return value"),
+    ("void *", "pointer to writable untyped memory"),
+    ("const void *", "pointer to read-only untyped memory"),
+    ("void *const", "pointer to writable untyped memory"),
+    ("const uint8_t *", "pointer to read-only 8-bit unsigned integer scalar"),
+    ("float32x4x3_t", "tuple of 3 vectors, each with 4 lanes of 32-bit floating point, 128-bit vector"),
+    ("svuint32_t", "scalable vector of 32-bit unsigned integer elements"),
+    ("svfloat32x2_t", "tuple of 2 vectors, each a scalable vector of 32-bit floating point elements"),
+    ("svuint16x3_t", "tuple of 3 vectors, each a scalable vector of 16-bit unsigned integer elements"),
+    ("svbfloat16x4_t", "tuple of 4 vectors, each a scalable vector of 16-bit brain floating point elements"),
+    ("uint8_t **", "uint8_t **"),
+    ("const uint8_t *const *", "const uint8_t *const *"),
+    ("svbool_t", "scalable predicate mask"),
+])
+def test_intrinsic_source_type_descriptions(ctype, description):
+    assert intrinsic_source.intrinsic_type_description(ctype) == description
+
+
+def test_prepared_inputs_keep_one_vector_per_record_and_preserve_other_documents(tokenizer, monkeypatch):
+    intrinsic = intrinsic_source.prepare_intrinsic_chunk(chunk())
+    intrinsic = {**intrinsic, "original_text": intrinsic["content"]}
+    rows = [record("First guide"), intrinsic, record("Second guide"), intrinsic]
+    encoded = np.eye(384, dtype=np.float32)[[2, 0, 3, 1]]
+    model = Mock(tokenizer=tokenizer)
+    model.float.return_value = model.eval.return_value = model
+    model.encode.return_value = encoded.copy()
+    monkeypatch.setattr(vectorstore, "SentenceTransformer", lambda *args, **kwargs: model)
+    monkeypatch.setattr(torch, "set_num_interop_threads", lambda _: None)
+    vectors, metadata = vectorstore.create_embeddings(rows, "unused")
+    assert vectors.shape == (4, 384) and metadata == rows
+    np.testing.assert_array_equal(vectors, encoded)
+    assert model.encode.call_args.args[0] == [
+        "First guide", intrinsic["embedding_text"], "Second guide", intrinsic["embedding_text"],
+    ]
+
+
+def chunk(isa="Neon"):
+    return {
+        "url": "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=vaddq_u8",
+        "keywords": "vaddq_u8, neon, addition, intrinsic, SSE, avx, streaming simd extension",
+        "content": f"The intrinsic is part of the {isa} instruction set architecture. "
+        "Here is a brief intrinsic description: Add unsigned bytes.\n\n"
+        "The signature is as follows:\n`uint8x16_t vaddq_u8(uint8x16_t a, uint8x16_t b);`\n"
+        "#include <arm_sve.h>\nShared compiler advice and full pseudocode.",
+    }
+
+
+@pytest.mark.parametrize("isa,expected", [("neon", "Neon"), ("sve", "SVE"), ("sve2", "SVE2")])
+def test_normalization_assigns_scope_and_removes_shared_keywords(isa, expected):
+    raw = chunk(isa)
+    before = deepcopy(raw)
+    normalized = intrinsic_source.normalize_intrinsic_chunk(raw)
+    assert raw == before
+    assert normalized["doc_type"] == "Intrinsic"
+    assert normalized["product"] == expected
+    assert normalized["heading_path"] == [expected, "vaddq_u8"]
+    assert normalized["keywords"] == "vaddq_u8, neon, addition"
+    assert ("#include <arm_neon.h>" in normalized["content"]) == (expected == "Neon")
+
+
+def test_card_preserves_operation_and_signature_but_omits_shared_template():
+    normalized = intrinsic_source.normalize_intrinsic_chunk(chunk())
+    record = {**normalized, "original_text": normalized["content"]}
+    text = intrinsic_source.intrinsic_embedding_text(record)
+    assert text == (
+        "Neon intrinsic vaddq_u8. Operation: addition. Add unsigned bytes. "
+        "Returns: 16 lanes of 8-bit unsigned integer, 128-bit vector. "
+        "Input a: 16 lanes of 8-bit unsigned integer, 128-bit vector. "
+        "Input b: 16 lanes of 8-bit unsigned integer, 128-bit vector. "
+        "Signature: uint8x16_t vaddq_u8(uint8x16_t a, uint8x16_t b);"
+    )
+    assert "full pseudocode" in record["original_text"]
+
+
+def test_card_preserves_unexpanded_types_and_full_signature():
+    signature = "svcount_t example(enum future_pattern pattern, const int lane, mfloat8_t value);"
+    record = {"heading": "example", "product": "SVE", "keywords": "",
+              "original_text": "The signature is as follows:\n`" + signature + "`\n"}
+    text = intrinsic_source.intrinsic_embedding_text(record)
+    assert "Returns: svcount_t." in text
+    assert "Input pattern: enum future_pattern." in text
+    assert "Input lane: signed integer scalar." in text
+    assert "Input value: mfloat8_t." in text
+    assert text.endswith("Signature: " + signature)
+
+
+def test_nonintrinsic_chunk_is_unchanged():
+    raw = {"url": "https://example.com/intrinsic-guide", "content": "example"}
+    assert intrinsic_source.normalize_intrinsic_chunk(raw) is raw
+
+
+@pytest.mark.parametrize("legacy_views", [False, True])
+def test_prepared_chunks_roundtrip_without_reparsing(tmp_path, monkeypatch, gc, legacy_views):
+    source = tmp_path / "intrinsics"
+    source.mkdir()
+    monkeypatch.setenv("INTRINSIC_CHUNKS_DIR", str(source))
+    monkeypatch.setenv("YAML_DATA_DIR", str(tmp_path / "guides"))
+    raw = {**chunk(), "uuid": "a", "title": "Arm Intrinsics - vaddq_u8"}
+    if legacy_views:
+        raw["embedding_texts"] = {"compact": "stale compact text", "detailed": "stale detailed text"}
+    path = source / "chunk_a.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["builder", "--model-path", "unused"])
+    inputs = []
+
+    def encode(metadata, *args):
+        inputs.append([r["embedding_text"] for r in metadata])
+        return np.ones((len(metadata), 384), dtype=np.float32), metadata
+
+    monkeypatch.setattr(vectorstore, "create_embeddings", encode)
+    with pytest.raises(ValueError, match="Regenerate.*acquisition"):
+        vectorstore.main()
+    assert not inputs
+    assert not (tmp_path / "metadata.json").exists()
+    gc.prepare_intrinsic_chunks()
+    prepared = path.read_text()
+    gc.prepare_intrinsic_chunks()
+    assert path.read_text() == prepared
+    record = yaml.safe_load(prepared)
+    assert record["keywords"] == "vaddq_u8, neon, addition"
+    assert isinstance(record.get("embedding_text"), str)
+    assert "16 lanes of 8-bit unsigned integer" in record["embedding_text"]
+    assert "embedding_texts" not in record
+
+    def unexpected_parse(*args):
+        raise AssertionError("Prepared chunks must not be parsed again")
+
+    monkeypatch.setattr(intrinsic_source, "normalize_intrinsic_chunk", unexpected_parse)
+    vectorstore.main()
+    assert inputs == [[record["embedding_text"]]]
+    saved = json.loads((tmp_path / "metadata.json").read_text())[0]
+    assert saved["original_text"] == record["content"]
+    assert saved["doc_type"] == "Intrinsic"
+    assert "embedding_text" not in saved
+
+
+@pytest.mark.parametrize("text", [None, "", " \t\n", 3, {"compact": "x", "detailed": "y"}])
+def test_invalid_prepared_descriptions_are_rejected(text, monkeypatch):
+    record = intrinsic_source.prepare_intrinsic_chunk(chunk())
+    record.pop("embedding_texts", None)
+    record["embedding_text"] = text
+    monkeypatch.setattr(sys, "argv", ["builder", "--model-path", "unused"])
+    monkeypatch.setattr(vectorstore, "load_local_yaml_files", lambda: [record])
+    with pytest.raises(ValueError, match="Regenerate.*acquisition"):
+        vectorstore.main()
+
+
+def test_old_two_description_chunks_require_reacquisition(monkeypatch):
+    record = {**intrinsic_source.prepare_intrinsic_chunk(chunk()), "uuid": "a", "title": "Intrinsic", "chunk_uuid": "a"}
+    record.pop("embedding_text", None)
+    record["embedding_texts"] = {"compact": "old compact text", "detailed": "old detailed text"}
+    monkeypatch.setattr(sys, "argv", ["builder", "--model-path", "unused"])
+    monkeypatch.setattr(vectorstore, "load_local_yaml_files", lambda: [record])
+    def unexpected_encode(*args):
+        pytest.fail("Old acquisition chunks must be rejected before encoding")
+    monkeypatch.setattr(vectorstore, "create_embeddings", unexpected_encode)
+    with pytest.raises(ValueError, match="Regenerate.*acquisition"):
+        vectorstore.main()
+
+
+@pytest.mark.parametrize("field", ["doc_type", "heading", "product"])
+def test_incomplete_intrinsic_metadata_is_rejected(field, monkeypatch):
+    record = intrinsic_source.prepare_intrinsic_chunk(chunk())
+    record.pop(field)
+    monkeypatch.setattr(sys, "argv", ["builder", "--model-path", "unused"])
+    monkeypatch.setattr(vectorstore, "load_local_yaml_files", lambda: [record])
+    with pytest.raises(ValueError, match="Regenerate.*acquisition"):
+        vectorstore.main()

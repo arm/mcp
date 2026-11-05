@@ -14,12 +14,16 @@
 
 import ast
 import json
+import os
 import re
 import subprocess
 import sys
 import tempfile
 import tomllib
 from pathlib import Path
+
+import pytest
+import yaml
 
 REPOSITORY = Path(__file__).resolve().parents[2]
 MCP_LOCAL = REPOSITORY / "mcp-local"
@@ -79,6 +83,22 @@ REQUIRED_CHECK_DISPATCH = (
 INTEGRATION_WORKFLOW = (
     REPOSITORY / ".github/workflows/integration-tests.yml"
 ).read_text()
+FORK_PROMOTION_WORKFLOW = (
+    REPOSITORY / ".github/workflows/promote-fork-pr.yml"
+).read_text()
+FORK_PROMOTION_SCRIPT = (
+    REPOSITORY / ".github/scripts/promote-fork-pr.py"
+).read_text()
+
+BENCHMARK_WORKFLOW = yaml.safe_load(EMBEDDING_WORKFLOW)
+BENCHMARK_SCRIPT = next(
+    step["run"]
+    for step in BENCHMARK_WORKFLOW["jobs"]["retrieval-benchmark"]["steps"]
+    if step["name"] == "Run full retrieval benchmark offline"
+)
+BENCHMARK_IMAGE_ID = "sha256:" + "a" * 64
+BENCHMARK_GENERATOR = "ghcr.io/arm/mcp-embedding-generator@sha256:" + "b" * 64
+BENCHMARK_CANDIDATE = "ghcr.io/arm/mcp-embedding-vectorstore@sha256:" + "c" * 64
 
 
 def test_docker_base_images_match_manifest() -> None:
@@ -236,6 +256,122 @@ def test_model_index_and_metadata_come_from_one_immutable_image() -> None:
     assert embeddings["model"] == MODEL_LOCK
 
 
+@pytest.fixture
+def benchmark(tmp_path):
+    binary = tmp_path / "docker"
+    binary.write_text(
+        f"#!{sys.executable}\n" + r'''
+import json, os, pathlib, sys
+args = sys.argv[1:]
+with open(os.environ["DOCKER_LOG"], "a") as log:
+    log.write(json.dumps(args) + "\n")
+if args[:2] == ["image", "inspect"]:
+    print(os.environ["ACTUAL_IMAGE_ID"])
+elif args[0] == "create":
+    print("corpus-container")
+elif args[0] == "run":
+    reports = pathlib.Path(os.environ["RUNNER_TEMP"]) / "retrieval-benchmark"
+    (reports / "summary.md").write_text("Benchmark summary\n")
+    sys.exit(int(os.environ["EVAL_EXIT"]))
+'''
+    )
+    binary.chmod(0o755)
+    log = tmp_path / "docker.jsonl"
+    env = dict(
+        os.environ,
+        PATH=f"{tmp_path}:{os.environ['PATH']}",
+        DOCKER_LOG=str(log),
+        RUNNER_TEMP=str(tmp_path / "runner temp"),
+        GITHUB_WORKSPACE=str(REPOSITORY),
+        GITHUB_SHA="d" * 40,
+        GITHUB_STEP_SUMMARY=str(tmp_path / "summary.md"),
+        GH_TOKEN="must-not-reach-evaluation",
+        GENERATOR_IMAGE=BENCHMARK_GENERATOR,
+        CANDIDATE_IMAGE=BENCHMARK_CANDIDATE,
+        CANDIDATE_IMAGE_ID=BENCHMARK_IMAGE_ID,
+        ACTUAL_IMAGE_ID=BENCHMARK_IMAGE_ID,
+        EVAL_EXIT="0",
+    )
+    log.touch()
+
+    def run(**overrides):
+        result = subprocess.run(
+            ["bash", "-c", BENCHMARK_SCRIPT],
+            env={**env, **overrides},
+            capture_output=True,
+            text=True,
+        )
+        return result, [json.loads(line) for line in log.read_text().splitlines()]
+
+    return run
+
+
+@pytest.mark.parametrize("candidate,exit_code", [(BENCHMARK_CANDIDATE, 0), (BENCHMARK_IMAGE_ID, 2)])
+def test_benchmark_runs_exact_candidate_offline(
+    benchmark, tmp_path, candidate, exit_code
+):
+    result, calls = benchmark(CANDIDATE_IMAGE=candidate, EVAL_EXIT=str(exit_code))
+    assert result.returncode == exit_code, result.stderr
+    create = next(call for call in calls if call[0] == "create")
+    assert create[-2:] == [candidate, "/unused"]
+    run = next(call for call in calls if call[0] == "run")
+    for flag in ("--network=none", "--read-only", "--pull=never", "--cap-drop=ALL"):
+        assert flag in run
+    assert BENCHMARK_GENERATOR in run
+    assert "/workspace/embedding-generation/evaluate_retrieval.py" in run
+    assert f"EVAL_TARGET={candidate}" in run
+    assert run[run.index("--model-path") + 1] == "/corpus/embedding-model"
+    assert run[run.index("--index-path") + 1] == "/corpus/usearch_index.bin"
+    assert run[run.index("--metadata-path") + 1] == "/corpus/metadata.json"
+    assert run[run.index("--synonyms-path") + 1] == "/workspace/mcp-local/name-synonyms.json"
+    mounts = [run[i + 1] for i, arg in enumerate(run) if arg == "--mount"]
+    for target in ("/workspace", "/corpus", "/baseline"):
+        assert any(f"dst={target},readonly" in mount for mount in mounts)
+    assert not any("GH_TOKEN" in arg or "docker.sock" in arg for arg in run)
+    assert (tmp_path / "summary.md").read_text() == "Benchmark summary\n"
+    assert calls[-1] == ["rm", "-f", "corpus-container"]
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"GENERATOR_IMAGE": "ghcr.io/arm/mcp-embedding-generator:latest"},
+        {"CANDIDATE_IMAGE": "ghcr.io/arm/mcp-embedding-vectorstore:latest"},
+        {"ACTUAL_IMAGE_ID": "sha256:" + "e" * 64},
+    ],
+)
+def test_benchmark_rejects_mutable_or_wrong_images(benchmark, override):
+    result, calls = benchmark(**override)
+    assert result.returncode != 0
+    assert "::error::" in result.stderr
+    assert not any(call[0] in ("create", "run") for call in calls)
+
+
+def test_benchmark_has_no_publication_privileges_or_dependents():
+    jobs = BENCHMARK_WORKFLOW["jobs"]
+    benchmark = jobs["retrieval-benchmark"]
+    assert benchmark["permissions"] == {
+        "actions": "read",
+        "contents": "read",
+        "packages": "read",
+    }
+    assert benchmark["continue-on-error"] is True
+    checkout = next(
+        step
+        for step in benchmark["steps"]
+        if step.get("uses", "").startswith("actions/checkout@")
+    )
+    assert checkout["with"]["persist-credentials"] is False
+    for name, job in jobs.items():
+        if name != "retrieval-benchmark":
+            assert "retrieval-benchmark" not in job.get("needs", [])
+    publisher_steps = jobs["generate-and-publish-vectorstore"]["steps"]
+    assert not any(
+        "evaluate_retrieval.py" in step.get("run", "")
+        for step in publisher_steps
+    )
+
+
 def test_embedding_candidate_requires_reviewed_promotion_before_release() -> None:
     image_triggers = IMAGE_WORKFLOW.split("jobs:", maxsplit=1)[0]
     assert "workflow_run:" not in image_triggers
@@ -379,11 +515,15 @@ def test_release_exports_cyclonedx_sboms_and_attaches_them_to_release() -> None:
 
 
 def test_source_scan_exports_cyclonedx_sbom_for_full_scans_only() -> None:
+    workflow = yaml.safe_load(BLACKDUCK_SOURCE_SCAN_WORKFLOW)
+    assert workflow["jobs"]["source_scan"]["name"] == (
+        "Main Push and Scheduled full source scan"
+    )
     full_scan_section = BLACKDUCK_SOURCE_SCAN_WORKFLOW.split(
         "      - name: Black Duck SCA scan", maxsplit=1
-    )[1].split("      - name: Black Duck SCA PR Scan", maxsplit=1)[0]
+    )[1].split("  pull_request_scan:", maxsplit=1)[0]
     pr_scan_section = BLACKDUCK_SOURCE_SCAN_WORKFLOW.split(
-        "      - name: Black Duck SCA PR Scan", maxsplit=1
+        "  pull_request_scan:", maxsplit=1
     )[1]
 
     assert "Export Black Duck CycloneDX SBOM" in full_scan_section
@@ -417,6 +557,197 @@ def test_source_scan_exports_cyclonedx_sbom_for_full_scans_only() -> None:
     assert "steps.black-duck-full-scan.outputs.status == '8'" in full_scan_section
     assert "steps.black-duck-full-scan.outputs.status != '8'" in full_scan_section
     assert "Export Black Duck CycloneDX SBOM" not in pr_scan_section
+
+
+def test_fork_pr_promotion_keeps_credentials_away_from_fork_code() -> None:
+    assert "\n  pull_request_scan:\n    name: Black Duck security scan\n" in (
+        BLACKDUCK_SOURCE_SCAN_WORKFLOW
+    )
+    assert "pull_request_result:" not in BLACKDUCK_SOURCE_SCAN_WORKFLOW
+    blackduck_workflow = yaml.safe_load(BLACKDUCK_SOURCE_SCAN_WORKFLOW)
+    assert "pull_request_result" not in blackduck_workflow["jobs"]
+    pr_job = blackduck_workflow["jobs"]["pull_request_scan"]
+    assert pr_job["name"] == "Black Duck security scan"
+    assert pr_job["if"] == "${{ github.event_name == 'pull_request' }}"
+    assert pr_job["steps"][0]["name"] == (
+        "Enforce the Black Duck pull request policy"
+    )
+    blackduck_step = next(
+        step for step in pr_job["steps"] if step["name"] == "Black Duck SCA PR Scan"
+    )
+    assert "head.repo.full_name == github.repository" in blackduck_step["if"]
+
+    triggers = FORK_PROMOTION_WORKFLOW.split("permissions:", maxsplit=1)[0]
+    assert "pull_request_target:" in triggers
+    assert "workflow_dispatch:" in triggers
+    assert (
+        "types: [opened, reopened, synchronize, ready_for_review]"
+        in triggers
+    )
+    assert "!github.event.pull_request.draft" in FORK_PROMOTION_WORKFLOW
+    assert "ref: main" in FORK_PROMOTION_WORKFLOW
+    assert "persist-credentials: false" in FORK_PROMOTION_WORKFLOW
+    assert "github.event.pull_request.head.sha || inputs.reviewed_sha" in (
+        FORK_PROMOTION_WORKFLOW
+    )
+    assert "actions/create-github-app-token@" in FORK_PROMOTION_WORKFLOW
+    assert "permission-contents: write" in FORK_PROMOTION_WORKFLOW
+    assert "permission-pull-requests: write" in FORK_PROMOTION_WORKFLOW
+    assert "permission-workflows:" not in FORK_PROMOTION_WORKFLOW
+    assert (
+        "GH_APP_SLUG: ${{ steps.promotion-token.outputs.app-slug }}"
+        in FORK_PROMOTION_WORKFLOW
+    )
+    assert (
+        "github.event.pull_request.merged == true"
+        not in FORK_PROMOTION_WORKFLOW
+    )
+    assert "finalize" not in FORK_PROMOTION_WORKFLOW
+    assert "reconcile" not in FORK_PROMOTION_WORKFLOW
+    assert '--expected-sha "${EXPECTED_SHA}"' in FORK_PROMOTION_WORKFLOW
+    assert "GH_APP_TOKEN" in FORK_PROMOTION_WORKFLOW
+    assert "actions/checkout" not in FORK_PROMOTION_SCRIPT
+    assert 'WORKFLOW_DIRECTORY = ".github/workflows/"' in FORK_PROMOTION_SCRIPT
+    assert "MAX_PULL_REQUEST_FILES = 3_000" in FORK_PROMOTION_SCRIPT
+    assert "external-contributions/pr-" in FORK_PROMOTION_SCRIPT
+    assert "trusted-fork-{username}/pr-" in FORK_PROMOTION_SCRIPT
+    assert 'user = pull.get("user") or {}' in FORK_PROMOTION_SCRIPT
+    assert 'user.get("type") != "Bot"' in FORK_PROMOTION_SCRIPT
+    assert "close_source_pr" not in FORK_PROMOTION_SCRIPT
+    assert "reconcile_source_pr" not in FORK_PROMOTION_SCRIPT
+    assert "finalize_internal_pr" not in FORK_PROMOTION_SCRIPT
+    assert "gh pr merge" not in FORK_PROMOTION_WORKFLOW
+
+    fork_guard = BLACKDUCK_SOURCE_SCAN_WORKFLOW.split(
+        "      - name: Enforce the Black Duck pull request policy",
+        maxsplit=1,
+    )[1]
+    assert '"${HEAD_REPOSITORY}" != "${GITHUB_REPOSITORY}"' in fork_guard
+    assert "Promote reviewed fork pull request workflow" in fork_guard
+    assert "Do not merge this source pull request" in fork_guard
+    assert "exit 1" in fork_guard
+
+    pin_guard = BLACKDUCK_SOURCE_SCAN_WORKFLOW.split(
+        "      - name: Verify promoted branch remains pinned to its reviewed commit",
+        maxsplit=1,
+    )[1].split("      - name: Checkout the reviewed pull request head", maxsplit=1)[0]
+    assert "external-contributions/" in pin_guard
+    assert "trusted-fork-" in pin_guard
+    assert 'expected_sha="${PROMOTED_REF##*-}"' in pin_guard
+    assert '"${ACTUAL_SHA,,}" != "${expected_sha,,}"' in pin_guard
+    assert "Promoted branch moved" in pin_guard
+    assert "exit 1" in pin_guard
+
+    pr_scan_section = BLACKDUCK_SOURCE_SCAN_WORKFLOW.split(
+        "  pull_request_scan:", maxsplit=1
+    )[1]
+    assert "if: ${{ github.event_name == 'pull_request' }}" in pr_scan_section
+    assert "HEAD_REPOSITORY:" in pr_scan_section
+    assert pr_scan_section.index("Enforce the Black Duck pull request policy") < (
+        pr_scan_section.index("Checkout the reviewed pull request head")
+    )
+    assert (
+        "github.event.pull_request.head.repo.full_name == github.repository"
+        in pr_scan_section
+    )
+    assert "environment:" not in pr_scan_section
+    assert "persist-credentials: false" in pr_scan_section
+    assert "git archive" not in pr_scan_section
+    assert '"git", "ls-tree", "-rz", "--full-tree"' in pr_scan_section
+    assert '["git", "cat-file", "blob", object_id]' in pr_scan_section
+    assert "every file and symlink stored as a Git blob" in pr_scan_section
+    assert "Materialize executable files and symlink targets as inert regular files" in (
+        pr_scan_section
+    )
+    assert "Unsupported Git blob mode" in pr_scan_section
+    assert "Unsafe Git tree path" in pr_scan_section
+    assert "Reviewed tree produced an empty source directory" in pr_scan_section
+    assert (
+        "project_directory: ${{ runner.temp }}/blackduck-pr-source"
+        in pr_scan_section
+    )
+    assert "project_source_archive:" not in pr_scan_section
+    assert "blackducksca_prComment_enabled: false" in pr_scan_section
+    assert "github_token:" not in pr_scan_section
+    assert "pull-requests: write" not in pr_scan_section
+
+
+def test_blackduck_pr_source_directory_is_inert_and_complete(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    runner_temp = tmp_path / "runner-temp"
+    repository.mkdir()
+    runner_temp.mkdir()
+    (repository / ".gitattributes").write_text(
+        "dependency.lock export-ignore\nsubstituted.txt export-subst\n"
+    )
+    (repository / "dependency.lock").write_text("must be scanned\n")
+    (repository / "substituted.txt").write_text("$Format:%H$\n")
+    (repository / "dependency-link").symlink_to("dependency.lock")
+
+    subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+    subprocess.run(["git", "add", "."], cwd=repository, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Archive Test",
+            "-c",
+            "user.email=archive-test@example.invalid",
+            "commit",
+            "-qm",
+            "Test archive attributes",
+        ],
+        cwd=repository,
+        check=True,
+    )
+    reviewed_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        stdout=subprocess.PIPE,
+        text=True,
+    ).stdout.strip()
+    workflow = yaml.safe_load(BLACKDUCK_SOURCE_SCAN_WORKFLOW)
+    materialize_script = next(
+        step["run"]
+        for step in workflow["jobs"]["pull_request_scan"]["steps"]
+        if step["name"]
+        == (
+            "Materialize inert source directory without executing repository code"
+        )
+    )
+
+    subprocess.run(
+        ["bash", "-c", materialize_script],
+        cwd=repository,
+        check=True,
+        env={
+            **os.environ,
+            "REVIEWED_SHA": reviewed_sha,
+            "RUNNER_TEMP": str(runner_temp),
+        },
+    )
+
+    source_directory = runner_temp / "blackduck-pr-source"
+    assert {
+        path.relative_to(source_directory).as_posix()
+        for path in source_directory.rglob("*")
+        if path.is_file()
+    } == {
+        ".gitattributes",
+        "dependency-link",
+        "dependency.lock",
+        "substituted.txt",
+    }
+    assert (source_directory / "dependency.lock").read_bytes() == (
+        b"must be scanned\n"
+    )
+    assert (source_directory / "substituted.txt").read_bytes() == (
+        b"$Format:%H$\n"
+    )
+    assert not (source_directory / "dependency-link").is_symlink()
+    assert (source_directory / "dependency-link").read_text() == "dependency.lock"
+    assert not ((source_directory / "dependency.lock").stat().st_mode & 0o111)
 
 
 def test_release_manifest_uses_the_validated_architecture_digests() -> None:
@@ -511,7 +842,14 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
     assert "steps.sbom-subjects.outputs.arm64_digest" in attest_image_job
     assert "verify-provenance:" in TRUSTED_RELEASE_WORKFLOW
     assert "attestations: read" in TRUSTED_RELEASE_WORKFLOW
-    assert TRUSTED_RELEASE_WORKFLOW.count("gh attestation verify") == 3
+    assert verify_attestations_job.count("gh attestation verify") == 3
+    assert publish_release_job.count("gh attestation download") == 1
+    assert publish_release_job.count("gh attestation verify") == 1
+    assert '--bundle "${provenance}"' in publish_release_job
+    assert (
+        '"${provenance}#Signed container provenance (Sigstore bundle)"'
+        in publish_release_job
+    )
     assert "--bundle-from-oci" in TRUSTED_RELEASE_WORKFLOW
     assert "Verify registry-attached architecture SBOMs" in verify_attestations_job
     assert "--predicate-type https://cyclonedx.org/bom" in verify_attestations_job
@@ -760,10 +1098,69 @@ def test_generated_prs_dispatch_required_checks_without_an_external_token() -> N
         assert "propose-pin-pr.sh" in workflow
     for workflow in (
         "integration-tests.yml",
-        "embedding-unit-tests.yml",
+        "knowledge-base-unit-tests.yml",
         "scorecard.yml",
     ):
         assert workflow in REQUIRED_CHECK_DISPATCH
+
+
+@pytest.mark.parametrize(
+    "notes,gh_exit_code,expected,warning",
+    [
+        (
+            "## What's Changed\n\n- Add `search` for $HOME\n\n**Full Changelog**: "
+            "https://github.com/arm/mcp/compare/v3.4.0...v3.5.0\n",
+            0, "## What's Changed\n\n- Add `search` for $HOME", "",
+        ),
+        ("", 0, "", "Generated release notes are empty"),
+        (" \t\n  \n", 0, "", "Generated release notes are empty"),
+        ("Partial API output must be discarded\n", 1, "", "Could not generate release notes"),
+    ],
+    ids=["success", "empty", "whitespace", "api-failure"],
+)
+def test_promotion_release_notes_are_best_effort(
+    tmp_path, notes, gh_exit_code, expected, warning
+):
+    workflow = yaml.safe_load(EMBEDDING_WORKFLOW)
+    steps = workflow["jobs"]["propose-mcp-embedding-pin"]["steps"]
+    generate = next(step for step in steps if step["name"] == "Generate release notes")
+    proposal = next(step for step in steps if step["name"] == "Propose embedding pin for review")
+
+    # Replace external commands with local stubs; no GitHub credentials are needed.
+    for name, script in {
+        "gh": '#!/bin/sh\nprintf \'%s\' "$MOCK_NOTES"\nexit "$MOCK_EXIT"\n',
+        "uuidgen": "#!/bin/sh\nprintf '%s\\n' 'test-delimiter'\n",
+    }.items():
+        binary = tmp_path / name
+        binary.write_text(script)
+        binary.chmod(0o755)
+
+    env_file = tmp_path / "github-env"
+    result = subprocess.run(
+        ["bash", "-c", generate["run"]],
+        env=dict(
+            os.environ,
+            PATH=f"{tmp_path}:{os.environ['PATH']}",
+            GH_TOKEN="mock-token",
+            GITHUB_ENV=str(env_file),
+            GITHUB_REPOSITORY="arm/mcp",
+            GITHUB_SHA="b" * 40,
+            RELEASE_VERSION="3.5.0",
+            MOCK_NOTES=notes,
+            MOCK_EXIT=str(gh_exit_code),
+        ),
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert ("::warning::" in result.stdout) == bool(warning)
+    assert warning in result.stdout
+    lines = env_file.read_text().splitlines()
+    name, delimiter = lines[0].split("<<", 1)
+    assert name == "RELEASE_NOTES"
+    assert lines[-1] == delimiter
+    assert "\n".join(lines[1:-1]) == expected
+    assert "${{ env.RELEASE_NOTES }}" in proposal["env"]["PR_BODY"]
 
 
 def test_version_bump_script_supports_all_release_types() -> None:
@@ -882,6 +1279,7 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
         "Dockerfile.toolchain",
         "acquire-model.py",
         "document_chunking.py",
+        "ecosystem_dashboard.py",
         "embedding-model.lock.json",
         "generate-chunks.py",
         "local_vectorstore_creation.py",
@@ -903,16 +1301,13 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
     assert "push-to-registry: true" in TOOLCHAIN_WORKFLOW
 
 
-def test_embedding_toolchain_uses_fixed_python_and_expat_versions() -> None:
-    assert "ARG PYTHON_VERSION=3.13.15" in TOOLCHAIN_DOCKERFILE
-    assert "ARG EXPAT_VERSION=2.8.4" in TOOLCHAIN_DOCKERFILE
+def test_embedding_toolchain_uses_fixed_python_version() -> None:
     assert (
-        "ARG EXPAT_SHA256="
-        "b8ece2437692dad44d851c4532723390a5a330990007706be9c8d2b90d294f36"
+        "ARG PYTHON_IMAGE=docker.io/library/python:3.13.18-slim@sha256:"
+        "7b58e4266b99c869d2225c050345f7c7fec255d9e3baeca19ea7de9411411c91"
         in TOOLCHAIN_DOCKERFILE
     )
-    assert "assert sys.version_info[:3] == (3, 13, 15)" in TOOLCHAIN_DOCKERFILE
-    assert "assert pyexpat.version_info == (2, 8, 4)" in TOOLCHAIN_DOCKERFILE
+    assert "assert sys.version_info[:3] == (3, 13, 18)" in TOOLCHAIN_DOCKERFILE
 
 
 def test_input_images_export_and_attach_blackduck_cyclonedx_sboms() -> None:

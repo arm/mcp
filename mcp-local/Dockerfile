@@ -15,9 +15,9 @@
 # syntax=docker/dockerfile:1.7
 
 # Keep these defaults synchronized with mcp-local/build-inputs.lock.json.
-ARG EMBEDDINGS_IMAGE=ghcr.io/arm/mcp-embedding-vectorstore@sha256:0cf92a4f41767324a27b463a9b6cc72ba0e69e8455a91c24bfbc831daac0e77b
-ARG MCP_BUILD_INPUTS_IMAGE=ghcr.io/arm/mcp-build-inputs@sha256:4625bdac56a7a661a3f7451138a44f046deaf7067a0b65f96211b3809af99ed1
-ARG UBUNTU_IMAGE=ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+ARG EMBEDDINGS_IMAGE=ghcr.io/arm/mcp-embedding-vectorstore@sha256:499a52e27a8a171d48920b0d9902cde3b13274f3babccd6db060a28c01d63680
+ARG MCP_BUILD_INPUTS_IMAGE=ghcr.io/arm/mcp-build-inputs@sha256:8587f10da108cb7320c0b11536e2d995afc34abe5a04da10c14758b55a26abc9
+ARG UBUNTU_IMAGE=ubuntu:24.04@sha256:24737cef17f4e22b1977df7d9a05e77c4e28b7da5b8911f8d8ccda136bf3573c
 
 FROM ${MCP_BUILD_INPUTS_IMAGE} AS mcp-inputs
 
@@ -89,8 +89,10 @@ COPY --from=embeddings /embedding-data/usearch_index.bin /app/data/usearch_index
 
 COPY mcp-local/utils/ /app/utils/
 COPY arm_kb_search/ /app/arm_kb_search/
-COPY mcp-local/server.py /app/
+COPY mcp-local/server.py /app/server.py
 COPY arm_mcp_definitions/ /app/arm_mcp_definitions/
+COPY mcp-local/name-synonyms.json /app/name-synonyms.json
+RUN --network=none python -c 'from arm_kb_search.resources import write_keyword_cache; write_keyword_cache("/app/data/metadata.json", synonyms_path="/app/name-synonyms.json")'
 
 FROM ${UBUNTU_IMAGE} AS runtime
 

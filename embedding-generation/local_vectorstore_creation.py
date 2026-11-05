@@ -17,8 +17,10 @@ import datetime
 import glob
 import json
 import os
+import uuid
 
 import numpy as np
+import torch
 import yaml
 from sentence_transformers import SentenceTransformer
 from usearch.index import Index
@@ -68,21 +70,122 @@ def load_local_yaml_files() -> list[dict]:
             print(f"Error loading {file_path}: {e}")
             continue
 
+    # Generated IDs change on acquisition; order by stable chunk data instead.
+    yaml_contents.sort(
+        key=lambda chunk: (
+            0 if chunk["chunk_uuid"].startswith("intrinsic_") else 1,
+            chunk.get("url", ""),
+            json.dumps(
+                {
+                    key: value
+                    for key, value in chunk.items()
+                    if key not in {"uuid", "chunk_uuid"}
+                },
+                sort_keys=True,
+            ),
+        )
+    )
+
     print(f"Successfully loaded {len(yaml_contents)} YAML files")
     return yaml_contents
 
 
-def create_embeddings(contents: list[str], model_path: str) -> np.ndarray:
-    """Create embeddings for the given contents using SentenceTransformers."""
-    print(f"Creating embeddings using local model: {model_path}")
-    model = SentenceTransformer(
-        model_path,
-        local_files_only=True,
-        trust_remote_code=False,
+EMBEDDING_TOKEN_CAP = 500
+PIECE_NAMESPACE = uuid.UUID("4729167e-eac3-5d52-af2b-f7f366cffb29")
+
+
+def token_count(tokenizer, text: str) -> int:
+    """Count the complete embedding input, including specials, without truncation."""
+    return len(tokenizer(text, add_special_tokens=True, truncation=False)["input_ids"])
+
+
+def choose_end(text: str, start: int, tokenizer) -> int:
+    """Reuse the experiment's tokenizer-offset and whitespace boundary selection."""
+    encoded = tokenizer(
+        text[start:], add_special_tokens=True, max_length=EMBEDDING_TOKEN_CAP,
+        truncation=True, return_offsets_mapping=True,
     )
-    embeddings = model.encode(contents, show_progress_bar=True, convert_to_numpy=True)
-    print(f"Created embeddings with shape: {embeddings.shape}")
-    return embeddings
+    ends = [end for begin, end in encoded["offset_mapping"] if end > 0]
+    if not ends:
+        raise ValueError(f"Tokenizer made no progress at character {start}")
+    proposed = min(len(text), start + max(ends))
+    floor = start + max(1, int((proposed - start) * 0.8))
+    end = next(
+        (i + 1 for i in range(proposed - 1, floor - 1, -1) if text[i].isspace()),
+        proposed,
+    )
+    while end > start and token_count(tokenizer, text[start:end]) > EMBEDDING_TOKEN_CAP:
+        prior = next((i + 1 for i in range(end - 2, start - 1, -1) if text[i].isspace()), None)
+        end = prior if prior and prior > start else end - 1
+    if end <= start:
+        raise ValueError(f"No tokenizer-safe slice begins at character {start}")
+    return end
+
+
+def embedding_input(row: dict) -> str:
+    """Use prepared intrinsic descriptions while preserving complete response text."""
+    if row.get("doc_type") == "Intrinsic":
+        return row["embedding_text"]
+    return row["original_text"]
+
+
+def split_embedding_inputs(metadata: list[dict], tokenizer) -> list[dict]:
+    """Return lossless consecutive pieces; leave fitting records unchanged."""
+    output = []
+    for row in metadata:
+        text = row["original_text"]
+        if row.get("doc_type") == "Intrinsic" or token_count(tokenizer, text) <= EMBEDDING_TOKEN_CAP:
+            output.append(row)
+            continue
+        if not row["search_text"].endswith(text):
+            raise ValueError("search_text must end with the complete embedding input")
+        intervals = []
+        start = 0
+        while start < len(text):
+            end = (len(text) if token_count(tokenizer, text[start:]) <= EMBEDDING_TOKEN_CAP
+                   else choose_end(text, start, tokenizer))
+            intervals.append((start, end))
+            start = end
+        for part, (start, end) in enumerate(intervals, 1):
+            identity = f"{row['uuid']}:{row['chunk_uuid']}:{start}:{end}"
+            child = dict(row)
+            child.update(
+                uuid=str(uuid.uuid5(PIECE_NAMESPACE, identity)),
+                chunk_uuid="cap500_nooverlap_" + str(uuid.uuid5(PIECE_NAMESPACE, "chunk:" + identity)),
+                original_text=text[start:end],
+                search_text=row["search_text"][:-len(text)] + text[start:end],
+                parent_uuid=row["uuid"], parent_chunk_uuid=row["chunk_uuid"],
+                source_start=start, source_end=end, source_part=part, source_parts=len(intervals),
+            )
+            output.append(child)
+    return output
+
+
+def create_embeddings(
+    metadata: list[dict], model_path: str, device: str = "cpu",
+) -> tuple[np.ndarray, list[dict]]:
+    """Build embeddings from intrinsic descriptions or original document text."""
+    torch.manual_seed(0)
+    torch.set_num_threads(2)
+    torch.set_num_interop_threads(1)
+    model = SentenceTransformer(
+        model_path, device=device, local_files_only=True, trust_remote_code=False,
+    ).float().eval()
+    model.max_seq_length = 512
+    metadata = split_embedding_inputs(metadata, model.tokenizer)
+    embeddings = np.empty((len(metadata), 384), dtype=np.float32)
+    for start in range(0, len(metadata), 32):
+        batch = metadata[start:start + 32]
+        texts = [embedding_input(row) for row in batch]
+        if any(token_count(model.tokenizer, text) > EMBEDDING_TOKEN_CAP for text in texts):
+            raise ValueError("Embedding input exceeds 500 tokens including special tokens")
+        encoded = model.encode(
+            texts, batch_size=32, show_progress_bar=False, convert_to_numpy=True,
+            precision="float32", normalize_embeddings=True,
+        )
+        embeddings[start:start + len(batch)] = encoded
+        print(f"Embedded {start + len(batch)}/{len(metadata)} pieces", flush=True)
+    return embeddings, metadata
 
 
 def create_usearch_index(
@@ -94,6 +197,9 @@ def create_usearch_index(
 
     dimension = embeddings.shape[1]
     num_vectors = embeddings.shape[0]
+
+    if num_vectors != len(metadata):
+        raise ValueError("Embedding and metadata counts differ")
 
     # Create USearch index
     index = Index(
@@ -123,6 +229,8 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Path to the embedding model created by acquire-model.py.",
     )
+    parser.add_argument("--device", choices=("cpu", "mps", "cuda"), default="cpu",
+                        help="Document encoding device; record this when comparing builds.")
     return parser.parse_args()
 
 
@@ -135,18 +243,26 @@ def main():
 
     # Extract content, uuid, url, and original text from YAML files
     print("Extracting content and metadata from YAML files")
-    contents = []
     metadata = []
     for i, yaml_content in enumerate(yaml_contents, 1):
         if i <= 10 or i % 1000 == 0 or i == len(yaml_contents):
             print(f"Processing YAML content {i}/{len(yaml_contents)}")
-        contents.append(yaml_content["content"])
+        if (yaml_content.get("doc_type") == "Intrinsic"
+                or "/instruction-sets/intrinsics/#q=" in str(yaml_content.get("url") or "")):
+            text = yaml_content.get("embedding_text")
+            if (not isinstance(text, str) or not text.strip()
+                    or yaml_content.get("doc_type") != "Intrinsic"
+                    or not yaml_content.get("heading") or not yaml_content.get("product")):
+                raise ValueError(
+                    f"Missing or invalid prepared intrinsic: {yaml_content.get('url')}. "
+                    "Regenerate the chunk artifact with the updated acquisition stage."
+                )
         heading_path = yaml_content.get("heading_path", []) or []
-        search_text = " ".join(
+        search_text = "\n\n".join(
             str(value)
             for value in [
                 yaml_content.get("title", ""),
-                " ".join(heading_path),
+                *heading_path,
                 yaml_content.get("heading", ""),
                 yaml_content.get("doc_type", ""),
                 yaml_content.get("product", ""),
@@ -171,12 +287,20 @@ def main():
                 "product": yaml_content.get("product", ""),
                 "version": yaml_content.get("version", ""),
                 "content_type": yaml_content.get("content_type", ""),
+                "platform": yaml_content.get("platform", ""),
+                "edition": yaml_content.get("edition", ""),
                 "search_text": search_text,
             }
         )
 
+        if "embedding_text" in yaml_content:
+            metadata[-1]["embedding_text"] = yaml_content["embedding_text"]
+
     # Create embeddings
-    embeddings = create_embeddings(contents, args.model_path)
+    embeddings, metadata = create_embeddings(metadata, args.model_path, args.device)
+
+    for row in metadata:
+        row.pop("embedding_text", None)
 
     print("Saving embeddings to file")
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -199,7 +323,7 @@ def main():
         json.dump(metadata, f, indent=2)
 
     print("USearch index and metadata have been created and saved.")
-    print(f"Total documents processed: {len(contents)}")
+    print(f"Total documents processed: {len(metadata)}")
     print(f"USearch index saved to: {os.path.abspath(index_filename)}")
     print(f"Metadata saved to: {os.path.abspath(metadata_filename)}")
 

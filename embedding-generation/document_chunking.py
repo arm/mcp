@@ -60,6 +60,126 @@ ARM_DOCUMENTATION_SERVICE_HOST = "documentation-service.arm.com"
 ARM_DEVELOPER_HOST = "developer.arm.com"
 
 
+_INTRINSIC_URL = "/instruction-sets/intrinsics/#q="
+_GENERIC_KEYWORDS = {"intrinsic", "sse", "avx", "streaming simd extension"}
+_ISAS = {"neon": "Neon", "sve": "SVE", "sve2": "SVE2"}
+
+
+def is_intrinsic_chunk(chunk: dict) -> bool:
+    return _INTRINSIC_URL in str(chunk.get("url") or "")
+
+
+def normalize_intrinsic_chunk(chunk: dict) -> dict:
+    """Normalize catalog metadata without changing unrelated chunks."""
+    if not is_intrinsic_chunk(chunk):
+        return chunk
+    name = chunk["url"].split("#q=", 1)[1]
+    text = chunk["content"]
+    match = re.search(r"part of the (\S+) instruction set architecture", text, re.I)
+    isa = _ISAS.get(match.group(1).lower(), match.group(1)) if match else ""
+    keywords = ", ".join(
+        term.strip() for term in str(chunk.get("keywords") or "").split(",")
+        if term.strip() and term.strip().lower() not in _GENERIC_KEYWORDS
+    )
+    if isa == "Neon":
+        text = text.replace("#include <arm_sve.h>", "#include <arm_neon.h>")
+    return {**chunk, "doc_type": "Intrinsic", "product": isa, "heading": name,
+            "heading_path": [isa, name], "keywords": keywords, "content": text}
+
+
+def intrinsic_type_description(raw: str) -> str:
+    """Describe C scalar, vector, tuple and pointer types at ingestion time."""
+    # Keep unsupported pointer nesting intact rather than flattening it.
+    if raw.count("*") > 1:
+        return raw.strip()
+    base = re.sub(r"\b(?:const|volatile|restrict|__restrict)\b", "", raw).replace("*", "").strip()
+    labels = {"uint": "unsigned integer", "int": "signed integer", "float": "floating point",
+              "poly": "polynomial", "bfloat": "brain floating point"}
+    fixed = re.fullmatch(r"(u?int|float|poly|bfloat)(\d+)((?:x\d+)*)_t", base)
+    scalable = re.fullmatch(r"sv(u?int|float|bfloat)(\d+)(?:x(\d+))?_t", base)
+    description = {"svbool_t": "scalable predicate mask", "bool": "boolean scalar",
+                   "int": "signed integer scalar",
+                   "enum svpattern": "predicate pattern selecting active elements",
+                   "enum svprfop": "prefetch operation selecting access type, cache level and retention policy",
+                   "void": "untyped memory" if "*" in raw else "no return value"}.get(base, base)
+    if fixed:
+        kind, width, dimensions = fixed.groups()
+        sizes = [int(size) for size in re.findall(r"x(\d+)", dimensions)]
+        description = f"{width}-bit {labels[kind]} scalar"
+        if sizes:
+            description = f"{sizes[0]} lanes of {width}-bit {labels[kind]}, {sizes[0] * int(width)}-bit vector"
+            if len(sizes) > 1:
+                description = f"tuple of {sizes[1]} vectors, each with " + description
+    elif scalable:
+        kind, width, count = scalable.groups()
+        description = f"scalable vector of {width}-bit {labels[kind]} elements"
+        if count:
+            description = f"tuple of {count} vectors, each a {description}"
+    if "*" in raw:
+        qualifier = "read-only" if re.search(r"\bconst\b", raw.split("*")[0]) else "writable"
+        description = f"pointer to {qualifier} " + description
+    return description
+
+
+def intrinsic_embedding_text(record: dict) -> str:
+    """Format detailed source text; preserve full text for responses."""
+    text, name = record["original_text"], record["heading"]
+    isa_match = re.search(r"is part of the (\S+) instruction set", text)
+    isa = isa_match.group(1) if isa_match else record["product"]
+    signature_match = re.search(r"follows:\s*`([^`]+)`", text)
+    if not signature_match:
+        raise ValueError(f"Missing intrinsic signature: {name}")
+    signature = signature_match.group(1)
+    categories = [term.strip() for term in str(record.get("keywords") or "").split(",")
+                  if term.strip() and term.strip().lower() not in _GENERIC_KEYWORDS | {name.lower(), isa.lower()}]
+    description_match = re.search(r"description: (.*?)\n\n", text, re.S)
+    description = description_match.group(1) if description_match else ""
+    description = description.strip()
+    declaration = re.fullmatch(r"\s*(.+?)\s+" + re.escape(name) + r"\s*\((.*?)\)\s*;\s*", signature, re.S)
+    if not declaration:
+        raise ValueError(f"Invalid intrinsic signature: {signature}")
+    result_type, arguments = (part.strip() for part in declaration.groups())
+    operation = text.partition("operates:\n")[2]
+    if operation.startswith("`") or operation.strip() == "No operation information.":
+        operation = ""
+    lines = [f"{isa} intrinsic {name}. Operation: {', '.join(categories)}."]
+    if description:
+        lines.append(description)
+    elif operation.strip().startswith(("Return ", "Returns ", "Store ", "Stores ", "Load ", "Loads ")):
+        sentences = re.split(r"(?<=[.!?])\s+", re.sub(r"\s+", " ", operation.strip()))
+        for sentence in sentences[:2]:
+            if len(sentence) > 400:
+                break
+            lines.append(sentence)
+    lines.append("Returns: " + intrinsic_type_description(result_type.strip()) + ".")
+    predicate_bits = sorted({int(bits) for bits in re.findall(r"(?:_|\[)b(8|16|32|64)(?=$|_|\]|\[)", name)})
+    if isa.lower().startswith("sve") and predicate_bits:
+        lines.append(f"Predicate controls {predicate_bits[0]}-bit lanes.")
+    counted_bits = sorted({int(bits) for bits in re.findall(
+        r"number of (8|16|32|64)[- ]bit (?:data )?elements", description + " " + operation, re.I)})
+    if counted_bits:
+        lines.append(f"Counts {counted_bits[0]}-bit vector elements.")
+    if arguments and arguments != "void":
+        for argument in arguments.split(","):
+            argument = argument.strip()
+            match = re.search(r"([A-Za-z_]\w*)\s*$", argument)
+            if not match or not argument[:match.start()].strip():
+                raise ValueError(f"Unparsed intrinsic argument: {signature}")
+            lines.append(f"Input {match[1]}: {intrinsic_type_description(argument[:match.start()].strip())}.")
+    lines.append("Signature: " + signature)
+    return " ".join(lines)
+
+
+def prepare_intrinsic_chunk(chunk: dict) -> dict:
+    """Prepare clean metadata and the embedding description during acquisition."""
+    if not is_intrinsic_chunk(chunk):
+        return chunk
+    normalized = normalize_intrinsic_chunk(chunk)
+    normalized.pop("embedding_texts", None)
+    record = {**normalized, "original_text": normalized["content"]}
+    return {**normalized, "embedding_text": intrinsic_embedding_text(record)}
+
+
 @dataclass
 class Link:
     text: str
@@ -87,6 +207,11 @@ class ParsedDocument:
     display_title: str
     content_type: str
     sections: list[Section]
+    # Product inference is optional; versions must come from source metadata.
+    product: str | None = None
+    version: str = ""
+    platform: str = ""
+    edition: str = ""
 
 
 def normalize_source_url(url: str) -> str:
@@ -266,6 +391,12 @@ def extract_html_links(tag, base_url: str) -> list[Link]:
 
 
 def link_text_with_urls(text: str, links: list[Link]) -> str:
+    # Markdown links already retain absolute URLs; HTML text and relative links
+    # may still need their resolved destinations appended.
+    embedded_destinations = {
+        match.group(2) for match in MARKDOWN_LINK_PATTERN.finditer(text)
+    }
+    links = [link for link in links if link.url not in embedded_destinations]
     if not links:
         return text
     link_evidence = " ".join(f"{link.text} {link.url}" for link in links)
@@ -296,13 +427,24 @@ def is_boilerplate_line(line: str) -> bool:
     return any(pattern.match(line) for pattern in BOILERPLATE_LINE_PATTERNS)
 
 
-def strip_frontmatter(markdown: str) -> str:
+def split_frontmatter(markdown: str) -> tuple[str | None, str]:
+    """Separate YAML text from the body without interpreting source metadata."""
     markdown = markdown.lstrip("\ufeff")
-    if markdown.startswith("---"):
-        end = markdown.find("\n---", 3)
-        if end != -1:
-            return markdown[end + 4 :].lstrip()
-    return markdown
+    lines = markdown.splitlines(keepends=True)
+    # Frontmatter must start on the first line, allowing LF or CRLF line endings.
+    if not lines or not re.fullmatch(r"---[ \t]*\r?\n", lines[0]):
+        return None, markdown
+    # Stop at the first closing delimiter, even for an empty block, so later
+    # Markdown horizontal rules cannot cause body content to be swallowed.
+    for index, line in enumerate(lines[1:], start=1):
+        if re.fullmatch(r"---[ \t]*(?:\r?\n)?", line):
+            frontmatter = "".join(lines[1:index]).removesuffix("\n").removesuffix("\r")
+            return frontmatter, "".join(lines[index + 1 :]).lstrip()
+    return None, markdown
+
+
+def strip_frontmatter(markdown: str) -> str:
+    return split_frontmatter(markdown)[1]
 
 
 def normalize_heading_path(title: str, heading_path: list[str]) -> list[str]:
@@ -942,6 +1084,7 @@ def parse_arm_documentation_api_json(
     fallback_title: str,
 ) -> ParsedDocument:
     data = json.loads(response_content.decode("utf-8", errors="ignore"))
+    version = data.get("versionLabel") or ""
     topic = data.get("topic", data)
     content = topic.get("content", "")
     if not content:
@@ -951,11 +1094,14 @@ def parse_arm_documentation_api_json(
             display_title=fallback_title,
             content_type="html",
             sections=[],
+            version=version,
         )
 
     html = base64.b64decode(content).decode("utf-8", errors="ignore")
     title = data.get("title") or fallback_title
-    return parse_html(html, source_url, resolved_url, title)
+    parsed_document = parse_html(html, source_url, resolved_url, title)
+    parsed_document.version = version
+    return parsed_document
 
 
 def merge_code_context(blocks: list[Block]) -> list[str]:
@@ -1069,17 +1215,6 @@ def build_chunk_text(title: str, heading_path: list[str], body: str) -> str:
     )
 
 
-def derive_version(title: str, source_url: str, content: str = "") -> str:
-    haystack = " ".join([title, source_url, content[:4000]])
-    match = re.search(r"\b(v?\d+(?:\.\d+){0,2})\b", haystack, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    match = re.search(r"\b(20\d{2})\b", haystack)
-    if match:
-        return match.group(1)
-    return ""
-
-
 def derive_product(
     title: str, source_url: str, doc_type: str, keywords: Iterable[str]
 ) -> str:
@@ -1111,12 +1246,14 @@ def chunk_parsed_document(
     overlap_tokens: int = 50,
 ) -> list[dict[str, str]]:
     chunks: list[dict[str, str]] = []
-    product = derive_product(
-        parsed_document.display_title, parsed_document.source_url, doc_type, keywords
+    product = (
+        parsed_document.product
+        if parsed_document.product is not None
+        else derive_product(
+            parsed_document.display_title, parsed_document.source_url, doc_type, keywords
+        )
     )
-    version = derive_version(
-        parsed_document.display_title, parsed_document.resolved_url
-    )
+    version = parsed_document.version or ""
     for section in parsed_document.sections:
         heading_path = normalize_heading_path(
             parsed_document.display_title, section.heading_path
@@ -1141,6 +1278,8 @@ def chunk_parsed_document(
                     "product": product,
                     "version": version,
                     "content_type": parsed_document.content_type,
+                    "platform": parsed_document.platform,
+                    "edition": parsed_document.edition,
                     "content": build_chunk_text(
                         parsed_document.display_title, heading_path, chunk_body
                     ),

@@ -6,12 +6,15 @@ requires-python = "==3.12.*"
 dependencies = [
     "ar==1.0.1",
     "arm-kb-search",
-    "fastmcp==4.0.10",
+    "fastmcp==3.4.10",
     "flask==3.1.3",
-    "gitpython==3.1.59",
+    "gitpython==3.2.1",
     "jinja2==3.1.6",
-    "lxml==6.1.1",
-    "mcp==2.2.0",
+    "joserfc==1.8.0",
+    "lxml==6.1.3",
+    "mcp==1.30.0",
+    # Pin runtime pip explicitly instead of inheriting the venv bootstrap version.
+    "pip==26.3",
     "pycryptodome==3.23.0",
     "python-magic==0.4.27",
     "pyyaml==6.0.3",
@@ -23,13 +26,13 @@ dependencies = [
 
 [dependency-groups]
 acquisition = [
-    "pip==26.2.1",
+    "pip==26.3",
 ]
 test = [
-    "fastmcp==4.0.10",
-    "mcp==2.2.0",
-    "pyyaml==6.0.3",
+    "fastmcp==3.4.10",
+    "mcp==1.30.0",
     "pytest",
+    "pyyaml==6.0.3",
     "testcontainers",
 ]
 

@@ -13,8 +13,9 @@ If your goal is to migrate an application from x86 to Arm as quickly as possible
 
 ## Features
 
-The server exposes one MCP tool, **`knowledge_base_search`**, for semantic search
-across Arm documentation, learning resources, intrinsics, and software compatibility.
+The server exposes one MCP tool, **`knowledge_base_search`**, for [keyword and semantic search](arm_kb_search/README.md)
+across Arm documentation, learning resources, intrinsics, and software compatibility,
+with technical-name aliases.
 
 Three bundled Agent Skills guide the assistant in running commands through its
 own shell:
@@ -54,6 +55,9 @@ docker buildx build -f mcp-local/Dockerfile -t armlimited/arm-mcp . --load
 This builds for the Docker host's native architecture. The release workflow is
 responsible for explicit multi-architecture builds. If dependencies changed and
 the pinned input bundle is stale, follow the [branch build instructions](CONTRIBUTING.md#building-with-changed-python-dependencies) first.
+
+For local development builds, see the
+[Quick Local Development Builds section in CONTRIBUTING.md](CONTRIBUTING.md#quick-local-development-builds).
 
 ### 2. Configure Your MCP Client
 
