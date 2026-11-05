@@ -18,6 +18,32 @@ The release links to two kinds of signed statements:
 The commands below verify **image provenance**. They do not verify the SBOM
 attestations or attest the separate SBOM files offered as release downloads.
 
+## Inspect the BuildKit SBOM
+
+Production images also carry a BuildKit-generated SPDX SBOM for each platform.
+This metadata is separate from the signed Black Duck SBOM attestations and is
+included so Docker tooling can inspect the image inventory directly.
+
+For the multi-platform release tag, select the platform whose SBOM you want:
+
+```bash
+VERSION='replace-with-release-version-without-v'
+
+docker buildx imagetools inspect "armlimited/arm-mcp:${VERSION}" \
+  --format '{{ json (index .SBOM "linux/amd64").SPDX }}'
+```
+
+Replace `linux/amd64` with `linux/arm64` for the Arm64 SBOM. Architecture tags
+contain one platform, so they support the shorter form:
+
+```bash
+docker buildx imagetools inspect "armlimited/arm-mcp:${VERSION}-amd64" \
+  --format '{{ json .SBOM.SPDX }}'
+```
+
+Inspection shows the attached inventory but does not verify the GitHub/Sigstore
+signature on the separate Black Duck attestation.
+
 ## One provenance statement, several places to retrieve it
 
 The provenance link and the `.intoto.jsonl` release attachment provide access
