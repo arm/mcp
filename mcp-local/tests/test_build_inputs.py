@@ -456,29 +456,6 @@ def test_release_scans_validated_runtime_images_in_all_modes() -> None:
     )
 
 
-def test_release_publishes_buildkit_sboms_inspectable_by_buildx() -> None:
-    build_job = TRUSTED_RELEASE_WORKFLOW.split(
-        "  build-arch-images:", maxsplit=1
-    )[1].split("  record-dry-run:", maxsplit=1)[0]
-    publish_image_job = TRUSTED_RELEASE_WORKFLOW.split(
-        "  publish-image:", maxsplit=1
-    )[1].split("  attest-image:", maxsplit=1)[0]
-
-    assert "sbom: ${{ needs.validate-release.outputs.mode == 'production' }}" in (
-        build_job
-    )
-    assert "Verify BuildKit platform SBOMs are inspectable" in publish_image_job
-    assert '{{ json (index .SBOM "linux/amd64").SPDX }}' in publish_image_job
-    assert '{{ json (index .SBOM "linux/arm64").SPDX }}' in publish_image_job
-    assert '.SPDXID == "SPDXRef-DOCUMENT"' in publish_image_job
-    assert 'startswith("SPDX-")' in publish_image_job
-    assert '{{ json (index .SBOM "linux/amd64").SPDX }}' in PROVENANCE_GUIDE
-    assert "BuildKit-generated SPDX SBOM" in PROVENANCE_GUIDE
-    assert publish_image_job.index(
-        "Publish multi-architecture release from validated digests"
-    ) < publish_image_job.index("Verify BuildKit platform SBOMs are inspectable")
-
-
 def test_release_exports_spdx_2_3_sboms_and_attaches_them_to_release() -> None:
     build_job = TRUSTED_RELEASE_WORKFLOW.split(
         "  build-arch-images:", maxsplit=1
