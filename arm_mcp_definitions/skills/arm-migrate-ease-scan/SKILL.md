@@ -1,5 +1,5 @@
 ---
-name: arm-migration-scan
+name: arm-migrate-ease-scan
 description: Download and run migrate-ease compatibility scanners to assess Arm portability (C/C++, Python, Go, Rust, Java, JavaScript, Dockerfile). Triggers on requests to scan local checkouts or remote repos for aarch64 migration.
 ---
 
