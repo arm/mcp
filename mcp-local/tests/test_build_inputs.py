@@ -14,12 +14,15 @@
 
 import json
 import os
-from pathlib import Path
 import re
+import runpy
 import subprocess
 import sys
 import tempfile
 import tomllib
+from io import BytesIO
+from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 import yaml
@@ -54,8 +57,9 @@ BLACKDUCK_SOURCE_SCAN_WORKFLOW = (
     REPOSITORY / ".github/workflows/black-duck-security-scan-ci.yml"
 ).read_text()
 BLACKDUCK_SBOM_EXPORT_SCRIPT = (
-    REPOSITORY / ".github/scripts/export-blackduck-cyclonedx.py"
+    REPOSITORY / ".github/scripts/export-blackduck-spdx.py"
 ).read_text()
+BLACKDUCK_SBOM_EXPORT_PATH = REPOSITORY / ".github/scripts/export-blackduck-spdx.py"
 PIN_PROMOTION_SCRIPT = (
     REPOSITORY / ".github/scripts/propose-pin-pr.sh"
 ).read_text()
@@ -452,7 +456,7 @@ def test_release_scans_validated_runtime_images_in_all_modes() -> None:
     )
 
 
-def test_release_exports_cyclonedx_sboms_and_attaches_them_to_release() -> None:
+def test_release_exports_spdx_2_3_sboms_and_attaches_them_to_release() -> None:
     build_job = TRUSTED_RELEASE_WORKFLOW.split(
         "  build-arch-images:", maxsplit=1
     )[1].split("  record-dry-run:", maxsplit=1)[0]
@@ -462,8 +466,8 @@ def test_release_exports_cyclonedx_sboms_and_attaches_them_to_release() -> None:
 
     assert '"reportFormat": "JSON"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
     assert '"reportType": "SBOM"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
-    assert '"sbomType": "CYCLONEDX_16"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
-    assert '"specification": "CycloneDX-1.6"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert '"sbomType": "SPDX_23"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert '"specification": "SPDX-2.3"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
     assert "/api/tokens/authenticate" in BLACKDUCK_SBOM_EXPORT_SCRIPT
     assert "/sbom-reports" in BLACKDUCK_SBOM_EXPORT_SCRIPT
     assert "/download.zip" in BLACKDUCK_SBOM_EXPORT_SCRIPT
@@ -472,43 +476,60 @@ def test_release_exports_cyclonedx_sboms_and_attaches_them_to_release() -> None:
     assert "report creation returned no Location header" in BLACKDUCK_SBOM_EXPORT_SCRIPT
     assert 'accept: str = "*/*"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
     assert "accept=REPORT_MEDIA_TYPE" not in BLACKDUCK_SBOM_EXPORT_SCRIPT
-    assert 'report.get("bomFormat") == "CycloneDX"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
-    assert 'report.get("specVersion") == "1.6"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert 'report.get("spdxVersion") == "SPDX-2.3"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
+    assert 'report.get("SPDXID") == "SPDXRef-DOCUMENT"' in BLACKDUCK_SBOM_EXPORT_SCRIPT
 
-    assert "Export Black Duck CycloneDX SBOM" in build_job
+    assert "Export Black Duck SPDX 2.3 SBOM" in build_job
     assert "BLACKDUCK_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}" in build_job
     assert (
         "BLACKDUCK_PROJECT_VERSION: "
         "mcp-runtime-container-${{ matrix.tag }}-1.0" in build_job
     )
-    assert "export-blackduck-cyclonedx.py" in build_job
+    assert "export-blackduck-spdx.py" in build_job
+    assert ".spdx.json" in build_job
     assert "--timeout 14400" in build_job
-    assert "Retain CycloneDX SBOM" in build_job
+    assert "Retain SPDX 2.3 SBOM" in build_job
     assert "runtime-sbom-${{ matrix.tag }}-${{ github.run_id }}" in build_job
     assert "if-no-files-found: error" in build_job
     assert build_job.index("Black Duck scan validated runtime image") < build_job.index(
-        "Export Black Duck CycloneDX SBOM"
+        "Export Black Duck SPDX 2.3 SBOM"
     )
-    assert build_job.index("Export Black Duck CycloneDX SBOM") < build_job.index(
-        "Retain CycloneDX SBOM"
+    assert build_job.index("Export Black Duck SPDX 2.3 SBOM") < build_job.index(
+        "Retain SPDX 2.3 SBOM"
     )
 
     assert "actions: read" in publish_release_job
-    assert "Download runtime CycloneDX SBOMs" in publish_release_job
+    assert "Download runtime SPDX 2.3 SBOMs" in publish_release_job
     assert "pattern: runtime-sbom-*-${{ github.run_id }}" in publish_release_job
-    assert "Validate runtime CycloneDX SBOMs" in publish_release_job
-    assert (
-        '.bomFormat == "CycloneDX" and .specVersion == "1.6"'
-        in publish_release_job
-    )
-    assert '"${amd64_sbom}#CycloneDX SBOM (AMD64)"' in publish_release_job
-    assert '"${arm64_sbom}#CycloneDX SBOM (Arm64)"' in publish_release_job
-    assert publish_release_job.index("Validate runtime CycloneDX SBOMs") < (
+    assert "Validate runtime SPDX 2.3 SBOMs" in publish_release_job
+    assert '.spdxVersion == "SPDX-2.3"' in publish_release_job
+    assert '.SPDXID == "SPDXRef-DOCUMENT"' in publish_release_job
+    assert '"${amd64_sbom}#SPDX 2.3 SBOM (AMD64)"' in publish_release_job
+    assert '"${arm64_sbom}#SPDX 2.3 SBOM (Arm64)"' in publish_release_job
+    assert publish_release_job.index("Validate runtime SPDX 2.3 SBOMs") < (
         publish_release_job.index("gh release create")
     )
 
 
-def test_source_scan_exports_cyclonedx_sbom_for_full_scans_only() -> None:
+def test_blackduck_exporter_extracts_spdx_2_3_json() -> None:
+    exporter = runpy.run_path(str(BLACKDUCK_SBOM_EXPORT_PATH))
+    spdx_document = {
+        "spdxVersion": "SPDX-2.3",
+        "SPDXID": "SPDXRef-DOCUMENT",
+        "dataLicense": "CC0-1.0",
+        "documentNamespace": "https://example.com/spdx/document",
+    }
+    archive_buffer = BytesIO()
+    with ZipFile(archive_buffer, "w") as archive:
+        archive.writestr("README.txt", "not an SBOM")
+        archive.writestr("report.json", json.dumps(spdx_document))
+
+    extracted = exporter["extract_spdx_json"](archive_buffer.getvalue())
+
+    assert json.loads(extracted) == spdx_document
+
+
+def test_source_scan_exports_spdx_2_3_sbom_for_full_scans_only() -> None:
     workflow = yaml.safe_load(BLACKDUCK_SOURCE_SCAN_WORKFLOW)
     assert workflow["jobs"]["source_scan"]["name"] == (
         "Main Push and Scheduled full source scan"
@@ -520,17 +541,18 @@ def test_source_scan_exports_cyclonedx_sbom_for_full_scans_only() -> None:
         "  pull_request_scan:", maxsplit=1
     )[1]
 
-    assert "Export Black Duck CycloneDX SBOM" in full_scan_section
+    assert "Export Black Duck SPDX 2.3 SBOM" in full_scan_section
     assert "id: source-sbom-export" in full_scan_section
     assert "continue-on-error: true" in full_scan_section
-    assert "export-blackduck-cyclonedx.py" in full_scan_section
+    assert "export-blackduck-spdx.py" in full_scan_section
+    assert ".spdx.json" in full_scan_section
     assert '--project "${DETECT_PROJECT_NAME}"' in full_scan_section
     assert '--version "${DETECT_PROJECT_VERSION_NAME}"' in full_scan_section
     assert "--timeout 14400" in full_scan_section
     assert "steps.black-duck-full-scan.outcome == 'success'" in full_scan_section
     assert "steps.source-sbom-export.outcome == 'success'" in full_scan_section
     assert full_scan_section.count("!cancelled()") >= 3
-    assert "Retain Black Duck source CycloneDX SBOM" in full_scan_section
+    assert "Retain Black Duck source SPDX 2.3 SBOM" in full_scan_section
     assert "blackduck-source-sbom-${{ github.run_id }}" in full_scan_section
     assert "if-no-files-found: error" in full_scan_section
     assert "retention-days: 10" in full_scan_section
@@ -550,7 +572,7 @@ def test_source_scan_exports_cyclonedx_sbom_for_full_scans_only() -> None:
     assert "Report Black Duck source scan failure" in full_scan_section
     assert "steps.black-duck-full-scan.outputs.status == '8'" in full_scan_section
     assert "steps.black-duck-full-scan.outputs.status != '8'" in full_scan_section
-    assert "Export Black Duck CycloneDX SBOM" not in pr_scan_section
+    assert "Export Black Duck SPDX 2.3 SBOM" not in pr_scan_section
 
 
 def test_fork_pr_promotion_keeps_credentials_away_from_fork_code() -> None:
@@ -829,8 +851,8 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
     )
     assert "push-to-registry: true" in attest_image_job
     assert "Validate attestation outputs" in attest_image_job
-    assert "Attach AMD64 CycloneDX SBOM to the image" in attest_image_job
-    assert "Attach ARM64 CycloneDX SBOM to the image" in attest_image_job
+    assert "Attach AMD64 SPDX 2.3 SBOM to the image" in attest_image_job
+    assert "Attach ARM64 SPDX 2.3 SBOM to the image" in attest_image_job
     assert attest_image_job.count("sbom-path:") == 2
     assert "steps.sbom-subjects.outputs.amd64_digest" in attest_image_job
     assert "steps.sbom-subjects.outputs.arm64_digest" in attest_image_job
@@ -846,7 +868,7 @@ def test_release_attests_and_verifies_the_final_production_digest() -> None:
     )
     assert "--bundle-from-oci" in TRUSTED_RELEASE_WORKFLOW
     assert "Verify registry-attached architecture SBOMs" in verify_attestations_job
-    assert "--predicate-type https://cyclonedx.org/bom" in verify_attestations_job
+    assert "--predicate-type https://spdx.dev/Document/v2.3" in verify_attestations_job
     assert (
         "arm/mcp/.github/workflows/trusted-mcp-release.yml"
         in TRUSTED_RELEASE_WORKFLOW
@@ -1304,18 +1326,19 @@ def test_embedding_toolchain_uses_fixed_python_version() -> None:
     assert "assert sys.version_info[:3] == (3, 13, 18)" in TOOLCHAIN_DOCKERFILE
 
 
-def test_input_images_export_and_attach_blackduck_cyclonedx_sboms() -> None:
+def test_input_images_export_and_attach_blackduck_spdx_2_3_sboms() -> None:
     assert "id-token: write" in INPUT_WORKFLOW
     assert "attestations: write" in INPUT_WORKFLOW
     assert "artifact-metadata: write" in INPUT_WORKFLOW
-    assert "Export Black Duck CycloneDX SBOM" in INPUT_WORKFLOW
+    assert "Export Black Duck SPDX 2.3 SBOM" in INPUT_WORKFLOW
     assert (
         "BLACKDUCK_PROJECT_VERSION: "
         "mcp-build-inputs-container-${{ matrix.arch }}-1.0" in INPUT_WORKFLOW
     )
-    assert "export-blackduck-cyclonedx.py" in INPUT_WORKFLOW
+    assert "export-blackduck-spdx.py" in INPUT_WORKFLOW
+    assert ".spdx.json" in INPUT_WORKFLOW
     assert "--timeout 14400" in INPUT_WORKFLOW
-    assert "Retain Black Duck CycloneDX SBOM" in INPUT_WORKFLOW
+    assert "Retain Black Duck SPDX 2.3 SBOM" in INPUT_WORKFLOW
     assert (
         "mcp-build-inputs-sbom-${{ matrix.arch }}-${{ github.run_id }}"
         in INPUT_WORKFLOW
@@ -1323,7 +1346,7 @@ def test_input_images_export_and_attach_blackduck_cyclonedx_sboms() -> None:
     assert "if-no-files-found: error" in INPUT_WORKFLOW
 
     attestation = INPUT_WORKFLOW.split(
-        "Attach Black Duck CycloneDX SBOM to the published input image",
+        "Attach Black Duck SPDX 2.3 SBOM to the published input image",
         maxsplit=1,
     )[1].split("Validate input-image SBOM attestation", maxsplit=1)[0]
     assert "if: ${{ env.PUBLISH_IMAGES == 'true' }}" in attestation
@@ -1334,26 +1357,27 @@ def test_input_images_export_and_attach_blackduck_cyclonedx_sboms() -> None:
     assert "push-to-registry: true" in attestation
     assert INPUT_WORKFLOW.index(
         "Secure Container scan architecture input image before publication"
-    ) < INPUT_WORKFLOW.index("Export Black Duck CycloneDX SBOM")
-    assert INPUT_WORKFLOW.index("Export Black Duck CycloneDX SBOM") < (
-        INPUT_WORKFLOW.index("Retain Black Duck CycloneDX SBOM")
+    ) < INPUT_WORKFLOW.index("Export Black Duck SPDX 2.3 SBOM")
+    assert INPUT_WORKFLOW.index("Export Black Duck SPDX 2.3 SBOM") < (
+        INPUT_WORKFLOW.index("Retain Black Duck SPDX 2.3 SBOM")
     )
     assert INPUT_WORKFLOW.index("Verify published image matches scanned candidate") < (
         INPUT_WORKFLOW.index(
-            "Attach Black Duck CycloneDX SBOM to the published input image"
+            "Attach Black Duck SPDX 2.3 SBOM to the published input image"
         )
     )
 
 
-def test_embedding_toolchain_exports_and_attaches_blackduck_cyclonedx_sbom() -> None:
-    assert "Export Black Duck CycloneDX SBOM" in TOOLCHAIN_WORKFLOW
+def test_embedding_toolchain_exports_and_attaches_blackduck_spdx_2_3_sbom() -> None:
+    assert "Export Black Duck SPDX 2.3 SBOM" in TOOLCHAIN_WORKFLOW
     assert (
         "BLACKDUCK_PROJECT_VERSION: mcp-embedding-generator-container-1.0"
         in TOOLCHAIN_WORKFLOW
     )
-    assert "export-blackduck-cyclonedx.py" in TOOLCHAIN_WORKFLOW
+    assert "export-blackduck-spdx.py" in TOOLCHAIN_WORKFLOW
+    assert ".spdx.json" in TOOLCHAIN_WORKFLOW
     assert "--timeout 14400" in TOOLCHAIN_WORKFLOW
-    assert "Retain Black Duck CycloneDX SBOM" in TOOLCHAIN_WORKFLOW
+    assert "Retain Black Duck SPDX 2.3 SBOM" in TOOLCHAIN_WORKFLOW
     assert (
         "embedding-toolchain-sbom-arm64-${{ github.run_id }}"
         in TOOLCHAIN_WORKFLOW
@@ -1361,7 +1385,7 @@ def test_embedding_toolchain_exports_and_attaches_blackduck_cyclonedx_sbom() -> 
     assert "if-no-files-found: error" in TOOLCHAIN_WORKFLOW
 
     attestation = TOOLCHAIN_WORKFLOW.split(
-        "Attach Black Duck CycloneDX SBOM to the published toolchain image",
+        "Attach Black Duck SPDX 2.3 SBOM to the published toolchain image",
         maxsplit=1,
     )[1].split("Verify published GHCR package is private", maxsplit=1)[0]
     assert "if: ${{ env.PUBLISH_IMAGE == 'true' }}" in attestation
@@ -1372,10 +1396,10 @@ def test_embedding_toolchain_exports_and_attaches_blackduck_cyclonedx_sbom() -> 
     assert "push-to-registry: true" in attestation
     assert TOOLCHAIN_WORKFLOW.index(
         "Secure Container scan toolchain image before publication"
-    ) < TOOLCHAIN_WORKFLOW.index("Export Black Duck CycloneDX SBOM")
+    ) < TOOLCHAIN_WORKFLOW.index("Export Black Duck SPDX 2.3 SBOM")
     assert TOOLCHAIN_WORKFLOW.index("Publish scanned toolchain image") < (
         TOOLCHAIN_WORKFLOW.index(
-            "Attach Black Duck CycloneDX SBOM to the published toolchain image"
+            "Attach Black Duck SPDX 2.3 SBOM to the published toolchain image"
         )
     )
 

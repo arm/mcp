@@ -143,7 +143,7 @@ jobs:
           blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
           distribution: "INTERNAL"
 
-      - name: Export Black Duck CycloneDX SBOM
+      - name: Export Black Duck SPDX 2.3 SBOM
         shell: bash
         env:
           BLACKDUCK_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}
@@ -152,18 +152,18 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
-          python3 .github/scripts/export-blackduck-cyclonedx.py \
+          python3 .github/scripts/export-blackduck-spdx.py \
             --blackduck-url "${BLACKDUCK_URL}" \
             --project "Arm:MCP" \
             --version "${BLACKDUCK_PROJECT_VERSION}" \
             --timeout 14400 \
-            --output "${RUNNER_TEMP}/mcp-build-inputs-sbom/mcp-build-inputs-${GITHUB_SHA}-${ARCH}.cdx.json"
+            --output "${RUNNER_TEMP}/mcp-build-inputs-sbom/mcp-build-inputs-${GITHUB_SHA}-${ARCH}.spdx.json"
 
-      - name: Retain Black Duck CycloneDX SBOM
+      - name: Retain Black Duck SPDX 2.3 SBOM
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: mcp-build-inputs-sbom-${{ matrix.arch }}-${{ github.run_id }}
-          path: ${{ runner.temp }}/mcp-build-inputs-sbom/mcp-build-inputs-${{ github.sha }}-${{ matrix.arch }}.cdx.json
+          path: ${{ runner.temp }}/mcp-build-inputs-sbom/mcp-build-inputs-${{ github.sha }}-${{ matrix.arch }}.spdx.json
           if-no-files-found: error
           retention-days: 10
 
@@ -228,14 +228,14 @@ jobs:
             exit 1
           fi
 
-      - name: Attach Black Duck CycloneDX SBOM to the published input image
+      - name: Attach Black Duck SPDX 2.3 SBOM to the published input image
         if: ${{ env.PUBLISH_IMAGES == 'true' }}
         id: attest-sbom
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.publish.outputs.digest }}
-          sbom-path: ${{ runner.temp }}/mcp-build-inputs-sbom/mcp-build-inputs-${{ github.sha }}-${{ matrix.arch }}.cdx.json
+          sbom-path: ${{ runner.temp }}/mcp-build-inputs-sbom/mcp-build-inputs-${{ github.sha }}-${{ matrix.arch }}.spdx.json
           push-to-registry: true
 
       - name: Validate input-image SBOM attestation
@@ -263,7 +263,7 @@ jobs:
             echo "- Platform: \`${{ matrix.platform }}\`"
             echo "- Candidate: \`${IMAGE}:${PUBLICATION_TAG}-${{ matrix.arch }}\`"
             echo "- Black Duck Secure Container scan: completed"
-            echo "- Black Duck CycloneDX SBOM: retained as a workflow artifact"
+            echo "- Black Duck SPDX 2.3 SBOM: retained as a workflow artifact"
             echo "- GHCR publication: skipped"
             echo "- Provenance and SBOM attestation publication: skipped"
           } >> "${GITHUB_STEP_SUMMARY}"
