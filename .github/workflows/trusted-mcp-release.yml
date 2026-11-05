@@ -259,6 +259,7 @@ jobs:
             MCP_BUILD_INPUTS_IMAGE=${{ steps.locked_images.outputs.mcp_build_inputs_image }}
           push: ${{ needs.validate-release.outputs.mode == 'production' }}
           load: ${{ needs.validate-release.outputs.mode == 'dry-run' }}
+          sbom: ${{ needs.validate-release.outputs.mode == 'production' }}
           tags: ${{ env.IMAGE }}:${{ needs.validate-release.outputs.version }}-${{ matrix.tag }}
 
       - name: Install runtime egress tracer
@@ -537,6 +538,32 @@ jobs:
 
           echo "digest=${created_digest}" >> "${GITHUB_OUTPUT}"
           echo "Resolved ${IMAGE_FQDN}@${created_digest}"
+
+      - name: Verify BuildKit platform SBOMs are inspectable
+        env:
+          VERSION: ${{ needs.validate-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          amd64_sbom="${RUNNER_TEMP}/buildkit-sbom-amd64.spdx.json"
+          arm64_sbom="${RUNNER_TEMP}/buildkit-sbom-arm64.spdx.json"
+
+          docker buildx imagetools inspect "${IMAGE}:${VERSION}" \
+            --format '{{ json (index .SBOM "linux/amd64").SPDX }}' \
+            > "${amd64_sbom}"
+          docker buildx imagetools inspect "${IMAGE}:${VERSION}" \
+            --format '{{ json (index .SBOM "linux/arm64").SPDX }}' \
+            > "${arm64_sbom}"
+
+          for sbom in "${amd64_sbom}" "${arm64_sbom}"; do
+            jq -e '
+              type == "object"
+              and .SPDXID == "SPDXRef-DOCUMENT"
+              and (.spdxVersion | type == "string" and startswith("SPDX-"))
+            ' "${sbom}" > /dev/null
+          done
+
+          echo "BuildKit SBOMs for linux/amd64 and linux/arm64 are inspectable through the release tag." \
+            >> "${GITHUB_STEP_SUMMARY}"
 
   attest-image:
     name: Attest production image provenance and SBOMs
