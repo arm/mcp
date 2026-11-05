@@ -166,6 +166,40 @@ args = [
 
 After updating the configuration, restart your MCP client to load the Arm MCP server.
 
+### Optional: Install the Codex Skills
+
+This repository includes two skills for using the Arm MCP Server with Codex:
+
+- [Arm Knowledge Base](agent-integrations/codex/arm-knowledgebase/SKILL.md)
+  answers Arm-specific technical questions with sourced results from the
+  `knowledge_base_search` tool.
+- [Arm Enablement](agent-integrations/codex/arm-enablement/SKILL.md) assesses a
+  repository for Arm readiness and generates an evidence-backed Markdown and PDF
+  report.
+
+Configure the Arm MCP Server first, then run the following command from the root
+of this repository to install either or both skills for your Codex user:
+
+```bash
+mkdir -p "$HOME/.agents/skills"
+cp -R agent-integrations/codex/arm-knowledgebase "$HOME/.agents/skills/"
+cp -R agent-integrations/codex/arm-enablement "$HOME/.agents/skills/"
+```
+
+Codex discovers personal skills from `$HOME/.agents/skills`. Start or restart
+Codex, run `/skills` to confirm that the installed skills are available, then
+invoke the relevant workflow with:
+
+```text
+$arm-knowledgebase How can I optimize NGINX performance on an Arm server?
+$arm-enablement Assess this repository for Arm readiness and generate the Markdown and PDF report.
+```
+
+When using `arm-enablement`, the project opened in Codex must be the same project
+mounted at `/workspace` in the Arm MCP Server configuration. For more
+information about skill discovery, see the
+[Codex skills documentation](https://learn.chatgpt.com/docs/build-skills).
+
 ## Logging
 
 Depending on usage, the server may write two log files under `/workspace`. With the
