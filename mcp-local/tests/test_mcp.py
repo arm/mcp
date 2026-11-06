@@ -174,7 +174,11 @@ def test_mcp_stdio_transport_responds(platform):
         ))
         resources = _read_response(9)["result"]["resources"]
         skill_uris = {r["uri"] for r in resources if r["uri"].endswith("/SKILL.md")}
-        names = {"arm-container-inspect", "arm-migration-scan", "arm-assembly-analyze"}
+        names = {
+            "arm-container-inspect",
+            "arm-migrate-ease-scan",
+            "arm-assembly-analyze",
+        }
         assert skill_uris == {f"skill://{name}/SKILL.md" for name in names}
         raw_socket.sendall(_encode_mcp_message(
             {"jsonrpc": "2.0", "id": 10, "method": "prompts/list", "params": {}}

@@ -23,7 +23,7 @@ own shell:
 | Skill | CLI workflow | Replaces MCP tools |
 | --- | --- | --- |
 | `arm-container-inspect` | Skopeo or Docker Buildx image/platform inspection | `check_image`, `skopeo` |
-| `arm-migration-scan` | migrate-ease scans for C/C++, Python, Go, JavaScript, Java | `migrate_ease_scan` |
+| `arm-migrate-ease-scan` | migrate-ease scans for C/C++, Python, Go, Rust, Java, JavaScript, Dockerfile | `migrate_ease_scan` |
 | `arm-assembly-analyze` | LLVM MCA assembly throughput/resource analysis | `mca` |
 
 Skills are served as standard MCP resources (`skill://<name>/SKILL.md`) with

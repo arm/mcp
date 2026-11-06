@@ -7,7 +7,7 @@ ships their instructions as portable Agent Skills:
 | Skill/prompt name | Resource URI |
 | --- | --- |
 | `arm-container-inspect` | `skill://arm-container-inspect/SKILL.md` |
-| `arm-migration-scan` | `skill://arm-migration-scan/SKILL.md` |
+| `arm-migrate-ease-scan` | `skill://arm-migrate-ease-scan/SKILL.md` |
 | `arm-assembly-analyze` | `skill://arm-assembly-analyze/SKILL.md` |
 
 ## How the server publishes skills
