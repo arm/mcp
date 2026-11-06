@@ -645,6 +645,8 @@ def test_technical_evidence_preserves_internal_punctuation():
     assert query.intrinsic_isas == {"sme"}
     assert query.acle_types == {"svbool_t", "uint8x16_t"}
     assert query.code_identifiers == {"svmopa_za32_m"}
+    array_query = search_module._analyze_query("SVE intrinsic for svuint32_t[] and svbool_t[]")
+    assert array_query.acle_types == {"svuint32_t", "svbool_t"}
 
 
 def test_typed_intrinsic_question_prefers_reference_to_general_guide():
@@ -720,18 +722,22 @@ def test_exact_api_identifier_overcomes_a_generic_competitor():
     assert search_module._rerank_candidates(control, [generic, exact])[0]["metadata"] == generic["metadata"]
 
 
-@pytest.mark.parametrize("catalog_name,query_format", [
-    ("svqrdmulh[_s32]", "How do I call {}?"), ("svadd[_f32]_m", "{}..."),
-    ("svst1_scatter[_u32base]_index[_s32]", "{}..."),
-    ("vaddq_u8", '"{}".'), ("svcntb", "`{}`."), ("__crc32b", "{}"),
+@pytest.mark.parametrize("catalog_name,query_format,short_name", [
+    ("[__arm_]vcreateq_f16", "{}", "vcreateq_f16"),
+    ("[__arm_]vaddq[_s8]", "{}", "vaddq_s8"),
+    ("[__arm_]vaddq[_s8]", "{}", "vaddq"), ("[__arm_]vaddq[_s8]", "{}", "__arm_vaddq"),
+    ("svqrdmulh[_s32]", "How do I call {}?", "svqrdmulh"),
+    ("svadd[_f32]_m", "{}...", "svadd_m"),
+    ("svst1_scatter[_u32base]_index[_s32]", "{}...", "svst1_scatter_index"),
+    ("vaddq_u8", '"{}".', "vaddq_u8"), ("svcntb", "`{}`.", "svcntb"), ("__crc32b", "{}", "__crc32b"),
 ])
 @pytest.mark.parametrize("count", [1, 2])
-def test_canonical_names_survive_public_search_and_filters(catalog_name, query_format, count):
+def test_canonical_names_survive_public_search_and_filters(catalog_name, query_format, short_name, count):
     target = intrinsic(catalog_name)["metadata"]
     metadata = [target, intrinsic("unrelated_name")["metadata"]][:count]
     index = build_bm25_index(metadata)
     assets = SearchResources(metadata, object(), None, index, include_disclaimers=False)
-    for name in dict.fromkeys([catalog_name, catalog_name.replace("[", "").replace("]", "")]):
+    for name in dict.fromkeys([catalog_name, catalog_name.replace("[", "").replace("]", ""), short_name]):
         query = query_format.format(name)
         analysis = search_module._analyze_query(query)
         assert search_module._reference_record_bonus(analysis, target, "intrinsic") == .45
@@ -741,10 +747,65 @@ def test_canonical_names_survive_public_search_and_filters(catalog_name, query_f
                    hybrid_search(query, None, metadata, object(), index, eligible_ids=tuple(range(1, count))))
 
 
-@pytest.mark.parametrize("query", ["svadd[_f32]_m.extra", "svadd[_f32]_missing", "svadd[_f32_m"])
-def test_partial_catalog_names_do_not_receive_exact_bonus(query):
-    record = intrinsic("svadd[_f32]_m")["metadata"]
+@pytest.mark.parametrize("query,expected,bonus", [
+    ("Neon vaddq intrinsic", 0, .10), ("Neon vaddq_s8", 0, .45),
+    ("Helium vaddq", 1, .45), ("MVE vaddq_s8", 1, .45),
+])
+def test_public_intrinsic_aliases_respect_requested_family(query, expected, bonus):
+    metadata = [intrinsic("vaddq_s8", "Neon")["metadata"],
+                intrinsic("[__arm_]vaddq[_s8]", "Helium")["metadata"]]
+    # Isolate name scoring from prose and heading fragments.
+    index = build_bm25_index(metadata, tokenized_corpus=[["neutral"], ["neutral"]])
+    if bonus == .45:
+        assets = SearchResources(metadata, object(), None, index, include_disclaimers=False)
+        assert search(query, assets, k=1)[0]["url"] == metadata[expected]["url"]
+    analyzed = search_module._analyze_query(query)
+    assert search_module._reference_record_bonus(analyzed, metadata[expected], "intrinsic") == bonus
+    assert search_module._reference_record_bonus(analyzed, metadata[1 - expected], "intrinsic") == 0
+    for eligible_ids in [None, (1, 0), (1 - expected,)]:
+        hits = bm25_search(query, metadata, index, eligible_ids=eligible_ids)
+        assert all(hit["metadata"] == metadata[expected] for hit in hits)
+
+
+@pytest.mark.parametrize("query", ["Neon vaddq intrinsic", "Neon vaddq_s8"])
+def test_neon_queries_rank_neon_above_helium_aliases(query):
+    metadata = [intrinsic("vaddq_s8", "Neon")["metadata"],
+                intrinsic("[__arm_]vaddq[_s8]", "Helium")["metadata"]]
+    for row in metadata:
+        row["title"] = "Arm Intrinsics - " + row["heading"]
+        row["heading_path"] = [row["product"], row["heading"]]
+        row["url"] = "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=" + row["heading"]
+    assets = SearchResources(metadata, QueryModel(), index_for([[0, 0], [0, 0]]), build_bm25_index(metadata),
+                             include_disclaimers=False)
+    assert search(query, assets, k=1)[0]["url"] == metadata[0]["url"]
+
+
+@pytest.mark.parametrize("family", ["SVE", "SVE2", "SME", "SME2", "SVE SME2"])
+def test_public_short_names_accept_combined_families(family):
+    target = intrinsic("svadd[_f32]_m", "SME and SME2 / SVE2")["metadata"]
+    metadata = [target, intrinsic("unrelated_name")["metadata"]]
+    assets = SearchResources(metadata, object(), None, build_bm25_index(metadata), include_disclaimers=False)
+    query = family + " svadd_m"
+    assert search(query, assets, k=1)[0]["url"] == target["url"]
+    assert search(query, assets, k=1, filters={"product": target["product"]})[0]["url"] == target["url"]
+    assert search_module._reference_record_bonus(search_module._analyze_query(query), target, "intrinsic") == .45
+    # A shared-family row receives its alias score once, even for a multi-family query.
+    index = build_bm25_index(metadata, tokenized_corpus=[["neutral"], ["neutral"]])
+    assert bm25_search(query, metadata, index)[0]["bm25_score"] == bm25_search("svadd_m", metadata, index)[0]["bm25_score"]
+
+
+@pytest.mark.parametrize("name,query", [
+    ("svadd[_f32]_m", "svadd[_f32]_m.extra"), ("svadd[_f32]_m", "svadd[_f32]_missing"),
+    ("svadd[_f32]_m", "svadd[_f32_m"), ("svqrdmulh[_s32]", "svqrdmulh[_s32].extra"),
+    ("svqrdmulh[_s32]", "svqrdmulh[_s32_missing"), ("svqrdmulh[_s32]", "How do I call svqrdmulh[]?"),
+])
+def test_partial_catalog_names_do_not_receive_exact_bonus(name, query):
+    record = intrinsic(name)["metadata"]
+    record["search_text"] = "neutral"
     assert search_module._reference_record_bonus(search_module._analyze_query(query), record, "intrinsic") == 0
+    index = build_bm25_index([record])
+    assert bm25_search(query, [record], index) == []
+    assert bm25_search(query, [record], index, eligible_ids=(0,)) == []
 
 
 @pytest.mark.parametrize("count", [1, 2])
@@ -761,7 +822,7 @@ def test_canonical_name_indexing_does_not_rewrite_other_document_types():
     assert bm25_search("example_s32", metadata, build_bm25_index(metadata)) == []
 
 
-@pytest.mark.parametrize("query", ["SVE load vector.", "svqrdmulh", "svmissing_s32.", "svqrdmulh_s32.extra"])
+@pytest.mark.parametrize("query", ["SVE load vector.", "svmissing_s32.", "svqrdmulh_s32.extra"])
 def test_alias_channel_leaves_nonmatching_sparse_scores_identical(query):
     metadata = [intrinsic("svqrdmulh[_s32]")["metadata"], chunk(1, search_text="SVE load vector examples")]
     # Compare the alias channel with ordinary BM25 over the same structured fields.
@@ -779,7 +840,8 @@ def test_full_sparse_scores_match_filtered_scores_without_using_batch_scoring(mo
         metadata.append(intrinsic("svadd[_f32]_m")["metadata"])
     index = build_bm25_index(metadata)
     queries = [[], ["sve", "arithmetic"], ["svadd_f32_m."], ["svadd[_f32]_m"],
-               ["svadd_f32_m", "svadd_f32_m"], ["unknown_name"]]
+               ["svadd_f32_m", "svadd_f32_m"], ["sve", "svadd_m"], ["neon", "svadd_m"],
+               ["unknown_name"]]
     selections = [list(range(len(metadata))), [len(metadata) - 1, 0, 0], []]
     expected = [[index.get_batch_scores(query, ids) for ids in selections] for query in queries]
 
@@ -1286,3 +1348,17 @@ def test_url_name_evidence_preserves_encoded_identifier_boundaries(url, expected
     query = search_module._analyze_query("sklearn", synonyms)
     score = search_module._score_lexical_exactness(query, {"url": url, "original_text": "neutral"})
     assert score > 0 if expected_match else score == 0
+
+
+@pytest.mark.parametrize("question,isa,result_type", [
+    ("Which Helium intrinsic returns mve_pred16_t?", "Helium", "mve_pred16_t"),
+    ("Which MVE intrinsic returns mve_pred16_t?", "Helium", "mve_pred16_t"),
+    ("Which SVE intrinsic returns svcount_t?", "SME and SME2 / SVE2", "svcount_t"),
+    ("Which SVE2 intrinsic returns svuint8_t?", "SME and SME2 / SVE2", "svuint8_t"),
+    ("Which SME intrinsic returns svuint8_t?", "SVE / SME and SME2", "svuint8_t"),
+    ("Which SVE intrinsic returns svuint8_t?", "SVE2", "svuint8_t"),
+])
+def test_extended_catalog_formats_use_existing_signature_bonus(question, isa, result_type):
+    row = intrinsic("matching", isa, f"{result_type} matching(void);")["metadata"]
+    query = search_module._analyze_query(question)
+    assert search_module._reference_record_bonus(query, row, "intrinsic") == pytest.approx(.35)

@@ -62,6 +62,14 @@ generated, evaluated, and rejected without changing the released MCP image.
 For a major or hotfix release, run **Build MCP Image** manually with the
 corresponding release action; it opens a separate reviewed version PR.
 
+## Intrinsic Catalog Snapshot
+
+Builds reuse the snapshot pinned by `intrinsic_chunks_image` in `pipeline-inputs.lock.json`.
+To refresh it, prepare new and updated catalog records with `prepare_intrinsic_chunk`,
+preserve their existing IDs and URLs, and publish the full snapshot at
+`/embedding-data/intrinsic_chunks/` in a new image.
+Update the pin to its published digest; builds use the previous snapshot until then.
+
 ## Add Documents
 
 Add one row to `vector-db-sources.csv` for each document:
