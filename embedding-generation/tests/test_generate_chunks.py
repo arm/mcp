@@ -39,6 +39,7 @@ from document_chunking import (
 
 FIXTURE_DIR = Path(__file__).parent
 SAMPLE_PPTX_FIXTURE = "sample_course_slides.pptx"
+LEARNING_PATH = "https://learn.arm.com/learning-paths/cross-platform/example/"
 
 
 def test_relative_link_evidence_is_retained_when_url_prefix_is_embedded():
@@ -125,7 +126,8 @@ class TestChunkClass:
         # Each keyword should be stripped individually before joining
         assert chunk.keywords == "python, testing"
 
-    def test_chunk_to_dict(self, gc):
+    @pytest.mark.parametrize("source_link", ["", "https://example.com", "https://example.com/source"])
+    def test_chunk_to_dict(self, gc, source_link):
         """Test toDict method returns correct dictionary."""
         chunk = gc.Chunk(
             title="Test Title",
@@ -140,9 +142,14 @@ class TestChunkClass:
             version="2025",
             resolved_url="https://example.com/resolved",
             content_type="markdown",
+            page_url=source_link,
+            learning_path_url=source_link,
         )
 
         result = chunk.toDict()
+        links = {k: result[k] for k in ("page_url", "learning_path_url") if k in result}
+        assert links == (dict.fromkeys(("page_url", "learning_path_url"), source_link)
+                         if source_link == "https://example.com/source" else {})
 
         assert result["title"] == "Test Title"
         assert result["url"] == "https://example.com"
@@ -309,6 +316,8 @@ class TestDocumentChunkingAnchors:
         assert "import torch" in chunks[0]["content"]
         assert "KleidiAI ready" in chunks[0]["content"]
         assert '"cells"' not in chunks[0]["content"]
+        assert chunks[0]["url"] == parsed.source_url
+        assert not {"page_url", "learning_path_url"} & chunks[0].keys()
 
     def test_pptx_content_is_parsed_from_slide_and_notes_text(self):
         parsed = parse_document_content(
@@ -340,6 +349,35 @@ class TestDocumentChunkingAnchors:
         assert "Matrix multiplication kernels" in chunks[0]["content"]
         assert "KleidiAI uses Arm CPU SIMD" in chunks[1]["content"]
         assert "<a:t>" not in chunks[0]["content"]
+        assert all(c["url"] == parsed.source_url for c in chunks)
+        assert all(not {"page_url", "learning_path_url"} & c.keys() for c in chunks)
+
+    def test_pdf_chunks_keep_the_document_url(self, gc):
+        from io import BytesIO
+
+        from pypdf import PdfWriter
+        from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+
+        writer = PdfWriter()
+        page = writer.add_blank_page(width=612, height=792)
+        font = DictionaryObject({NameObject("/Type"): NameObject("/Font"),
+                                 NameObject("/Subtype"): NameObject("/Type1"),
+                                 NameObject("/BaseFont"): NameObject("/Helvetica")})
+        page[NameObject("/Resources")] = DictionaryObject({
+            NameObject("/Font"): DictionaryObject({NameObject("/F1"): font})})
+        stream = DecodedStreamObject()
+        stream.set_data(b"BT /F1 12 Tf 72 720 Td (Install Arm software with the package manager and verify that the service starts correctly.) Tj ET")
+        page[NameObject("/Contents")] = stream
+        output = BytesIO()
+        writer.write(output)
+        url = "https://example.org/guide.pdf?version=2"
+        parsed = parse_document_content(source_url=url, resolved_url=url, fallback_title="Guide",
+                                        content_type="application/pdf", response_content=output.getvalue())
+        records = [gc.chunk_from_payload(c, []).toDict()
+                   for c in chunk_parsed_document(parsed, "Documentation", [])]
+        assert records and "package manager" in records[0]["content"]
+        assert all(r["url"] == url and r["content_type"] == "pdf" for r in records)
+        assert all(not {"page_url", "learning_path_url"} & r.keys() for r in records)
 
     def test_notebook_text_outputs_skip_binary_payloads(self):
         notebook = {
@@ -428,9 +466,17 @@ class TestDocumentChunkingAnchors:
         assert parsed.display_title == "Legacy Lab"
         assert "Use Arm CPUs for inference." in chunks[0]["content"]
 
-    def test_markdown_heading_anchor_is_used_as_chunk_url_fragment(self):
+    @pytest.mark.parametrize("source_url,parent", [
+        ("https://learn.arm.com/example/1-get-started/", None),
+        ("https://example.org/guide?version=2", None),
+        (LEARNING_PATH + "install/", LEARNING_PATH),
+        (LEARNING_PATH, None),
+        (LEARNING_PATH.rstrip("/"), None),
+        (LEARNING_PATH + "?utm_source=example", None),
+    ])
+    def test_markdown_heading_anchor_is_used_as_chunk_url_fragment(self, gc, source_url, parent):
         parsed = parse_document_content(
-            source_url="https://learn.arm.com/example/1-get-started/",
+            source_url=source_url,
             resolved_url="https://raw.githubusercontent.com/example/doc.md",
             response_content=(
                 b"# Example\n\n"
@@ -448,9 +494,10 @@ class TestDocumentChunkingAnchors:
             parsed, doc_type="Learning Path", keywords=["SME2"], min_tokens=1
         )
 
-        assert (
-            chunks[0]["url"] == "https://learn.arm.com/example/1-get-started/#devices"
-        )
+        record = gc.chunk_from_payload(chunks[0], []).toDict()
+        assert record["url"] == source_url + "#devices"
+        assert record["page_url"] == source_url
+        assert record.get("learning_path_url") == parent
         assert chunks[0]["heading_path"] == ["Devices with native SME2 support"]
 
     def test_html_heading_id_is_used_as_chunk_url_fragment(self):
@@ -474,6 +521,8 @@ class TestDocumentChunkingAnchors:
             chunks[0]["url"] == "https://learn.arm.com/example/1-get-started/#devices"
         )
         assert chunks[0]["heading_path"] == ["Devices with native SME2 support"]
+        assert chunks[0]["page_url"] == parsed.source_url
+        assert "learning_path_url" not in chunks[0]
 
     def test_learn_learning_path_step_urls_discovers_same_path_steps(self):
         html = (
@@ -1442,10 +1491,27 @@ class TestArmDocumentationParsing:
             == "https://developer.arm.com/documentation/102376/0100/install"
         )
         assert "target CPU for Cortex-A builds" in chunks[1].content
+        assert all(not {"page_url", "learning_path_url"} & c.toDict().keys() for c in chunks)
 
 
 class TestCreateChunksForSource:
     """Tests for generic source chunking."""
+
+    def test_learning_path_step_keeps_its_page_and_parent(self, gc, monkeypatch):
+        step = LEARNING_PATH + "install/"
+        pages = {
+            LEARNING_PATH: f'<main><h1 id="intro">Intro</h1><p>Start here.</p><a href="{step}">Install</a></main>',
+            step: '<main><h1 id="install">Install</h1><p>Run this.</p></main>',
+        }
+        fetched = []
+        def fetch(url):
+            fetched.append(url)
+            return SimpleNamespace(url=url, content=pages[url].encode(), headers={"content-type": "text/html"})
+        monkeypatch.setattr(gc, "fetch_with_logging", fetch)
+        records = [c.toDict() for c in gc.create_chunks_for_source(LEARNING_PATH, "Example", "Learning Paths", "")]
+        assert fetched == [LEARNING_PATH, step]
+        child = [r for r in records if r["url"].startswith(step)]
+        assert child and all(r["page_url"] == step and r["learning_path_url"] == LEARNING_PATH for r in child)
 
     def test_unparseable_pptx_source_returns_empty_and_logs(
         self, gc, monkeypatch, capsys
@@ -1532,6 +1598,7 @@ class TestCreateTranscriptChunks:
         assert all(chunk.url == source_url for chunk in chunks)
         assert all(chunk.doc_type == "Educational Course" for chunk in chunks)
         assert "energy efficiency" in chunks[0].content.lower()
+        assert all(not {"page_url", "learning_path_url"} & c.toDict().keys() for c in chunks)
 
     def test_transcript_fetch_failure_returns_empty(self, gc, monkeypatch, capsys):
         """A failed transcript fetch should return no chunks and log both URLs."""

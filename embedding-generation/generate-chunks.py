@@ -235,6 +235,8 @@ class Chunk:
         content_type="",
         platform="",
         edition="",
+        page_url="",
+        learning_path_url="",
     ):
         self.title = title
         self.url = url
@@ -249,6 +251,11 @@ class Chunk:
         self.content_type = content_type
         self.platform = platform
         self.edition = edition
+        self.context_metadata = {
+            key: value for key, value in {
+                "page_url": page_url, "learning_path_url": learning_path_url,
+            }.items() if value and value != url
+        }
 
         # Translate keyword list into comma-separated string, and add similar words to keywords.
         self.keywords = self.formatKeywords(keywords)
@@ -274,6 +281,7 @@ class Chunk:
             "content_type": self.content_type,
             "platform": self.platform,
             "edition": self.edition,
+            **self.context_metadata,
         }
 
     def __repr__(self):
