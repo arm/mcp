@@ -208,9 +208,9 @@ class ParsedDocument:
     display_title: str
     content_type: str
     sections: list[Section]
-    # None permits inference; an empty string explicitly suppresses it.
+    # Product inference is optional; versions must come from source metadata.
     product: str | None = None
-    version: str | None = None
+    version: str = ""
     platform: str = ""
     edition: str = ""
 
@@ -1085,6 +1085,7 @@ def parse_arm_documentation_api_json(
     fallback_title: str,
 ) -> ParsedDocument:
     data = json.loads(response_content.decode("utf-8", errors="ignore"))
+    version = data.get("versionLabel") or ""
     topic = data.get("topic", data)
     content = topic.get("content", "")
     if not content:
@@ -1094,11 +1095,14 @@ def parse_arm_documentation_api_json(
             display_title=fallback_title,
             content_type="html",
             sections=[],
+            version=version,
         )
 
     html = base64.b64decode(content).decode("utf-8", errors="ignore")
     title = data.get("title") or fallback_title
-    return parse_html(html, source_url, resolved_url, title)
+    parsed_document = parse_html(html, source_url, resolved_url, title)
+    parsed_document.version = version
+    return parsed_document
 
 
 def merge_code_context(blocks: list[Block]) -> list[str]:
@@ -1212,17 +1216,6 @@ def build_chunk_text(title: str, heading_path: list[str], body: str) -> str:
     )
 
 
-def derive_version(title: str, source_url: str, content: str = "") -> str:
-    haystack = " ".join([title, source_url, content[:4000]])
-    match = re.search(r"\b(v?\d+(?:\.\d+){0,2})\b", haystack, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    match = re.search(r"\b(20\d{2})\b", haystack)
-    if match:
-        return match.group(1)
-    return ""
-
-
 def derive_product(
     title: str, source_url: str, doc_type: str, keywords: Iterable[str]
 ) -> str:
@@ -1261,11 +1254,7 @@ def chunk_parsed_document(
             parsed_document.display_title, parsed_document.source_url, doc_type, keywords
         )
     )
-    version = (
-        parsed_document.version
-        if parsed_document.version is not None
-        else derive_version(parsed_document.display_title, parsed_document.resolved_url)
-    )
+    version = parsed_document.version or ""
     for section in parsed_document.sections:
         heading_path = normalize_heading_path(
             parsed_document.display_title, section.heading_path
