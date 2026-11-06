@@ -13,7 +13,7 @@
 # limitations under the License.
 
 #!/usr/bin/env python3
-"""Export a completed Black Duck project version as CycloneDX 1.6 JSON."""
+"""Export a completed Black Duck project version as SPDX 2.3 JSON."""
 
 from __future__ import annotations
 
@@ -32,11 +32,11 @@ from zipfile import BadZipFile, ZipFile
 
 
 REPORT_MEDIA_TYPE = "application/vnd.blackducksoftware.report-4+json"
-CYCLONEDX_REPORT = {
+SPDX_REPORT = {
     "reportFormat": "JSON",
     "reportType": "SBOM",
-    "sbomType": "CYCLONEDX_16",
-    "specification": "CycloneDX-1.6",
+    "sbomType": "SPDX_23",
+    "specification": "SPDX-2.3",
 }
 
 
@@ -257,10 +257,10 @@ class BlackDuckClient:
                 )
             time.sleep(poll_interval)
 
-    def create_cyclonedx_report(
+    def create_spdx_report(
         self, version_url: str, *, timeout: int, poll_interval: int
     ) -> str:
-        report_body = json.dumps(CYCLONEDX_REPORT).encode("utf-8")
+        report_body = json.dumps(SPDX_REPORT).encode("utf-8")
         _, headers = self._request(
             f"{version_url}/sbom-reports",
             method="POST",
@@ -282,12 +282,12 @@ class BlackDuckClient:
                 return requested_report
             if status in {"FAILED", "ERROR", "CANCELLED"}:
                 raise BlackDuckExportError(
-                    f"Black Duck CycloneDX report generation ended with {status}."
+                    f"Black Duck SPDX report generation ended with {status}."
                 )
 
             if time.monotonic() >= deadline:
                 raise BlackDuckExportError(
-                    "Timed out waiting for the Black Duck CycloneDX report."
+                    "Timed out waiting for the Black Duck SPDX report."
                 )
             time.sleep(poll_interval)
 
@@ -298,7 +298,15 @@ class BlackDuckClient:
         return report
 
 
-def extract_cyclonedx_json(report_archive: bytes) -> bytes:
+def _is_spdx_2_3_json(report: Any) -> bool:
+    return (
+        isinstance(report, dict)
+        and report.get("spdxVersion") == "SPDX-2.3"
+        and report.get("SPDXID") == "SPDXRef-DOCUMENT"
+    )
+
+
+def extract_spdx_json(report_archive: bytes) -> bytes:
     try:
         with ZipFile(BytesIO(report_archive)) as archive:
             valid_reports: list[bytes] = []
@@ -310,11 +318,7 @@ def extract_cyclonedx_json(report_archive: bytes) -> bytes:
                     report = json.loads(content)
                 except (json.JSONDecodeError, UnicodeDecodeError):
                     continue
-                if (
-                    isinstance(report, dict)
-                    and report.get("bomFormat") == "CycloneDX"
-                    and report.get("specVersion") == "1.6"
-                ):
+                if _is_spdx_2_3_json(report):
                     valid_reports.append(content)
     except BadZipFile as error:
         raise BlackDuckExportError(
@@ -323,7 +327,7 @@ def extract_cyclonedx_json(report_archive: bytes) -> bytes:
 
     if len(valid_reports) != 1:
         raise BlackDuckExportError(
-            "Expected one CycloneDX 1.6 JSON document in the Black Duck report "
+            "Expected one SPDX 2.3 JSON document in the Black Duck report "
             f"archive; found {len(valid_reports)}."
         )
     return valid_reports[0]
@@ -366,18 +370,18 @@ def main() -> int:
             timeout=args.timeout,
             poll_interval=args.poll_interval,
         )
-        report_url = client.create_cyclonedx_report(
+        report_url = client.create_spdx_report(
             version_url,
             timeout=args.timeout,
             poll_interval=args.poll_interval,
         )
-        report = extract_cyclonedx_json(client.download_report(report_url))
+        report = extract_spdx_json(client.download_report(report_url))
         write_report(args.output, report)
     except (BlackDuckExportError, OSError) as error:
-        print(f"Black Duck CycloneDX export failed: {error}", file=sys.stderr)
+        print(f"Black Duck SPDX export failed: {error}", file=sys.stderr)
         return 1
 
-    print(f"Exported Black Duck CycloneDX 1.6 SBOM to {args.output}")
+    print(f"Exported Black Duck SPDX 2.3 SBOM to {args.output}")
     return 0
 
 

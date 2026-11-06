@@ -103,7 +103,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 10
 
-      - name: Export Black Duck CycloneDX SBOM
+      - name: Export Black Duck SPDX 2.3 SBOM
         id: source-sbom-export
         if: >-
           ${{
@@ -116,14 +116,14 @@ jobs:
           BLACKDUCK_URL: ${{ vars.BLACKDUCKSCA_URL }}
         run: |
           set -euo pipefail
-          python3 .github/scripts/export-blackduck-cyclonedx.py \
+          python3 .github/scripts/export-blackduck-spdx.py \
             --blackduck-url "${BLACKDUCK_URL}" \
             --project "${DETECT_PROJECT_NAME}" \
             --version "${DETECT_PROJECT_VERSION_NAME}" \
             --timeout 14400 \
-            --output "${RUNNER_TEMP}/blackduck-source-sbom-${GITHUB_SHA}.cdx.json"
+            --output "${RUNNER_TEMP}/blackduck-source-sbom-${GITHUB_SHA}.spdx.json"
 
-      - name: Retain Black Duck source CycloneDX SBOM
+      - name: Retain Black Duck source SPDX 2.3 SBOM
         if: >-
           ${{
             !cancelled()
@@ -134,7 +134,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: blackduck-source-sbom-${{ github.run_id }}
-          path: ${{ runner.temp }}/blackduck-source-sbom-${{ github.sha }}.cdx.json
+          path: ${{ runner.temp }}/blackduck-source-sbom-${{ github.sha }}.spdx.json
           if-no-files-found: error
           retention-days: 10
 
@@ -162,7 +162,7 @@ jobs:
             printf -- '- Scan outcome: `%s`\n' "${SCAN_OUTCOME}"
             printf -- '- Bridge exit status: `%s`\n' "${SCAN_STATUS:-unavailable}"
             printf -- '- Result classification: `%s`\n' "${scan_result}"
-            printf -- '- CycloneDX SBOM export: `%s`\n' "${SBOM_OUTCOME:-not-run}"
+            printf -- '- SPDX 2.3 SBOM export: `%s`\n' "${SBOM_OUTCOME:-not-run}"
             echo '- SARIF retention: workflow artifact for 10 days'
             echo '- Bridge diagnostics: retained by the Black Duck action'
           } >> "${GITHUB_STEP_SUMMARY}"

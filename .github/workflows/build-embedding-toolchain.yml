@@ -89,7 +89,7 @@ jobs:
           blackducksca_token: ${{ secrets.BLACKDUCKSCA_TOKEN }}
           distribution: "INTERNAL"
 
-      - name: Export Black Duck CycloneDX SBOM
+      - name: Export Black Duck SPDX 2.3 SBOM
         shell: bash
         env:
           BLACKDUCK_TOKEN: ${{ secrets.BLACKDUCKSCA_TOKEN }}
@@ -97,18 +97,18 @@ jobs:
           BLACKDUCK_PROJECT_VERSION: mcp-embedding-generator-container-1.0
         run: |
           set -euo pipefail
-          python3 .github/scripts/export-blackduck-cyclonedx.py \
+          python3 .github/scripts/export-blackduck-spdx.py \
             --blackduck-url "${BLACKDUCK_URL}" \
             --project "Arm:MCP" \
             --version "${BLACKDUCK_PROJECT_VERSION}" \
             --timeout 14400 \
-            --output "${RUNNER_TEMP}/embedding-toolchain-sbom/mcp-embedding-generator-${GITHUB_SHA}-arm64.cdx.json"
+            --output "${RUNNER_TEMP}/embedding-toolchain-sbom/mcp-embedding-generator-${GITHUB_SHA}-arm64.spdx.json"
 
-      - name: Retain Black Duck CycloneDX SBOM
+      - name: Retain Black Duck SPDX 2.3 SBOM
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: embedding-toolchain-sbom-arm64-${{ github.run_id }}
-          path: ${{ runner.temp }}/embedding-toolchain-sbom/mcp-embedding-generator-${{ github.sha }}-arm64.cdx.json
+          path: ${{ runner.temp }}/embedding-toolchain-sbom/mcp-embedding-generator-${{ github.sha }}-arm64.spdx.json
           if-no-files-found: error
           retention-days: 10
 
@@ -148,14 +148,14 @@ jobs:
           subject-digest: ${{ steps.publish.outputs.digest }}
           push-to-registry: true
 
-      - name: Attach Black Duck CycloneDX SBOM to the published toolchain image
+      - name: Attach Black Duck SPDX 2.3 SBOM to the published toolchain image
         if: ${{ env.PUBLISH_IMAGE == 'true' }}
         id: attest-sbom
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.publish.outputs.digest }}
-          sbom-path: ${{ runner.temp }}/embedding-toolchain-sbom/mcp-embedding-generator-${{ github.sha }}-arm64.cdx.json
+          sbom-path: ${{ runner.temp }}/embedding-toolchain-sbom/mcp-embedding-generator-${{ github.sha }}-arm64.spdx.json
           push-to-registry: true
 
       - name: Verify published GHCR package is private
@@ -188,7 +188,7 @@ jobs:
             echo "- Tag: \`${TAG}\`"
             echo "- Immutable reference: \`${IMAGE}@${DIGEST}\`"
             echo "- Attestation: [view provenance](${ATTESTATION_URL})"
-            echo "- SBOM attestation: [view CycloneDX SBOM](${SBOM_ATTESTATION_URL})"
+            echo "- SBOM attestation: [view SPDX 2.3 SBOM](${SBOM_ATTESTATION_URL})"
           } >> "${GITHUB_STEP_SUMMARY}"
 
   propose-toolchain-pin:
