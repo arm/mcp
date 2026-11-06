@@ -233,6 +233,15 @@ def is_learn_learning_path_url(url: str) -> bool:
     )
 
 
+def learn_learning_path_root_url(source_url: str) -> str | None:
+    parsed = urlparse(normalize_source_url(source_url))
+    segments = parsed.path.strip("/").split("/")
+    if not is_learn_learning_path_url(source_url) or len(segments) < 3:
+        return None
+    return urlunparse((parsed.scheme, parsed.netloc.lower(),
+                       "/" + "/".join(segments[:3]) + "/", "", "", ""))
+
+
 def learn_learning_path_step_urls(source_url: str, html: str | bytes) -> list[str]:
     source_url = normalize_source_url(source_url)
     if not is_learn_learning_path_url(source_url):
@@ -1286,4 +1295,11 @@ def chunk_parsed_document(
                     ),
                 }
             )
+    page_url = urlunparse(urlparse(parsed_document.source_url)._replace(fragment=""))
+    learning_path_url = learn_learning_path_root_url(page_url)
+    for chunk in chunks:
+        if page_url != chunk["url"] and doc_type != "Intrinsic":
+            chunk["page_url"] = page_url
+        if learning_path_url and urlparse(learning_path_url).path.rstrip("/") != urlparse(page_url).path.rstrip("/"):
+            chunk["learning_path_url"] = learning_path_url
     return chunks

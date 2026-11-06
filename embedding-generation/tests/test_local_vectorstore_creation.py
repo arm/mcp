@@ -46,7 +46,8 @@ def test_load_local_yaml_files_requires_intrinsic_chunks(tmp_path, monkeypatch):
 def test_serialized_search_text_preserves_field_and_body_boundaries(tmp_path, monkeypatch):
     body = 'CLI\n\nUse PyTorch.'
     record = {"uuid": "a", "chunk_uuid": "a", "url": "https://example.org/guide", "title": "AWS",
-              "heading": "CLI", "heading_path": ["AWS", "CLI"], "keywords": "", "content": body}
+              "heading": "CLI", "heading_path": ["AWS", "CLI"], "keywords": "", "content": body,
+              "page_url": "https://example.org/source?version=2", "learning_path_url": "https://learn.arm.com/path/"}
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["local_vectorstore_creation.py", "--model-path", "unused"])
     monkeypatch.setattr(vectorstore, "load_local_yaml_files", lambda: [record])
@@ -59,6 +60,9 @@ def test_serialized_search_text_preserves_field_and_body_boundaries(tmp_path, mo
     assert row["original_text"] == body
     assert vectorstore.embedding_input(row) == body
     assert row["search_text"].endswith(body)
+    for key in ("page_url", "learning_path_url"):
+        assert row[key] == record[key]
+        assert row[key] not in row["search_text"]
 
 
 def test_vectorstore_serialization_preserves_dashboard_scope(tmp_path, monkeypatch):
@@ -100,6 +104,7 @@ def test_vectorstore_serialization_preserves_dashboard_scope(tmp_path, monkeypat
     )
     assert metadata[0]["product"] == metadata[0]["version"] == ""
     assert metadata[1]["platform"] == metadata[1]["edition"] == ""
+    assert all(not {"page_url", "learning_path_url"} & row.keys() for row in metadata)
 
 
 @pytest.mark.parametrize("reverse", [False, True])

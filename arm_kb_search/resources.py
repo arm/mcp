@@ -308,6 +308,8 @@ def search(
             "edition": item["metadata"].get("edition", ""),
             "distance": item.get("distance"),
             "score": item.get("rerank_score", item.get("rrf_score")),
+            **{key: item["metadata"][key] for key in ("page_url", "learning_path_url")
+               if isinstance(item["metadata"].get(key), str) and item["metadata"][key]},
         }
         for item in search_results[:resolved_k]
     ]

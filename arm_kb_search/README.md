@@ -29,6 +29,12 @@ results = search(
 Reuse the loaded resources across requests. Create new resources when replacing
 the corpus; metadata and indexes are treated as a fixed snapshot.
 
+Results also include `page_url` and `learning_path_url` when these nonempty
+strings are stored in the chunk metadata. They identify the containing source
+page and Learning Path; search does not fetch their content. Existing bundles
+without these fields keep their previous response shape. Regenerate the chunk
+and vector metadata to populate links for existing sources.
+
 ## Startup preparation
 
 MCP images cache keyword tokens in `metadata.keywords.json.gz` beside

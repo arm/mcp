@@ -32,7 +32,12 @@ from utils.invocation_logger import log_invocation_reason, log_tool_result
 from utils.error_handling import format_tool_error
 
 # Initialize the MCP server
-mcp = FastMCP("arm-mcp")
+mcp = FastMCP("arm-mcp", instructions=(
+    "KB search returns matching chunks and stored source links when available. These links "
+    "do not include the full page or Learning Path content. Do not automatically fetch linked "
+    "content. If more context would help, ask the user which source to read, unless they have "
+    "already requested it. Clients must enforce this user-choice boundary."
+))
 
 
 # Load USearch index and metadata at module load time

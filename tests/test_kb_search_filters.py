@@ -68,6 +68,34 @@ def index_for(vectors):
     return index
 
 
+def test_source_links_preserve_five_ranked_results_without_fetching(monkeypatch):
+    import requests
+
+    def unexpected_fetch(*args, **kwargs):
+        pytest.fail("Search must not fetch source links")
+
+    monkeypatch.setattr(requests.sessions.Session, "request", unexpected_fetch)
+    rows = [chunk(i, original_text=f"needle {i}") for i in range(6)]
+    rows[0]["url"] = "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=vadd_s8"
+    rows[1]["url"] = "https://developer.arm.com/ecosystem-dashboard/linux?package=jenkins"
+    state = SearchResources(rows, QueryModel(), index_for([[i / 10, 0] for i in range(6)]),
+                            build_bm25_index(rows), include_disclaimers=False)
+    baseline = search("needle", state)
+    assert all(not {"page_url", "learning_path_url"} & hit.keys() for hit in baseline)
+    for row in rows[2:]:
+        row.update(page_url=f"https://example.org/source/{row['chunk_uuid']}?version=2",
+                   learning_path_url="https://learn.arm.com/learning-paths/cross-platform/example/")
+    before = deepcopy(rows)
+    hits = search("needle", state)
+    assert len(hits) == len(baseline) == 5 and rows == before
+    assert [{k: v for k, v in hit.items() if k not in {"page_url", "learning_path_url"}}
+            for hit in hits] == baseline
+    by_url = {row["url"]: row for row in rows}
+    for hit in hits:
+        for key in ("page_url", "learning_path_url"):
+            assert hit.get(key) == by_url[hit["url"]].get(key)
+
+
 @pytest.mark.parametrize("name", ["doc_type", "product", "platform", "edition"])
 def test_filter_matching_normalizes_values_and_excludes_missing_metadata(name):
     metadata = [{name: value} for value in [" Linux ", "LINUX", "windows", "", None, ["linux"]]]
