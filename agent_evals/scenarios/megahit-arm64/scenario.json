@@ -1,0 +1,86 @@
+{
+  "$schema": "../../scenario.schema.json",
+  "schema_version": 1,
+  "id": "megahit-arm64",
+  "description": "Compare Codex alone with Codex using Arm MCP and the migration skills on MEGAHIT v1.2.9.",
+  "task": {
+    "request_file": "task.md",
+    "inputs": [
+      {
+        "id": "megahit-v1.2.9",
+        "kind": "git",
+        "repository": "https://github.com/voutcn/megahit.git",
+        "revision": "d729cca1e201ca16749b67f750b0bc5465c9a990"
+      }
+    ],
+    "verifier": {
+      "command": [
+        "python3",
+        "verify.py"
+      ]
+    }
+  },
+  "run": {
+    "execution_target": "local",
+    "repetitions": 10,
+    "agent_timeout_seconds": 300,
+    "docker_access": true
+  },
+  "configurations": [
+    {
+      "id": "codex-standalone",
+      "agent": {
+        "kind": "codex",
+        "model": "gpt-6.1-sol"
+      }
+    },
+    {
+      "id": "codex-arm-mcp",
+      "agent": {
+        "kind": "codex",
+        "model": "gpt-6.1-sol"
+      },
+      "prompt": "../../../agent-integrations/codex/arm-migration.md",
+      "mcp_servers": [
+        {
+          "name": "arm-mcp",
+          "source": {
+            "kind": "local",
+            "path": "../../.."
+          },
+          "skills": [
+            "arm-container-inspect",
+            "arm-migration-scan",
+            "arm-assembly-analyze"
+          ],
+          "enabled_tools": [
+            "knowledge_base_search"
+          ],
+          "default_tools_approval_mode": "approve",
+          "build": [
+            "docker",
+            "buildx",
+            "build",
+            "--load",
+            "-f",
+            "mcp-local/Dockerfile.local",
+            "-t",
+            "arm-mcp:agent-eval-candidate",
+            "."
+          ],
+          "launch": [
+            "docker",
+            "run",
+            "--rm",
+            "-i",
+            "--pull=never",
+            "arm-mcp:agent-eval-candidate"
+          ]
+        }
+      ],
+      "environment": {
+        "ARM_MCP_IMAGE": "arm-mcp:agent-eval-candidate"
+      }
+    }
+  ]
+}
