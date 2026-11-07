@@ -34,6 +34,29 @@ def _write_json(path: Path, value: Any) -> None:
     path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
 
 
+def _kill_process_group(process: subprocess.Popen[Any]) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+
+
+def _stop_process_group(process: subprocess.Popen[Any]) -> None:
+    """Allow child cleanup on interruption, then force-stop a stuck group."""
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=35)
+    except subprocess.TimeoutExpired:
+        _kill_process_group(process)
+        process.wait()
+    else:
+        # A child may remain in the group after its leader exits on SIGTERM.
+        _kill_process_group(process)
+
+
 def _command(
     args: list[str], cwd: Path, log: Path, *,
     environment: dict[str, str] | None = None, timeout: int = 1800,
@@ -49,9 +72,11 @@ def _command(
         try:
             return process.wait(timeout=timeout)
         except subprocess.TimeoutExpired as exc:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait()
+            _stop_process_group(process)
             raise RunnerError(f"command timed out after {timeout}s; see {log}") from exc
+        except KeyboardInterrupt:
+            _stop_process_group(process)
+            raise
 
 
 def _git(args: list[str], cwd: Path, log: Path) -> None:
@@ -145,7 +170,7 @@ def _verify(
     if verdict is not None and "success" in verdict and not isinstance(verdict["success"], bool):
         return {"status": "error", "error": "verifier.json success must be a boolean",
                 "elapsed_seconds": round(time.monotonic() - started, 3)}
-    status = ("error" if exit_code >= 2 else
+    status = ("error" if exit_code < 0 or exit_code >= 2 else
               "passed" if exit_code == 0 and (verdict is None or verdict.get("success", True))
               else "failed")
     return {
@@ -218,7 +243,7 @@ def run_scenario(
         prepared: list[tuple[dict[str, Any], Path]] = []
         source_records: list[dict[str, Any]] = []
         for server in config.get("mcp_servers", []):
-            destination = sources / f"server-{config['id']}-{server['name']}"
+            destination = sources / f"server-{config['id']}+{server['name']}"
             source = server.get("source", {"kind": "local", "path": "."})
             announce(f"Preparing MCP server {config['id']}/{server['name']} ({source['kind']})")
             source_info = _prepare_source(source, scenario_dir, destination, logs)
@@ -229,7 +254,7 @@ def run_scenario(
             if "build" in server:
                 environment = os.environ.copy()
                 environment.update(config.get("environment", {}))
-                log = logs / f"build-{config['id']}-{server['name']}.log"
+                log = logs / f"build-{config['id']}+{server['name']}.log"
                 announce(f"Building MCP server {config['id']}/{server['name']} (log: {log})")
                 if _command(server["build"], destination, log, environment=environment) != 0:
                     raise RunnerError(f"MCP build failed; see {log}")

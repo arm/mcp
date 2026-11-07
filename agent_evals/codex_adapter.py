@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import signal
 import shutil
 import subprocess
 import tempfile
@@ -12,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .runner import RunnerError
+from .runner import RunnerError, _kill_process_group
 
 try:
     import tomllib
@@ -218,8 +217,12 @@ def run_codex(
                 process.communicate(input=prompt.encode("utf-8"), timeout=timeout_seconds)
             except subprocess.TimeoutExpired:
                 timed_out = True
-                os.killpg(process.pid, signal.SIGKILL)
+                _kill_process_group(process)
                 process.communicate()
+            except KeyboardInterrupt:
+                _kill_process_group(process)
+                process.communicate()
+                raise
         elapsed = time.monotonic() - started
     usage, completed = _usage_from_trace(trace)
     status = ("timeout" if timed_out else

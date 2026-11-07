@@ -101,10 +101,10 @@ that configuration no scenario-provided MCP servers or skills.
 The framework is intended to support three ways to supply an MCP server:
 
 - **Local source and build:** Snapshot a local checkout, build it, and launch
-  the result. This is the path exercised by the current MEGAHIT scenario.
+  the result.
 - **Git source and build:** Fetch a specified Git revision, build it locally,
-  and launch the result. The source path exists in the runner, but it has not
-  yet been exercised end to end.
+  and launch the result. The MEGAHIT example uses this mode to keep its MCP
+  server and bundled skills on a revision compatible with its prompt.
 - **Published version:** Specify a server version and run that release
   directly, without a local build. This is planned; the runner does not yet
   resolve or pull a release from `version`.
@@ -147,7 +147,9 @@ arm-agent-evals plan agent_evals/scenarios/megahit-arm64/scenario.json
 ```
 
 The MEGAHIT example requires Codex CLI authentication and a working Docker
-daemon. To try one repetition of each configuration:
+daemon. Its MCP source is pinned to a revision before PR #259 while its
+migration prompt uses the original scan skill. To try one repetition of each
+configuration:
 
 ```sh
 arm-agent-evals run agent_evals/scenarios/megahit-arm64/scenario.json \

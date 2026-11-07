@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import socket
 import subprocess
 import sys
@@ -11,14 +12,14 @@ import tempfile
 import unittest
 from functools import partial
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 
 from agent_evals import Scenario, load_scenario
 from agent_evals.codex_adapter import (
     _docker_socket, _write_provider_config, run_codex,
     run_codex_trial, tomllib,
 )
-from agent_evals.runner import RunnerError, _patch, _verify, run_scenario
+from agent_evals.runner import RunnerError, _command, _patch, _stop_process_group, _verify, run_scenario
 
 
 class RunnerTests(unittest.TestCase):
@@ -240,6 +241,88 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(result["status"], "error")
             self.assertEqual(result["result"]["stage"], "setup")
 
+    def test_signal_terminated_verifier_is_unscored(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            trial = root / "trial"
+            trial.mkdir()
+            scenario = Scenario(
+                path=root / "scenario.json",
+                document={"task": {"verifier": {"command": [
+                    sys.executable, "-c", "import os, signal; os.kill(os.getpid(), signal.SIGTERM)",
+                ]}}},
+                request="",
+            )
+            result = _verify(scenario, root, trial)
+            self.assertEqual(result["status"], "error")
+            self.assertEqual(result["exit_code"], -15)
+
+    def test_interrupted_command_stops_process_group(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with patch("agent_evals.runner.subprocess.Popen") as popen, \
+                 patch("agent_evals.runner._stop_process_group") as stop_group:
+                process = popen.return_value
+                process.wait.side_effect = KeyboardInterrupt
+                process.pid = 12345
+                with self.assertRaises(KeyboardInterrupt):
+                    _command(["example"], root, root / "command.log")
+                stop_group.assert_called_once_with(process)
+
+    def test_stopping_process_group_escalates_after_grace_period(self):
+        process = Mock(pid=12345)
+        process.wait.side_effect = [subprocess.TimeoutExpired("example", 35), 0]
+        with patch("agent_evals.runner.os.killpg") as killpg:
+            _stop_process_group(process)
+        self.assertEqual(killpg.call_args_list, [
+            call(12345, signal.SIGTERM), call(12345, signal.SIGKILL),
+        ])
+        self.assertEqual(process.wait.call_args_list, [call(timeout=35), call()])
+
+    def test_stopping_process_group_clears_surviving_children(self):
+        process = Mock(pid=12345)
+        process.wait.return_value = 0
+        with patch("agent_evals.runner.os.killpg") as killpg:
+            _stop_process_group(process)
+        self.assertEqual(killpg.call_args_list, [
+            call(12345, signal.SIGTERM), call(12345, signal.SIGKILL),
+        ])
+
+    def test_server_snapshots_do_not_collide_for_hyphenated_ids(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "server"
+            source.mkdir()
+            (source / "marker.txt").write_text("source", encoding="utf-8")
+            configurations = [
+                {"id": "a-b", "agent": {"kind": "test-agent", "model": "test"},
+                 "mcp_servers": [{"name": "c", "source": {"kind": "local", "path": str(source)},
+                                  "launch": ["true"]}]},
+                {"id": "a", "agent": {"kind": "test-agent", "model": "test"},
+                 "mcp_servers": [{"name": "b-c", "source": {"kind": "local", "path": str(source)},
+                                  "launch": ["true"]}]},
+            ]
+            document = {
+                "schema_version": 1, "id": "distinct-sources",
+                "task": {"request": "Answer.", "verifier": {"command": [sys.executable, "-c", "pass"]}},
+                "run": {"execution_target": "local", "repetitions": 1,
+                        "agent_timeout_seconds": 30},
+                "configurations": configurations,
+            }
+            scenario_path = root / "scenario.json"
+            scenario_path.write_text(json.dumps(document), encoding="utf-8")
+
+            def run_agent(configuration, servers, workspace, trial_dir, prompt,
+                          timeout_seconds, *, docker_access=False):
+                return ({"status": "completed", "elapsed_seconds": 0.1,
+                         "usage": None, "trace": None, "final_answer": None}, [])
+
+            output = root / "output"
+            run_scenario(load_scenario(scenario_path), output,
+                         adapters={"test-agent": run_agent})
+            self.assertTrue((output / "sources" / "server-a-b+c" / "marker.txt").is_file())
+            self.assertTrue((output / "sources" / "server-a+b-c" / "marker.txt").is_file())
+
     def test_isolated_codex_config_keeps_provider_but_not_user_servers(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -358,7 +441,7 @@ class RunnerTests(unittest.TestCase):
                               "example-skill").exists())
             self.assertTrue((variant / "profile" / ".agents" / "skills" /
                              "example-skill" / "SKILL.md").is_file())
-            self.assertTrue((output / "sources" / "server-with-mcp-test-server" /
+            self.assertTrue((output / "sources" / "server-with-mcp+test-server" /
                              "built.txt").is_file())
             result = json.loads((variant / "result.json").read_text(encoding="utf-8"))
             self.assertEqual(result["trial_id"], variant.name)

@@ -28,6 +28,10 @@
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9._-]*$"
     },
+    "mcpServerName": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
     "gitSource": {
       "type": "object",
       "required": ["kind", "repository", "revision"],
@@ -136,7 +140,7 @@
       "type": "object",
       "required": ["name", "launch"],
       "properties": {
-        "name": {"$ref": "#/$defs/identifier"},
+        "name": {"$ref": "#/$defs/mcpServerName"},
         "source": {"$ref": "#/$defs/source"},
         "version": {"$ref": "#/$defs/nonEmptyString"},
         "enabled_tools": {

@@ -45,7 +45,11 @@ class ScenarioTests(unittest.TestCase):
         variant = scenario.configurations[1]
         self.assertEqual(variant["prompt"], "../../../agent-integrations/codex/arm-migration.md")
         server = variant["mcp_servers"][0]
-        self.assertEqual(server["source"], {"kind": "local", "path": "../../.."})
+        self.assertEqual(server["source"], {
+            "kind": "git",
+            "repository": "https://github.com/arm/mcp.git",
+            "revision": "5950b0f1f7f7a4f2a68347eb2119c858a3d7376d",
+        })
         self.assertEqual(server["skills"], [
             "arm-container-inspect", "arm-migration-scan", "arm-assembly-analyze"
         ])
@@ -164,6 +168,15 @@ class ScenarioTests(unittest.TestCase):
         self.assertEqual([server["source"]["kind"] for server in servers], ["git", "local"])
         self.assertEqual(servers[0]["skills"], ["arm-migration-scan"])
         self.assertEqual(servers[1]["skills"], ["helper-skill"])
+
+    def test_mcp_server_name_rejects_dot(self):
+        document = question_document()
+        document["configurations"][0]["mcp_servers"] = [{
+            "name": "arm.mcp",
+            "launch": ["python3", "-m", "arm_mcp"],
+        }]
+        with self.assertRaisesRegex(ScenarioError, "arm.mcp"):
+            self.load_question(document)
 
     def test_mcp_servers_reject_http_configuration(self):
         for field, value in (

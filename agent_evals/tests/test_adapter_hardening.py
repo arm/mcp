@@ -14,6 +14,28 @@ from agent_evals.codex_adapter import run_codex
 
 
 class AdapterHardeningTests(unittest.TestCase):
+    def test_interrupt_kills_and_reaps_codex(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            codex_home = root / "codex-home"
+            codex_home.mkdir()
+            workspace = root / "workspace"
+            trial = root / "trial"
+            workspace.mkdir()
+            trial.mkdir()
+            with patch.dict(os.environ, {"CODEX_HOME": str(codex_home)}), \
+                 patch("agent_evals.codex_adapter.subprocess.Popen") as popen, \
+                 patch("agent_evals.codex_adapter._kill_process_group") as kill_group:
+                process = popen.return_value
+                process.communicate.side_effect = [KeyboardInterrupt, (None, None)]
+                with self.assertRaises(KeyboardInterrupt):
+                    run_codex(
+                        {"agent": {"kind": "codex", "model": "test"}},
+                        [], workspace, trial, "Test.\n", 10,
+                    )
+                kill_group.assert_called_once_with(process)
+                self.assertEqual(process.communicate.call_count, 2)
+
     def test_signaled_agent_is_recorded_as_interrupted(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

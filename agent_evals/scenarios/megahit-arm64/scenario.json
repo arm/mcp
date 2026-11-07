@@ -45,8 +45,9 @@
         {
           "name": "arm-mcp",
           "source": {
-            "kind": "local",
-            "path": "../../.."
+            "kind": "git",
+            "repository": "https://github.com/arm/mcp.git",
+            "revision": "5950b0f1f7f7a4f2a68347eb2119c858a3d7376d"
           },
           "skills": [
             "arm-container-inspect",
