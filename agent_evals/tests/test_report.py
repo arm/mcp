@@ -1,3 +1,4 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
 """Exercise comparison reporting from saved trial records without an agent run."""
 
 from __future__ import annotations

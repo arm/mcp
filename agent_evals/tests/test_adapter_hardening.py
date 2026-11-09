@@ -1,3 +1,4 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
 """Check that a trial cannot alter saved Codex authentication."""
 
 from __future__ import annotations

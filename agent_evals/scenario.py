@@ -1,3 +1,4 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
 """Load and plan agent evaluations from the versioned scenario format."""
 
 from __future__ import annotations

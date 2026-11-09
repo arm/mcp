@@ -1,3 +1,4 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
 """Validate codebase inputs and request-only scenarios."""
 from __future__ import annotations
 

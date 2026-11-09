@@ -1,3 +1,4 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
 """Summarize saved trials and link the evidence for each comparison."""
 
 from __future__ import annotations

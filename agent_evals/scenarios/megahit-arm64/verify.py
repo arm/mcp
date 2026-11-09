@@ -1,3 +1,4 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
 """Run the MEGAHIT verifier in a native Linux/AArch64 container."""
 
 from __future__ import annotations

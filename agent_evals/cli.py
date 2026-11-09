@@ -1,3 +1,4 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
 """Developer-facing commands for checking and planning agent evaluations."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
 """Prepare isolated local trials and hand each one to an agent adapter."""
 
 from __future__ import annotations

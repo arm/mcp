@@ -1,3 +1,4 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
 """Run one Codex CLI trial and retain its machine-readable trace."""
 
 from __future__ import annotations

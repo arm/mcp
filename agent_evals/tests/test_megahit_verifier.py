@@ -1,3 +1,4 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
 """Check host-side fixture handling in the MEGAHIT verifier."""
 
 from __future__ import annotations

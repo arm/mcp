@@ -1,3 +1,4 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
 """Exercise one complete local run without network or Codex credentials."""
 
 from __future__ import annotations

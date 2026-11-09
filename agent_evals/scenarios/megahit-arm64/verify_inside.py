@@ -1,3 +1,4 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
 """Build, test, and benchmark the agent's MEGAHIT changes on Linux/AArch64."""
 
 import json
