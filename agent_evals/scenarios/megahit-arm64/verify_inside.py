@@ -54,12 +54,10 @@ def fasta_sequences(path):
     return sequences
 
 
-def canonical_kmers(sequence):
-    kmers = set()
+def canonical_kmer_windows(sequence):
     for index in range(len(sequence) - KMER_SIZE + 1):
         kmer = sequence[index:index + KMER_SIZE]
-        kmers.add(min(kmer, kmer.translate(COMPLEMENT)[::-1]))
-    return kmers
+        yield min(kmer, kmer.translate(COMPLEMENT)[::-1])
 
 
 def check_assembly(directory, fixture=Path("/fixture/test_data")):
@@ -69,15 +67,16 @@ def check_assembly(directory, fixture=Path("/fixture/test_data")):
     for name, filename in (("main", "ref.fa"), ("loop", "loop.fa")):
         kmers = set()
         for sequence in fasta_sequences(fixture / filename):
-            kmers.update(canonical_kmers(sequence))
+            kmers.update(canonical_kmer_windows(sequence))
         if not kmers:
             raise RuntimeError(f"{name} reference is shorter than the comparison k-mer")
         references[name] = kmers
     contig_kmers = []
     for index, contig in enumerate(contigs, 1):
-        kmers = canonical_kmers(contig)
-        purity = (max(len(kmers & reference) / len(kmers)
-                      for reference in references.values()) if kmers else 0)
+        windows = list(canonical_kmer_windows(contig))
+        kmers = set(windows)
+        purity = (max(sum(window in reference for window in windows) / len(windows)
+                      for reference in references.values()) if windows else 0)
         if purity < MIN_CONTIG_PURITY:
             raise RuntimeError(f"contig {index} does not match the toy references")
         contig_kmers.append(kmers)

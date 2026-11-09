@@ -75,6 +75,14 @@ class MegahitAssemblyTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "contig 3 does not match"):
             self.check_assembly(self.output, self.fixture)
 
+    def test_rejects_repetitive_contamination(self) -> None:
+        randomizer = random.Random(42)
+        long_main = "".join(randomizer.choices("ACGT", k=1000))
+        write_fasta(self.fixture / "ref.fa", [long_main])
+        self.write_output(long_main + "N" * 1000, self.loop)
+        with self.assertRaisesRegex(RuntimeError, "contig 1 does not match"):
+            self.check_assembly(self.output, self.fixture)
+
     def test_rejects_chimera_of_both_references(self) -> None:
         self.write_output(self.main + self.loop)
         with self.assertRaisesRegex(RuntimeError, "contig 1 does not match"):
