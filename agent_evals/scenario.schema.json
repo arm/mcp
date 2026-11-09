@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Arm MCP agent evaluation scenario",
+  "description": "Shared task, run plan, and agent configurations for a local evaluation.",
+  "type": "object",
+  "required": ["schema_version", "id", "task", "run", "configurations"],
+  "properties": {
+    "$schema": {"$ref": "#/$defs/nonEmptyString"},
+    "schema_version": {"type": "integer", "const": 1},
+    "id": {"$ref": "#/$defs/identifier"},
+    "description": {"$ref": "#/$defs/nonEmptyString"},
+    "task": {"$ref": "#/$defs/task"},
+    "run": {"$ref": "#/$defs/run"},
+    "configurations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/configuration"}
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "mcpServerName": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "gitSource": {
+      "type": "object",
+      "required": ["kind", "repository", "revision"],
+      "properties": {
+        "kind": {"const": "git"},
+        "repository": {"$ref": "#/$defs/nonEmptyString"},
+        "revision": {"$ref": "#/$defs/nonEmptyString"}
+      },
+      "additionalProperties": false
+    },
+    "localSource": {
+      "type": "object",
+      "required": ["kind", "path"],
+      "properties": {
+        "kind": {"const": "local"},
+        "path": {"$ref": "#/$defs/nonEmptyString"}
+      },
+      "additionalProperties": false
+    },
+    "source": {
+      "oneOf": [
+        {"$ref": "#/$defs/gitSource"},
+        {"$ref": "#/$defs/localSource"}
+      ]
+    },
+    "gitInput": {
+      "type": "object",
+      "required": ["id", "kind", "repository", "revision"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "kind": {"const": "git"},
+        "repository": {"$ref": "#/$defs/nonEmptyString"},
+        "revision": {"$ref": "#/$defs/nonEmptyString"}
+      },
+      "additionalProperties": false
+    },
+    "localInput": {
+      "type": "object",
+      "required": ["id", "kind", "path"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "kind": {"const": "local"},
+        "path": {"$ref": "#/$defs/nonEmptyString"}
+      },
+      "additionalProperties": false
+    },
+    "input": {
+      "oneOf": [
+        {"$ref": "#/$defs/gitInput"},
+        {"$ref": "#/$defs/localInput"}
+      ]
+    },
+    "command": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/nonEmptyString"}
+    },
+    "verifier": {
+      "type": "object",
+      "required": ["command"],
+      "properties": {
+        "command": {"$ref": "#/$defs/command"}
+      },
+      "additionalProperties": false
+    },
+    "task": {
+      "type": "object",
+      "required": ["verifier"],
+      "properties": {
+        "request": {"$ref": "#/$defs/nonEmptyString"},
+        "request_file": {"$ref": "#/$defs/nonEmptyString"},
+        "inputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/input"}
+        },
+        "verifier": {"$ref": "#/$defs/verifier"}
+      },
+      "oneOf": [
+        {"required": ["request"]},
+        {"required": ["request_file"]}
+      ],
+      "additionalProperties": false
+    },
+    "run": {
+      "type": "object",
+      "required": ["execution_target", "repetitions", "agent_timeout_seconds"],
+      "properties": {
+        "execution_target": {"const": "local"},
+        "repetitions": {"type": "integer", "minimum": 1},
+        "agent_timeout_seconds": {"type": "integer", "minimum": 1},
+        "docker_access": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "agent": {
+      "type": "object",
+      "required": ["kind", "model"],
+      "properties": {
+        "kind": {"$ref": "#/$defs/identifier"},
+        "model": {"$ref": "#/$defs/nonEmptyString"}
+      },
+      "additionalProperties": false
+    },
+    "mcpServer": {
+      "type": "object",
+      "required": ["name", "launch"],
+      "properties": {
+        "name": {"$ref": "#/$defs/mcpServerName"},
+        "source": {"$ref": "#/$defs/source"},
+        "version": {"$ref": "#/$defs/nonEmptyString"},
+        "enabled_tools": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/nonEmptyString"}
+        },
+        "skills": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/identifier"}
+        },
+        "build": {"$ref": "#/$defs/command"},
+        "launch": {"$ref": "#/$defs/command"},
+        "default_tools_approval_mode": {
+          "enum": ["auto", "prompt", "writes", "approve"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "configuration": {
+      "type": "object",
+      "required": ["id", "agent"],
+      "properties": {
+        "id": {"$ref": "#/$defs/identifier"},
+        "agent": {"$ref": "#/$defs/agent"},
+        "prompt": {"$ref": "#/$defs/nonEmptyString"},
+        "mcp_servers": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/mcpServer"}
+        },
+        "environment": {
+          "type": "object",
+          "propertyNames": {"$ref": "#/$defs/nonEmptyString"},
+          "additionalProperties": {"type": "string"}
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
