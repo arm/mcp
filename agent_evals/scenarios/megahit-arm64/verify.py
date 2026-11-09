@@ -75,6 +75,16 @@ def _interrupt_on_sigterm(_signum: int, _frame: object) -> None:
     raise KeyboardInterrupt
 
 
+def _verifier_user_args(security_options: list[str], host_platform: str,
+                        uid: int, gid: int) -> list[str]:
+    if host_platform != "linux" or any(option.startswith("name=rootless")
+                                        for option in security_options):
+        return []
+    if any(option.startswith("name=userns") for option in security_options):
+        raise RuntimeError("Docker userns-remap cannot write the verifier output mount")
+    return ["--user", f"{uid}:{gid}", "-e", "HOME=/results"]
+
+
 def main() -> int:
     deadline = time.monotonic() + VERIFIER_BUDGET_SECONDS
     if not os.environ.get("AGENT_EVAL_INPUT_SOURCE"):
@@ -106,6 +116,24 @@ def main() -> int:
                                       "error": f"expected a Linux Docker daemon, got {daemon.stdout.strip()!r}"}) + "\n")
         return 2
     native_arm = architecture.lower() in ("aarch64", "arm64")
+    user_args = []
+    if sys.platform == "linux":
+        try:
+            security = subprocess.run(
+                ["docker", "info", "--format", "{{json .SecurityOptions}}"],
+                capture_output=True, text=True, check=True,
+                timeout=min(30, _remaining_seconds(deadline)),
+            )
+            options = json.loads(security.stdout)
+            if not isinstance(options, list) or not all(isinstance(option, str)
+                                                         for option in options):
+                raise ValueError("unexpected Docker security options")
+            user_args = _verifier_user_args(options, sys.platform, os.getuid(), os.getgid())
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired,
+                ValueError, RuntimeError) as exc:
+            RESULT.write_text(json.dumps({"success": False, "stage": "docker_info",
+                                          "error": str(exc)}) + "\n")
+            return 2
     try:
         build = subprocess.run(
             ["docker", "build", "-q", "-f", str(SCENARIO / "verifier.Dockerfile"),
@@ -130,6 +158,7 @@ def main() -> int:
         try:
             run = subprocess.run(
                 ["docker", "run", "--rm", "--name", container_name,
+                 *user_args,
                  "--network", "none", "--platform", "linux/arm64",
                  "-e", f"AGENT_EVAL_NATIVE_ARM={int(native_arm)}",
                  "-e", f"AGENT_EVAL_DAEMON_ARCH={architecture}",

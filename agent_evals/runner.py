@@ -71,13 +71,16 @@ def _command(
         except OSError as exc:
             raise RunnerError(f"cannot start {args[0]}: {exc}") from exc
         try:
-            return process.wait(timeout=timeout)
+            exit_code = process.wait(timeout=timeout)
         except subprocess.TimeoutExpired as exc:
             _stop_process_group(process)
             raise RunnerError(f"command timed out after {timeout}s; see {log}") from exc
         except KeyboardInterrupt:
             _stop_process_group(process)
             raise
+        # A completed command can leave background children in its process group.
+        _kill_process_group(process)
+        return exit_code
 
 
 def _git(args: list[str], cwd: Path, log: Path) -> None:

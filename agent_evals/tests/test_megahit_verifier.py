@@ -18,6 +18,23 @@ VERIFY = Path(__file__).resolve().parents[1] / "scenarios" / "megahit-arm64" / "
 
 
 class MegahitVerifierTests(unittest.TestCase):
+    def test_verifier_user_matches_rootful_linux_caller(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            environment = {
+                "AGENT_EVAL_SCENARIO_DIR": temporary,
+                "AGENT_EVAL_WORKSPACE": temporary,
+                "AGENT_EVAL_TRIAL_DIR": temporary,
+                "AGENT_EVAL_VERIFIER_RESULT": str(Path(temporary) / "verifier.json"),
+            }
+            with patch.dict(os.environ, environment):
+                user_args = runpy.run_path(str(VERIFY))["_verifier_user_args"]
+        self.assertEqual(user_args([], "linux", 1000, 1001),
+                         ["--user", "1000:1001", "-e", "HOME=/results"])
+        self.assertEqual(user_args(["name=rootless"], "linux", 1000, 1001), [])
+        self.assertEqual(user_args([], "darwin", 1000, 1001), [])
+        with self.assertRaisesRegex(RuntimeError, "userns-remap"):
+            user_args(["name=userns"], "linux", 1000, 1001)
+
     def test_missing_workspace_fixture_is_scored_as_failure(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -139,10 +156,14 @@ class MegahitVerifierTests(unittest.TestCase):
 
             def fake_docker(args, **kwargs):
                 if args[:2] == ["docker", "info"]:
+                    if "{{json .SecurityOptions}}" in args:
+                        return subprocess.CompletedProcess(args, 0, "[]\n")
                     return subprocess.CompletedProcess(args, 0, "arm64 linux\n")
                 if args[:2] == ["docker", "build"]:
                     return subprocess.CompletedProcess(args, 0, "image-id\n")
                 self.assertEqual(args[:2], ["docker", "run"])
+                self.assertEqual(args[args.index("--user") + 1],
+                                 f"{os.getuid()}:{os.getgid()}")
                 mounts = [args[index + 1] for index, value in enumerate(args)
                           if value == "--mount"]
                 self.assertIn(f"type=bind,source={workspace},target=/workspace,readonly",
@@ -157,8 +178,8 @@ class MegahitVerifierTests(unittest.TestCase):
                 (output_dir / "verifier.json").write_text('{"success": true}\n')
                 return subprocess.CompletedProcess(args, 0, "verified\n")
 
-            with patch.dict(os.environ, environment), patch("subprocess.run",
-                                                             side_effect=fake_docker):
+            with patch.dict(os.environ, environment), patch("sys.platform", "linux"), \
+                 patch("subprocess.run", side_effect=fake_docker):
                 verify = runpy.run_path(str(VERIFY))
                 self.assertEqual(verify["main"](), 0)
                 self.assertTrue(json.loads((trial / "verifier.json").read_text())["success"])
@@ -190,6 +211,8 @@ class MegahitVerifierTests(unittest.TestCase):
 
             def fake_docker(args, **kwargs):
                 if args[:2] == ["docker", "info"]:
+                    if "{{json .SecurityOptions}}" in args:
+                        return subprocess.CompletedProcess(args, 0, "[]\n")
                     return subprocess.CompletedProcess(args, 0, "arm64 linux\n")
                 if args[:2] == ["docker", "build"]:
                     return subprocess.CompletedProcess(args, 0, "image-id\n")

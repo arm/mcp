@@ -10,6 +10,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from functools import partial
 from pathlib import Path
@@ -191,6 +192,7 @@ class RunnerTests(unittest.TestCase):
                 "if arg == '-c')\n"
                 "capture = Path(args[args.index('-o') + 1]).with_name('capture.json')\n"
                 "capture.write_text(json.dumps({'docker_host': os.environ.get('DOCKER_HOST'), "
+                "'docker_context': os.environ.get('DOCKER_CONTEXT'), "
                 "'env_vars': configs.get('mcp_servers.test.env_vars')}))\n"
                 "sys.stdin.read()\n"
                 "print(json.dumps({'type': 'turn.completed', 'usage': "
@@ -203,7 +205,8 @@ class RunnerTests(unittest.TestCase):
                 "agent": {"kind": "codex", "model": "test"},
                 "environment": {"ARM_MCP_IMAGE": "test-image"},
             }
-            with patch("agent_evals.codex_adapter._docker_socket", return_value=socket_path):
+            with patch("agent_evals.codex_adapter._docker_socket", return_value=socket_path), \
+                 patch.dict(os.environ, {"DOCKER_CONTEXT": "unavailable"}):
                 for command in ("docker", "python3"):
                     with self.subTest(command=command):
                         trial = root / command
@@ -217,6 +220,7 @@ class RunnerTests(unittest.TestCase):
                         self.assertEqual(result["status"], "completed")
                         capture = json.loads((trial / "capture.json").read_text(encoding="utf-8"))
                         self.assertEqual(capture["docker_host"], f"unix://{socket_path}")
+                        self.assertIsNone(capture["docker_context"])
                         env_vars = json.loads(capture["env_vars"])
                         expected = ["ARM_MCP_IMAGE", "DOCKER_HOST"] if command == "docker" else ["ARM_MCP_IMAGE"]
                         self.assertEqual(env_vars, expected)
@@ -270,6 +274,37 @@ class RunnerTests(unittest.TestCase):
                     _command(["example"], root, root / "command.log")
                 stop_group.assert_called_once_with(process)
 
+    def test_completed_command_stops_background_child(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            heartbeat = root / "heartbeat.txt"
+            pid_file = root / "child.pid"
+            child = (
+                "import sys, time\n"
+                "while True:\n"
+                "    with open(sys.argv[1], 'a') as output: output.write('x')\n"
+                "    time.sleep(0.02)\n"
+            )
+            parent = (
+                "import os, subprocess, sys, time\n"
+                f"child = subprocess.Popen([sys.executable, '-c', {child!r}, sys.argv[1]])\n"
+                "open(sys.argv[2], 'w').write(str(child.pid))\n"
+                "while not os.path.exists(sys.argv[1]): time.sleep(0.01)\n"
+            )
+            try:
+                self.assertEqual(_command([sys.executable, "-c", parent,
+                                           str(heartbeat), str(pid_file)],
+                                          root, root / "command.log"), 0)
+                before = heartbeat.stat().st_size
+                time.sleep(0.2)
+                self.assertEqual(heartbeat.stat().st_size, before)
+            finally:
+                if pid_file.exists():
+                    try:
+                        os.kill(int(pid_file.read_text()), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+
     def test_stopping_process_group_escalates_after_grace_period(self):
         process = Mock(pid=12345)
         process.wait.side_effect = [subprocess.TimeoutExpired("example", 35), 0]
@@ -288,6 +323,20 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(killpg.call_args_list, [
             call(12345, signal.SIGTERM), call(12345, signal.SIGKILL),
         ])
+
+    def test_isolated_codex_config_keeps_builtin_provider(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            original = root / "original"
+            isolated = root / "isolated"
+            original.mkdir()
+            isolated.mkdir()
+            (original / "config.toml").write_text('model_provider = "openai"\n',
+                                                   encoding="utf-8")
+            _write_provider_config(original, isolated)
+            with (isolated / "config.toml").open("rb") as file:
+                config = tomllib.load(file)
+            self.assertEqual(config, {"model_provider": "openai"})
 
     def test_server_snapshots_do_not_collide_for_hyphenated_ids(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -47,12 +47,11 @@ def _write_provider_config(original_home: Path, isolated_home: Path) -> None:
     if not provider_name:
         return
     provider = config.get("model_providers", {}).get(provider_name)
-    if not isinstance(provider, dict):
-        raise ValueError(f"Codex model provider {provider_name!r} is not configured")
-    lines = [f"model_provider = {_toml_value(provider_name)}", "",
-             f"[model_providers.{_toml_value(provider_name)}]"]
-    lines.extend(f"{_toml_value(key)} = {_toml_value(value)}"
-                 for key, value in provider.items())
+    lines = [f"model_provider = {_toml_value(provider_name)}"]
+    if isinstance(provider, dict):
+        lines.extend(["", f"[model_providers.{_toml_value(provider_name)}]"])
+        lines.extend(f"{_toml_value(key)} = {_toml_value(value)}"
+                     for key, value in provider.items())
     descriptor = os.open(isolated_home / "config.toml", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as target:
         target.write("\n".join(lines) + "\n")
@@ -191,6 +190,7 @@ def run_codex(
     environment.update(configuration.get("environment", {}))
     if docker_access:
         environment["DOCKER_HOST"] = f"unix://{docker_socket}"
+        environment.pop("DOCKER_CONTEXT", None)
     timed_out = False
     # Keep user MCP servers and plugins out while retaining the provider and auth.
     # The temporary home (and its private auth copy) is removed after this turn.
