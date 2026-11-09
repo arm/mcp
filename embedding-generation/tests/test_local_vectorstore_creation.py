@@ -278,6 +278,10 @@ def test_intrinsics_embed_one_source_card_without_splitting_full_text(tokenizer,
     ("uint8_t **", "uint8_t **"),
     ("const uint8_t *const *", "const uint8_t *const *"),
     ("svbool_t", "scalable predicate mask"),
+    ("mve_pred16_t", "16-bit MVE predicate mask"),
+    ("svcount_t", "scalable predicate-as-counter"),
+    ("mfloat8x16_t", "16 lanes of 8-bit modal floating point, 128-bit vector"),
+    ("svmfloat8_t", "scalable vector of 8-bit modal floating point elements"),
 ])
 def test_intrinsic_source_type_descriptions(ctype, description):
     assert intrinsic_source.intrinsic_type_description(ctype) == description
@@ -339,15 +343,25 @@ def test_card_preserves_operation_and_signature_but_omits_shared_template():
     assert "full pseudocode" in record["original_text"]
 
 
+@pytest.mark.parametrize("isa,expected", [
+    ("SME and SME2 / SVE2", True), ("SME and SME2 / SVE", True), ("SME and SME2", False),
+])
+def test_predicate_lane_description_recognizes_combined_families(isa, expected):
+    record = {"heading": "svfirstp_b8", "product": isa, "keywords": "",
+              "original_text": "The signature is as follows:\n`svbool_t svfirstp_b8(svbool_t pg, svbool_t pn);`"}
+    text = intrinsic_source.intrinsic_embedding_text(record)
+    assert ("Predicate controls 8-bit lanes." in text) == expected
+
+
 def test_card_preserves_unexpanded_types_and_full_signature():
-    signature = "svcount_t example(enum future_pattern pattern, const int lane, mfloat8_t value);"
+    signature = "future_vector_t example(enum future_pattern pattern, const int lane, future_float_t value);"
     record = {"heading": "example", "product": "SVE", "keywords": "",
               "original_text": "The signature is as follows:\n`" + signature + "`\n"}
     text = intrinsic_source.intrinsic_embedding_text(record)
-    assert "Returns: svcount_t." in text
+    assert "Returns: future_vector_t." in text
     assert "Input pattern: enum future_pattern." in text
     assert "Input lane: signed integer scalar." in text
-    assert "Input value: mfloat8_t." in text
+    assert "Input value: future_float_t." in text
     assert text.endswith("Signature: " + signature)
 
 
@@ -357,12 +371,18 @@ def test_nonintrinsic_chunk_is_unchanged():
 
 
 @pytest.mark.parametrize("legacy_views", [False, True])
-def test_prepared_chunks_roundtrip_without_reparsing(tmp_path, monkeypatch, gc, legacy_views):
+@pytest.mark.parametrize("isa,fallback", [
+    ("Neon", False), ("SME and SME2 / SVE2", False), ("SME and SME2 / SVE2", True),
+])
+def test_prepared_chunks_roundtrip_without_reparsing(tmp_path, monkeypatch, gc, legacy_views, isa, fallback):
     source = tmp_path / "intrinsics"
     source.mkdir()
     monkeypatch.setenv("INTRINSIC_CHUNKS_DIR", str(source))
     monkeypatch.setenv("YAML_DATA_DIR", str(tmp_path / "guides"))
-    raw = {**chunk(), "uuid": "a", "title": "Arm Intrinsics - vaddq_u8"}
+    raw = {**chunk(isa), "uuid": "a", "title": "Arm Intrinsics - vaddq_u8"}
+    if fallback:
+        raw["product"] = isa
+        raw["content"] = raw["content"].split("architecture. ", 1)[1]
     if legacy_views:
         raw["embedding_texts"] = {"compact": "stale compact text", "detailed": "stale detailed text"}
     path = source / "chunk_a.yaml"
@@ -385,6 +405,9 @@ def test_prepared_chunks_roundtrip_without_reparsing(tmp_path, monkeypatch, gc, 
     gc.prepare_intrinsic_chunks()
     assert path.read_text() == prepared
     record = yaml.safe_load(prepared)
+    assert record["product"] == isa
+    assert record["heading_path"] == [isa, "vaddq_u8"]
+    assert record["embedding_text"].startswith(f"{isa} intrinsic vaddq_u8.")
     assert record["keywords"] == "vaddq_u8, neon, addition"
     assert isinstance(record.get("embedding_text"), str)
     assert "16 lanes of 8-bit unsigned integer" in record["embedding_text"]
@@ -399,6 +422,8 @@ def test_prepared_chunks_roundtrip_without_reparsing(tmp_path, monkeypatch, gc, 
     saved = json.loads((tmp_path / "metadata.json").read_text())[0]
     assert saved["original_text"] == record["content"]
     assert saved["doc_type"] == "Intrinsic"
+    assert saved["product"] == isa
+    assert saved["heading_path"] == [isa, "vaddq_u8"]
     assert "embedding_text" not in saved
 
 

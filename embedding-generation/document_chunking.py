@@ -75,8 +75,8 @@ def normalize_intrinsic_chunk(chunk: dict) -> dict:
         return chunk
     name = chunk["url"].split("#q=", 1)[1]
     text = chunk["content"]
-    match = re.search(r"part of the (\S+) instruction set architecture", text, re.I)
-    isa = _ISAS.get(match.group(1).lower(), match.group(1)) if match else ""
+    match = re.search(r"part of the (.+?) instruction set architecture", text, re.I)
+    isa = _ISAS.get(match.group(1).lower(), match.group(1)) if match else str(chunk.get("product") or "")
     keywords = ", ".join(
         term.strip() for term in str(chunk.get("keywords") or "").split(",")
         if term.strip() and term.strip().lower() not in _GENERIC_KEYWORDS
@@ -94,10 +94,11 @@ def intrinsic_type_description(raw: str) -> str:
         return raw.strip()
     base = re.sub(r"\b(?:const|volatile|restrict|__restrict)\b", "", raw).replace("*", "").strip()
     labels = {"uint": "unsigned integer", "int": "signed integer", "float": "floating point",
-              "poly": "polynomial", "bfloat": "brain floating point"}
-    fixed = re.fullmatch(r"(u?int|float|poly|bfloat)(\d+)((?:x\d+)*)_t", base)
-    scalable = re.fullmatch(r"sv(u?int|float|bfloat)(\d+)(?:x(\d+))?_t", base)
-    description = {"svbool_t": "scalable predicate mask", "bool": "boolean scalar",
+              "poly": "polynomial", "bfloat": "brain floating point", "mfloat": "modal floating point"}
+    fixed = re.fullmatch(r"(u?int|float|poly|bfloat|mfloat)(\d+)((?:x\d+)*)_t", base)
+    scalable = re.fullmatch(r"sv(u?int|float|bfloat|mfloat)(\d+)(?:x(\d+))?_t", base)
+    description = {"svbool_t": "scalable predicate mask", "mve_pred16_t": "16-bit MVE predicate mask",
+                   "svcount_t": "scalable predicate-as-counter", "bool": "boolean scalar",
                    "int": "signed integer scalar",
                    "enum svpattern": "predicate pattern selecting active elements",
                    "enum svprfop": "prefetch operation selecting access type, cache level and retention policy",
@@ -124,7 +125,7 @@ def intrinsic_type_description(raw: str) -> str:
 def intrinsic_embedding_text(record: dict) -> str:
     """Format detailed source text; preserve full text for responses."""
     text, name = record["original_text"], record["heading"]
-    isa_match = re.search(r"is part of the (\S+) instruction set", text)
+    isa_match = re.search(r"is part of the (.+?) instruction set", text)
     isa = isa_match.group(1) if isa_match else record["product"]
     signature_match = re.search(r"follows:\s*`([^`]+)`", text)
     if not signature_match:
@@ -153,7 +154,7 @@ def intrinsic_embedding_text(record: dict) -> str:
             lines.append(sentence)
     lines.append("Returns: " + intrinsic_type_description(result_type.strip()) + ".")
     predicate_bits = sorted({int(bits) for bits in re.findall(r"(?:_|\[)b(8|16|32|64)(?=$|_|\]|\[)", name)})
-    if isa.lower().startswith("sve") and predicate_bits:
+    if {"sve", "sve2"} & set(re.findall(r"[a-z0-9]+", isa.lower())) and predicate_bits:
         lines.append(f"Predicate controls {predicate_bits[0]}-bit lanes.")
     counted_bits = sorted({int(bits) for bits in re.findall(
         r"number of (8|16|32|64)[- ]bit (?:data )?elements", description + " " + operation, re.I)})
