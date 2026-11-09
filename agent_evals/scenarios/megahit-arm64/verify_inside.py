@@ -13,6 +13,11 @@ from pathlib import Path
 ROOT = Path("/results")
 RESULT = ROOT / "verifier.json"
 BENCHMARK_ID = "megahit-bundled-toy-assembly"
+# Compare sequence content without depending on FASTA headers or orientation.
+KMER_SIZE = 31
+MIN_REFERENCE_COVERAGE = 0.95
+MIN_CONTIG_PURITY = 0.95
+COMPLEMENT = str.maketrans("ACGT", "TGCA")
 
 
 def command(name, args, *, cwd=None):
@@ -23,26 +28,64 @@ def command(name, args, *, cwd=None):
         raise RuntimeError(f"{name} exited {completed.returncode}; see {log.name}")
 
 
-def check_contigs(directory):
-    contigs = directory / "final.contigs.fa"
-    if not contigs.is_file() or contigs.stat().st_size == 0:
-        raise RuntimeError(f"missing or empty {contigs}")
-    headers = sequences = 0
-    with contigs.open(encoding="ascii") as stream:
+def fasta_sequences(path):
+    if not path.is_file() or path.stat().st_size == 0:
+        raise RuntimeError(f"missing or empty {path}")
+    sequences = []
+    current = None
+    with path.open(encoding="ascii") as stream:
         for line in stream:
             line = line.strip()
             if not line:
                 continue
             if line.startswith(">"):
-                if not line[1:] or (headers and sequences < headers):
-                    raise RuntimeError(f"invalid FASTA header in {contigs}")
-                headers += 1
-            elif not headers or not set(line.upper()) <= set("ACGTN"):
-                raise RuntimeError(f"invalid FASTA sequence in {contigs}")
+                if not line[1:].strip() or (current is not None and not current):
+                    raise RuntimeError(f"invalid FASTA header in {path}")
+                if current is not None:
+                    sequences.append("".join(current))
+                current = []
+            elif current is None or not set(line.upper()) <= set("ACGTN"):
+                raise RuntimeError(f"invalid FASTA sequence in {path}")
             else:
-                sequences = headers
-    if not headers or sequences != headers:
-        raise RuntimeError(f"missing FASTA sequence in {contigs}")
+                current.append(line.upper())
+    if current is None or not current:
+        raise RuntimeError(f"missing FASTA sequence in {path}")
+    sequences.append("".join(current))
+    return sequences
+
+
+def canonical_kmers(sequence):
+    kmers = set()
+    for index in range(len(sequence) - KMER_SIZE + 1):
+        kmer = sequence[index:index + KMER_SIZE]
+        kmers.add(min(kmer, kmer.translate(COMPLEMENT)[::-1]))
+    return kmers
+
+
+def check_assembly(directory, fixture=Path("/fixture/test_data")):
+    """Compare assembled output with trusted toy references outside the checkout."""
+    contigs = fasta_sequences(directory / "final.contigs.fa")
+    references = {}
+    for name, filename in (("main", "ref.fa"), ("loop", "loop.fa")):
+        kmers = set()
+        for sequence in fasta_sequences(fixture / filename):
+            kmers.update(canonical_kmers(sequence))
+        if not kmers:
+            raise RuntimeError(f"{name} reference is shorter than the comparison k-mer")
+        references[name] = kmers
+    contig_kmers = []
+    for index, contig in enumerate(contigs, 1):
+        kmers = canonical_kmers(contig)
+        purity = (max(len(kmers & reference) / len(kmers)
+                      for reference in references.values()) if kmers else 0)
+        if purity < MIN_CONTIG_PURITY:
+            raise RuntimeError(f"contig {index} does not match the toy references")
+        contig_kmers.append(kmers)
+    for name, kmers in references.items():
+        coverage = max(len(kmers & observed) / len(kmers)
+                       for observed in contig_kmers)
+        if coverage < MIN_REFERENCE_COVERAGE:
+            raise RuntimeError(f"{name} reference coverage in one contig too low: {coverage:.1%}")
 
 
 def check_aarch64_binary():
@@ -91,16 +134,16 @@ def main():
                 cwd=ROOT / "build")
         stage = "functional_test"
         run_application(stage, ROOT / "functional")
-        check_contigs(ROOT / "functional")
+        check_assembly(ROOT / "functional")
         elapsed = None
         checks = ["linux_aarch64_container", "build", "aarch64_binary",
-                  "simple_test", "functional_test"]
+                  "simple_test", "functional_test", "reference_match"]
         if os.environ["AGENT_EVAL_NATIVE_ARM"] == "1":
             stage = "benchmark"
             started = time.monotonic()
             run_application(stage, ROOT / "benchmark")
             elapsed = round(time.monotonic() - started, 3)
-            check_contigs(ROOT / "benchmark")
+            check_assembly(ROOT / "benchmark")
             checks.append("benchmark")
         verdict = {"success": True, "architecture": architecture,
                    "docker_daemon_architecture": os.environ["AGENT_EVAL_DAEMON_ARCH"],

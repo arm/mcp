@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import signal
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -56,14 +57,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     if args.command == "run":
+        terminated = False
+
+        def interrupt_on_sigterm(_signum: int, _frame: object) -> None:
+            nonlocal terminated
+            terminated = True
+            raise KeyboardInterrupt
+
+        previous_sigterm = signal.signal(signal.SIGTERM, interrupt_on_sigterm)
         try:
-            summary = run_scenario(
-                scenario, Path(args.output), repetitions=args.repetitions,
-                progress=lambda message: print(message, file=sys.stderr, flush=True),
-            )
-        except (ReportError, RunnerError, OSError) as exc:
-            print(f"Run failed: {exc}", file=sys.stderr)
-            return 2
+            try:
+                summary = run_scenario(
+                    scenario, Path(args.output), repetitions=args.repetitions,
+                    progress=lambda message: print(message, file=sys.stderr, flush=True),
+                )
+            except (ReportError, RunnerError, OSError) as exc:
+                print(f"Run failed: {exc}", file=sys.stderr)
+                return 2
+            except KeyboardInterrupt:
+                print("Run interrupted", file=sys.stderr)
+                return 128 + (signal.SIGTERM if terminated else signal.SIGINT)
+        finally:
+            signal.signal(signal.SIGTERM, previous_sigterm)
         print(json.dumps(summary, indent=2))
         return 0 if all(summary[key] == 0 for key in
                         ("failed", "unscored", "not_recorded")) else 1

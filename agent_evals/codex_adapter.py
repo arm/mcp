@@ -224,6 +224,9 @@ def run_codex(
                 _kill_process_group(process)
                 process.communicate()
                 raise
+            else:
+                # Codex may exit while an MCP or shell child is still running.
+                _kill_process_group(process)
         elapsed = time.monotonic() - started
     usage, completed = _usage_from_trace(trace)
     status = ("timeout" if timed_out else
