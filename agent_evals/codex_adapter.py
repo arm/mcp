@@ -86,7 +86,7 @@ def _usage_from_trace(path: Path) -> tuple[dict[str, int | None], bool]:
 
 def _docker_socket() -> Path:
     """Resolve the active local Docker context before isolating Codex's HOME."""
-    endpoint = os.environ.get("DOCKER_HOST")
+    endpoint = None if os.environ.get("DOCKER_CONTEXT") else os.environ.get("DOCKER_HOST")
     if not endpoint:
         try:
             result = subprocess.run(
