@@ -48,13 +48,17 @@ def context_row(url, index=0, count=1, *, pages=None, **extra):
             "original_text": f"{url} chunk {index}", "document_context": context, **extra}
 
 
+def context_resources(monkeypatch, rows, selected):
+    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [
+        {"metadata": row, "distance": 0.1} for row in selected])
+    return SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
+
+
 def test_context_scope_expands_all_hits_once_in_stored_order(monkeypatch):
     pages = ["https://example.org/path/", "https://example.org/path/z/", "https://example.org/path/a/"]
     rows = [context_row(url, i, 2, pages=pages) for url in pages for i in range(2)]
     other = context_row("https://example.org/manual.pdf")
-    state = SearchResources([other, *reversed(rows)], QueryModel(), None, None, include_disclaimers=False)
-    seeds = [{"metadata": r, "distance": 0.1} for r in (rows[3], rows[2], rows[5], other)]
-    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: seeds)
+    state = context_resources(monkeypatch, [other, *reversed(rows)], [rows[3], rows[2], rows[5], other])
     default = search("needle", state, k=4)
     assert search("needle", state, k=4, scope="chunks") == default
     assert len(default) == 4 and all("context" not in hit for hit in default)
@@ -65,7 +69,8 @@ def test_context_scope_expands_all_hits_once_in_stored_order(monkeypatch):
     # z then a, independent of metadata storage order and lexicographic URL order.
     path = search("needle", state, k=1, scope="parent_resource")
     assert [hit["snippet"] for hit in path] == [r["original_text"] for r in rows]
-    assert [hit["context"]["page_index"] for hit in path] == [0, 0, 1, 1, 2, 2]
+    assert [(h["context"]["page_index"], h["context"]["page_count"], h["context"]["chunk_index"], h["context"]["chunk_count"])
+            for h in path] == [(page, 3, chunk, 2) for page in range(3) for chunk in range(2)]
     assert all(hit["context"]["scope"] == "parent_resource" for hit in path)
     mixed = search("needle", state, k=4, scope="parent_resource")
     assert len(mixed) == 7 and mixed[-1]["context"]["scope"] == "page"
@@ -73,8 +78,7 @@ def test_context_scope_expands_all_hits_once_in_stored_order(monkeypatch):
 
     standalone = deepcopy(rows[3])
     standalone["document_context"].pop("learning_path_pages")
-    state = SearchResources([standalone, *reversed(rows)], QueryModel(), None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [{"metadata": standalone}])
+    state = context_resources(monkeypatch, [standalone, *reversed(rows)], [standalone])
     assert [h["snippet"] for h in search("needle", state, scope="parent_resource")] == [r["original_text"] for r in rows]
 
     legacy = deepcopy(rows)
@@ -82,8 +86,7 @@ def test_context_scope_expands_all_hits_once_in_stored_order(monkeypatch):
         context = row["document_context"]
         context["learning_path_url"] = context.pop("parent_page_url")
     before = deepcopy(legacy)
-    state = SearchResources([*legacy, *rows], QueryModel(), None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [{"metadata": legacy[3]}])
+    state = context_resources(monkeypatch, [*legacy, *rows], [legacy[3]])
     expanded = search("needle", state, scope="parent_resource")
     assert [h["snippet"] for h in expanded] == [r["original_text"] for r in rows]
     assert all(h["context"]["parent_page_url"] == pages[0] and "learning_path_url" not in h["context"] for h in expanded)
@@ -96,8 +99,7 @@ def test_context_parent_scope_rejects_partial_parent_identity(monkeypatch, missi
     rows = [context_row(pages[0], pages=pages),
             *[context_row(pages[1], i, 2, pages=pages) for i in range(2)]]
     rows[1 + missing_index]["document_context"].pop("parent_page_url")
-    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": rows[-1]}])
+    state = context_resources(monkeypatch, rows, [rows[-1]])
     with pytest.raises(ValueError, match="inconsistent parent"):
         search("needle", state, scope="parent_resource")
 
@@ -107,60 +109,44 @@ def test_context_parent_scope_resolves_siblings_by_their_own_identity(monkeypatc
     pages = ["https://example.org/path/", "https://example.org/path/step/"]
     rows = [context_row(url, pages=pages, **{field: value})
             for url, value in zip(pages, ("root-value", "step-value"))]
-    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": rows[1]}])
+    state = context_resources(monkeypatch, rows, [rows[1]])
     hits = search("needle", state, scope="parent_resource")
     assert [hit["snippet"] for hit in hits] == [row["original_text"] for row in rows]
     assert [hit["context"]["page_index"] for hit in hits] == [0, 1]
 
 
-@pytest.mark.parametrize("field", ["version", "platform", "edition"])
-def test_context_parent_scope_rejects_ambiguous_sibling_variants(monkeypatch, field):
+@pytest.mark.parametrize("field,ordered", [
+    ("version", True), ("platform", True), ("edition", True), ("version", False),
+])
+def test_context_parent_scope_rejects_ambiguous_sibling_variants(monkeypatch, field, ordered):
     pages = ["https://example.org/path/", "https://example.org/path/step/"]
     rows = [context_row(url, pages=pages) for url in pages]
-    rows.append(context_row(pages[1], pages=pages, **{field: "another-variant"}))
-    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": rows[0]}])
+    variant = context_row(pages[1], pages=pages, page_url=pages[1], **{field: "another-variant"})
+    if not ordered:
+        variant.pop("document_context")
+    state = context_resources(monkeypatch, [*rows, variant], [rows[1]])
     with pytest.raises(ValueError, match="ambiguous document"):
         search("needle", state, scope="parent_resource")
-    assert len(search("needle", state, scope="page")) == 1
+    assert [h["snippet"] for h in search("needle", state, scope="page")] == [rows[1]["original_text"]]
 
 
-@pytest.mark.parametrize("seed_order", [(1, 2), (2, 1)])
-def test_context_parent_scope_validates_manifests_before_deduplication(monkeypatch, seed_order):
+@pytest.mark.parametrize("selected_indices,ordered", [
+    ((1,), True), ((1, 2), True), ((2, 1), True), ((1,), False),
+])
+def test_context_parent_scope_rejects_omitted_siblings(monkeypatch, selected_indices, ordered):
     root, a, b = "https://example.org/path/", "https://example.org/path/a/", "https://example.org/path/b/"
-    rows = [context_row(root, pages=[root, a]), context_row(a, pages=[root, a]),
-            context_row(b, pages=[root, b])]
-    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [
-        {"metadata": rows[index]} for index in seed_order])
+    sibling = context_row(b, pages=[root, b], page_url=b, parent_page_url=root)
+    if not ordered:
+        sibling.pop("document_context")
+    rows = [context_row(root, pages=[root, a]), context_row(a, pages=[root, a]), sibling]
+    selected = [rows[i] for i in selected_indices]
+    state = context_resources(monkeypatch, rows, selected)
     with pytest.raises(ValueError, match="inconsistent parent"):
         search("needle", state, scope="parent_resource")
+    assert [h["snippet"] for h in search("needle", state, scope="page")] == [r["original_text"] for r in selected]
 
 
-@pytest.mark.parametrize("case", ["conflicting", "consistent", "unrelated"])
-def test_context_parent_scope_validates_unselected_siblings(monkeypatch, case):
-    root, a, b = "https://example.org/path/", "https://example.org/path/a/", "https://example.org/path/b/"
-    pages = [root, a, b] if case == "consistent" else [root, a]
-    sibling_pages = pages if case == "consistent" else [root, b]
-    if case == "unrelated":
-        sibling_pages = ["https://example.org/other/", b]
-    rows = [context_row(root, pages=pages), context_row(a, pages=pages),
-            context_row(b, pages=sibling_pages)]
-    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": rows[1]}])
-    assert len(search("needle", state, k=1)) == 1
-    assert len(search("needle", state, k=1, scope="page")) == 1
-    if case == "conflicting":
-        with pytest.raises(ValueError, match="inconsistent parent"):
-            search("needle", state, k=1, scope="parent_resource")
-    else:
-        hits = search("needle", state, k=1, scope="parent_resource")
-        assert [hit["context"]["page_url"] for hit in hits] == pages
-        assert all(hit["context"]["page_count"] == len(pages) for hit in hits)
-
-
-@pytest.mark.parametrize("failure", ["legacy", "missing_chunk", "bad_index", "conflict", "missing_page", "manifest", "pieces"])
+@pytest.mark.parametrize("failure", ["legacy", "missing_chunk", "bad_index", "conflict", "missing_page", "manifest"])
 def test_context_scope_rejects_incomplete_or_unordered_data(monkeypatch, failure):
     pages = ["https://example.org/path/", "https://example.org/path/step/"]
     row = context_row(pages[0], pages=pages)
@@ -177,14 +163,7 @@ def test_context_scope_rejects_incomplete_or_unordered_data(monkeypatch, failure
         rows.pop()
     elif failure == "manifest":
         rows[1]["document_context"].pop("learning_path_pages")
-    elif failure == "pieces":
-        row.update(parent_uuid="parent", parent_chunk_uuid="parent")
-    # Incomplete piece details would be rejected during resource initialization;
-    # simulate a loaded snapshot with a missing sibling after initialization.
-    if failure == "pieces":
-        row.update(source_start=0, source_end=len(row["original_text"]), source_part=1, source_parts=2)
-    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [{"metadata": row}])
+    state = context_resources(monkeypatch, rows, [row])
     with pytest.raises(ValueError, match="Regenerate chunks"):
         search("needle", state, scope="parent_resource")
     assert len(search("needle", state)) == 1
@@ -211,9 +190,7 @@ def test_context_reassembles_embedding_pieces_without_duplicate_chunks(monkeypat
         rows = rows[:1]
         if failure != "missing_piece":
             rows[0].pop(failure.removeprefix("missing_"))
-    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
-    seeds = rows[:1] if failure else rows
-    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [{"metadata": r} for r in seeds])
+    state = context_resources(monkeypatch, rows, rows[:1] if failure else rows)
     for scope in ("page", "parent_resource"):
         if failure:
             with pytest.raises(ValueError, match="Regenerate chunks"):
@@ -229,8 +206,7 @@ def test_context_reassembles_embedding_pieces_without_duplicate_chunks(monkeypat
 ])
 def test_context_rejects_partial_split_metadata(monkeypatch, field, value):
     row = context_row("https://example.org/manual.pdf", **{field: value})
-    state = SearchResources([row], QueryModel(), None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": row}])
+    state = context_resources(monkeypatch, [row], [row])
     with pytest.raises(ValueError, match="Regenerate chunks"):
         search("needle", state, scope="page")
     assert len(search("needle", state)) == 1
@@ -243,8 +219,7 @@ def test_context_rejects_unindexable_same_document_records(monkeypatch, context)
     unindexed = {"url": pages[1] + "#other", "page_url": pages[1], "original_text": "Unordered section"}
     if context is not None:
         unindexed["document_context"] = context
-    state = SearchResources([*rows, unindexed], QueryModel(), None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": rows[1]}])
+    state = context_resources(monkeypatch, [*rows, unindexed], [rows[1]])
     baseline = search("needle", state, k=1)
     for scope in ("page", "parent_resource"):
         with pytest.raises(ValueError, match="missing document-order metadata"):
@@ -260,8 +235,7 @@ def test_context_unindexable_records_preserve_other_documents(monkeypatch, field
     url = "https://example.org/guide/"
     selected = context_row(url)
     unindexed = {"url": url + "#other", "page_url": url, "original_text": "Unordered section", field: value}
-    state = SearchResources([selected, unindexed], QueryModel(), None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": selected}])
+    state = context_resources(monkeypatch, [selected, unindexed], [selected])
     assert [h["snippet"] for h in search("needle", state, scope="page")] == [selected["original_text"]]
 
 
@@ -270,39 +244,15 @@ def test_context_catalog_keeps_unrelated_failures_local(monkeypatch):
     rows = [context_row(url, pages=pages) for url in pages]
     broken_url = "https://example.org/broken/"
     broken = context_row(broken_url, count=2, pages=[broken_url])
-    state = SearchResources([broken, *rows], QueryModel(), None, None, include_disclaimers=False)
-    selected = rows[1]
-    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": selected}])
+    selected = [rows[1]]
+    state = context_resources(monkeypatch, [broken, *rows], selected)
     expected = search("needle", state, scope="parent_resource")
     assert [hit["context"]["page_url"] for hit in expected] == pages
-    selected = broken
+    selected[:] = [broken]
     with pytest.raises(ValueError, match="chunks are missing"):
         search("needle", state, scope="page")
-    selected = rows[1]
+    selected[:] = [rows[1]]
     assert search("needle", state, scope="parent_resource") == expected
-
-
-def test_context_parent_scope_rejects_unordered_unlisted_members(monkeypatch):
-    pages = ["https://example.org/path/", "https://example.org/path/a/"]
-    rows = [context_row(url, pages=pages) for url in pages]
-    orphan = {"url": "https://example.org/path/b/#section", "page_url": "https://example.org/path/b/",
-              "parent_page_url": pages[0], "original_text": "Unordered sibling"}
-    state = SearchResources([*rows, orphan], QueryModel(), None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": rows[1]}])
-    with pytest.raises(ValueError, match="inconsistent parent"):
-        search("needle", state, scope="parent_resource")
-    assert [h["snippet"] for h in search("needle", state, scope="page")] == [rows[1]["original_text"]]
-
-
-def test_context_parent_scope_rejects_unindexable_variants(monkeypatch):
-    pages = ["https://example.org/path/", "https://example.org/path/step/"]
-    rows = [context_row(url, pages=pages) for url in pages]
-    other_version = {"url": pages[1], "page_url": pages[1], "version": "v2", "original_text": "Other version"}
-    state = SearchResources([*rows, other_version], QueryModel(), None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": rows[1]}])
-    with pytest.raises(ValueError, match="ambiguous document"):
-        search("needle", state, scope="parent_resource")
-    assert [h["snippet"] for h in search("needle", state, scope="page")] == [rows[1]["original_text"]]
 
 
 def test_context_keeps_intrinsic_dashboard_and_edition_identities(monkeypatch):
@@ -311,8 +261,7 @@ def test_context_keeps_intrinsic_dashboard_and_edition_identities(monkeypatch):
             "https://developer.arm.com/ecosystem-dashboard/linux?package=b"]
     rows = [{**context_row(url), "url": url} for url in urls]
     rows.append(context_row(urls[2], edition="commercial", original_text="commercial edition"))
-    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [{"metadata": r} for r in (rows[0], rows[2])])
+    state = context_resources(monkeypatch, rows, [rows[0], rows[2]])
     assert [h["snippet"] for h in search("needle", state, scope="parent_resource")] == [rows[0]["original_text"], rows[2]["original_text"]]
 
 
