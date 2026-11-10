@@ -38,7 +38,9 @@ class DocumentContextIndex:
     def __init__(self, metadata: list[dict[str, Any]]):
         self.documents: dict[tuple, list[dict]] = {}
         self.document_urls_by_parent: dict[str, set[str]] = {}
+        self.split_chunk_positions: dict[tuple, tuple | None] = {}
         for row in metadata:
+            position = None
             context = row.get("document_context")
             if isinstance(context, dict) and isinstance(context.get("url"), str):
                 # Read earlier experimental artifacts without mutating the snapshot.
@@ -46,10 +48,19 @@ class DocumentContextIndex:
                     context = dict(context)
                     context.setdefault("parent_page_url", context.pop("learning_path_url"))
                     row = {**row, "document_context": context}
-                self.documents.setdefault(_document_key(row, context["url"]), []).append(row)
+                key = _document_key(row, context["url"])
+                position = (key, context.get("chunk_index"))
+                self.documents.setdefault(key, []).append(row)
                 parent_url = context.get("parent_page_url")
                 if isinstance(parent_url, str) and parent_url:
                     self.document_urls_by_parent.setdefault(parent_url, set()).add(context["url"])
+            parent = (row.get("parent_uuid"), row.get("parent_chunk_uuid"))
+            if all(isinstance(value, str) and value for value in parent):
+                # Every piece must identify the same original document position.
+                if parent not in self.split_chunk_positions:
+                    self.split_chunk_positions[parent] = position
+                elif self.split_chunk_positions[parent] != position:
+                    self.split_chunk_positions[parent] = None
         self.document_keys_by_url: dict[str, list[tuple]] = {}
         for key in self.documents:
             self.document_keys_by_url.setdefault(key[0], []).append(key)
@@ -60,6 +71,7 @@ class DocumentContextIndex:
             raise _unavailable(key[0], "document is missing")
         chunks: dict[int, dict] = {}
         expected_count = None
+        split_fields = ("parent_uuid", "parent_chunk_uuid", "source_start", "source_end", "source_part", "source_parts")
         for row in rows:
             context = row["document_context"]
             index, count = context.get("chunk_index"), context.get("chunk_count")
@@ -69,10 +81,14 @@ class DocumentContextIndex:
             if expected_count is not None and count != expected_count:
                 raise _unavailable(key[0], "conflicting document revisions")
             expected_count = count
-            if row.get("parent_chunk_uuid") and (
-                row.get("parent_uuid"), row["parent_chunk_uuid"]
-            ) not in resources._parent_texts:
-                raise _unavailable(key[0], "an original chunk has missing embedding pieces")
+            if any(field in row for field in split_fields):
+                parent = (row.get("parent_uuid"), row.get("parent_chunk_uuid"))
+                if not all(isinstance(value, str) and value for value in parent):
+                    raise _unavailable(key[0], "a split chunk is missing parent identifiers")
+                if parent not in resources._parent_texts:
+                    raise _unavailable(key[0], "an original chunk has missing or invalid embedding pieces")
+                if self.split_chunk_positions.get(parent) != (key, index):
+                    raise _unavailable(key[0], "a split chunk has conflicting or missing document positions")
             # A logical chunk can have many embedding pieces or duplicate imports.
             # Deduplicate by its stored position, never by URL (sections can share it).
             if index in chunks:

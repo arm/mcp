@@ -190,15 +190,50 @@ def test_context_scope_rejects_incomplete_or_unordered_data(monkeypatch, failure
     assert len(search("needle", state)) == 1
 
 
-def test_context_reassembles_embedding_pieces_without_duplicate_chunks(monkeypatch):
+@pytest.mark.parametrize("failure", [
+    None, "positions", "different_document", "missing_context",
+    "missing_parent_uuid", "missing_parent_chunk_uuid", "missing_piece",
+])
+def test_context_reassembles_embedding_pieces_without_duplicate_chunks(monkeypatch, failure):
     row = context_row("https://example.org/notebook.ipynb")
     rows = [{**row, "original_text": text, "parent_uuid": "p", "parent_chunk_uuid": "p",
              "chunk_uuid": str(i), "source_start": start, "source_end": start + len(text),
              "source_part": i, "source_parts": 2}
             for i, start, text in [(1, 0, "first "), (2, 6, "second")]]
+    if failure == "positions":
+        rows = [{**piece, "document_context": {**piece["document_context"], "chunk_index": i, "chunk_count": 2}}
+                for i, piece in enumerate(rows)]
+    elif failure == "different_document":
+        rows[1]["document_context"] = {**rows[1]["document_context"], "url": "https://example.org/other.ipynb"}
+    elif failure == "missing_context":
+        rows[1].pop("document_context")
+    elif failure:
+        rows = rows[:1]
+        if failure != "missing_piece":
+            rows[0].pop(failure.removeprefix("missing_"))
     state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [{"metadata": r} for r in rows])
-    assert [h["snippet"] for h in search("needle", state, scope="page")] == ["first second"]
+    seeds = rows[:1] if failure else rows
+    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [{"metadata": r} for r in seeds])
+    for scope in ("page", "parent_resource"):
+        if failure:
+            with pytest.raises(ValueError, match="Regenerate chunks"):
+                search("needle", state, scope=scope)
+        else:
+            assert [h["snippet"] for h in search("needle", state, scope=scope)] == ["first second"]
+    assert search("needle", state)  # Ranked chunks keep their existing fallback behavior.
+
+
+@pytest.mark.parametrize("field,value", [
+    ("parent_uuid", "p"), ("parent_chunk_uuid", "p"), ("source_start", 0),
+    ("source_end", 5), ("source_part", 1), ("source_parts", 2),
+])
+def test_context_rejects_partial_split_metadata(monkeypatch, field, value):
+    row = context_row("https://example.org/manual.pdf", **{field: value})
+    state = SearchResources([row], QueryModel(), None, None, include_disclaimers=False)
+    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": row}])
+    with pytest.raises(ValueError, match="Regenerate chunks"):
+        search("needle", state, scope="page")
+    assert len(search("needle", state)) == 1
 
 
 def test_context_keeps_intrinsic_dashboard_and_edition_identities(monkeypatch):
