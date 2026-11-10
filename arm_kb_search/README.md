@@ -29,11 +29,21 @@ results = search(
 Reuse the loaded resources across requests. Create new resources when replacing
 the corpus; metadata and indexes are treated as a fixed snapshot.
 
-Results also include `page_url` and `learning_path_url` when these nonempty
-strings are stored in the chunk metadata. They identify the containing source
-page and Learning Path; search does not fetch their content. Existing bundles
-without these fields keep their previous response shape. Regenerate the chunk
-and vector metadata to populate links for existing sources.
+Results optionally include `page_url` and `parent_page_url`. Earlier experimental
+`learning_path_url` metadata is accepted on read; output uses the new name.
+
+`search(..., scope="page")` returns all stored chunks for every matched document.
+`scope="parent_resource"` expands each matched parent in stored page order,
+falling back to page scope when no parent is known. Default `scope="chunks"`
+keeps ranked search. Filters and `k` select seeds only; shared documents are
+returned once and embedding pieces are reassembled into logical chunks.
+
+Expansion needs `document_context` format 1: document identity, zero-based chunk
+index/count, and a parent URL/ordered page manifest for parent expansion.
+Regenerate chunk/vector artifacts to populate these fields. Missing or conflicting
+data raises `ValueError`. Parent manifests are currently acquired for Arm Learning
+Paths; other multi-page sources need corresponding ingestion support. No live
+URLs are fetched. Expanded results include position/count metadata and null scores.
 
 ## Startup preparation
 

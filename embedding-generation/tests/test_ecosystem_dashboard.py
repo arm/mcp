@@ -43,7 +43,7 @@ def test_dotnet_retains_discovery_support_and_resource_information():
     )
     for chunk in result:
         assert chunk["url"] == SOURCE
-        assert not {"page_url", "learning_path_url"} & chunk.keys()
+        assert not {"page_url", "parent_page_url"} & chunk.keys()
         assert chunk["resolved_url"] == RESOLVED
         assert chunk["version"] == ""  # Neither the commit number nor minimum version.
         assert chunk["product"] == ""
