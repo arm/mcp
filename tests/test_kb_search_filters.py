@@ -90,18 +90,73 @@ def test_context_scope_expands_all_hits_once_in_stored_order(monkeypatch):
     assert legacy == before
 
 
+@pytest.mark.parametrize("missing_index", [0, 1])
+def test_context_parent_scope_rejects_partial_parent_identity(monkeypatch, missing_index):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(pages[0], pages=pages),
+            *[context_row(pages[1], i, 2, pages=pages) for i in range(2)]]
+    rows[1 + missing_index]["document_context"].pop("parent_page_url")
+    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
+    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": rows[-1]}])
+    with pytest.raises(ValueError, match="inconsistent parent"):
+        search("needle", state, scope="parent_resource")
+
+
+@pytest.mark.parametrize("field", ["version", "platform", "edition"])
+def test_context_parent_scope_resolves_siblings_by_their_own_identity(monkeypatch, field):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(url, pages=pages, **{field: value})
+            for url, value in zip(pages, ("root-value", "step-value"))]
+    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
+    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": rows[1]}])
+    hits = search("needle", state, scope="parent_resource")
+    assert [hit["snippet"] for hit in hits] == [row["original_text"] for row in rows]
+    assert [hit["context"]["page_index"] for hit in hits] == [0, 1]
+
+
+@pytest.mark.parametrize("field", ["version", "platform", "edition"])
+def test_context_parent_scope_rejects_ambiguous_sibling_variants(monkeypatch, field):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(url, pages=pages) for url in pages]
+    rows.append(context_row(pages[1], pages=pages, **{field: "another-variant"}))
+    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
+    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": rows[0]}])
+    with pytest.raises(ValueError, match="ambiguous document"):
+        search("needle", state, scope="parent_resource")
+    assert len(search("needle", state, scope="page")) == 1
+
+
+@pytest.mark.parametrize("seed_order", [(1, 2), (2, 1)])
+def test_context_parent_scope_validates_manifests_before_deduplication(monkeypatch, seed_order):
+    root, a, b = "https://example.org/path/", "https://example.org/path/a/", "https://example.org/path/b/"
+    rows = [context_row(root, pages=[root, a]), context_row(a, pages=[root, a]),
+            context_row(b, pages=[root, b])]
+    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
+    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [
+        {"metadata": rows[index]} for index in seed_order])
+    with pytest.raises(ValueError, match="inconsistent parent"):
+        search("needle", state, scope="parent_resource")
+
+
 @pytest.mark.parametrize("failure", ["legacy", "missing_chunk", "bad_index", "conflict", "missing_page", "manifest", "pieces"])
 def test_context_scope_rejects_incomplete_or_unordered_data(monkeypatch, failure):
     pages = ["https://example.org/path/", "https://example.org/path/step/"]
     row = context_row(pages[0], pages=pages)
     rows = [row, context_row(pages[1], pages=pages)]
-    if failure == "legacy": row.pop("document_context")
-    elif failure == "missing_chunk": row["document_context"]["chunk_count"] = 2
-    elif failure == "bad_index": row["document_context"]["chunk_index"] = True
-    elif failure == "conflict": rows.append({**row, "original_text": "conflicting revision"})
-    elif failure == "missing_page": rows.pop()
-    elif failure == "manifest": rows[1]["document_context"].pop("learning_path_pages")
-    elif failure == "pieces": row.update(parent_uuid="parent", parent_chunk_uuid="parent")
+    if failure == "legacy":
+        row.pop("document_context")
+    elif failure == "missing_chunk":
+        row["document_context"]["chunk_count"] = 2
+    elif failure == "bad_index":
+        row["document_context"]["chunk_index"] = True
+    elif failure == "conflict":
+        rows.append({**row, "original_text": "conflicting revision"})
+    elif failure == "missing_page":
+        rows.pop()
+    elif failure == "manifest":
+        rows[1]["document_context"].pop("learning_path_pages")
+    elif failure == "pieces":
+        row.update(parent_uuid="parent", parent_chunk_uuid="parent")
     # Incomplete piece details would be rejected during resource initialization;
     # simulate a loaded snapshot with a missing sibling after initialization.
     if failure == "pieces":
