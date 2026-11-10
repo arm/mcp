@@ -24,7 +24,6 @@ from pathlib import Path
 
 import requests
 import yaml
-from bs4 import BeautifulSoup
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -32,7 +31,6 @@ from document_chunking import (
     arm_service_url_to_developer_url,
     chunk_parsed_document,
     is_arm_developer_documentation_url,
-    learn_learning_path_step_urls,
     normalize_source_url,
     parse_arm_documentation_api_json,
     parse_document_content,
@@ -40,6 +38,7 @@ from document_chunking import (
     source_to_fetch_url,
 )
 from ecosystem_dashboard import acquire_catalog
+from learn_repository import LearnSources, is_learn_url
 
 
 # Create a session with retry logic for resilient HTTP requests
@@ -77,8 +76,8 @@ details_file = os.getenv("CHUNK_DETAILS_FILE", "info/chunk_details.csv")
 
 chunk_index = 1
 
-# Global var to prevent duplication entries from cross platform learning paths
-cross_platform_lps_dont_duplicate = []
+# Reuse the same pinned source snapshots for discovery and chunking.
+learn_sources = LearnSources(http_session)
 
 # Reuse one validated source revision for dashboard discovery and chunking.
 ecosystem_dashboard_entries = None
@@ -170,21 +169,6 @@ def register_source(
 
     print(f"[NEW SOURCE] {display_name}: {url}")
     return True
-
-
-def get_install_guide_title(url):
-    """Return the title for a valid install-guide page, otherwise None."""
-    try:
-        response = http_session.get(url, timeout=60)
-    except requests.exceptions.RequestException as err:
-        print(f"[INSTALL GUIDE FETCH FAILED] {url}: {err}")
-        return None
-
-    if not response.ok:
-        return None
-
-    title = BeautifulSoup(response.text, "html.parser").find(id="ads-masthead-title")
-    return title.get_text(strip=True) if title else None
 
 
 def save_sources_csv(csv_file):
@@ -503,195 +487,36 @@ def createIntrinsicsDatabaseChunks():
     """
 
 
-def processLearningPath(url, type, emit_chunks=True):
-    github_raw_link = "https://raw.githubusercontent.com/ArmDeveloperEcosystem/arm-learning-paths/refs/heads/production/content"
-    site_link = "https://learn.arm.com"
-
-    def chunkizeLearningPath(relative_url, title, keywords):
-        if not emit_chunks:
-            return
-        if relative_url.endswith("/"):
-            relative_url = relative_url[:-1]
-        MARKDOWN_url = github_raw_link + relative_url + ".md"
-        WEBSITE_url = site_link + relative_url
-
-        response = fetch_with_logging(MARKDOWN_url)
-        if response is None:
-            return
-        parsed_document = parse_document_content(
-            source_url=WEBSITE_url,
-            resolved_url=response.url,
-            response_content=response.content,
-            content_type=response.headers.get("content-type", "text/markdown"),
-            fallback_title=title,
-        )
-        chunk_payloads = chunk_parsed_document(
-            parsed_document,
-            doc_type=type,
-            keywords=keywords,
-        )
-
-        # 5) Create chunks for each snippet by adding metadata
-        for payload in chunk_payloads:
-            chunk = chunk_from_payload(payload, keywords, url=WEBSITE_url)
-            chunkSaveAndTrack(WEBSITE_url, chunk)
-
-    if type == "Learning Path":
-        # Prevent duplicate logging of cross-platform learningpaths via a local list. Check if URL is already in list. If so, move past URL. If not, add it and continue processing.
-        if "cross-platform" in url:
-            if url in cross_platform_lps_dont_duplicate:
-                print("NOT PROCESSING ", url, " already in list")
-                # Don't process URL
-                return
-            else:
-                print("Cross platform URL being added to list: ", url)
-                cross_platform_lps_dont_duplicate.append(url)
-
-        response = http_session.get(url, timeout=60)
-        soup = BeautifulSoup(response.text, "html.parser")
-
-        # Get learning path title and keywords once for registration
-        lp_title_elem = soup.find(id="learning-path-title")
-        if lp_title_elem:
-            lp_title = lp_title_elem.get_text()
-            ads_tags = soup.findAll("ads-tag")
-            lp_keywords = []
-            for tag in ads_tags:
-                keyword = tag.get_text().strip()
-                if keyword not in lp_keywords:
-                    lp_keywords.append(keyword)
-
-            # Register this learning path as a source
-            register_source(
-                site_name="Learning Paths",
-                license_type="CC4.0",
-                display_name=f"Learning Path - {lp_title}",
-                url=url,
-                keywords=lp_keywords,
-            )
-
-        for link in soup.find_all(class_="inner-learning-path-navbar-element"):
-            # Ignore mobile links
-            if "content-individual-a-mobile" not in link.get("class", []):
-                href = link.get("href")
-
-                # Ignore the index file
-                if "0-weight" in link.get("class", []):  # Ignore index
-                    continue
-                # Ignore links that start with _   (index, demo, next_steps, review)
-                if href.split("/")[-1].startswith("_"):
-                    continue
-
-                # Obtain title of learning path
-                title = (
-                    "Arm Learning Path - "
-                    + soup.find(id="learning-path-title").get_text()
-                )
-
-                # Obtain keywords of learning path
-                ads_tags = soup.findAll("ads-tag")
-                keywords = []
-                for tag in ads_tags:
-                    keyword = tag.get_text().strip()
-                    if keyword not in keywords:
-                        keywords.append(keyword)
-
-                chunkizeLearningPath(href, title, keywords)
-
-    elif type == "Install Guide":
-        igs_response = http_session.get(site_link + url, timeout=60)
-        igs_soup = BeautifulSoup(igs_response.text, "html.parser")
-        for ig_card in igs_soup.find_all(class_="tool-card"):
-            ig_rel_url = ig_card.get("link")
-            ig_url = site_link + ig_rel_url
-
-            ig_response = http_session.get(ig_url, timeout=60)
-            ig_soup = BeautifulSoup(ig_response.text, "html.parser")
-
-            # obtain title of Install Guide
-            ig_title_elem = ig_soup.find(id="install-guide-title")
-            if not ig_title_elem:
-                continue
-            ig_title = ig_title_elem.get_text()
-            title = "Install Guide - " + ig_title
-
-            # Obtain keywords of learning path
-            keywords = [ig_title, "install", "build", "download"]
-
-            # Register this install guide as a source
-            register_source(
-                site_name="Install Guides",
-                license_type="CC4.0",
-                display_name=title,
-                url=ig_url,
-                keywords=keywords,
-            )
-
-            # Processing to check for multi-install
-            multi_install_guides = ig_soup.find_all(class_="multi-install-card")
-            for guide in multi_install_guides:
-                sub_ig_rel_url = guide.get("link")
-                if not sub_ig_rel_url:
-                    continue
-                child_url = site_link + sub_ig_rel_url
-                child_title = get_install_guide_title(child_url)
-                if not child_title:
-                    continue
-
-                child_display_name = "Install Guide - " + child_title
-                child_keywords = [
-                    child_title,
-                    ig_title,
-                    "install",
-                    "build",
-                    "download",
-                ]
-                register_source(
-                    site_name="Install Guides",
-                    license_type="CC4.0",
-                    display_name=child_display_name,
-                    url=child_url,
-                    keywords=child_keywords,
-                )
-                chunkizeLearningPath(sub_ig_rel_url, child_display_name, child_keywords)
-
-            # If not multi-install (most cases)
-            if not multi_install_guides:
-                chunkizeLearningPath(ig_rel_url, title, keywords)
+def discover_learn_sources():
+    for source in learn_sources.discovered_sources():
+        register_source(**source)
 
 
-def createLearningPathChunks(emit_chunks=True):
-    # Find all categories to iterate over
-    learn_url = "https://learn.arm.com/"
-    response = http_session.get(learn_url, timeout=60)
-    soup = BeautifulSoup(response.text, "html.parser")
+def reconcile_learn_sources(discover=True):
+    """Omit retired/unpublished rows, retaining curated metadata for live pages."""
+    global all_sources, known_source_urls
+    retained = []
+    for source in all_sources:
+        url = source["url"]
+        if is_learn_url(url) and not learn_sources.has_page(url):
+            print(f"[LEARN OMITTED SOURCE] Missing or unpublished in snapshot: {url}")
+        else:
+            retained.append(source)
+    all_sources = retained
+    known_source_urls = {source["url"] for source in all_sources}
+    if discover:
+        discover_learn_sources()
 
-    # Process Install Guides separately (directly from /install-guides page)
-    processLearningPath("/install-guides", "Install Guide", emit_chunks=emit_chunks)
 
-    # Find category links - main-topic-card elements are now wrapped in <a> tags
-    # Look for <a> tags that contain main-topic-card divs
-    for a_tag in soup.find_all("a", href=True):
-        card = a_tag.find(class_="main-topic-card")
-        if card:
-            cat_rel_path = a_tag.get("href")
-            if cat_rel_path is None or cat_rel_path.startswith("http"):
-                continue
-            # Skip non-learning-path links (like /tag/ml/ or install guides button)
-            if not cat_rel_path.startswith("/learning-paths/"):
-                continue
-
-            cat_response = http_session.get(
-                learn_url.rstrip("/") + cat_rel_path, timeout=60
-            )
-            cat_soup = BeautifulSoup(cat_response.text, "html.parser")
-            for lp_card in cat_soup.find_all(class_="path-card"):
-                lp_link = lp_card.get("link")
-                if lp_link is None:
-                    continue
-                lp_url = learn_url.rstrip("/") + lp_link
-                # Chunking step
-                processLearningPath(lp_url, "Learning Path", emit_chunks=emit_chunks)
+def create_learn_chunks(source_url, source_name, doc_type, keywords_value):
+    keywords = parse_keywords(keywords_value, source_name)
+    chunks = []
+    for document in learn_sources.documents(source_url):
+        for payload in chunk_parsed_document(
+            document, doc_type=doc_type or "Documentation", keywords=keywords
+        ):
+            chunks.append(chunk_from_payload(payload, keywords))
+    return chunks
 
 
 def readInCSV(csv_file):
@@ -859,6 +684,11 @@ def create_transcript_chunks(
     ``source_url`` as the user-facing link so retrieval still points users at
     the original content.
     """
+    if is_learn_url(transcript_url):
+        chunks = create_learn_chunks(transcript_url, source_name, doc_type, keywords_value)
+        for chunk in chunks:
+            chunk.url = normalize_source_url(source_url)
+        return chunks
     normalized_source_url = normalize_source_url(source_url)
     fetch_url = source_to_fetch_url(normalize_source_url(transcript_url))
     response = fetch_with_logging(fetch_url)
@@ -903,6 +733,8 @@ def create_transcript_chunks(
 def create_chunks_for_source(
     source_url, source_name, doc_type, keywords_value, transcript_url=""
 ):
+    source_url = normalize_source_url(source_url)
+    transcript_url = normalize_source_url(transcript_url)
     # When a transcript source is provided, chunk that document instead of
     # fetching the primary URL (which may be a video player or other non-text page),
     # while keeping the primary URL as the user-facing link for retrieval.
@@ -910,6 +742,8 @@ def create_chunks_for_source(
         return create_transcript_chunks(
             source_url, transcript_url, source_name, doc_type, keywords_value
         )
+    if is_learn_url(source_url):
+        return create_learn_chunks(source_url, source_name, doc_type, keywords_value)
     if doc_type == "Ecosystem Dashboard":
         return create_ecosystem_dashboard_chunk(source_url, keywords_value)
     if is_arm_developer_documentation_url(source_url):
@@ -925,12 +759,6 @@ def create_chunks_for_source(
         return []
 
     sources_to_parse = [(normalized_source_url, response)]
-    for step_url in learn_learning_path_step_urls(
-        normalized_source_url, response.content
-    ):
-        step_response = fetch_with_logging(source_to_fetch_url(step_url))
-        if step_response is not None:
-            sources_to_parse.append((step_url, step_response))
 
     keywords = parse_keywords(keywords_value, source_name)
     chunks = []
@@ -1102,12 +930,17 @@ def main():
     load_existing_sources(sources_file)
 
     # 0) Obtain full database information:
-    # a) Learning Paths & Install Guides
-    if not skip_discovery:
-        createLearningPathChunks(emit_chunks=False)
+    # a) All Learn content, including courses and Insights
+    reconcile_learn_sources(discover=not skip_discovery)
 
     # b) Validate and reconcile the dashboard before writing any source changes.
     reconcile_ecosystem_sources(discover=not skip_discovery)
+    # Validate Learn sources before modifying the CSV or deleting old chunks.
+    # This also applies to SKIP_DISCOVERY and explicit transcript sources.
+    for source in all_sources:
+        url = source.get("transcript_source_url") or source["url"]
+        if is_learn_url(url):
+            learn_sources.documents(url)
     save_sources_csv(sources_file)
 
     # 0) Initialize files
@@ -1130,6 +963,7 @@ def main():
     # 1) Get URLs and details from CSV
     csv_dict, csv_length = readInCSV(sources_file)
 
+    seen_learn_chunks = set()
     print(f"Starting to loop over CSV file {sources_file} ......")
     for i in range(csv_length):
         url = csv_dict["urls"][i]
@@ -1141,6 +975,12 @@ def main():
         for chunk in create_chunks_for_source(
             url, source_name, doc_type, keywords_value, transcript_url
         ):
+            if is_learn_url(url):
+                # A parent guide and an explicitly listed child may overlap.
+                identity = (chunk.url, chunk.resolved_url, chunk.content)
+                if identity in seen_learn_chunks:
+                    continue
+                seen_learn_chunks.add(identity)
             chunkSaveAndTrack(url, chunk)
 
     # Save updated sources CSV with all discovered sources

@@ -583,7 +583,8 @@ def _should_skip_html_tag(tag) -> bool:
 
 
 def parse_html(
-    html: str, source_url: str, resolved_url: str, fallback_title: str
+    html: str, source_url: str, resolved_url: str, fallback_title: str,
+    *, use_heading_levels: bool = False,
 ) -> ParsedDocument:
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup.find_all(
@@ -613,6 +614,7 @@ def parse_html(
         title = clean_text(soup.title.get_text(" ", strip=True)) or title
 
     heading_stack: list[str] = []
+    heading_levels: list[int] = []
     heading_anchor_stack: list[Optional[str]] = []
     sections: list[Section] = []
     current_blocks: list[Block] = []
@@ -637,9 +639,16 @@ def parse_html(
         if tag.name in HTML_HEADING_TAGS:
             flush_section()
             level = int(tag.name[1])
-            while len(heading_stack) >= level:
+            # Repository Markdown can begin at h3 or skip levels. Opt in to
+            # that hierarchy without changing other providers' HTML chunks.
+            while heading_stack and (
+                heading_levels[-1] >= level if use_heading_levels
+                else len(heading_stack) >= level
+            ):
+                heading_levels.pop()
                 heading_stack.pop()
                 heading_anchor_stack.pop()
+            heading_levels.append(level)
             heading_stack.append(text)
             heading_anchor_stack.append(clean_text(tag.get("id", "")) or None)
             if level == 1 and not first_h1_seen:

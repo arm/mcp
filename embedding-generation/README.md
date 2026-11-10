@@ -73,6 +73,63 @@ Example Docs,CC4.0,Example Arm Guide,https://example.com/arm-guide,arm; migratio
 
 Use clear keywords that users might include in questions. The `URL` is also what retrieval eval uses for expected matches.
 
+### Learn content from repositories
+
+All `learn.arm.com` rows use source repositories, including discovery. Acquisition
+resolves each repository's `production` branch once, then streams a commit-pinned
+archive and retains only source files. It never falls back to rendered Learn pages.
+
+| Content | Repository | Revision override |
+| --- | --- | --- |
+| Learning Paths, Install Guides, migration and other Learn pages | `ArmDeveloperEcosystem/arm-learning-paths` | `LEARN_LEARNING_PATHS_REF` |
+| Courses | `ArmDeveloperEcosystem/courses` | `LEARN_COURSES_REF` |
+| Insights | `ArmDeveloperEcosystem/insights` | `LEARN_INSIGHTS_REF` |
+
+Overrides accept a branch, tag or commit; use commit SHAs to repeat acquisition.
+Public page URLs stay in `url`; `resolved_url` records the exact repository commit
+and source file. Hugo frontmatter `url`, `slug` and aliases resolve public pages.
+Drafts (including cascaded drafts), future and expired pages are excluded. Retired
+or unpublished CSV rows are reported and omitted during reconciliation.
+`SKIP_DISCOVERY=1` prevents adding rows; it still uses and validates repository
+sources. Fetch and parsing errors stop acquisition before the CSV or existing
+chunks are replaced.
+
+A course, Learning Path or multipart guide row includes its descendant source
+pages. A single lesson row includes just that lesson. Course membership follows
+the repository directories even when Hugo gives lessons different public URLs.
+Code, tables, callouts, code-tab labels, prerequisites and learning objectives are
+preserved. Generated source FAQs, further-reading links and instructional quiz
+feedback are retained; survey and completion controls are omitted. Unknown Hugo
+shortcodes fail explicitly so new content formats cannot silently lose text.
+Overlapping parent/child CSV rows emit each identical Learn chunk once.
+
+Markdown is rendered locally in memory and passed through the shared content
+parser. Embeddings receive readable paragraphs, captions, tables and code instead
+of image asset addresses and Markdown formatting syntax. Learning Path audience,
+prerequisites, summaries and FAQ answers remain separate sections, with the
+published `about-marker` and `generated-summary-faq` citation anchors. Repository
+frontmatter accepts leading blank lines, and heading styling attributes do not
+become part of generated anchors.
+
+Insights answers are Markdown strings in `data/insights/*.json`, referenced by the
+page's Markdown frontmatter. Each question is chunked separately; all its chunks
+keep the question in the heading path and link to its published `slug` (or `id`)
+anchor. Repeated answer headings cannot merge questions or replace these anchors.
+The shared token splitter still handles long answers.
+
+Courses and Insights are private repositories. Configure the repository Actions
+secret `LEARN_GITHUB_TOKEN` with **Contents: read** access to the source repositories
+before running the embedding workflow. It is passed only to the acquisition
+stage as a BuildKit secret, never as a build argument or image environment value.
+`GH_APP_TOKEN` in this project is a GitHub App private key and must not be used as
+a bearer token. For local acquisition, supply `LEARN_GITHUB_TOKEN` or a
+`LEARN_GITHUB_TOKEN_FILE` pointing to a token file. A GitHub App installation token
+with the same repository access also works; mint it before acquisition.
+
+Changes to this parsing code require rebuilding the toolchain and merging its
+`automation/pin-embedding-generator` PR before rebuilding the corpus. The pinned
+toolchain, not the current checkout, supplies the acquisition Python modules.
+
 ## Discover developer.arm.com Sources
 
 `discover-developer-arm-com-sources.py` searches developer.arm.com and appends any new relevant pages (currently SME-related guides, programmer's guides, and blog posts) to `vector-db-sources.csv`. Existing rows are never modified, so it is safe to re-run occasionally to pick up new content.
@@ -173,7 +230,7 @@ questions alongside the MCP integration tests against the candidate image. Every
 must retrieve an accepted source in the top five results; a miss or execution
 error fails the required integration check and blocks merging.
 
-The recurring embedding workflow runs all 408 benchmark questions in a separate
+The recurring embedding workflow runs all 423 benchmark questions in a separate
 job with read-only permissions. It evaluates the published candidate by digest,
 or the same saved image in a dry run, after verifying its original image ID.
 Evaluation runs without networking in the digest-pinned generator image, using
@@ -201,6 +258,16 @@ cannot be used as baselines; the next completed report establishes a new baselin
 New sources need a rebuilt local corpus: building the MCP image alone uses its
 pinned embedding artifact. See [contribution guidance](../CONTRIBUTING.md#retrieval-evaluations)
 for source-label rules and miss investigation.
+
+Benchmark cases B410–B424 add practical course and Insights queries: CPU
+delegation and benchmarking, quantization, Android integration and validation,
+Ethos-U fallback and output decoding, profiling, and safe SIMD dispatch/loops.
+Their accepted lesson/answer URLs were selected from source content before
+retrieval testing. The original 408 cases and smoke suite remain unchanged.
+The expanded suite needs a fresh baseline; compare the original subset
+separately when checking regressions. A corpus containing only the new sources
+can test ingestion and initial retrieval, but cannot establish performance
+against the complete production corpus.
 
 Run lint and tests with:
 
