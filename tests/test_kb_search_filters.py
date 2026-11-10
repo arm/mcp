@@ -138,6 +138,28 @@ def test_context_parent_scope_validates_manifests_before_deduplication(monkeypat
         search("needle", state, scope="parent_resource")
 
 
+@pytest.mark.parametrize("case", ["conflicting", "consistent", "unrelated"])
+def test_context_parent_scope_validates_unselected_siblings(monkeypatch, case):
+    root, a, b = "https://example.org/path/", "https://example.org/path/a/", "https://example.org/path/b/"
+    pages = [root, a, b] if case == "consistent" else [root, a]
+    sibling_pages = pages if case == "consistent" else [root, b]
+    if case == "unrelated":
+        sibling_pages = ["https://example.org/other/", b]
+    rows = [context_row(root, pages=pages), context_row(a, pages=pages),
+            context_row(b, pages=sibling_pages)]
+    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
+    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": rows[1]}])
+    assert len(search("needle", state, k=1)) == 1
+    assert len(search("needle", state, k=1, scope="page")) == 1
+    if case == "conflicting":
+        with pytest.raises(ValueError, match="inconsistent parent"):
+            search("needle", state, k=1, scope="parent_resource")
+    else:
+        hits = search("needle", state, k=1, scope="parent_resource")
+        assert [hit["context"]["page_url"] for hit in hits] == pages
+        assert all(hit["context"]["page_count"] == len(pages) for hit in hits)
+
+
 @pytest.mark.parametrize("failure", ["legacy", "missing_chunk", "bad_index", "conflict", "missing_page", "manifest", "pieces"])
 def test_context_scope_rejects_incomplete_or_unordered_data(monkeypatch, failure):
     pages = ["https://example.org/path/", "https://example.org/path/step/"]
