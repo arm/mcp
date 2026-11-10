@@ -25,6 +25,20 @@ def _document_key(row: dict, url: str) -> tuple:
     return (url, *(row.get(field, "") for field in ("platform", "edition", "version")))
 
 
+def _fallback_document_url(row: dict) -> str | None:
+    """Associate unordered rows with a document without inventing chunk order."""
+    for field in ("page_url", "url", "resolved_url"):
+        url = row.get(field)
+        if isinstance(url, str) and url:
+            page, _, fragment = url.partition("#")
+            # Explicit page identities and intrinsic fragments identify whole
+            # records; ordinary citation fragments identify sections of a page.
+            if field == "page_url" or row.get("doc_type") == "Intrinsic" or fragment.startswith("q="):
+                return url
+            return page  # Keep query parameters, including dashboard package IDs.
+    return None
+
+
 def _unavailable(url: str, reason: str) -> ValueError:
     return ValueError(
         f"Cannot expand stored context for {url}: {reason}. "
@@ -146,7 +160,7 @@ class DocumentContextIndex:
                 context.setdefault("parent_page_url", context.pop("learning_path_url"))
                 row = {**row, "document_context": context}
             context_url = context.get("url") if isinstance(context, dict) else None
-            url = context_url if isinstance(context_url, str) and context_url else row.get("page_url")
+            url = context_url if isinstance(context_url, str) and context_url else _fallback_document_url(row)
             if isinstance(url, str) and url:
                 key = _document_key(row, url)
                 rows_by_document.setdefault(key, []).append(row)

@@ -121,7 +121,7 @@ def test_context_parent_scope_resolves_siblings_by_their_own_identity(monkeypatc
 def test_context_parent_scope_rejects_ambiguous_sibling_variants(monkeypatch, field, ordered):
     pages = ["https://example.org/path/", "https://example.org/path/step/"]
     rows = [context_row(url, pages=pages) for url in pages]
-    variant = context_row(pages[1], pages=pages, page_url=pages[1], **{field: "another-variant"})
+    variant = context_row(pages[1], pages=pages, **{field: "another-variant"})
     if not ordered:
         variant.pop("document_context")
     state = context_resources(monkeypatch, [*rows, variant], [rows[1]])
@@ -135,7 +135,7 @@ def test_context_parent_scope_rejects_ambiguous_sibling_variants(monkeypatch, fi
 ])
 def test_context_parent_scope_rejects_omitted_siblings(monkeypatch, selected_indices, ordered):
     root, a, b = "https://example.org/path/", "https://example.org/path/a/", "https://example.org/path/b/"
-    sibling = context_row(b, pages=[root, b], page_url=b, parent_page_url=root)
+    sibling = context_row(b, pages=[root, b], parent_page_url=root)
     if not ordered:
         sibling.pop("document_context")
     rows = [context_row(root, pages=[root, a]), context_row(a, pages=[root, a]), sibling]
@@ -212,11 +212,12 @@ def test_context_rejects_partial_split_metadata(monkeypatch, field, value):
     assert len(search("needle", state)) == 1
 
 
+@pytest.mark.parametrize("page_url", [None, "", [], "https://example.org/path/step/"])
 @pytest.mark.parametrize("context", [None, {}, [], {"url": None}, {"url": ""}])
-def test_context_rejects_unindexable_same_document_records(monkeypatch, context):
+def test_context_rejects_unindexable_same_document_records(monkeypatch, context, page_url):
     pages = ["https://example.org/path/", "https://example.org/path/step/"]
     rows = [context_row(url, pages=pages) for url in pages]
-    unindexed = {"url": pages[1] + "#other", "page_url": pages[1], "original_text": "Unordered section"}
+    unindexed = {"url": pages[1] + "#other", "page_url": page_url, "original_text": "Unordered section"}
     if context is not None:
         unindexed["document_context"] = context
     state = context_resources(monkeypatch, [*rows, unindexed], [rows[1]])
@@ -225,6 +226,11 @@ def test_context_rejects_unindexable_same_document_records(monkeypatch, context)
         with pytest.raises(ValueError, match="missing document-order metadata"):
             search("needle", state, k=1, scope=scope)
     assert search("needle", state, k=1) == baseline
+    # A valid root must also reject an unordered, unselected sibling.
+    state = context_resources(monkeypatch, [*rows, unindexed], [rows[0]])
+    assert len(search("needle", state, scope="page")) == 1
+    with pytest.raises(ValueError, match="missing document-order metadata"):
+        search("needle", state, scope="parent_resource")
 
 
 @pytest.mark.parametrize("field,value", [
@@ -234,9 +240,38 @@ def test_context_rejects_unindexable_same_document_records(monkeypatch, context)
 def test_context_unindexable_records_preserve_other_documents(monkeypatch, field, value):
     url = "https://example.org/guide/"
     selected = context_row(url)
-    unindexed = {"url": url + "#other", "page_url": url, "original_text": "Unordered section", field: value}
+    unindexed = {"url": url + "#other", "original_text": "Unordered section", field: value}
     state = context_resources(monkeypatch, [selected, unindexed], [selected])
     assert [h["snippet"] for h in search("needle", state, scope="page")] == [selected["original_text"]]
+
+
+@pytest.mark.parametrize("source,citation,extra,affected", [
+    ("manual.pdf", "manual.pdf", {}, True),
+    ("notebook.ipynb", "notebook.ipynb", {}, True),
+    ("slides.pptx", "slides.pptx", {}, True),
+    ("transcript.vtt", "transcript.vtt", {}, True),
+    ("manual.pdf", "manual.pdf#page=2", {}, True),
+    ("guide/", "guide/#section", {"url": None, "resolved_url": "https://example.org/guide/#section"}, True),
+    ("dashboard?package=a", "dashboard?package=a#section", {}, True),
+    ("dashboard?package=a", "dashboard?package=b", {}, False),
+    ("intrinsics/#q=a", "intrinsics/#q=a", {}, True),
+    ("intrinsics/#q=a", "intrinsics/#q=b", {}, False),
+    ("intrinsics/#a", "intrinsics/#a", {"doc_type": "Intrinsic"}, True),
+    ("intrinsics/#a", "intrinsics/#b", {"doc_type": "Intrinsic"}, False),
+    ("guide/", "guide/#section", {"document_context": {"url": "https://example.org/other/"}}, False),
+])
+def test_context_citation_fallback_preserves_document_identity(monkeypatch, source, citation, extra, affected):
+    row = context_row("https://example.org/" + source)
+    unindexed = {"url": "https://example.org/" + citation, "original_text": "Unordered section", **extra}
+    state = context_resources(monkeypatch, [row, unindexed], [row])
+    baseline = search("needle", state)
+    for scope in ("page", "parent_resource"):
+        if affected:
+            with pytest.raises(ValueError, match="missing document-order metadata"):
+                search("needle", state, scope=scope)
+        else:
+            assert [h["snippet"] for h in search("needle", state, scope=scope)] == [row["original_text"]]
+    assert search("needle", state) == baseline
 
 
 def test_context_catalog_keeps_unrelated_failures_local(monkeypatch):
