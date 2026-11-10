@@ -104,6 +104,25 @@ def test_context_parent_scope_rejects_partial_parent_identity(monkeypatch, missi
         search("needle", state, scope="parent_resource")
 
 
+@pytest.mark.parametrize("empty_parent", [None, ""])
+def test_context_legacy_parent_fallback_accepts_empty_new_fields(monkeypatch, empty_parent):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(url, i, 2, pages=pages) for url in pages for i in range(2)]
+    legacy = deepcopy(rows)
+    for row in legacy:
+        row["document_context"].update(parent_page_url=empty_parent, learning_path_url=pages[0])
+        row.update(parent_page_url=empty_parent, learning_path_url=pages[0])
+    before = deepcopy(legacy)
+    # Legacy and current copies describe the same logical chunks.
+    state = context_resources(monkeypatch, [*legacy, *rows], [legacy[-1]])
+    hits = search("needle", state, scope="parent_resource")
+    assert [hit["snippet"] for hit in hits] == [row["original_text"] for row in rows]
+    assert all(hit["context"]["parent_page_url"] == pages[0] for hit in hits)
+    assert all(hit["parent_page_url"] == pages[0] for hit in hits)
+    assert search("needle", state)[0]["parent_page_url"] == pages[0]
+    assert legacy == before
+
+
 @pytest.mark.parametrize("field", ["version", "platform", "edition"])
 def test_context_parent_scope_resolves_siblings_by_their_own_identity(monkeypatch, field):
     pages = ["https://example.org/path/", "https://example.org/path/step/"]

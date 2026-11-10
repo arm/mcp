@@ -168,7 +168,9 @@ class DocumentContextIndex:
                      if isinstance(value := source.get(field), str) and value}
             if isinstance(context, dict) and "learning_path_url" in context:
                 context = dict(context)
-                context.setdefault("parent_page_url", context.pop("learning_path_url"))
+                legacy_root = context.pop("learning_path_url")
+                if context.get("parent_page_url") in (None, ""):
+                    context["parent_page_url"] = legacy_root
                 row = {**row, "document_context": context}
             context_url = context.get("url") if isinstance(context, dict) else None
             url = context_url if isinstance(context_url, str) and context_url else _fallback_document_url(row)

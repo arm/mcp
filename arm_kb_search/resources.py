@@ -322,8 +322,8 @@ def search(
             **({"context": item["context"]} if "context" in item else {}),
             **{key: value for key, value in {
                 "page_url": item["metadata"].get("page_url"),
-                "parent_page_url": item["metadata"].get(
-                    "parent_page_url", item["metadata"].get("learning_path_url")),
+                "parent_page_url": item["metadata"].get("parent_page_url")
+                    or item["metadata"].get("learning_path_url"),
             }.items() if isinstance(value, str) and value},
         }
         for item in selected
