@@ -37,12 +37,14 @@ def _unavailable(url: str, reason: str) -> ValueError:
 class DocumentContextIndex:
     def __init__(self, metadata: list[dict[str, Any]]):
         self.documents: dict[tuple, list[dict]] = {}
+        self.unindexable_documents: set[tuple] = set()
         self.document_urls_by_parent: dict[str, set[str]] = {}
         self.split_chunk_positions: dict[tuple, tuple | None] = {}
         for row in metadata:
             position = None
             context = row.get("document_context")
-            if isinstance(context, dict) and isinstance(context.get("url"), str):
+            if (isinstance(context, dict) and isinstance(context.get("url"), str)
+                    and context["url"]):
                 # Read earlier experimental artifacts without mutating the snapshot.
                 if "learning_path_url" in context:
                     context = dict(context)
@@ -54,6 +56,11 @@ class DocumentContextIndex:
                 parent_url = context.get("parent_page_url")
                 if isinstance(parent_url, str) and parent_url:
                     self.document_urls_by_parent.setdefault(parent_url, set()).add(context["url"])
+            else:
+                # Explicit source links identify incomplete documents without guessing order.
+                page_url = row.get("page_url")
+                if isinstance(page_url, str) and page_url:
+                    self.unindexable_documents.add(_document_key(row, page_url))
             parent = (row.get("parent_uuid"), row.get("parent_chunk_uuid"))
             if all(isinstance(value, str) and value for value in parent):
                 # Every piece must identify the same original document position.
@@ -66,6 +73,8 @@ class DocumentContextIndex:
             self.document_keys_by_url.setdefault(key[0], []).append(key)
 
     def ordered_chunks(self, key: tuple, resources) -> list[dict]:
+        if key in self.unindexable_documents:
+            raise _unavailable(key[0], "a same-document record is missing document-order metadata")
         rows = self.documents.get(key, [])
         if not rows:
             raise _unavailable(key[0], "document is missing")

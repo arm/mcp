@@ -236,6 +236,35 @@ def test_context_rejects_partial_split_metadata(monkeypatch, field, value):
     assert len(search("needle", state)) == 1
 
 
+@pytest.mark.parametrize("context", [None, {}, [], {"url": None}, {"url": ""}])
+def test_context_rejects_unindexable_same_document_records(monkeypatch, context):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(url, pages=pages) for url in pages]
+    unindexed = {"url": pages[1] + "#other", "page_url": pages[1], "original_text": "Unordered section"}
+    if context is not None:
+        unindexed["document_context"] = context
+    state = SearchResources([*rows, unindexed], QueryModel(), None, None, include_disclaimers=False)
+    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": rows[1]}])
+    baseline = search("needle", state, k=1)
+    for scope in ("page", "parent_resource"):
+        with pytest.raises(ValueError, match="missing document-order metadata"):
+            search("needle", state, k=1, scope=scope)
+    assert search("needle", state, k=1) == baseline
+
+
+@pytest.mark.parametrize("field,value", [
+    ("page_url", "https://example.org/other/"), ("version", "v2"),
+    ("platform", "linux"), ("edition", "commercial"),
+])
+def test_context_unindexable_records_preserve_other_documents(monkeypatch, field, value):
+    url = "https://example.org/guide/"
+    selected = context_row(url)
+    unindexed = {"url": url + "#other", "page_url": url, "original_text": "Unordered section", field: value}
+    state = SearchResources([selected, unindexed], QueryModel(), None, None, include_disclaimers=False)
+    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": selected}])
+    assert [h["snippet"] for h in search("needle", state, scope="page")] == [selected["original_text"]]
+
+
 def test_context_keeps_intrinsic_dashboard_and_edition_identities(monkeypatch):
     urls = ["https://developer.arm.com/intrinsics/#q=a", "https://developer.arm.com/intrinsics/#q=b",
             "https://developer.arm.com/ecosystem-dashboard/linux?package=a",
