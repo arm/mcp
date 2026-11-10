@@ -31,15 +31,25 @@ def _document_key(row: dict, url: str) -> tuple:
 
 def _fallback_document_url(row: dict) -> str | None:
     """Associate unordered rows with a document without inventing chunk order."""
+    from urllib.parse import urlparse, urlunparse
+
     for field in ("page_url", "url", "resolved_url"):
         url = row.get(field)
         if isinstance(url, str) and url:
             page, _, fragment = url.partition("#")
-            # Explicit page identities and intrinsic fragments identify whole
-            # records; ordinary citation fragments identify sections of a page.
-            if field == "page_url" or row.get("doc_type") == "Intrinsic" or fragment.startswith("q="):
+            if row.get("doc_type") == "Intrinsic" or fragment.startswith("q="):
                 return url
-            return page  # Keep query parameters, including dashboard package IDs.
+            identity = url if field == "page_url" else page
+            parsed = urlparse(identity)
+            segments = parsed.path.strip("/").split("/")
+            # Acquisition canonicalizes learning-path roots but retains citations.
+            if (parsed.scheme in {"http", "https"}
+                    and parsed.netloc.lower() == "learn.arm.com"
+                    and parsed.path.startswith("/learning-paths/")
+                    and len(segments) == 3):
+                return urlunparse((parsed.scheme, parsed.netloc.lower(),
+                                   "/" + "/".join(segments) + "/", "", "", ""))
+            return identity
     return None
 
 
