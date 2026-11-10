@@ -175,9 +175,12 @@ these options keeps the default unfiltered search with up to five matching chunk
 {"query": "How do SVE predicated loads work?", "filters": {"doc_type": "Intrinsic", "product": "SVE"}, "k": 3}
 ```
 
-- `filters`: exact `doc_type`, `product`, `platform`, and `edition` values,
-  combined with AND, ignoring case and surrounding whitespace. Missing tags
-  cannot match; use known labels. Platform/edition coverage is currently sparse.
+- `filters`: each `doc_type`, `product`, `platform`, or `edition` accepts a string
+  or non-empty list, e.g. `"platform": ["linux", "windows"]`. Alternatives within
+  a field combine with OR; different fields combine with AND. Matching ignores
+  case, surrounding whitespace, and duplicate choices. Empty lists and blank or
+  non-string items are rejected. Missing tags cannot match; use known labels.
+  Platform/edition coverage is currently sparse.
 - `k`: any positive integer, default 5 when omitted/null. Limits ranked seed
   results, not tokens or expanded chunks. Fewer results may be available.
   Agents are instructed to use at most 20; this is guidance, not an API limit.

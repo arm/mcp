@@ -68,12 +68,18 @@ Runtime loading writes no files. Keep metadata and synonyms unchanged during loa
 `filters` accepts a `SearchFilters` instance or a dictionary with optional
 `doc_type`, `product`, `platform`, and `edition` fields.
 
-- Values match complete metadata strings after trimming whitespace and case
-  folding. Multiple fields combine with AND; use values present in your corpus.
+- Each field accepts a string or a non-empty list of strings. Values match
+  complete metadata labels after trimming whitespace and case folding.
+  Alternatives within a field combine with OR; fields combine with AND.
+  For example, `{"platform": ["linux", "windows"], "doc_type": ["Install Guides", "Learning Paths"]}`
+  matches either platform and either document type. `k` limits the combined results.
+  Duplicate alternatives are removed; caller lists are copied into immutable
+  tuples. Python callers may also supply tuples. Single strings stay strings.
 - Omitted filters, `None`, and `{}` leave search unrestricted. A field set to
   `None` is ignored. Missing or blank metadata cannot match an active filter.
-- Invalid dictionary keys, blank strings, and non-string filter values raise
-  `ValueError`. No matching chunks returns an empty list.
+- Invalid keys, empty lists/tuples, blank strings, and non-string list items
+  raise `ValueError`. Unknown labels match nothing, while other alternatives
+  can still match. No matching chunks returns an empty list.
 
 Filters restrict candidates before ranking and deduplication. Vector retrieval
 uses exact search over the full corpus, or only eligible vectors when filtered.

@@ -5,23 +5,34 @@ from dataclasses import dataclass, fields
 from typing import Any
 
 
+FilterValue = str | list[str] | tuple[str, ...] | None
+
+
+def normalize_filter_value(value: FilterValue) -> str | tuple[str, ...] | None:
+    """Keep scalars compatible and copy alternatives into an immutable, unique tuple."""
+    if value is None:
+        return None
+    scalar = isinstance(value, str)
+    choices = [value] if scalar else value
+    if (not isinstance(choices, (list, tuple)) or not choices
+            or any(not isinstance(item, str) or not item.strip() for item in choices)):
+        raise ValueError("Filter values must be a non-empty string, a non-empty list/tuple of non-empty strings, or null")
+    normalized = tuple(dict.fromkeys(item.strip().casefold() for item in choices))
+    return normalized[0] if scalar else normalized
+
+
 @dataclass(frozen=True)
 class SearchFilters:
-    """Optional scalar filters, combined with AND after strip/casefold normalization."""
+    """Exact labels: OR within a field, AND across fields; lists normalize to tuples."""
 
-    doc_type: str | None = None
-    product: str | None = None
-    platform: str | None = None
-    edition: str | None = None
+    doc_type: FilterValue = None
+    product: FilterValue = None
+    platform: FilterValue = None
+    edition: FilterValue = None
 
     def __post_init__(self) -> None:
         for field in fields(self):
-            value = getattr(self, field.name)
-            if value is None:
-                continue
-            if not isinstance(value, str) or not value.strip():
-                raise ValueError(f"Filter '{field.name}' must be a non-empty string or None")
-            object.__setattr__(self, field.name, value.strip().casefold())
+            object.__setattr__(self, field.name, normalize_filter_value(getattr(self, field.name)))
 
     @classmethod
     def parse(cls, value: "SearchFilters | Mapping[str, Any] | None") -> "SearchFilters":
@@ -54,11 +65,15 @@ class MetadataFilterIndex:
 
     def eligible_ids(self, filters: SearchFilters) -> tuple[int, ...] | None:
         """None means unrestricted; an empty tuple means no eligible chunks."""
-        postings = [
-            values.get(value, set())
-            for name, values in self._postings.items()
-            if (value := getattr(filters, name)) is not None
-        ]
+        postings = []
+        for name, values in self._postings.items():
+            value = getattr(filters, name)
+            if value is None:
+                continue
+            # Union alternatives before intersecting fields. Scalar lookups keep
+            # their existing fast path; neither operation mutates the index.
+            postings.append(values.get(value, set()) if isinstance(value, str) else
+                            set().union(*(values.get(label, set()) for label in value)))
         if not postings:
             return None
         postings.sort(key=len)
