@@ -37,6 +37,10 @@ Results optionally include `page_url` and `parent_page_url`. Earlier experimenta
 falling back to page scope when no parent is known. Default `scope="chunks"`
 keeps ranked search. Filters and `k` select seeds only; shared documents are
 returned once and embedding pieces are reassembled into logical chunks.
+The first non-empty expansion prepares and validates a document/parent catalog
+for the fixed resource snapshot; subsequent calls reuse its ordered entries.
+Validation errors are retained per document or parent, so an invalid parent can
+still have readable pages and unrelated valid documents remain available.
 
 Expansion needs `document_context` format 1: document identity, zero-based chunk
 index/count, and a parent URL/ordered page manifest for parent expansion.
