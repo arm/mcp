@@ -37,6 +37,7 @@ def _unavailable(url: str, reason: str) -> ValueError:
 class DocumentContextIndex:
     def __init__(self, metadata: list[dict[str, Any]]):
         self.documents: dict[tuple, list[dict]] = {}
+        self.document_urls_by_parent: dict[str, set[str]] = {}
         for row in metadata:
             context = row.get("document_context")
             if isinstance(context, dict) and isinstance(context.get("url"), str):
@@ -46,6 +47,9 @@ class DocumentContextIndex:
                     context.setdefault("parent_page_url", context.pop("learning_path_url"))
                     row = {**row, "document_context": context}
                 self.documents.setdefault(_document_key(row, context["url"]), []).append(row)
+                parent_url = context.get("parent_page_url")
+                if isinstance(parent_url, str) and parent_url:
+                    self.document_urls_by_parent.setdefault(parent_url, set()).add(context["url"])
         self.document_keys_by_url: dict[str, list[tuple]] = {}
         for key in self.documents:
             self.document_keys_by_url.setdefault(key[0], []).append(key)
@@ -120,6 +124,10 @@ class DocumentContextIndex:
                         or pages[0] != root or context["url"] not in pages
                         or len(set(pages)) != len(pages)):
                     raise _unavailable(root, "the parent resource page order is absent or invalid")
+                # A seed's manifest must not hide other stored siblings. Listed
+                # pages are checked for completeness and consistency below.
+                if not self.document_urls_by_parent.get(root, set()).issubset(pages):
+                    raise _unavailable(root, "inconsistent parent resource manifests: a stored sibling is omitted")
                 resolved_scope = "parent_resource"
             for page_index, page_url in enumerate(pages):
                 key = seed_key
