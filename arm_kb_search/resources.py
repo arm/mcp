@@ -33,6 +33,7 @@ from usearch.index import Index
 
 from . import analysis
 from .config import K_RESULTS
+from .context import CONTEXT_SCOPES, DocumentContextIndex
 from .filters import MetadataFilterIndex, SearchFilters
 from .loaders import load_metadata, load_usearch_index
 from .response import add_disclaimer_to_arm_results, add_utm_source_to_results
@@ -143,6 +144,7 @@ class SearchResources:
     synonyms: analysis.Synonyms = field(default=analysis.EMPTY, repr=False)
     _filter_index: MetadataFilterIndex = field(init=False, repr=False, compare=False)
     _parent_texts: dict[tuple[str, str], str] = field(init=False, repr=False, compare=False)
+    _document_context: DocumentContextIndex | None = field(default=None, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         self._filter_index = MetadataFilterIndex(self.metadata)
@@ -262,8 +264,11 @@ def search(
     k: int | None = None,
     *,
     filters: SearchFilters | Mapping[str, Any] | None = None,
+    scope: str = "chunks",
 ) -> list[dict[str, Any]]:
     """Search a resource snapshot, optionally restricting eligible metadata values."""
+    if not isinstance(scope, str) or scope not in CONTEXT_SCOPES:
+        raise ValueError("scope must be 'chunks', 'page', or 'parent_resource'")
     eligible_ids = resources._filter_index.eligible_ids(SearchFilters.parse(filters))
     if eligible_ids == ():
         return []
@@ -296,6 +301,12 @@ def search(
     if len(search_results) < resolved_k and can_expand and expanded_pool_size > pool_size:
         search_results = ranked_candidates(expanded_pool_size)
 
+    selected = search_results[:resolved_k]
+    if scope != "chunks":
+        if resources._document_context is None:
+            resources._document_context = DocumentContextIndex(resources.metadata)
+        selected = resources._document_context.expand(selected, resources, scope)
+
     formatted = [
         {
             "url": item["metadata"].get("url") or item["metadata"].get("resolved_url"),
@@ -308,10 +319,14 @@ def search(
             "edition": item["metadata"].get("edition", ""),
             "distance": item.get("distance"),
             "score": item.get("rerank_score", item.get("rrf_score")),
-            **{key: item["metadata"][key] for key in ("page_url", "learning_path_url")
-               if isinstance(item["metadata"].get(key), str) and item["metadata"][key]},
+            **({"context": item["context"]} if "context" in item else {}),
+            **{key: value for key, value in {
+                "page_url": item["metadata"].get("page_url"),
+                "parent_page_url": item["metadata"].get(
+                    "parent_page_url", item["metadata"].get("learning_path_url")),
+            }.items() if isinstance(value, str) and value},
         }
-        for item in search_results[:resolved_k]
+        for item in selected
     ]
     formatted = add_utm_source_to_results(formatted, resources.utm_source)
     if resources.include_disclaimers:

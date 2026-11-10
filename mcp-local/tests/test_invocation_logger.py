@@ -61,7 +61,7 @@ def test_search_source_links_survive_mcp_response_and_logging(tmp_path, monkeypa
     import arm_kb_search
 
     expected = [{"url": "https://example.org/step/#install", "snippet": "Run this.",
-                 "page_url": "https://example.org/step/", "learning_path_url": "https://example.org/"}]
+                 "page_url": "https://example.org/step/", "parent_page_url": "https://example.org/"}]
     monkeypatch.setattr(arm_kb_search, "load_search_resources", lambda **kwargs: None)
     monkeypatch.setattr(arm_kb_search, "search", lambda *args: expected)
     monkeypatch.setattr(invocation_logger, "WORKSPACE_DIR", str(tmp_path))
@@ -80,3 +80,96 @@ def test_search_source_links_survive_mcp_response_and_logging(tmp_path, monkeypa
     calls = [json.loads(line) for line in (tmp_path / "mcp-traffic.jsonl").read_text().splitlines()]
     assert len(calls) == 2 and calls[0]["id"] == calls[1]["id"]
     assert calls[1]["result"] == expected
+
+
+def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monkeypatch):
+    import asyncio
+    import importlib.util
+    import pytest
+    from fastmcp import Client
+    from fastmcp.exceptions import ToolError
+    import arm_kb_search
+
+    calls = []
+    expected = [{"url": "https://example.org/guide/#section", "snippet": "Evidence"}]
+    monkeypatch.setattr(arm_kb_search, "load_search_resources", lambda **kwargs: None)
+    def search(query, resources, **options):
+        calls.append((query, options))
+        return [] if options.get("filters", {}).get("product") == "missing" else expected
+    monkeypatch.setattr(arm_kb_search, "search", search)
+    monkeypatch.setattr(invocation_logger, "WORKSPACE_DIR", str(tmp_path))
+    spec = importlib.util.spec_from_file_location("filter_options_server", Path(__file__).parents[1] / "server.py")
+    server = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(server)
+
+    async def exercise():
+        async with Client(server.mcp) as client:
+            tool = next(t for t in await client.list_tools() if t.name == "knowledge_base_search")
+            assert {"query", "invocation_reason", "filters", "k", "scope"} == set(tool.inputSchema["properties"])
+            assert tool.inputSchema["properties"]["scope"]["enum"] == ["chunks", "page", "parent_resource"]
+            for options in ({}, {"filters": None, "k": None}, {"filters": {}}, {"filters": {"product": None}}):
+                result = await client.call_tool(tool.name, {"query": "needle", **options})
+                assert result.structured_content["result"] == expected
+                assert calls[-1] == ("needle", {})
+            result = await client.call_tool(tool.name, {"query": "needle", "k": 1,
+                "filters": {"doc_type": " Learning Paths ", "product": "ARM", "platform": "Linux", "edition": "Open-Source"}})
+            assert result.structured_content["result"] == expected
+            assert calls[-1] == ("needle", {"k": 1, "filters": {
+                "doc_type": "learning paths", "product": "arm", "platform": "linux", "edition": "open-source"}})
+            await client.call_tool(tool.name, {"query": "needle", "k": 20})
+            assert calls[-1] == ("needle", {"k": 20})
+            empty = await client.call_tool(tool.name, {"query": "needle", "filters": {"product": "missing"}})
+            assert empty.structured_content["result"] == []
+            for scope in ("chunks", "page", "parent_resource"):
+                await client.call_tool(tool.name, {"query": "needle", "scope": scope})
+                assert calls[-1] == ("needle", {} if scope == "chunks" else {"scope": scope})
+            before = len(calls)
+            invalid = [{"k": v} for v in (0, -1, 21, True, 1.5, "3")]
+            invalid += [{"scope": v} for v in (None, "parent", "learning_path", "PAGE", [], True)]
+            invalid += [{"filters": f} for f in ({"unknown": "x"}, {"product": " "}, {"product": 3}, {"product": ["Arm"]}, [])]
+            for options in invalid:
+                with pytest.raises(ToolError):
+                    await client.call_tool(tool.name, {"query": "needle", **options})
+            assert len(calls) == before
+    asyncio.run(exercise())
+    logged = [json.loads(x) for x in (tmp_path / "mcp-traffic.jsonl").read_text().splitlines()]
+    assert logged[8]["args"] == {"query": "needle", "k": 1, "filters": {
+        "doc_type": "learning paths", "product": "arm", "platform": "linux", "edition": "open-source"}}
+
+
+def test_scope_expansion_through_mcp_and_missing_metadata_error(tmp_path, monkeypatch):
+    import asyncio
+    import importlib.util
+    import pytest
+    import arm_kb_search
+    from fastmcp import Client
+    from fastmcp.exceptions import ToolError
+    from utils import error_handling
+
+    url = "https://example.org/guide"
+    rows = [{"url": url + "#section", "original_text": f"section {i}", "chunk_uuid": str(i),
+             "document_context": {"format": 1, "url": url, "chunk_index": i, "chunk_count": 2}}
+            for i in range(2)]
+    state = arm_kb_search.SearchResources(list(reversed(rows)), object(), None, None, include_disclaimers=False)
+    monkeypatch.setattr(arm_kb_search, "load_search_resources", lambda **kwargs: state)
+    monkeypatch.setattr(arm_kb_search.resources, "hybrid_search", lambda *a, **kw: [{"metadata": rows[1]}])
+    monkeypatch.setattr(invocation_logger, "WORKSPACE_DIR", str(tmp_path))
+    monkeypatch.setattr(error_handling, "WORKSPACE_DIR", str(tmp_path))
+    spec = importlib.util.spec_from_file_location("context_scope_server", Path(__file__).parents[1] / "server.py")
+    server = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(server)
+
+    async def exercise():
+        async with Client(server.mcp) as client:
+            baseline = await client.call_tool("knowledge_base_search", {"query": "guide"})
+            assert [r["snippet"] for r in baseline.structured_content["result"]] == ["section 1"]
+            for scope in ("page", "parent_resource"):
+                expanded = await client.call_tool("knowledge_base_search", {"query": "guide", "scope": scope, "k": 1})
+                assert [r["snippet"] for r in expanded.structured_content["result"]] == ["section 0", "section 1"]
+                assert all(r["context"]["scope"] == "page" for r in expanded.structured_content["result"])
+            rows[1].pop("document_context")
+            with pytest.raises(ToolError, match="Regenerate chunks"):
+                await client.call_tool("knowledge_base_search", {"query": "guide", "scope": "page"})
+    asyncio.run(exercise())
+    logs = [json.loads(line) for line in (tmp_path / "mcp-traffic.jsonl").read_text().splitlines()]
+    assert logs[-2]["args"]["scope"] == "page" and logs[-1]["result"]["status"] == "error"

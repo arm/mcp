@@ -40,6 +40,107 @@ from arm_kb_search.search import (
 search_module = importlib.import_module("arm_kb_search.search")
 
 
+def context_row(url, index=0, count=1, *, pages=None, **extra):
+    context = {"format": 1, "url": url, "chunk_index": index, "chunk_count": count}
+    if pages:
+        context.update(parent_page_url=pages[0], learning_path_pages=pages)
+    return {"url": url + "#section", "chunk_uuid": f"{url}:{index}",
+            "original_text": f"{url} chunk {index}", "document_context": context, **extra}
+
+
+def test_context_scope_expands_all_hits_once_in_stored_order(monkeypatch):
+    pages = ["https://example.org/path/", "https://example.org/path/z/", "https://example.org/path/a/"]
+    rows = [context_row(url, i, 2, pages=pages) for url in pages for i in range(2)]
+    other = context_row("https://example.org/manual.pdf")
+    state = SearchResources([other, *reversed(rows)], QueryModel(), None, None, include_disclaimers=False)
+    seeds = [{"metadata": r, "distance": 0.1} for r in (rows[3], rows[2], rows[5], other)]
+    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: seeds)
+    default = search("needle", state, k=4)
+    assert search("needle", state, k=4, scope="chunks") == default
+    assert len(default) == 4 and all("context" not in hit for hit in default)
+    expanded = search("needle", state, k=4, scope="page")
+    assert [hit["snippet"] for hit in expanded] == [r["original_text"] for r in (*rows[2:], other)]
+    assert all(hit["score"] is None and hit["distance"] is None for hit in expanded)
+    # k counts seeds; even one seed expands all three pages. Navigation order is
+    # z then a, independent of metadata storage order and lexicographic URL order.
+    path = search("needle", state, k=1, scope="parent_resource")
+    assert [hit["snippet"] for hit in path] == [r["original_text"] for r in rows]
+    assert [hit["context"]["page_index"] for hit in path] == [0, 0, 1, 1, 2, 2]
+    assert all(hit["context"]["scope"] == "parent_resource" for hit in path)
+    mixed = search("needle", state, k=4, scope="parent_resource")
+    assert len(mixed) == 7 and mixed[-1]["context"]["scope"] == "page"
+    assert search("needle", state, k=4) == default  # expansion does not mutate the snapshot
+
+    standalone = deepcopy(rows[3])
+    standalone["document_context"].pop("learning_path_pages")
+    state = SearchResources([standalone, *reversed(rows)], QueryModel(), None, None, include_disclaimers=False)
+    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [{"metadata": standalone}])
+    assert [h["snippet"] for h in search("needle", state, scope="parent_resource")] == [r["original_text"] for r in rows]
+
+    legacy = deepcopy(rows)
+    for row in legacy:
+        context = row["document_context"]
+        context["learning_path_url"] = context.pop("parent_page_url")
+    before = deepcopy(legacy)
+    state = SearchResources([*legacy, *rows], QueryModel(), None, None, include_disclaimers=False)
+    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [{"metadata": legacy[3]}])
+    expanded = search("needle", state, scope="parent_resource")
+    assert [h["snippet"] for h in expanded] == [r["original_text"] for r in rows]
+    assert all(h["context"]["parent_page_url"] == pages[0] and "learning_path_url" not in h["context"] for h in expanded)
+    assert legacy == before
+
+
+@pytest.mark.parametrize("failure", ["legacy", "missing_chunk", "bad_index", "conflict", "missing_page", "manifest", "pieces"])
+def test_context_scope_rejects_incomplete_or_unordered_data(monkeypatch, failure):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    row = context_row(pages[0], pages=pages)
+    rows = [row, context_row(pages[1], pages=pages)]
+    if failure == "legacy": row.pop("document_context")
+    elif failure == "missing_chunk": row["document_context"]["chunk_count"] = 2
+    elif failure == "bad_index": row["document_context"]["chunk_index"] = True
+    elif failure == "conflict": rows.append({**row, "original_text": "conflicting revision"})
+    elif failure == "missing_page": rows.pop()
+    elif failure == "manifest": rows[1]["document_context"].pop("learning_path_pages")
+    elif failure == "pieces": row.update(parent_uuid="parent", parent_chunk_uuid="parent")
+    # Incomplete piece details would be rejected during resource initialization;
+    # simulate a loaded snapshot with a missing sibling after initialization.
+    if failure == "pieces":
+        row.update(source_start=0, source_end=len(row["original_text"]), source_part=1, source_parts=2)
+    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
+    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [{"metadata": row}])
+    with pytest.raises(ValueError, match="Regenerate chunks"):
+        search("needle", state, scope="parent_resource")
+    assert len(search("needle", state)) == 1
+
+
+def test_context_reassembles_embedding_pieces_without_duplicate_chunks(monkeypatch):
+    row = context_row("https://example.org/notebook.ipynb")
+    rows = [{**row, "original_text": text, "parent_uuid": "p", "parent_chunk_uuid": "p",
+             "chunk_uuid": str(i), "source_start": start, "source_end": start + len(text),
+             "source_part": i, "source_parts": 2}
+            for i, start, text in [(1, 0, "first "), (2, 6, "second")]]
+    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
+    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [{"metadata": r} for r in rows])
+    assert [h["snippet"] for h in search("needle", state, scope="page")] == ["first second"]
+
+
+def test_context_keeps_intrinsic_dashboard_and_edition_identities(monkeypatch):
+    urls = ["https://developer.arm.com/intrinsics/#q=a", "https://developer.arm.com/intrinsics/#q=b",
+            "https://developer.arm.com/ecosystem-dashboard/linux?package=a",
+            "https://developer.arm.com/ecosystem-dashboard/linux?package=b"]
+    rows = [{**context_row(url), "url": url} for url in urls]
+    rows.append(context_row(urls[2], edition="commercial", original_text="commercial edition"))
+    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
+    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [{"metadata": r} for r in (rows[0], rows[2])])
+    assert [h["snippet"] for h in search("needle", state, scope="parent_resource")] == [rows[0]["original_text"], rows[2]["original_text"]]
+
+
+@pytest.mark.parametrize("scope", [None, [], "parent", "learning_path", "PAGE"])
+def test_invalid_context_scope_is_rejected(scope):
+    with pytest.raises(ValueError, match="scope must be"):
+        search("needle", SearchResources([], QueryModel(), None, None), scope=scope)
+
+
 class QueryModel:
     def __init__(self):
         self.calls = 0
@@ -68,7 +169,8 @@ def index_for(vectors):
     return index
 
 
-def test_source_links_preserve_five_ranked_results_without_fetching(monkeypatch):
+@pytest.mark.parametrize("parent_field", ["parent_page_url", "learning_path_url"])
+def test_source_links_preserve_five_ranked_results_without_fetching(monkeypatch, parent_field):
     import requests
 
     def unexpected_fetch(*args, **kwargs):
@@ -81,19 +183,20 @@ def test_source_links_preserve_five_ranked_results_without_fetching(monkeypatch)
     state = SearchResources(rows, QueryModel(), index_for([[i / 10, 0] for i in range(6)]),
                             build_bm25_index(rows), include_disclaimers=False)
     baseline = search("needle", state)
-    assert all(not {"page_url", "learning_path_url"} & hit.keys() for hit in baseline)
+    assert all(not {"page_url", "parent_page_url"} & hit.keys() for hit in baseline)
     for row in rows[2:]:
         row.update(page_url=f"https://example.org/source/{row['chunk_uuid']}?version=2",
-                   learning_path_url="https://learn.arm.com/learning-paths/cross-platform/example/")
+                   **{parent_field: "https://learn.arm.com/learning-paths/cross-platform/example/"})
     before = deepcopy(rows)
     hits = search("needle", state)
     assert len(hits) == len(baseline) == 5 and rows == before
-    assert [{k: v for k, v in hit.items() if k not in {"page_url", "learning_path_url"}}
+    assert [{k: v for k, v in hit.items() if k not in {"page_url", "parent_page_url"}}
             for hit in hits] == baseline
     by_url = {row["url"]: row for row in rows}
     for hit in hits:
-        for key in ("page_url", "learning_path_url"):
-            assert hit.get(key) == by_url[hit["url"]].get(key)
+        assert "learning_path_url" not in hit
+        assert hit.get("page_url") == by_url[hit["url"]].get("page_url")
+        assert hit.get("parent_page_url") == by_url[hit["url"]].get(parent_field)
 
 
 @pytest.mark.parametrize("name", ["doc_type", "product", "platform", "edition"])

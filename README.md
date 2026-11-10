@@ -166,6 +166,38 @@ args = [
 
 After updating the configuration, restart your MCP client to load the Arm MCP server.
 
+## Knowledge-base search
+
+`knowledge_base_search` accepts optional `filters`, `k`, and `scope`. Omitting
+these options keeps the default unfiltered search with up to five matching chunks.
+
+```json
+{"query": "How do SVE predicated loads work?", "filters": {"doc_type": "Intrinsic", "product": "SVE"}, "k": 3}
+```
+
+- `filters`: exact `doc_type`, `product`, `platform`, and `edition` values,
+  combined with AND, ignoring case and surrounding whitespace. Missing tags
+  cannot match; use known labels. Platform/edition coverage is currently sparse.
+- `k`: integer 1–20, default 5 when omitted/null. Limits ranked seed results,
+  not tokens or expanded chunks. Invalid options are rejected.
+
+| Scope | Content returned |
+| --- | --- |
+| `chunks` (default) | Ranked matching chunks. |
+| `page` | Every matched document's stored chunks, in order. |
+| `parent_resource` | Every matched parent's stored pages/chunks, in order; page scope when no parent is known. |
+
+Expansion deduplicates shared documents. Filters and `k` apply only to seed
+matches; expanded sibling pages are unrestricted. Results include stored
+`page_url`/`parent_page_url` links and, for expansion, position/count metadata.
+Request wider context only when the user asks; responses can be large and client
+output limits apply. Links and expansion do not fetch live pages.
+
+Expansion requires regenerated chunk/vector artifacts with complete ordering
+metadata; missing or conflicting data returns an error. Parent manifests are
+currently acquired for Arm Learning Paths. See the [shared search documentation](arm_kb_search/README.md)
+for metadata details and other-source limitations.
+
 ## Logging
 
 Depending on usage, the server may write two log files under `/workspace`. With the
