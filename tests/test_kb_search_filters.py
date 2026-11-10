@@ -290,6 +290,37 @@ def test_context_catalog_keeps_unrelated_failures_local(monkeypatch):
     assert search("needle", state, scope="parent_resource") == expected
 
 
+@pytest.mark.parametrize("field", ["platform", "edition", "version"])
+@pytest.mark.parametrize("value,ordered", [([], True), ({}, True), ([], False), (3, True)])
+def test_context_invalid_identity_is_local_but_never_silently_dropped(monkeypatch, field, value, ordered):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(url, pages=pages) for url in pages]
+    malformed = context_row(pages[1], pages=pages, **{field: value})
+    if not ordered:
+        malformed.pop("document_context")  # Citation fallback must retain invalid records too.
+    other = context_row("https://example.org/other/", doc_type="Install Guides")
+    selected = [other]
+    state = context_resources(monkeypatch, [malformed, *rows, other], selected)
+    baseline = search("needle", state)
+    for scope in ("page", "parent_resource"):
+        # Filtering excludes the bad seed but the catalog still sees the whole snapshot.
+        hits = search("needle", state, filters={"doc_type": "Install Guides"}, scope=scope)
+        assert [hit["snippet"] for hit in hits] == [other["original_text"]]
+    selected[:] = [rows[0]]
+    assert len(search("needle", state, scope="page")) == 1
+    with pytest.raises(ValueError, match="Regenerate chunks"):
+        search("needle", state, scope="parent_resource")
+    # A valid variant at the affected URL must not conceal the malformed content.
+    for seed in [rows[1], *([malformed] if ordered else [])]:
+        selected[:] = [seed]
+        for scope in ("page", "parent_resource"):
+            with pytest.raises(ValueError, match=f"invalid {field} identity"):
+                search("needle", state, scope=scope)
+    selected[:] = [other]
+    assert search("needle", state) == baseline
+    assert len(search("needle", state, scope="page")) == 1
+
+
 def test_context_keeps_intrinsic_dashboard_and_edition_identities(monkeypatch):
     urls = ["https://developer.arm.com/intrinsics/#q=a", "https://developer.arm.com/intrinsics/#q=b",
             "https://developer.arm.com/ecosystem-dashboard/linux?package=a",
