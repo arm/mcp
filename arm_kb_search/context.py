@@ -22,6 +22,10 @@ CONTEXT_SCOPES = {"chunks", "page", "parent_resource"}
 
 def _document_key(row: dict, url: str) -> tuple:
     # Keep versioned documents and query/fragment identities distinct.
+    for field in ("platform", "edition", "version"):
+        value = row.get(field)
+        if value is not None and not isinstance(value, str):
+            raise _unavailable(url, f"invalid {field} identity; expected a string or null")
     return (url, *(row.get(field, "") for field in ("platform", "edition", "version")))
 
 
@@ -148,6 +152,7 @@ class DocumentContextIndex:
 
     def __init__(self, metadata: list[dict[str, Any]], resources):
         rows_by_document: dict[tuple, list[dict]] = {}
+        invalid_documents: dict[str, ValueError] = {}
         known_parents: dict[tuple, set[str]] = {}
         members: dict[str, set[tuple]] = {}
         keys_by_url: dict[str, list[tuple]] = {}
@@ -162,7 +167,13 @@ class DocumentContextIndex:
             context_url = context.get("url") if isinstance(context, dict) else None
             url = context_url if isinstance(context_url, str) and context_url else _fallback_document_url(row)
             if isinstance(url, str) and url:
-                key = _document_key(row, url)
+                try:
+                    key = _document_key(row, url)
+                except ValueError as exc:
+                    invalid_documents[url] = ValueError(str(exc))
+                    # Retain unknown variants and parent membership. Any expansion
+                    # of this URL is unsafe; unrelated URLs remain usable.
+                    key = (url,)
                 rows_by_document.setdefault(key, []).append(row)
                 if isinstance(context_url, str) and context_url:
                     position = (key, context.get("chunk_index"))
@@ -183,7 +194,8 @@ class DocumentContextIndex:
 
         # Record errors at the narrowest scope: a bad parent need not prevent
         # reading a valid page, and a bad page need not block another document.
-        self.documents = {key: _prepare(_ordered_chunks, key, rows, resources, split_positions)
+        self.documents = {key: invalid_documents[key[0]] if key[0] in invalid_documents else
+                          _prepare(_ordered_chunks, key, rows, resources, split_positions)
                           for key, rows in rows_by_document.items()}
         self.document_parents = {key: _prepare(_parent_url, key, document, known_parents[key])
                                  for key, document in self.documents.items()}
