@@ -19,12 +19,12 @@ The commands below verify **image provenance**. They do not verify the SBOM
 attestations or attest the separate SBOM files offered as release downloads. SBOM (for AMD64 or Arm64) can be downloaded from the images using the following command:
 
 ```bash
-gh attestation verify 
-  oci://docker.io/armlimited/arm-mcp:3.5.0-arm64 
-  --repo arm/mcp 
-  --predicate-type https://cyclonedx.org/bom 
-  --bundle-from-oci 
-  --format json |
+gh attestation verify \
+  oci://docker.io/armlimited/arm-mcp:3.5.0-arm64 \
+  --repo arm/mcp \
+  --predicate-type https://cyclonedx.org/bom \
+  --bundle-from-oci \
+  --format json |
 jq '.[0].verificationResult.statement.predicate' > sbom-arm64.json
 ```
 
