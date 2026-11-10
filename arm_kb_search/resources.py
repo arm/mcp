@@ -302,10 +302,10 @@ def search(
         search_results = ranked_candidates(expanded_pool_size)
 
     selected = search_results[:resolved_k]
-    if scope != "chunks":
+    if scope != "chunks" and selected:
         if resources._document_context is None:
-            resources._document_context = DocumentContextIndex(resources.metadata)
-        selected = resources._document_context.expand(selected, resources, scope)
+            resources._document_context = DocumentContextIndex(resources.metadata, resources)
+        selected = resources._document_context.expand(selected, scope)
 
     formatted = [
         {

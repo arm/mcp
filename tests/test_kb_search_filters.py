@@ -265,6 +265,46 @@ def test_context_unindexable_records_preserve_other_documents(monkeypatch, field
     assert [h["snippet"] for h in search("needle", state, scope="page")] == [selected["original_text"]]
 
 
+def test_context_catalog_keeps_unrelated_failures_local(monkeypatch):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(url, pages=pages) for url in pages]
+    broken_url = "https://example.org/broken/"
+    broken = context_row(broken_url, count=2, pages=[broken_url])
+    state = SearchResources([broken, *rows], QueryModel(), None, None, include_disclaimers=False)
+    selected = rows[1]
+    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": selected}])
+    expected = search("needle", state, scope="parent_resource")
+    assert [hit["context"]["page_url"] for hit in expected] == pages
+    selected = broken
+    with pytest.raises(ValueError, match="chunks are missing"):
+        search("needle", state, scope="page")
+    selected = rows[1]
+    assert search("needle", state, scope="parent_resource") == expected
+
+
+def test_context_parent_scope_rejects_unordered_unlisted_members(monkeypatch):
+    pages = ["https://example.org/path/", "https://example.org/path/a/"]
+    rows = [context_row(url, pages=pages) for url in pages]
+    orphan = {"url": "https://example.org/path/b/#section", "page_url": "https://example.org/path/b/",
+              "parent_page_url": pages[0], "original_text": "Unordered sibling"}
+    state = SearchResources([*rows, orphan], QueryModel(), None, None, include_disclaimers=False)
+    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": rows[1]}])
+    with pytest.raises(ValueError, match="inconsistent parent"):
+        search("needle", state, scope="parent_resource")
+    assert [h["snippet"] for h in search("needle", state, scope="page")] == [rows[1]["original_text"]]
+
+
+def test_context_parent_scope_rejects_unindexable_variants(monkeypatch):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(url, pages=pages) for url in pages]
+    other_version = {"url": pages[1], "page_url": pages[1], "version": "v2", "original_text": "Other version"}
+    state = SearchResources([*rows, other_version], QueryModel(), None, None, include_disclaimers=False)
+    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [{"metadata": rows[1]}])
+    with pytest.raises(ValueError, match="ambiguous document"):
+        search("needle", state, scope="parent_resource")
+    assert [h["snippet"] for h in search("needle", state, scope="page")] == [rows[1]["original_text"]]
+
+
 def test_context_keeps_intrinsic_dashboard_and_edition_identities(monkeypatch):
     urls = ["https://developer.arm.com/intrinsics/#q=a", "https://developer.arm.com/intrinsics/#q=b",
             "https://developer.arm.com/ecosystem-dashboard/linux?package=a",
