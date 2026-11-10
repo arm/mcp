@@ -274,6 +274,48 @@ def test_context_citation_fallback_preserves_document_identity(monkeypatch, sour
     assert search("needle", state) == baseline
 
 
+@pytest.mark.parametrize("parent_location", ["context", "legacy_context", "row", "legacy_row"])
+@pytest.mark.parametrize("invalid_url", [None, "", []])
+def test_context_parent_rejects_members_without_document_urls(monkeypatch, parent_location, invalid_url):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(url, pages=pages) for url in pages]
+    orphan = {"url": invalid_url, "page_url": invalid_url, "resolved_url": invalid_url,
+              "platform": [], "original_text": "Stored content with lost document identity",
+              "document_context": {"url": invalid_url}}
+    target = orphan["document_context"] if "context" in parent_location else orphan
+    target["learning_path_url" if parent_location.startswith("legacy") else "parent_page_url"] = pages[0]
+    if parent_location.startswith("legacy"):
+        target["parent_page_url"] = None  # An empty new field must not hide legacy evidence.
+    unrelated = context_row("https://example.org/other/", pages=["https://example.org/other/"])
+    selected = [rows[0]]
+    state = context_resources(monkeypatch, [*rows, orphan, unrelated], selected)
+    before = deepcopy(state.metadata)
+    baseline = search("needle", state)
+    with pytest.raises(ValueError, match="stored sibling has no usable document URL"):
+        search("needle", state, scope="parent_resource")
+    assert search("needle", state) == baseline
+    assert len(search("needle", state, scope="page")) == 1
+    selected[:] = [unrelated]
+    assert [h["snippet"] for h in search("needle", state, scope="parent_resource")] == [unrelated["original_text"]]
+    assert state.metadata == before
+
+
+@pytest.mark.parametrize("location", ["context", "row"])
+def test_context_rejects_conflicting_parent_aliases(monkeypatch, location):
+    roots = ["https://example.org/one/", "https://example.org/two/"]
+    rows = [context_row(root, pages=[root]) for root in roots]
+    sibling = context_row("https://example.org/sibling/")
+    target = sibling["document_context"] if location == "context" else sibling
+    target.update(parent_page_url=roots[0], learning_path_url=roots[1])
+    selected = []
+    state = context_resources(monkeypatch, [*rows, sibling], selected)
+    for row in rows:
+        selected[:] = [row]
+        with pytest.raises(ValueError, match="stored sibling is omitted"):
+            search("needle", state, scope="parent_resource")
+        assert len(search("needle", state, scope="page")) == 1
+
+
 def test_context_catalog_keeps_unrelated_failures_local(monkeypatch):
     pages = ["https://example.org/path/", "https://example.org/path/step/"]
     rows = [context_row(url, pages=pages) for url in pages]
