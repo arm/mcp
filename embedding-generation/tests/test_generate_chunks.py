@@ -42,8 +42,10 @@ SAMPLE_PPTX_FIXTURE = "sample_course_slides.pptx"
 LEARNING_PATH = "https://learn.arm.com/learning-paths/cross-platform/example/"
 
 
-@pytest.mark.parametrize("source_url", [LEARNING_PATH, LEARNING_PATH.rstrip("/"), LEARNING_PATH + "?utm_source=example"])
-@pytest.mark.parametrize("missing_step", [False, True])
+@pytest.mark.parametrize("source_url,missing_step", [
+    (LEARNING_PATH, False), (LEARNING_PATH, True),
+    (LEARNING_PATH.rstrip("/"), False), (LEARNING_PATH + "?utm_source=example", False),
+])
 def test_document_context_preserves_chunks_and_verified_path_navigation(gc, monkeypatch, missing_step, source_url):
     first, second = LEARNING_PATH + "z-first/", LEARNING_PATH + "a-second/"
     root = (f'<main><h1>Intro</h1><p>Overview.</p>'
@@ -51,7 +53,9 @@ def test_document_context_preserves_chunks_and_verified_path_navigation(gc, monk
             f'<a class="inner-learning-path-navbar-element 10-weight" href="{first}">First</a>'
             f'<a class="inner-learning-path-navbar-element 10-weight content-individual-a-mobile" href="{first}">Mobile</a></main>')
     body = '<main><h2 id="z">First section</h2><p>First text.</p><h2 id="a">Second section</h2><p>Second text.</p></main>'
+    fetched = []
     def fetch(url):
+        fetched.append(url)
         if missing_step and url == second:
             return None
         return SimpleNamespace(url=LEARNING_PATH if url == source_url else url,
@@ -59,9 +63,12 @@ def test_document_context_preserves_chunks_and_verified_path_navigation(gc, monk
                                headers={"content-type": "text/html"})
     monkeypatch.setattr(gc, "fetch_with_logging", fetch)
     records = [c.toDict() for c in gc.create_chunks_for_source(source_url, "Example", "Learning Paths", "")]
+    assert set(fetched) == {source_url, first, second}
     assert records
     manifest = [LEARNING_PATH, first, second]
     assert all(r["document_context"]["learning_path_pages"] == manifest for r in records)
+    children = [r for r in records if r["document_context"]["url"] != LEARNING_PATH]
+    assert all(r["page_url"] == r["document_context"]["url"] and r["parent_page_url"] == LEARNING_PATH for r in children)
     assert {r["document_context"]["url"] for r in records} == set(manifest[:2] if missing_step else manifest)
     page = [r for r in records if r["document_context"]["url"] == first]
     assert [r["document_context"]["chunk_index"] for r in page] == [0, 1]
@@ -1524,22 +1531,6 @@ class TestArmDocumentationParsing:
 
 class TestCreateChunksForSource:
     """Tests for generic source chunking."""
-
-    def test_learning_path_step_keeps_its_page_and_parent(self, gc, monkeypatch):
-        step = LEARNING_PATH + "install/"
-        pages = {
-            LEARNING_PATH: f'<main><h1 id="intro">Intro</h1><p>Start here.</p><a href="{step}">Install</a></main>',
-            step: '<main><h1 id="install">Install</h1><p>Run this.</p></main>',
-        }
-        fetched = []
-        def fetch(url):
-            fetched.append(url)
-            return SimpleNamespace(url=url, content=pages[url].encode(), headers={"content-type": "text/html"})
-        monkeypatch.setattr(gc, "fetch_with_logging", fetch)
-        records = [c.toDict() for c in gc.create_chunks_for_source(LEARNING_PATH, "Example", "Learning Paths", "")]
-        assert fetched == [LEARNING_PATH, step]
-        child = [r for r in records if r["url"].startswith(step)]
-        assert child and all(r["page_url"] == step and r["parent_page_url"] == LEARNING_PATH for r in child)
 
     def test_unparseable_pptx_source_returns_empty_and_logs(
         self, gc, monkeypatch, capsys

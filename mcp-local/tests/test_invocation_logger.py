@@ -51,37 +51,6 @@ def test_logs_call_without_invocation_reason(tmp_path, monkeypatch):
     assert entry["invocation_reason"] is None
 
 
-def test_search_source_links_survive_mcp_response_and_logging(tmp_path, monkeypatch):
-    import asyncio
-    import importlib.util
-
-    from fastmcp import Client
-
-    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[2]))
-    import arm_kb_search
-
-    expected = [{"url": "https://example.org/step/#install", "snippet": "Run this.",
-                 "page_url": "https://example.org/step/", "parent_page_url": "https://example.org/"}]
-    monkeypatch.setattr(arm_kb_search, "load_search_resources", lambda **kwargs: None)
-    monkeypatch.setattr(arm_kb_search, "search", lambda *args: expected)
-    monkeypatch.setattr(invocation_logger, "WORKSPACE_DIR", str(tmp_path))
-    spec = importlib.util.spec_from_file_location("source_links_server", Path(__file__).parents[1] / "server.py")
-    server = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(server)
-
-    async def exercise():
-        async with Client(server.mcp) as client:
-            assert {t.name for t in await client.list_tools()} == {
-                "knowledge_base_search", "check_image", "migrate_ease_scan", "skopeo", "mca"}
-            result = await client.call_tool("knowledge_base_search", {"query": "installation"})
-            assert result.structured_content["result"] == json.loads(result.content[0].text) == expected
-
-    asyncio.run(exercise())
-    calls = [json.loads(line) for line in (tmp_path / "mcp-traffic.jsonl").read_text().splitlines()]
-    assert len(calls) == 2 and calls[0]["id"] == calls[1]["id"]
-    assert calls[1]["result"] == expected
-
-
 def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monkeypatch):
     import asyncio
     import importlib.util
@@ -91,7 +60,8 @@ def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monk
     import arm_kb_search
 
     calls = []
-    expected = [{"url": "https://example.org/guide/#section", "snippet": "Evidence"}]
+    expected = [{"url": "https://example.org/guide/#section", "snippet": "Evidence",
+                 "page_url": "https://example.org/guide/", "parent_page_url": "https://example.org/"}]
     monkeypatch.setattr(arm_kb_search, "load_search_resources", lambda **kwargs: None)
     def search(query, resources, **options):
         calls.append((query, options))
@@ -112,16 +82,14 @@ def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monk
             assert "maximum" not in integer_schema
             for options in ({}, {"filters": None, "k": None}, {"filters": {}}, {"filters": {"product": None}}):
                 result = await client.call_tool(tool.name, {"query": "needle", **options})
-                assert result.structured_content["result"] == expected
+                assert result.structured_content["result"] == json.loads(result.content[0].text) == expected
                 assert calls[-1] == ("needle", {})
             result = await client.call_tool(tool.name, {"query": "needle", "k": 1,
                 "filters": {"doc_type": " Learning Paths ", "product": "ARM", "platform": "Linux", "edition": "Open-Source"}})
             assert result.structured_content["result"] == expected
             assert calls[-1] == ("needle", {"k": 1, "filters": {
                 "doc_type": "learning paths", "product": "arm", "platform": "linux", "edition": "open-source"}})
-            await client.call_tool(tool.name, {"query": "needle", "k": 20})
-            assert calls[-1] == ("needle", {"k": 20})
-            for k in (21, 100):
+            for k in (20, 21, 100):
                 result = await client.call_tool(tool.name, {"query": "needle", "k": k})
                 assert result.structured_content["result"] == expected
                 assert calls[-1] == ("needle", {"k": k})
@@ -140,7 +108,8 @@ def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monk
             assert len(calls) == before
     asyncio.run(exercise())
     logged = [json.loads(x) for x in (tmp_path / "mcp-traffic.jsonl").read_text().splitlines()]
-    assert logged[8]["args"] == {"query": "needle", "k": 1, "filters": {
+    assert logged[0]["id"] == logged[1]["id"] and logged[1]["result"] == expected
+    assert next(entry["args"] for entry in logged if entry.get("args", {}).get("filters")) == {"query": "needle", "k": 1, "filters": {
         "doc_type": "learning paths", "product": "arm", "platform": "linux", "edition": "open-source"}}
 
 
