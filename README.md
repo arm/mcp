@@ -178,8 +178,11 @@ these options keeps the default unfiltered search with up to five matching chunk
 - `filters`: exact `doc_type`, `product`, `platform`, and `edition` values,
   combined with AND, ignoring case and surrounding whitespace. Missing tags
   cannot match; use known labels. Platform/edition coverage is currently sparse.
-- `k`: integer 1–20, default 5 when omitted/null. Limits ranked seed results,
-  not tokens or expanded chunks. Invalid options are rejected.
+- `k`: any positive integer, default 5 when omitted/null. Limits ranked seed
+  results, not tokens or expanded chunks. Fewer results may be available.
+  Agents are instructed to use at most 20; this is guidance, not an API limit.
+  Direct calls such as `k=100` use the same interface without special configuration.
+  Invalid types and non-positive values are rejected.
 
 | Scope | Content returned |
 | --- | --- |

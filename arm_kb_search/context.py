@@ -46,6 +46,9 @@ class DocumentContextIndex:
                     context.setdefault("parent_page_url", context.pop("learning_path_url"))
                     row = {**row, "document_context": context}
                 self.documents.setdefault(_document_key(row, context["url"]), []).append(row)
+        self.document_keys_by_url: dict[str, list[tuple]] = {}
+        for key in self.documents:
+            self.document_keys_by_url.setdefault(key[0], []).append(key)
 
     def ordered_chunks(self, key: tuple, resources) -> list[dict]:
         rows = self.documents.get(key, [])
@@ -97,8 +100,17 @@ class DocumentContextIndex:
                 raise _unavailable(row.get("url", ""), "document metadata is absent")
             # A separately acquired copy of a step can lack a path manifest.
             # Use the verified copy from the same stored document when available.
-            context = self.ordered_chunks(_document_key(row, context["url"]), resources)[0]["document_context"]
+            seed_key = _document_key(row, context["url"])
+            seed_chunks = self.ordered_chunks(seed_key, resources)
+            context = seed_chunks[0]["document_context"]
             root = context.get("parent_page_url")
+            if scope == "parent_resource":
+                if any(chunk["document_context"].get("parent_page_url") != root for chunk in seed_chunks):
+                    raise _unavailable(context["url"], "inconsistent parent identity across chunks")
+                if root is not None and (not isinstance(root, str) or not root):
+                    raise _unavailable(context["url"], "invalid parent identity")
+                if root is None and any("learning_path_pages" in chunk["document_context"] for chunk in seed_chunks):
+                    raise _unavailable(context["url"], "parent manifest has no parent identity")
             pages = [context["url"]]
             resolved_scope = "page"
             if scope == "parent_resource" and root:
@@ -110,9 +122,15 @@ class DocumentContextIndex:
                     raise _unavailable(root, "the parent resource page order is absent or invalid")
                 resolved_scope = "parent_resource"
             for page_index, page_url in enumerate(pages):
-                key = _document_key(row, page_url)
-                if key in seen:
-                    continue
+                key = seed_key
+                if resolved_scope == "parent_resource":
+                    # URL-only manifests cannot disambiguate multiple stored variants.
+                    # Each sibling can legitimately have its own version/edition/platform.
+                    keys = self.document_keys_by_url.get(page_url, [])
+                    if len(keys) != 1:
+                        reason = "document is missing" if not keys else "ambiguous document variants"
+                        raise _unavailable(page_url, reason)
+                    key = keys[0]
                 chunks = self.ordered_chunks(key, resources)
                 if resolved_scope == "parent_resource" and any(
                     chunk["document_context"].get("learning_path_pages") != pages
@@ -120,6 +138,8 @@ class DocumentContextIndex:
                     for chunk in chunks
                 ):
                     raise _unavailable(root, "inconsistent parent resource manifests")
+                if key in seen:
+                    continue
                 seen.add(key)
                 for chunk in chunks:
                     output.append({"metadata": chunk, "context": {

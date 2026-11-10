@@ -107,6 +107,9 @@ def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monk
             tool = next(t for t in await client.list_tools() if t.name == "knowledge_base_search")
             assert {"query", "invocation_reason", "filters", "k", "scope"} == set(tool.inputSchema["properties"])
             assert tool.inputSchema["properties"]["scope"]["enum"] == ["chunks", "page", "parent_resource"]
+            integer_schema = next(s for s in tool.inputSchema["properties"]["k"]["anyOf"] if s["type"] == "integer")
+            assert integer_schema["minimum"] == 1
+            assert "maximum" not in integer_schema
             for options in ({}, {"filters": None, "k": None}, {"filters": {}}, {"filters": {"product": None}}):
                 result = await client.call_tool(tool.name, {"query": "needle", **options})
                 assert result.structured_content["result"] == expected
@@ -118,13 +121,17 @@ def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monk
                 "doc_type": "learning paths", "product": "arm", "platform": "linux", "edition": "open-source"}})
             await client.call_tool(tool.name, {"query": "needle", "k": 20})
             assert calls[-1] == ("needle", {"k": 20})
+            for k in (21, 100):
+                result = await client.call_tool(tool.name, {"query": "needle", "k": k})
+                assert result.structured_content["result"] == expected
+                assert calls[-1] == ("needle", {"k": k})
             empty = await client.call_tool(tool.name, {"query": "needle", "filters": {"product": "missing"}})
             assert empty.structured_content["result"] == []
             for scope in ("chunks", "page", "parent_resource"):
                 await client.call_tool(tool.name, {"query": "needle", "scope": scope})
                 assert calls[-1] == ("needle", {} if scope == "chunks" else {"scope": scope})
             before = len(calls)
-            invalid = [{"k": v} for v in (0, -1, 21, True, 1.5, "3")]
+            invalid = [{"k": v} for v in (0, -1, True, 1.5, "3")]
             invalid += [{"scope": v} for v in (None, "parent", "learning_path", "PAGE", [], True)]
             invalid += [{"filters": f} for f in ({"unknown": "x"}, {"product": " "}, {"product": 3}, {"product": ["Arm"]}, [])]
             for options in invalid:
