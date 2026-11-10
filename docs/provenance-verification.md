@@ -16,7 +16,8 @@ The release links to two kinds of signed statements:
 | **SBOM attestations (AMD64 and Arm64)** | The recorded inventory of software components in each architecture's image. | Each architecture's own container image digest. |
 
 The commands below verify **image provenance**. They do not verify the SBOM
-attestations or attest the separate SBOM files offered as release downloads. SBOM (for AMD64 or Arm64) can be downloaded from the images using the following command:
+attestations or attest the separate SBOM files offered as release downloads.
+The Arm64 SBOM can be downloaded from its image using the following command:
 
 ```bash
 gh attestation verify \
@@ -27,6 +28,9 @@ gh attestation verify \
   --format json |
 jq '.[0].verificationResult.statement.predicate' > sbom-arm64.json
 ```
+
+Replace `arm64` with `amd64` in the image tag and output filename to get the
+other SBOM.
 
 ## One provenance statement, several places to retrieve it
 
