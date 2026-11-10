@@ -336,6 +336,16 @@ def test_filter_matching_normalizes_values_and_excludes_missing_metadata(name):
     lookup = MetadataFilterIndex(metadata)
     assert lookup.eligible_ids(SearchFilters.parse({name: " linux "})) == (0, 1)
     assert lookup.eligible_ids(SearchFilters.parse({name: "unknown"})) == ()
+    choices = [" LINUX ", "windows", "linux", "unknown"]
+    filters = SearchFilters.parse({name: choices})
+    assert getattr(filters, name) == ("linux", "windows", "unknown")
+    assert replace(filters) == filters  # Normalized tuples can be reused by Python callers.
+    assert choices == [" LINUX ", "windows", "linux", "unknown"]
+    choices.clear()
+    assert lookup.eligible_ids(filters) == (0, 1, 2)
+    assert lookup.eligible_ids(SearchFilters.parse({name: ["linux"]})) == (0, 1)
+    assert lookup.eligible_ids(SearchFilters.parse({name: ["unknown"]})) == ()
+    assert lookup.eligible_ids(SearchFilters.parse({name: "linux,windows"})) == ()
     assert metadata[0][name] == " Linux "  # Matching never rewrites returned metadata.
 
 
@@ -344,7 +354,8 @@ def test_empty_filters_are_unrestricted(filters):
     assert MetadataFilterIndex([{}]).eligible_ids(SearchFilters.parse(filters)) is None
 
 
-@pytest.mark.parametrize("value", ["", "  ", [], {}, 1, True])
+@pytest.mark.parametrize("value", ["", "  ", [], (), {}, 1, True,
+                                   [None], ["linux", " "], ["linux", 1], [["linux"]]])
 def test_invalid_filter_values(value):
     with pytest.raises(ValueError, match="non-empty string"):
         SearchFilters.parse({"product": value})
@@ -354,6 +365,22 @@ def test_invalid_filter_values(value):
 def test_invalid_filter_objects(value):
     with pytest.raises(ValueError):
         SearchFilters.parse(value)
+
+
+def test_filter_alternatives_combine_before_ranking_and_share_k():
+    tags = [("linux", "Install Guides"), ("windows", "Learning Paths"),
+            ("windows", "Install Guides"), ("macos", "Learning Paths"),
+            ("linux", "Intrinsic"), (None, "Install Guides"), ("linux", None)]
+    rows = [chunk(i, platform=platform, doc_type=doc_type, original_text=f"Jenkins setup instructions {i}")
+            for i, (platform, doc_type) in enumerate(tags)]
+    state = SearchResources(rows, QueryModel(), index_for([[i / 10, 0] for i in range(len(rows))]),
+                            build_bm25_index(rows), include_disclaimers=False)
+    filters = {"platform": ["linux", "windows"], "doc_type": ["Install Guides", "Learning Paths"]}
+    assert MetadataFilterIndex(rows).eligible_ids(SearchFilters.parse(filters)) == (0, 1, 2)
+    hits = search("needle", state, k=10, filters=filters)
+    assert {hit["url"] for hit in hits} == {rows[i]["url"] for i in (0, 1, 2)}
+    assert search("needle", state, k=2, filters=filters) == hits[:2]
+    assert [h["url"] for h in search("needle", state, filters={**filters, "platform": "linux"})] == [rows[0]["url"]]
 
 
 def test_combined_filters_apply_before_dashboard_deduplication():

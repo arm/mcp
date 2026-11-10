@@ -80,6 +80,13 @@ def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monk
             integer_schema = next(s for s in tool.inputSchema["properties"]["k"]["anyOf"] if s["type"] == "integer")
             assert integer_schema["minimum"] == 1
             assert "maximum" not in integer_schema
+            filter_schema = next(s for s in tool.inputSchema["properties"]["filters"]["anyOf"]
+                                 if s["type"] == "object")["properties"]
+            for field in ("doc_type", "product", "platform", "edition"):
+                options = filter_schema[field]["anyOf"]
+                assert {option["type"] for option in options} == {"string", "array", "null"}
+                array = next(option for option in options if option["type"] == "array")
+                assert array["minItems"] == 1 and array["items"]["type"] == "string"
             for options in ({}, {"filters": None, "k": None}, {"filters": {}}, {"filters": {"product": None}}):
                 result = await client.call_tool(tool.name, {"query": "needle", **options})
                 assert result.structured_content["result"] == json.loads(result.content[0].text) == expected
@@ -89,6 +96,14 @@ def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monk
             assert result.structured_content["result"] == expected
             assert calls[-1] == ("needle", {"k": 1, "filters": {
                 "doc_type": "learning paths", "product": "arm", "platform": "linux", "edition": "open-source"}})
+            alternatives = {"doc_type": [" Learning Paths ", "Install Guides", "learning paths"],
+                            "platform": [" Linux ", "Windows"], "product": ["ARM"], "edition": ["OPEN-SOURCE"]}
+            await client.call_tool(tool.name, {"query": "needle", "filters": alternatives, "k": 2})
+            assert calls[-1] == ("needle", {"k": 2, "filters": {
+                "doc_type": ["learning paths", "install guides"], "platform": ["linux", "windows"],
+                "product": ["arm"], "edition": ["open-source"]}})
+            await client.call_tool(tool.name, {"query": "needle", "filters": {"platform": ["linux", "windows"], "product": "Arm"}})
+            assert calls[-1] == ("needle", {"filters": {"platform": ["linux", "windows"], "product": "arm"}})
             for k in (20, 21, 100):
                 result = await client.call_tool(tool.name, {"query": "needle", "k": k})
                 assert result.structured_content["result"] == expected
@@ -101,7 +116,8 @@ def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monk
             before = len(calls)
             invalid = [{"k": v} for v in (0, -1, True, 1.5, "3")]
             invalid += [{"scope": v} for v in (None, "parent", "learning_path", "PAGE", [], True)]
-            invalid += [{"filters": f} for f in ({"unknown": "x"}, {"product": " "}, {"product": 3}, {"product": ["Arm"]}, [])]
+            invalid += [{"filters": f} for f in ({"unknown": "x"}, {"product": " "}, {"product": 3}, [])]
+            invalid += [{"filters": {"platform": v}} for v in ([], [None], ["linux", " "], ["linux", 3], [["linux"]])]
             for options in invalid:
                 with pytest.raises(ToolError):
                     await client.call_tool(tool.name, {"query": "needle", **options})

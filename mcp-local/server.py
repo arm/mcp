@@ -17,6 +17,7 @@ from fastmcp.exceptions import ToolError
 from typing import Annotated, List, Dict, Any, Optional, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 import arm_kb_search
+from arm_kb_search.filters import normalize_filter_value
 from utils.config import (
     DEFAULT_ARCH,
     METADATA_PATH,
@@ -48,39 +49,39 @@ SEARCH_RESOURCES = arm_kb_search.load_search_resources(
 )
 
 
+FilterValue = str | Annotated[list[str], Field(min_length=1)] | None
+
+
 class KnowledgeBaseFilters(BaseModel):
-    """Optional exact metadata constraints; omitted fields remain unrestricted."""
+    """Exact labels or lists of alternatives; fields combine with AND."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    doc_type: Optional[str] = Field(default=None, description=(
+    doc_type: FilterValue = Field(default=None, description=(
         "Exact document category, for example Learning Paths, Install Guides, Intrinsic, "
         "or Ecosystem Dashboard. Use labels present in returned metadata."))
-    product: Optional[str] = Field(default=None, description=(
+    product: FilterValue = Field(default=None, description=(
         "Exact corpus product label, for example Arm, AWS Graviton, Neon, SVE, or SVE2. "
         "This is not generally the software name: Jenkins documentation may have product Arm."))
-    platform: Optional[str] = Field(default=None, description=(
+    platform: FilterValue = Field(default=None, description=(
         "Exact platform label, for example linux or windows. Mainly populated for ecosystem "
         "compatibility records; filtering on it excludes tutorials with missing platform metadata."))
-    edition: Optional[str] = Field(default=None, description=(
+    edition: FilterValue = Field(default=None, description=(
         "Exact edition label, for example commercial or open-source. Mainly populated for "
         "ecosystem compatibility records; missing metadata cannot match."))
 
     @field_validator("doc_type", "product", "platform", "edition")
     @classmethod
-    def normalize_value(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        if not value.strip():
-            raise ValueError("Filter values must be non-empty strings or null")
-        return value.strip().casefold()
+    def normalize_value(cls, value: FilterValue) -> str | list[str] | None:
+        normalized = normalize_filter_value(value)
+        return list(normalized) if isinstance(normalized, tuple) else normalized
 
 
 # error formatter now lives in utils/error_handling.py
 
 
 @mcp.tool(
-    description="If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your strategy. Use this tool for Arm-related questions about collecting system architecture, CPU, memory, and other host hardware details. Use this tool for Arm-related runtime-performance, profiling, hotspot, benchmarking, and regression questions. Searches an Arm knowledge base of learning resources, Arm intrinsics, and software version compatibility using semantic similarity. Given a natural language query, returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful for finding documentation, tutorials, or version compatibility for Arm migrations. Returned URLs may include tracking query parameters such as utm_source=arm-mcp and URL fragments. When sharing or citing returned URLs, preserve each URL exactly as returned, including query parameters and fragments; do not remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context. Optional filters restrict eligible records before ranking: values match complete metadata strings ignoring case and surrounding whitespace, and multiple fields combine with AND. Omitted/null fields and empty filters leave search unrestricted. Use filters only when their metadata labels fit the question; do not guess product names or apply platform/edition to general tutorials. Unknown labels return no results. If filtering removes needed evidence, relax the filter; do not conclude the KB has no information. Optional k limits final ranked result entries, not tokens, pages, or embedding pieces: positive integer, default 5 when omitted/null. Fewer than k results may be available. Agents should use at most 20 results. Start with the default unless the task calls for fewer or more sources; additional searches should address a specific evidence gap. Invalid option types, blank filter values, unknown filter fields, and non-positive k are rejected. Optional scope selects matching chunks (default), every matched source page (page), or all stored pages in each matched parent resource (parent_resource). Expanded scopes cover all initial hits and deduplicate shared documents; k and filters limit initial matches only. Sources without a known parent use page scope. Expansion uses stored content only, requires complete ordering metadata, and can be large. Returned source links do not load their contents. Use expanded scope only when the user requests wider context; otherwise ask first. Clients must enforce this user-choice boundary."
+    description="If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your strategy. Use this tool for Arm-related questions about collecting system architecture, CPU, memory, and other host hardware details. Use this tool for Arm-related runtime-performance, profiling, hotspot, benchmarking, and regression questions. Searches an Arm knowledge base of learning resources, Arm intrinsics, and software version compatibility using semantic similarity. Given a natural language query, returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful for finding documentation, tutorials, or version compatibility for Arm migrations. Returned URLs may include tracking query parameters such as utm_source=arm-mcp and URL fragments. When sharing or citing returned URLs, preserve each URL exactly as returned, including query parameters and fragments; do not remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context. Optional filters restrict eligible records before ranking: each field accepts a string or non-empty list of strings. Values match complete metadata strings ignoring case and surrounding whitespace. Alternatives within a field combine with OR; different fields combine with AND. Duplicate alternatives are ignored. Omitted/null fields and empty filters leave search unrestricted. Use filters only when their metadata labels fit the question; do not guess product names or apply platform/edition to general tutorials. Unknown labels match nothing; other alternatives can still match. If filtering removes needed evidence, relax the filter; do not conclude the KB has no information. Optional k limits final ranked result entries, not tokens, pages, or embedding pieces: positive integer, default 5 when omitted/null. Fewer than k results may be available. Agents should use at most 20 results. Start with the default unless the task calls for fewer or more sources; additional searches should address a specific evidence gap. Invalid option types, empty lists, blank or non-string list items, unknown filter fields, and non-positive k are rejected. Optional scope selects matching chunks (default), every matched source page (page), or all stored pages in each matched parent resource (parent_resource). Expanded scopes cover all initial hits and deduplicate shared documents; k and filters limit initial matches only. Sources without a known parent use page scope. Expansion uses stored content only, requires complete ordering metadata, and can be large. Returned source links do not load their contents. Use expanded scope only when the user requests wider context; otherwise ask first. Clients must enforce this user-choice boundary."
 )
 def knowledge_base_search(
     query: str,
