@@ -153,6 +153,7 @@ class DocumentContextIndex:
     def __init__(self, metadata: list[dict[str, Any]], resources):
         rows_by_document: dict[tuple, list[dict]] = {}
         invalid_documents: dict[str, ValueError] = {}
+        invalid_parents: dict[str, ValueError] = {}
         known_parents: dict[tuple, set[str]] = {}
         members: dict[str, set[tuple]] = {}
         keys_by_url: dict[str, list[tuple]] = {}
@@ -160,6 +161,11 @@ class DocumentContextIndex:
         for row in metadata:
             position = None
             context = row.get("document_context")
+            # Parent evidence survives a missing page identity. Read both names
+            # before legacy normalization so conflicting aliases are retained.
+            roots = {value for source in (context, row) if isinstance(source, dict)
+                     for field in ("parent_page_url", "learning_path_url")
+                     if isinstance(value := source.get(field), str) and value}
             if isinstance(context, dict) and "learning_path_url" in context:
                 context = dict(context)
                 context.setdefault("parent_page_url", context.pop("learning_path_url"))
@@ -177,12 +183,12 @@ class DocumentContextIndex:
                 rows_by_document.setdefault(key, []).append(row)
                 if isinstance(context_url, str) and context_url:
                     position = (key, context.get("chunk_index"))
-                roots = known_parents.setdefault(key, set())
-                for root in (context.get("parent_page_url") if isinstance(context, dict) else None,
-                             row.get("parent_page_url", row.get("learning_path_url"))):
-                    if isinstance(root, str) and root:
-                        roots.add(root)
-                        members.setdefault(root, set()).add(key)
+                known_parents.setdefault(key, set()).update(roots)
+                for root in roots:
+                    members.setdefault(root, set()).add(key)
+            else:
+                for root in roots:
+                    invalid_parents[root] = _unavailable(root, "a stored sibling has no usable document URL")
             parent = (row.get("parent_uuid"), row.get("parent_chunk_uuid"))
             if all(isinstance(value, str) and value for value in parent):
                 if parent not in split_positions:
@@ -201,6 +207,7 @@ class DocumentContextIndex:
                                  for key, document in self.documents.items()}
         self.parents = {root: _prepare(_parent_pages, root, keys, keys_by_url, self.documents, self.document_parents)
                         for root, keys in members.items()}
+        self.parents.update(invalid_parents)
 
     def expand(self, seeds: list[dict], scope: str) -> list[dict]:
         output = []
