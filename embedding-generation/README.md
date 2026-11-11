@@ -62,6 +62,14 @@ generated, evaluated, and rejected without changing the released MCP image.
 For a major or hotfix release, run **Build MCP Image** manually with the
 corresponding release action; it opens a separate reviewed version PR.
 
+## Intrinsic Catalog Snapshot
+
+Builds reuse the snapshot pinned by `intrinsic_chunks_image` in `pipeline-inputs.lock.json`.
+To refresh it, prepare new and updated catalog records with `prepare_intrinsic_chunk`,
+preserve their existing IDs and URLs, and publish the full snapshot at
+`/embedding-data/intrinsic_chunks/` in a new image.
+Update the pin to its published digest; builds use the previous snapshot until then.
+
 ## Add Documents
 
 Add one row to `vector-db-sources.csv` for each document:
@@ -258,16 +266,6 @@ cannot be used as baselines; the next completed report establishes a new baselin
 New sources need a rebuilt local corpus: building the MCP image alone uses its
 pinned embedding artifact. See [contribution guidance](../CONTRIBUTING.md#retrieval-evaluations)
 for source-label rules and miss investigation.
-
-Benchmark cases B410–B424 add practical course and Insights queries: CPU
-delegation and benchmarking, quantization, Android integration and validation,
-Ethos-U fallback and output decoding, profiling, and safe SIMD dispatch/loops.
-Their accepted lesson/answer URLs were selected from source content before
-retrieval testing. The original 408 cases and smoke suite remain unchanged.
-The expanded suite needs a fresh baseline; compare the original subset
-separately when checking regressions. A corpus containing only the new sources
-can test ingestion and initial retrieval, but cannot establish performance
-against the complete production corpus.
 
 Run lint and tests with:
 
