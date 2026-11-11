@@ -26,6 +26,8 @@ from types import SimpleNamespace
 from urllib.parse import urlparse
 
 import pytest
+from arm_kb_search import SearchResources
+from arm_kb_search.context import DocumentContextIndex
 
 from document_chunking import (
     chunk_parsed_document,
@@ -75,6 +77,28 @@ def test_document_context_preserves_chunks_and_verified_path_navigation(gc, monk
     assert all(r["document_context"]["chunk_count"] == 2 for r in page)
     assert [r["heading"] for r in page] == ["First section", "Second section"]
     assert not learn_learning_path_step_urls(LEARNING_PATH, f'<a href="{first}">Unordered link</a>', ordered_only=True)
+
+
+def test_acquired_parent_citation_variants_expand_together(gc, monkeypatch):
+    step = LEARNING_PATH + "step/"
+    root_html = (f'<main><h1>Intro</h1><p>Overview.</p>'
+                 f'<a class="inner-learning-path-navbar-element 10-weight" href="{step}">Step</a></main>')
+    step_html = '<main><h1>Step</h1><p>Step instructions.</p></main>'
+    def fetch(url):
+        return SimpleNamespace(url=step if url == step else LEARNING_PATH,
+                               content=(step_html if url == step else root_html).encode(),
+                               headers={"content-type": "text/html"})
+    monkeypatch.setattr(gc, "fetch_with_logging", fetch)
+    records = []
+    for url in (LEARNING_PATH, LEARNING_PATH.rstrip("/"), LEARNING_PATH + "?utm_source=test"):
+        records.extend(c.toDict() for c in gc.create_chunks_for_source(url, "Example", "Learning Paths", ""))
+    state = SearchResources(records, None, None, None)
+    catalog = DocumentContextIndex(records, state)
+    hits = catalog.expand([{"metadata": records[-1]}], "parent_resource")
+    assert [h["context"]["page_url"] for h in hits] == [LEARNING_PATH, step]
+    assert [h["context"]["page_count"] for h in hits] == [2, 2]
+    assert "Overview." in state.snippet_for(hits[0]["metadata"])
+    assert "Step instructions." in state.snippet_for(hits[1]["metadata"])
 
 
 def test_relative_link_evidence_is_retained_when_url_prefix_is_embedded():

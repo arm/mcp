@@ -41,6 +41,12 @@ The first non-empty expansion prepares and validates a document/parent catalog
 for the fixed resource snapshot; subsequent calls reuse its ordered entries.
 Validation errors are retained per document or parent, so an invalid parent can
 still have readable pages and unrelated valid documents remain available.
+Catalog identity treats absent, null, and empty optional platform/edition/version
+fields alike while keeping non-empty variant labels distinct. Duplicate chunks
+must agree on canonical document identity, content, and ordering metadata;
+their original citation URLs may differ and are preserved in results. Parent
+aliases and manifests both provide membership evidence for completeness checks,
+but a manifest alone does not supply missing document-order or parent metadata.
 
 Expansion needs `document_context` format 1: document identity, zero-based chunk
 index/count, and a parent URL/ordered page manifest for parent expansion.

@@ -28,6 +28,7 @@ from usearch.index import Index
 
 from arm_kb_search import SearchFilters, SearchResources, resources, search
 from arm_kb_search.analysis import Synonyms, analyze, atom, name_keys
+from arm_kb_search.context import DocumentContextIndex
 from arm_kb_search.filters import MetadataFilterIndex
 from arm_kb_search.search import (
     bm25_search,
@@ -52,6 +53,116 @@ def context_resources(monkeypatch, rows, selected):
     monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [
         {"metadata": row, "distance": 0.1} for row in selected])
     return SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
+
+
+@pytest.mark.parametrize("field", ["platform", "edition", "version"])
+@pytest.mark.parametrize("layout", ["split", "duplicate", "unordered"])
+def test_context_normalizes_absent_identity_fields(field, layout):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(pages[0], pages=pages),
+            context_row(pages[1], 0, 2, pages=pages), context_row(pages[1], 1, 2, pages=pages)]
+    rows[1][field] = ""
+    rows[2][field] = None
+    if layout == "duplicate":
+        copies = deepcopy(rows)
+        for copy in copies:
+            copy.pop(field, None)
+        rows.extend(copies)
+    elif layout == "unordered":
+        rows[1][field] = None
+        rows.append({"url": pages[1] + "#unordered", "original_text": "Unordered section"})
+    before = deepcopy(rows)
+    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
+    catalog = DocumentContextIndex(rows, state)
+    for scope in ("page", "parent_resource"):
+        if layout == "unordered":
+            with pytest.raises(ValueError, match="missing document-order metadata"):
+                catalog.expand([{"metadata": rows[2]}], scope)
+        else:
+            hits = catalog.expand([{"metadata": rows[2]}], scope)
+            expected = rows[1:3] if scope == "page" else rows[:3]
+            assert [state.snippet_for(h["metadata"]) for h in hits] == [r["original_text"] for r in expected]
+    assert rows == before
+
+
+@pytest.mark.parametrize("citation", [
+    "https://learn.arm.com/learning-paths/cross-platform/example",
+    "https://learn.arm.com/learning-paths/cross-platform/example/?utm_source=test#intro",
+])
+@pytest.mark.parametrize("conflicting_text", [False, True])
+def test_context_compares_document_identity_independently_of_citations(citation, conflicting_text):
+    url = "https://learn.arm.com/learning-paths/cross-platform/example/"
+    original = context_row(url, pages=[url])
+    copy = deepcopy(original)
+    copy["url"] = citation
+    if conflicting_text:
+        copy["original_text"] = "A different revision"
+    for rows in ([original, copy], [copy, original]):
+        before = deepcopy(rows)
+        state = SearchResources(rows, QueryModel(), None, None)
+        catalog = DocumentContextIndex(rows, state)
+        for scope in ("page", "parent_resource"):
+            if conflicting_text:
+                with pytest.raises(ValueError, match="conflicting chunks"):
+                    catalog.expand([{"metadata": copy}], scope)
+            else:
+                hits = catalog.expand([{"metadata": copy}], scope)
+                assert len(hits) == 1
+                assert state.snippet_for(hits[0]["metadata"]) == original["original_text"]
+                assert hits[0]["context"]["page_url"] == url
+                assert hits[0]["metadata"]["url"] in (original["url"], citation)
+        assert rows == before
+
+
+@pytest.mark.parametrize("identity", ["document", "citation", "missing"])
+@pytest.mark.parametrize("parent_alias", [None, "https://example.org/other-parent/"])
+def test_context_retains_manifest_only_parent_evidence(identity, parent_alias):
+    root, step, extra = "https://example.org/path/", "https://example.org/path/step/", "https://example.org/path/extra/"
+    rows = [context_row(url, pages=[root, step]) for url in (root, step)]
+    sibling = context_row(extra, pages=[root, step, extra])
+    sibling["document_context"].pop("parent_page_url")
+    if parent_alias:
+        sibling["document_context"]["parent_page_url"] = parent_alias
+    if identity != "document":
+        sibling["document_context"].pop("url")
+    if identity == "missing":
+        sibling.pop("url")
+    unrelated = context_row("https://example.org/unrelated/", pages=["https://example.org/unrelated/"])
+    rows.extend([sibling, unrelated])
+    before = deepcopy(rows)
+    state = SearchResources(rows, QueryModel(), None, None)
+    catalog = DocumentContextIndex(rows, state)
+    with pytest.raises(ValueError, match="Regenerate chunks"):
+        catalog.expand([{"metadata": rows[0]}], "parent_resource")
+    assert len(catalog.expand([{"metadata": rows[0]}], "page")) == 1
+    assert len(catalog.expand([{"metadata": unrelated}], "parent_resource")) == 1
+    assert rows == before
+
+
+@pytest.mark.parametrize("field", ["page_url", "url", "resolved_url"])
+@pytest.mark.parametrize("suffix", ["", "/?utm_source=test#intro"])
+def test_context_fallback_recognizes_acquisition_root_identity(field, suffix):
+    root = "https://learn.arm.com/learning-paths/cross-platform/example/"
+    row = context_row(root, pages=[root])
+    unordered = {field: root.rstrip("/") + suffix, "original_text": "Unordered section"}
+    rows = [row, unordered]
+    state = SearchResources(rows, QueryModel(), None, None)
+    catalog = DocumentContextIndex(rows, state)
+    for scope in ("page", "parent_resource"):
+        with pytest.raises(ValueError, match="missing document-order metadata"):
+            catalog.expand([{"metadata": row}], scope)
+
+
+def test_context_malformed_fallback_url_only_blocks_its_known_parent():
+    root, other = "https://example.org/path/", "https://example.org/unrelated/"
+    rows = [context_row(root, pages=[root]), context_row(other, pages=[other]),
+            {"url": "https://[broken", "parent_page_url": root, "original_text": "Unknown sibling"}]
+    state = SearchResources(rows, QueryModel(), None, None)
+    catalog = DocumentContextIndex(rows, state)
+    assert len(catalog.expand([{"metadata": rows[1]}], "parent_resource")) == 1
+    assert len(catalog.expand([{"metadata": rows[0]}], "page")) == 1
+    with pytest.raises(ValueError, match="Regenerate chunks"):
+        catalog.expand([{"metadata": rows[0]}], "parent_resource")
 
 
 def test_context_scope_expands_all_hits_once_in_stored_order(monkeypatch):

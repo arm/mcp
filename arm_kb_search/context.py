@@ -15,6 +15,7 @@
 """Expand ranked hits using stored document identities and acquisition order only."""
 
 from typing import Any
+from urllib.parse import urlparse, urlunparse
 
 
 CONTEXT_SCOPES = {"chunks", "page", "parent_resource"}
@@ -22,17 +23,17 @@ CONTEXT_SCOPES = {"chunks", "page", "parent_resource"}
 
 def _document_key(row: dict, url: str) -> tuple:
     # Keep versioned documents and query/fragment identities distinct.
+    variants = []
     for field in ("platform", "edition", "version"):
         value = row.get(field)
         if value is not None and not isinstance(value, str):
             raise _unavailable(url, f"invalid {field} identity; expected a string or null")
-    return (url, *(row.get(field, "") for field in ("platform", "edition", "version")))
+        variants.append(value or "")
+    return (url, *variants)
 
 
 def _fallback_document_url(row: dict) -> str | None:
     """Associate unordered rows with a document without inventing chunk order."""
-    from urllib.parse import urlparse, urlunparse
-
     for field in ("page_url", "url", "resolved_url"):
         url = row.get(field)
         if isinstance(url, str) and url:
@@ -54,6 +55,32 @@ def _fallback_document_url(row: dict) -> str | None:
                                    "/" + "/".join(segments) + "/", "", "", ""))
             return identity
     return None
+
+
+def _normalize_record(row: dict) -> tuple[dict, str | None, set[str]]:
+    """Resolve supported identity representations without changing citations.
+
+    Parent evidence is collected before normalizing aliases. It constrains
+    completeness checks even when the record cannot supply ordered content.
+    A manifest is evidence of membership, not a replacement for missing fields.
+    """
+    context = row.get("document_context")
+    roots = {value for source in (context, row) if isinstance(source, dict)
+             for field in ("parent_page_url", "learning_path_url")
+             if isinstance(value := source.get(field), str) and value}
+    if isinstance(context, dict):
+        pages = context.get("learning_path_pages")
+        if isinstance(pages, list) and pages and isinstance(pages[0], str) and pages[0]:
+            roots.add(pages[0])
+        if "learning_path_url" in context:
+            context = dict(context)
+            legacy_root = context.pop("learning_path_url")
+            if context.get("parent_page_url") in (None, ""):
+                context["parent_page_url"] = legacy_root
+            row = {**row, "document_context": context}
+    context_url = context.get("url") if isinstance(context, dict) else None
+    url = context_url if isinstance(context_url, str) and context_url else _fallback_document_url(row)
+    return row, url, roots
 
 
 def _unavailable(url: str, reason: str) -> ValueError:
@@ -107,7 +134,9 @@ def _ordered_chunks(key: tuple, rows: list[dict], resources, split_positions: di
             previous = chunks[index]
             previous_context = previous["document_context"]
             old_pages, new_pages = (c.get("learning_path_pages") for c in (previous_context, context))
-            if (any(previous.get(f) != row.get(f) for f in ("url", "heading", "title"))
+            # The grouping key already establishes document identity. Citations
+            # may differ across equivalent acquisitions of that same document.
+            if (any(previous.get(f) != row.get(f) for f in ("heading", "title"))
                     or resources.snippet_for(previous) != resources.snippet_for(row)
                     or {k: v for k, v in previous_context.items() if k != "learning_path_pages"}
                     != {k: v for k, v in context.items() if k != "learning_path_pages"}
@@ -173,20 +202,9 @@ class DocumentContextIndex:
         split_positions: dict[tuple, tuple | None] = {}
         for row in metadata:
             position = None
+            row, url, roots = _normalize_record(row)
             context = row.get("document_context")
-            # Parent evidence survives a missing page identity. Read both names
-            # before legacy normalization so conflicting aliases are retained.
-            roots = {value for source in (context, row) if isinstance(source, dict)
-                     for field in ("parent_page_url", "learning_path_url")
-                     if isinstance(value := source.get(field), str) and value}
-            if isinstance(context, dict) and "learning_path_url" in context:
-                context = dict(context)
-                legacy_root = context.pop("learning_path_url")
-                if context.get("parent_page_url") in (None, ""):
-                    context["parent_page_url"] = legacy_root
-                row = {**row, "document_context": context}
             context_url = context.get("url") if isinstance(context, dict) else None
-            url = context_url if isinstance(context_url, str) and context_url else _fallback_document_url(row)
             if isinstance(url, str) and url:
                 try:
                     key = _document_key(row, url)
