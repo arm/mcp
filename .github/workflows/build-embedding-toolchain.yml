@@ -11,6 +11,7 @@ on:
       - embedding-generation/document_chunking.py
       - embedding-generation/ecosystem_dashboard.py
       - embedding-generation/learn_repository.py
+      - embedding-generation/learn_public.py
       - embedding-generation/embedding-model.lock.json
       - embedding-generation/generate-chunks.py
       - embedding-generation/local_vectorstore_creation.py

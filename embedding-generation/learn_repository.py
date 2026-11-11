@@ -1,19 +1,14 @@
-"""Read Learn's published source repositories without fetching rendered pages.
-
-Each repository is resolved once per acquisition. Only Markdown and Insights
-JSON are retained from its commit-pinned archive; assets are streamed past.
-"""
+"""Acquire Learn content from its public repository and public web pages."""
 
 import datetime as dt
 import html
-import json
 import os
 import posixpath
 import re
 import shlex
 import tarfile
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from urllib.parse import quote, unquote, urljoin, urlsplit
 
 import requests
@@ -21,12 +16,11 @@ import yaml
 from markdown_it import MarkdownIt
 
 from document_chunking import parse_html, split_frontmatter
+from learn_public import PublicLearnSources, is_public_learn_url
 
 SITE = "https://learn.arm.com"
 REPOSITORIES = {
     "learning_paths": "ArmDeveloperEcosystem/arm-learning-paths",
-    "courses": "ArmDeveloperEcosystem/courses",
-    "insights": "ArmDeveloperEcosystem/insights",
 }
 SHORTCODE = re.compile(r"\{\{[<%]\s*(.*?)\s*[>%]\}\}", re.S)
 TAGS = (
@@ -97,7 +91,6 @@ def read_archive(stream):
             path = member.name.partition("/")[2]
             if not (
                 (path.startswith("content/") and path.endswith(".md"))
-                or (path.startswith("data/insights/") and path.endswith(".json"))
                 or path == "layouts/shortcodes/comparison-results-table.html"
             ):
                 continue
@@ -111,14 +104,11 @@ def read_archive(stream):
     return files
 
 
-def acquire_repository(kind, session, token=""):
+def acquire_repository(kind, session):
     repository = REPOSITORIES[kind]
     ref = os.getenv(f"LEARN_{kind.upper()}_REF", "production")
-    # Keep credentials on GitHub API requests only. requests removes the header
-    # on cross-host redirects to the archive download URL.
+    # This repository is public; acquisition must work without credentials.
     headers = {"Accept": "application/vnd.github+json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
     api = f"https://api.github.com/repos/{repository}"
     try:
         response = session.get(
@@ -136,7 +126,7 @@ def acquire_repository(kind, session, token=""):
     except (requests.RequestException, KeyError):
         # Do not expose signed redirect URLs or credentials in build logs.
         raise ValueError(
-            f"Cannot acquire {repository} at {ref}; check LEARN_GITHUB_TOKEN read access and the ref"
+            f"Cannot acquire public repository {repository} at {ref}; check availability and the ref"
         ) from None
     print(f"[LEARN SOURCE] {repository}@{revision}: {len(files)} source files")
     snapshot = Repository(repository, revision, files)
@@ -233,9 +223,11 @@ class Repository:
                 route = str(PurePosixPath(relative).parent)
                 if route == ".":
                     route = ""
-            elif metadata.get("slug"):
+            if metadata.get("slug"):
                 route = posixpath.join(posixpath.dirname(route), metadata["slug"])
-            url = public_url(metadata.get("url") or "/" + route + "/")
+            # Hugo lowercases generated paths. Explicit URL overrides retain
+            # their authored casing; the raw source path is never changed.
+            url = public_url(metadata.get("url") or "/" + route.lower() + "/")
             page = Page(path, url, metadata, body)
             self.pages[path] = page
             if url in self.by_url:
@@ -392,9 +384,6 @@ class Repository:
     def documents(self, url):
         documents = []
         for page in self.selected_pages(url):
-            if page.metadata.get("dataset"):
-                documents.extend(self.insight_documents(page))
-                continue
             body = self.markdown(page, page.body)
             introduction = (
                 page.path.startswith("content/learning-paths/")
@@ -481,49 +470,6 @@ class Repository:
             documents.append(document)
         return documents
 
-    def insight_documents(self, page):
-        path = f"data/insights/{page.metadata['dataset']}.json"
-        if path not in self.files:
-            raise ValueError(f"Missing Insights dataset: {path}")
-        dataset = json.loads(self.files[path])
-        if dataset.get("schema_version") != 1 or not isinstance(
-            dataset.get("entries"), list
-        ):
-            raise ValueError(f"Unsupported Insights dataset schema: {path}")
-        documents, seen = [], set()
-        for entry in dataset["entries"]:
-            anchor = entry.get("slug") or entry.get("id")
-            if not isinstance(anchor, str) or not anchor or anchor in seen:
-                raise ValueError(f"Missing or duplicate Insights answer anchor: {path}")
-            seen.add(anchor)
-            question, answer = entry.get("question"), entry.get("answer")
-            if (
-                not isinstance(question, str)
-                or not question.strip()
-                or not isinstance(answer, str)
-                or not answer.strip()
-            ):
-                raise ValueError(f"Invalid Insights question/answer: {path}#{anchor}")
-            document = parse_repository_markdown(
-                answer, page.url, self.resolved_url(path), page.title
-            )
-            document.display_title = page.title
-            # Each answer is separate, even when two questions share headings.
-            # Point all its chunks at the public accordion, not inner headings.
-            for section in document.sections:
-                section.heading_path.insert(0, question)
-                section.url_fragment = anchor
-            documents.append(document)
-        overview = dataset.get("fundamentals", {}).get("paragraphs", [])
-        if overview:
-            document = parse_repository_markdown(
-                "\n\n".join(overview), page.url, self.resolved_url(path), page.title
-            )
-            for section in document.sections:
-                section.url_fragment = "insight-overview-title"
-            documents.insert(0, document)
-        return documents
-
     def discovered_sources(self):
         for page in self.pages.values():
             parts = PurePosixPath(page.path).parts
@@ -540,16 +486,11 @@ class Repository:
                 == "true"
             ):
                 site, label = "Install Guides", "Install Guide"
-            elif family == "courses" and len(parts) == 4 and parts[-1] == "_index.md":
-                site = label = "Educational Course"
-            elif family == "insights" and len(parts) == 4 and parts[-1] == "_index.md":
-                site = label = "Insights"
             else:
                 continue
             yield dict(
                 site_name=site,
-                license_type=page.metadata.get("license")
-                or ("CC-BY-SA-4.0" if family == "insights" else "CC4.0"),
+                license_type=page.metadata.get("license") or "CC4.0",
                 display_name=f"{label} - {page.title}",
                 url=page.url,
                 keywords=page.keywords
@@ -563,14 +504,14 @@ class Repository:
 
 def heading_anchors(markdown):
     """Goldmark's default heading IDs, with duplicate suffixes; leave code alone."""
-    seen, lines = {}, []
+    seen, lines = set(), []
     fence = None
     for line in markdown.splitlines():
         marker = re.match(r"^\s*(`{3,}|~{3,})", line)
         if marker:
             if fence is None:
-                fence = marker[1][0]
-            elif fence == marker[1][0]:
+                fence = marker[1]
+            elif fence[0] == marker[1][0] and len(marker[1]) >= len(fence):
                 fence = None
         heading = (
             re.match(r"^(#{1,6})\s+(.+?)\s*#*\s*$", line) if fence is None else None
@@ -583,38 +524,40 @@ def heading_anchors(markdown):
                 identifier = re.search(r"(?:^|\s)#([^\s]+)", attributes[1])
                 explicit_id = identifier[1] if identifier else None
                 title = title[: attributes.start()].rstrip()
-            plain_title = re.sub(r"\[([^]]+)\]\([^)]*\)", r"\1", title)
-            plain_title = html.unescape(re.sub(r"<[^>]*>", "", plain_title))
+            # Hugo's default Goldmark ID factory sanitizes the raw heading
+            # source, including inline code, link destinations and entities.
             slug = "".join(
-                c.lower() for c in plain_title if c.isalnum() or c in "-_" or c.isspace()
-            )
-            slug = re.sub(r"\s", "-", slug) or "heading"
-            count = seen.get(slug, 0)
-            seen[slug] = count + 1
-            anchor = explicit_id or slug + ("-" + str(count) if count else "")
+                "-" if c == " " else c.lower()
+                for c in title.strip()
+                if c.isalpha() or c.isdecimal() or c in "-_ "
+            ) or "heading"
+            anchor = explicit_id or slug
+            count = 0
+            while not explicit_id and anchor in seen:
+                count += 1
+                anchor = f"{slug}-{count}"
+            seen.add(anchor)
             line = f"{heading[1]} {title} {{#{anchor}}}"
         lines.append(line)
     return "\n".join(lines)
 
 
 class LearnSources:
-    def __init__(self, session, token=None):
+    def __init__(self, session):
         self.session = session
-        self.token = os.getenv("LEARN_GITHUB_TOKEN", "") if token is None else token
-        if token is None and not self.token and os.getenv("LEARN_GITHUB_TOKEN_FILE"):
-            self.token = Path(os.environ["LEARN_GITHUB_TOKEN_FILE"]).read_text().strip()
+        self.public = PublicLearnSources(session)
         self.repositories = {}
         self._documents = {}
 
     def repository(self, kind):
         if kind not in self.repositories:
-            self.repositories[kind] = acquire_repository(kind, self.session, self.token)
+            self.repositories[kind] = acquire_repository(kind, self.session)
         return self.repositories[kind]
 
     def repository_for_url(self, url):
-        family = urlsplit(url).path.strip("/").split("/")[0]
-        kind = family if family in {"courses", "insights"} else "learning_paths"
-        return self.repository(kind)
+        if is_public_learn_url(url):
+            raise ValueError(f"Use the public website for this Learn source: {url}")
+        return self.repository("learning_paths")
 
     def has_page(self, url):
         return public_url(url) in self.repository_for_url(url).by_url
@@ -622,9 +565,13 @@ class LearnSources:
     def documents(self, url):
         key = public_url(url)
         if key not in self._documents:
-            self._documents[key] = self.repository_for_url(url).documents(url)
+            self._documents[key] = (
+                self.public.documents(key) if is_public_learn_url(key)
+                else self.repository_for_url(key).documents(key)
+            )
         return self._documents[key]
 
     def discovered_sources(self):
         for kind in REPOSITORIES:
             yield from self.repository(kind).discovered_sources()
+        yield from self.public.discovered_sources()

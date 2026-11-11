@@ -31,8 +31,7 @@ COPY --from=intrinsic-chunks \
 RUN --network=none mkdir -p "${YAML_OUTPUT_DIR}" /work/info
 
 # Discovery is intentionally enabled during this controlled network phase.
-RUN --network=default --mount=type=secret,id=learn_github_token,required=true \
-    LEARN_GITHUB_TOKEN_FILE=/run/secrets/learn_github_token \
+RUN --network=default \
     python /embedding-data/generate-chunks.py /work/vector-db-sources.csv
 
 FROM scratch AS chunks

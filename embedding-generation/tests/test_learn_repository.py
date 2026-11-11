@@ -2,7 +2,6 @@
 
 import datetime as dt
 import io
-import json
 import tarfile
 from types import SimpleNamespace
 
@@ -19,7 +18,6 @@ from learn_repository import (
 )
 
 SHA = "a" * 40
-COURSE = "https://learn.arm.com/courses/example/"
 
 
 def markdown(title, body="", **metadata):
@@ -35,47 +33,6 @@ def repository(files, kind="arm-learning-paths"):
         files,
         now=dt.datetime(2026, 10, 27, tzinfo=dt.timezone.utc),
     )
-
-
-def test_nested_course_uses_frontmatter_urls_and_retains_code(gc, monkeypatch):
-    repo = repository(
-        {
-            "content/courses/example/_index.md": markdown(
-                "Example course", description="Deploy on Arm."
-            ),
-            "content/courses/example/module/_index.md": markdown(
-                "Module", url="/courses/example/deployment/"
-            ),
-            "content/courses/example/module/section/lesson.md": markdown(
-                "Deploy model",
-                "### Run\n\n```python\nmodel.forward(inputs)\n```\n\n### Inspect\n\nCheck outputs.",
-                url="/courses/example/deployment/run/",
-                aliases=["/courses/old/run/"],
-            ),
-            "content/courses/other/_index.md": markdown(
-                "Unrelated course", "Not part of example."
-            ),
-        },
-        "courses",
-    )
-    sources = LearnSources(None)
-    sources.repositories["courses"] = repo
-    monkeypatch.setattr(gc, "learn_sources", sources)
-    monkeypatch.setattr(gc, "fetch_with_logging", lambda *_: pytest.fail("HTML fetch"))
-    chunks = gc.create_chunks_for_source(
-        COURSE, "Example course", "Educational Course", "Arm"
-    )
-    run = next(c for c in chunks if c.url.endswith("/run/#run"))
-    assert "model.forward(inputs)" in run.content
-    assert run.title == "Deploy model"
-    assert run.resolved_url.endswith(
-        f"/{SHA}/content/courses/example/module/section/lesson.md"
-    )
-    assert all("Unrelated" not in c.content for c in chunks)
-    inspect = next(c for c in chunks if c.url.endswith("#inspect"))
-    assert "Run" not in inspect.heading_path  # skipped heading levels stay siblings
-    alias = repo.documents("https://learn.arm.com/courses/old/run/")
-    assert len(alias) == 1 and alias[0].source_url.endswith("/deployment/run/")
 
 
 def test_discovery_and_multipart_guides_share_the_repository(gc, monkeypatch):
@@ -103,9 +60,8 @@ def test_discovery_and_multipart_guides_share_the_repository(gc, monkeypatch):
     sources = LearnSources(None)
     sources.repositories = {
         "learning_paths": repo,
-        "courses": repository({}),
-        "insights": repository({}),
     }
+    monkeypatch.setattr(sources.public, "discovered_sources", lambda: [])
     monkeypatch.setattr(gc, "learn_sources", sources)
     monkeypatch.setattr(
         gc.http_session, "get", lambda *_args, **_kw: pytest.fail("Network fetch")
@@ -130,68 +86,6 @@ def test_discovery_and_multipart_guides_share_the_repository(gc, monkeypatch):
     assert gc.create_chunks_for_source(
         "https://learn.arm.com/migration", "Migrate", "Documentation", ""
     )
-
-
-def test_insights_keep_all_answers_separate_and_use_dataset_anchors():
-    dataset = {
-        "schema_version": 1,
-        "entries": [
-            {
-                "id": "q1",
-                "slug": "tail-handling",
-                "question": "How do I handle the tail?",
-                "answer": "Use predication.\n\n## Example\n\n```c\nsvwhilelt_b32(i, n);\n```",
-            },
-            {
-                "id": "q2",
-                "question": "How do I choose vector length?",
-                "answer": "Query the vector length at runtime.\n\n## Example\n\nUse svcntw().",
-            },
-        ],
-    }
-    repo = repository(
-        {
-            "content/insights/sve/_index.md": markdown("SVE Insights", dataset="sve"),
-            "data/insights/sve.json": json.dumps(dataset),
-        },
-        "insights",
-    )
-    docs = repo.documents("https://learn.arm.com/insights/sve/")
-    assert len(docs) == 2
-    chunks = [
-        c
-        for d in docs
-        for c in chunk_parsed_document(d, doc_type="Insights", keywords=["SVE"])
-    ]
-    first = [c for c in chunks if c["url"].endswith("#tail-handling")]
-    assert first and all(
-        c["heading_path"][0] == "How do I handle the tail?" for c in first
-    )
-    assert all("choose vector length" not in c["content"] for c in first)
-    assert {c["url"].split("#")[1] for c in chunks} == {"tail-handling", "q2"}
-    assert all(
-        c["resolved_url"].endswith(f"/{SHA}/data/insights/sve.json") for c in chunks
-    )
-
-
-@pytest.mark.parametrize(
-    "entries",
-    [
-        [{"id": "q", "question": "Question", "answer": ""}],
-        [{"id": "q", "question": "Question", "answer": "Answer"}] * 2,
-    ],
-)
-def test_invalid_insights_fail_instead_of_dropping_answers(entries):
-    repo = repository(
-        {
-            "content/insights/sve/_index.md": markdown("SVE", dataset="sve"),
-            "data/insights/sve.json": json.dumps(
-                {"schema_version": 1, "entries": entries}
-            ),
-        }
-    )
-    with pytest.raises(ValueError):
-        repo.documents("https://learn.arm.com/insights/sve/")
 
 
 def test_hugo_shortcodes_preserve_tabs_notices_quizzes_and_references():
@@ -316,7 +210,8 @@ def test_acquisition_resolves_one_commit_and_downloads_sources_only(monkeypatch)
     calls = []
     archive = archive_bytes(
         {
-            "content/courses/demo/_index.md": markdown("Demo", "Body"),
+            "content/learning-paths/demo/_index.md": markdown("Demo", "Body"),
+            "content/install-guides/demo.md": markdown("Guide", "Body"),
             "static/asset.png": "ignore",
             "data/insights/demo.json": "{}",
         }
@@ -341,15 +236,15 @@ def test_acquisition_resolves_one_commit_and_downloads_sources_only(monkeypatch)
         calls.append((url, kwargs))
         return Response()
 
-    monkeypatch.setenv("LEARN_COURSES_REF", "production")
-    repo = acquire_repository("courses", SimpleNamespace(get=get), "test-secret")
+    monkeypatch.setenv("LEARN_LEARNING_PATHS_REF", "production")
+    repo = acquire_repository("learning_paths", SimpleNamespace(get=get))
     assert len(calls) == 2
     assert calls[0][0].endswith("/commits/production")
     assert calls[1][0].endswith("/tarball/" + SHA)
-    assert calls[1][1]["headers"]["Authorization"] == "Bearer test-secret"
+    assert all("Authorization" not in kwargs["headers"] for _, kwargs in calls)
     assert set(repo.files) == {
-        "content/courses/demo/_index.md",
-        "data/insights/demo.json",
+        "content/learning-paths/demo/_index.md",
+        "content/install-guides/demo.md",
     }
 
 
@@ -376,10 +271,11 @@ def test_snapshot_is_reused_for_discovery_and_chunking(monkeypatch):
 
     monkeypatch.setattr("learn_repository.acquire_repository", acquire)
     sources = LearnSources(None)
+    monkeypatch.setattr(sources.public, "discovered_sources", lambda: [])
     list(sources.discovered_sources())
     sources.documents("https://learn.arm.com/install-guides/demo/")
     sources.documents("https://learn.arm.com/install-guides/demo")
-    assert calls == ["learning_paths", "courses", "insights"]
+    assert calls == ["learning_paths"]
 
 
 def test_heading_anchors_skip_code_and_number_duplicate_headings():
@@ -389,6 +285,38 @@ def test_heading_anchors_skip_code_and_number_duplicate_headings():
     assert "{#build-aarch64}" in text and "{#build-aarch64-1}" in text
     assert "# a comment\n" in text and "{#a-comment}" not in text
     assert "{#custom}" in text
+
+
+def test_generated_routes_match_hugo_casing_without_changing_source_paths():
+    path = "content/learning-paths/laptops-and-desktops/Implementing-a-Voice-Translation-Pipeline/_index.md"
+    repo = repository({
+        path: markdown("Voice translation", "Build it."),
+        "content/install-guides/Tool.md": markdown("Tool", "Install.", slug="My-Tool"),
+        "content/install-guides/explicit.md": markdown("Explicit", "Read.", url="/Custom-URL/"),
+    })
+    url = "https://learn.arm.com/learning-paths/laptops-and-desktops/implementing-a-voice-translation-pipeline/"
+    document = repo.documents(url)[0]
+    assert document.source_url == url
+    assert document.resolved_url.endswith(path)
+    assert repo.documents("https://learn.arm.com/install-guides/my-tool/")
+    assert repo.documents("https://learn.arm.com/Custom-URL/")
+
+
+def test_heading_ids_match_hugo_raw_source_and_global_collisions():
+    # Expected IDs verified against Hugo's default Goldmark renderer.
+    source = "\n".join([
+        "### Replace `std::complex<double>` with raw double arithmetic",
+        "## [Link](url)", "## Build &amp; run", "## Build  again",
+        "## Explicit {#custom}", "## Explicit", "## custom",
+        "## foo", "## foo-1", "## foo",
+    ])
+    import re
+
+    assert re.findall(r"\{#([^}]+)\}", heading_anchors(source)) == [
+        "replace-stdcomplexdouble-with-raw-double-arithmetic",
+        "linkurl", "build-amp-run", "build--again", "custom", "explicit", "custom-1",
+        "foo", "foo-1", "foo-2",
+    ]
 
 
 def test_learning_path_title_and_hugo_heading_attributes_keep_public_anchors():
@@ -539,31 +467,30 @@ def test_source_validation_failure_preserves_existing_csv_and_chunks(
     output = tmp_path / "yaml_data"
     output.mkdir()
     (output / "chunk_existing.yaml").write_text("existing")
-    repo = repository(
-        {"content/insights/sve/_index.md": markdown("SVE", dataset="missing")}
-    )
-    sources = LearnSources(None)
-    sources.repositories["insights"] = repo
+    sources = LearnSources(SimpleNamespace(get=lambda *_a, **_kw: SimpleNamespace(
+        raise_for_status=lambda: None, url="https://learn.arm.com/insights/sve/",
+        content=b"<main><h1>SVE</h1></main>",
+    )))
     monkeypatch.setattr(gc, "learn_sources", sources)
     monkeypatch.setattr(gc, "yaml_dir", str(output))
     monkeypatch.setattr(gc, "prepare_intrinsic_chunks", lambda: None)
     monkeypatch.setattr(gc, "reconcile_ecosystem_sources", lambda **_: None)
     monkeypatch.setattr("sys.argv", ["generate-chunks.py", str(csv_path)])
     monkeypatch.setenv("SKIP_DISCOVERY", "1")
-    with pytest.raises(ValueError, match="Missing Insights dataset"):
+    with pytest.raises(ValueError, match="No published Insights answers"):
         gc.main()
     assert csv_path.read_text() == original
     assert (output / "chunk_existing.yaml").read_text() == "existing"
 
 
-def test_auth_failure_does_not_leak_credentials():
+def test_acquisition_failure_does_not_log_redirect_details():
     import requests
 
     def get(*_args, **_kwargs):
         raise requests.HTTPError("https://example.com/?token=DO-NOT-LOG")
 
-    with pytest.raises(ValueError, match="LEARN_GITHUB_TOKEN") as error:
-        acquire_repository("courses", SimpleNamespace(get=get), "DO-NOT-LOG")
+    with pytest.raises(ValueError, match="public repository") as error:
+        acquire_repository("learning_paths", SimpleNamespace(get=get))
     assert "DO-NOT-LOG" not in str(error.value)
 
 
@@ -626,11 +553,3 @@ def test_parent_and_child_rows_do_not_emit_duplicate_chunks(gc, monkeypatch, tmp
     gc.main()
     assert len(saved) == 2
     assert len({chunk.url for chunk in saved}) == 2
-
-
-def test_token_can_be_read_from_buildkit_secret_file(monkeypatch, tmp_path):
-    token_file = tmp_path / "secret"
-    token_file.write_text("test-token\n")
-    monkeypatch.delenv("LEARN_GITHUB_TOKEN", raising=False)
-    monkeypatch.setenv("LEARN_GITHUB_TOKEN_FILE", str(token_file))
-    assert LearnSources(None).token == "test-token"

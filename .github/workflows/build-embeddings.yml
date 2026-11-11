@@ -84,15 +84,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash .github/scripts/verify-ghcr-package-private.sh "${CHUNK_PACKAGE_NAME}" --allow-missing
 
-      - name: Verify Learn source credentials
-        env:
-          LEARN_GITHUB_TOKEN: ${{ secrets.LEARN_GITHUB_TOKEN }}
-        run: |
-          if [ -z "${LEARN_GITHUB_TOKEN}" ]; then
-            echo "::error::Configure LEARN_GITHUB_TOKEN with Contents: read access to the Learn source repositories."
-            exit 1
-          fi
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
@@ -104,8 +95,6 @@ jobs:
           context: embedding-generation
           file: embedding-generation/Dockerfile.acquire
           target: chunks
-          secrets: |
-            learn_github_token=${{ secrets.LEARN_GITHUB_TOKEN }}
           platforms: linux/arm64
           pull: true
           no-cache: true
@@ -126,8 +115,6 @@ jobs:
           context: embedding-generation
           file: embedding-generation/Dockerfile.acquire
           target: chunks
-          secrets: |
-            learn_github_token=${{ secrets.LEARN_GITHUB_TOKEN }}
           platforms: linux/arm64
           pull: true
           no-cache: true

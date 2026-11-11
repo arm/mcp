@@ -37,6 +37,7 @@ from document_chunking import (
     source_to_fetch_url,
 )
 from ecosystem_dashboard import acquire_catalog
+from learn_public import is_public_learn_url
 from learn_repository import LearnSources, is_learn_url
 
 
@@ -362,7 +363,7 @@ def reconcile_learn_sources(discover=True):
     retained = []
     for source in all_sources:
         url = source["url"]
-        if is_learn_url(url) and not learn_sources.has_page(url):
+        if is_learn_url(url) and not is_public_learn_url(url) and not learn_sources.has_page(url):
             print(f"[LEARN OMITTED SOURCE] Missing or unpublished in snapshot: {url}")
         else:
             retained.append(source)
