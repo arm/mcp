@@ -40,7 +40,10 @@ def _fallback_document_url(row: dict) -> str | None:
             if row.get("doc_type") == "Intrinsic" or fragment.startswith("q="):
                 return url
             identity = url if field == "page_url" else page
-            parsed = urlparse(identity)
+            try:
+                parsed = urlparse(identity)
+            except ValueError:
+                return identity
             segments = parsed.path.strip("/").split("/")
             # Acquisition canonicalizes learning-path roots but retains citations.
             if (parsed.scheme in {"http", "https"}
