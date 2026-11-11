@@ -21,26 +21,27 @@ from urllib.parse import urlparse, urlunparse
 CONTEXT_SCOPES = {"chunks", "page", "parent_resource"}
 
 
-def _canonical_url(url: str) -> str:
-    """Apply acquisition's Learning Path root identity rule at every lookup.
-
-    Other URLs retain their query/fragment identities. Malformed URLs remain
-    attributable to their own records instead of aborting catalog preparation.
-    """
+def _learning_path_root(url: str, *, root_only: bool = False) -> str | None:
+    """Recognize acquisition's Learning Path root without inventing page order."""
     if url.partition("#")[2].startswith("q="):
-        return url
+        return None
     try:
         parsed = urlparse(url)
     except ValueError:
-        return url
+        return None
     segments = parsed.path.strip("/").split("/")
     if (parsed.scheme in {"http", "https"}
             and parsed.netloc.lower() == "learn.arm.com"
             and parsed.path.startswith("/learning-paths/")
-            and len(segments) == 3):
+            and len(segments) >= 3 and (not root_only or len(segments) == 3)):
         return urlunparse((parsed.scheme, parsed.netloc.lower(),
-                           "/" + "/".join(segments) + "/", "", "", ""))
-    return url
+                           "/" + "/".join(segments[:3]) + "/", "", "", ""))
+    return None
+
+
+def _canonical_url(url: str) -> str:
+    """Normalize Learning Path roots, preserving other and malformed identities."""
+    return _learning_path_root(url, root_only=True) or url
 
 
 def _document_key(row: dict, url: str) -> tuple:
@@ -98,6 +99,12 @@ def _normalize_record(row: dict) -> tuple[dict, str | None, set[str]]:
         row = {**row, "document_context": context}
     context_url = context.get("url") if isinstance(context, dict) else None
     url = context_url if isinstance(context_url, str) and context_url else _fallback_document_url(row)
+    # URL structure also identifies stored siblings that lost all explicit
+    # parent fields. This evidence constrains validation; it supplies no order.
+    if url and row.get("doc_type") != "Intrinsic":
+        root = _learning_path_root(url)
+        if root:
+            roots.add(root)
     return row, url, roots
 
 

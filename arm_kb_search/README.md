@@ -45,8 +45,9 @@ Catalog identity treats absent, null, and empty optional platform/edition/versio
 fields alike while keeping non-empty variant labels distinct. Duplicate chunks
 must agree on canonical document identity, content, and ordering metadata;
 their original citation URLs may differ and are preserved in results. Parent
-aliases and manifests both provide membership evidence for completeness checks,
-but a manifest alone does not supply missing document-order or parent metadata.
+aliases, manifests, and recognized Arm Learning Path URLs provide membership
+evidence for completeness checks. Neither a URL nor a manifest supplies missing
+document-order or parent metadata; incomplete parent expansion raises an error.
 
 Expansion needs `document_context` format 1: document identity, zero-based chunk
 index/count, and a parent URL/ordered page manifest for parent expansion.
