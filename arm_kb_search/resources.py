@@ -132,6 +132,32 @@ def _load_keyword_cache(
         return None
 
 
+def _reassemble_pieces(pieces: list[dict[str, Any]]) -> str | None:
+    """Collapse identical slices, then require one complete, consistent sequence."""
+    unique: dict[int, tuple] = {}
+    for piece in pieces:
+        part, count, start, end = (piece.get(field) for field in
+                                   ("source_part", "source_parts", "source_start", "source_end"))
+        text = piece.get("original_text")
+        if (any(type(value) is not int for value in (part, count, start, end))
+                or not isinstance(text, str) or not 1 <= part <= count
+                or start < 0 or end <= start or end != start + len(text)):
+            return None
+        signature = (count, start, end, text)
+        if part in unique and unique[part] != signature:
+            return None
+        unique[part] = signature
+    expected_start = 0
+    texts = []
+    for number, part in enumerate(sorted(unique), 1):
+        count, start, end, text = unique[part]
+        if part != number or count != len(unique) or start != expected_start:
+            return None
+        texts.append(text)
+        expected_start = end
+    return "".join(texts) if texts else None
+
+
 @dataclass
 class SearchResources:
     metadata: list[dict[str, Any]]
@@ -150,22 +176,14 @@ class SearchResources:
         self._filter_index = MetadataFilterIndex(self.metadata)
         parents: dict[tuple[str, str], list[dict[str, Any]]] = {}
         for row in self.metadata:
-            if row.get("parent_uuid") and row.get("parent_chunk_uuid"):
-                key = (row["parent_uuid"], row["parent_chunk_uuid"])
+            key = (row.get("parent_uuid"), row.get("parent_chunk_uuid"))
+            if all(isinstance(value, str) and value for value in key):
                 parents.setdefault(key, []).append(row)
         self._parent_texts = {}
         for key, pieces in parents.items():
-            pieces.sort(key=lambda piece: piece["source_start"])
-            expected_starts = [0] + [piece["source_end"] for piece in pieces[:-1]]
-            complete = all(
-                piece["source_part"] == number
-                and piece["source_parts"] == len(pieces)
-                and piece["source_start"] == expected_starts[number - 1]
-                and piece["source_end"] == piece["source_start"] + len(piece["original_text"])
-                for number, piece in enumerate(pieces, 1)
-            )
-            if complete:
-                self._parent_texts[key] = "".join(piece["original_text"] for piece in pieces)
+            text = _reassemble_pieces(pieces)
+            if text is not None:
+                self._parent_texts[key] = text
 
     def snippet_for(self, metadata: dict[str, Any]) -> str:
         """Expand a ranked piece to its complete original chunk when available."""

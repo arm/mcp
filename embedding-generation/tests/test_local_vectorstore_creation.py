@@ -26,6 +26,7 @@ import torch
 import yaml
 from arm_kb_search import resources
 from arm_kb_search.analysis import Synonyms, analyze, name_keys
+from arm_kb_search.context import DocumentContextIndex
 from transformers import AutoTokenizer
 
 import document_chunking as intrinsic_source
@@ -182,6 +183,30 @@ def test_cap_preserves_exact_text_metadata_and_piece_identity(tokenizer, identif
             assert piece[key] == row[key]
     assert cursor == len(text)
     assert vectorstore.split_embedding_inputs([row], tokenizer) == pieces
+
+
+def test_duplicate_generated_pieces_expand_complete_context_once(tokenizer):
+    root = "https://learn.arm.com/learning-paths/cross-platform/example/"
+    pages = [root, root + "step/"]
+    rows = [record("\tint café = foo(a, b);  // 雪\r\n" * 400 + "  \n", "root"),
+            record("Second page", "step")]
+    for row, url in zip(rows, pages):
+        row["document_context"] = dict(format=1, url=url, chunk_index=0, chunk_count=1,
+                                       parent_page_url=root, learning_path_pages=pages)
+    duplicate = deepcopy(rows[0])
+    duplicate["document_context"].update(url=root.rstrip("/"), parent_page_url=root + "?utm_source=copy",
+                                         learning_path_pages=[root + "#intro", pages[1]])
+    pieces = vectorstore.split_embedding_inputs([*rows, duplicate], tokenizer)
+    assert sum(piece.get("parent_uuid") == "root" for piece in pieces) > 2
+    pieces.reverse()
+    before = deepcopy(pieces)
+    state = resources.SearchResources(pieces, None, None, None)
+    catalog = DocumentContextIndex(pieces, state)
+    for scope, expected in (("page", rows[:1]), ("parent_resource", rows)):
+        hits = catalog.expand([{"metadata": pieces[0]}], scope)
+        assert [state.snippet_for(hit["metadata"]) for hit in hits] == [row["original_text"] for row in expected]
+        assert [hit["context"]["page_url"] for hit in hits] == pages[:len(expected)]
+    assert pieces == before
 
 
 def test_bad_search_text_is_rejected(tokenizer):

@@ -165,6 +165,122 @@ def test_context_malformed_fallback_url_only_blocks_its_known_parent():
         catalog.expand([{"metadata": rows[0]}], "parent_resource")
 
 
+@pytest.mark.parametrize("suffix", ["", "/?utm_source=test#intro"])
+@pytest.mark.parametrize("evidence", ["document", "parent", "legacy_parent", "manifest", "missing_url"])
+def test_context_canonicalizes_all_parent_membership_evidence(suffix, evidence):
+    root = "https://learn.arm.com/learning-paths/cross-platform/example/"
+    alias = root.rstrip("/") + suffix
+    valid = context_row(root, pages=[root])
+    orphan = {"url": root + "extra/", "original_text": "Must not be omitted"}
+    if evidence == "document":
+        orphan["document_context"] = {"url": alias}
+    elif evidence in ("parent", "legacy_parent"):
+        orphan["learning_path_url" if evidence == "legacy_parent" else "parent_page_url"] = alias
+    else:
+        orphan["document_context"] = {"learning_path_pages": [alias, root + "extra/"]}
+        if evidence == "missing_url":
+            orphan.pop("url")
+    unrelated = context_row("https://example.org/unrelated/", pages=["https://example.org/unrelated/"])
+    rows = [valid, orphan, unrelated]
+    before = deepcopy(rows)
+    state = SearchResources(rows, QueryModel(), None, None)
+    catalog = DocumentContextIndex(rows, state)
+    with pytest.raises(ValueError, match="Regenerate chunks"):
+        catalog.expand([{"metadata": valid}], "parent_resource")
+    if evidence == "document":
+        with pytest.raises(ValueError, match="Regenerate chunks"):
+            catalog.expand([{"metadata": valid}], "page")
+    else:
+        assert len(catalog.expand([{"metadata": valid}], "page")) == 1
+    assert len(catalog.expand([{"metadata": unrelated}], "parent_resource")) == 1
+    assert rows == before
+
+
+@pytest.mark.parametrize("evidence", ["parent", "legacy_parent", "manifest", "missing_url"])
+def test_context_known_root_cannot_fall_back_to_page_when_parent_metadata_is_missing(evidence):
+    root = "https://learn.arm.com/learning-paths/cross-platform/example/"
+    standalone = context_row(root)
+    sibling = context_row(root + "step/")
+    alias = root.rstrip("/")
+    if evidence in ("parent", "legacy_parent"):
+        sibling["learning_path_url" if evidence == "legacy_parent" else "parent_page_url"] = alias
+    else:
+        sibling["document_context"]["learning_path_pages"] = [alias, root + "step/"]
+        if evidence == "missing_url":
+            sibling["document_context"].pop("url")
+            sibling.pop("url")
+    unrelated = context_row("https://example.org/standalone/")
+    rows = [standalone, sibling, unrelated]
+    before = deepcopy(rows)
+    state = SearchResources(rows, QueryModel(), None, None)
+    catalog = DocumentContextIndex(rows, state)
+    with pytest.raises(ValueError, match="Regenerate chunks"):
+        catalog.expand([{"metadata": standalone}], "parent_resource")
+    assert len(catalog.expand([{"metadata": standalone}], "page")) == 1
+    assert len(catalog.expand([{"metadata": unrelated}], "parent_resource")) == 1
+    assert rows == before
+
+
+def test_context_canonical_identity_is_shared_by_catalog_and_seeds():
+    root = "https://learn.arm.com/learning-paths/cross-platform/example/"
+    step = root + "step/"
+    rows = [context_row(root, pages=[root, step]), context_row(step, pages=[root, step])]
+    copies = deepcopy(rows)
+    copies[0]["document_context"]["url"] = root.rstrip("/")
+    for copy in copies:
+        context = copy["document_context"]
+        context["parent_page_url"] = root + "?utm_source=parent"
+        context["learning_path_url"] = root.rstrip("/")
+        context["learning_path_pages"][0] = root + "#intro"
+    records = [*copies, *rows]
+    before = deepcopy(records)
+    state = SearchResources(records, QueryModel(), None, None)
+    catalog = DocumentContextIndex(records, state)
+    for seed in (rows[0], copies[0], copies[1]):
+        hits = catalog.expand([{"metadata": seed}], "parent_resource")
+        assert [h["context"]["page_url"] for h in hits] == [root, step]
+        assert [state.snippet_for(h["metadata"]) for h in hits] == [r["original_text"] for r in rows]
+    assert records == before
+
+
+@pytest.mark.parametrize("failure", [None, "text", "count", "range", "missing_field", "missing_piece", "position"])
+def test_context_duplicate_embedding_slices_preserve_completeness(failure):
+    url = "https://example.org/document/"
+    row = context_row(url, pages=[url])
+    pieces = [{**deepcopy(row), "parent_uuid": "p", "parent_chunk_uuid": "c", "chunk_uuid": str(i),
+               "original_text": text, "source_start": start, "source_end": start + len(text),
+               "source_part": i, "source_parts": 2}
+              for i, start, text in [(1, 0, "first "), (2, 6, "second")]]
+    duplicates = deepcopy(pieces)
+    if failure == "text":
+        duplicates[0]["original_text"] = "other "
+    elif failure == "count":
+        duplicates[0]["source_parts"] = 3
+    elif failure == "range":
+        duplicates[0]["source_end"] = 5
+    elif failure == "missing_field":
+        duplicates[0].pop("source_start")
+    elif failure == "missing_piece":
+        pieces, duplicates = pieces[:1], duplicates[:1]
+    elif failure == "position":
+        duplicates[0]["document_context"]["chunk_index"] = 1
+    other = context_row("https://example.org/other/")
+    for copies in (duplicates[:1], duplicates):
+        rows = [*reversed(pieces), *copies, other]
+        before = deepcopy(rows)
+        state = SearchResources(rows, QueryModel(), None, None)
+        catalog = DocumentContextIndex(rows, state)
+        for scope in ("page", "parent_resource"):
+            if failure:
+                with pytest.raises(ValueError, match="Regenerate chunks"):
+                    catalog.expand([{"metadata": pieces[0]}], scope)
+            else:
+                hits = catalog.expand([{"metadata": pieces[0]}], scope)
+                assert len(hits) == 1 and state.snippet_for(hits[0]["metadata"]) == "first second"
+        assert len(catalog.expand([{"metadata": other}], "parent_resource")) == 1
+        assert rows == before
+
+
 def test_context_scope_expands_all_hits_once_in_stored_order(monkeypatch):
     pages = ["https://example.org/path/", "https://example.org/path/z/", "https://example.org/path/a/"]
     rows = [context_row(url, i, 2, pages=pages) for url in pages for i in range(2)]

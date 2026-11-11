@@ -21,8 +21,32 @@ from urllib.parse import urlparse, urlunparse
 CONTEXT_SCOPES = {"chunks", "page", "parent_resource"}
 
 
+def _canonical_url(url: str) -> str:
+    """Apply acquisition's Learning Path root identity rule at every lookup.
+
+    Other URLs retain their query/fragment identities. Malformed URLs remain
+    attributable to their own records instead of aborting catalog preparation.
+    """
+    if url.partition("#")[2].startswith("q="):
+        return url
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return url
+    segments = parsed.path.strip("/").split("/")
+    if (parsed.scheme in {"http", "https"}
+            and parsed.netloc.lower() == "learn.arm.com"
+            and parsed.path.startswith("/learning-paths/")
+            and len(segments) == 3):
+        return urlunparse((parsed.scheme, parsed.netloc.lower(),
+                           "/" + "/".join(segments) + "/", "", "", ""))
+    return url
+
+
 def _document_key(row: dict, url: str) -> tuple:
     # Keep versioned documents and query/fragment identities distinct.
+    if row.get("doc_type") != "Intrinsic":
+        url = _canonical_url(url)
     variants = []
     for field in ("platform", "edition", "version"):
         value = row.get(field)
@@ -40,20 +64,7 @@ def _fallback_document_url(row: dict) -> str | None:
             page, _, fragment = url.partition("#")
             if row.get("doc_type") == "Intrinsic" or fragment.startswith("q="):
                 return url
-            identity = url if field == "page_url" else page
-            try:
-                parsed = urlparse(identity)
-            except ValueError:
-                return identity
-            segments = parsed.path.strip("/").split("/")
-            # Acquisition canonicalizes learning-path roots but retains citations.
-            if (parsed.scheme in {"http", "https"}
-                    and parsed.netloc.lower() == "learn.arm.com"
-                    and parsed.path.startswith("/learning-paths/")
-                    and len(segments) == 3):
-                return urlunparse((parsed.scheme, parsed.netloc.lower(),
-                                   "/" + "/".join(segments) + "/", "", "", ""))
-            return identity
+            return _canonical_url(url if field == "page_url" else page)
     return None
 
 
@@ -65,19 +76,26 @@ def _normalize_record(row: dict) -> tuple[dict, str | None, set[str]]:
     A manifest is evidence of membership, not a replacement for missing fields.
     """
     context = row.get("document_context")
-    roots = {value for source in (context, row) if isinstance(source, dict)
+    roots = {_canonical_url(value) for source in (context, row) if isinstance(source, dict)
              for field in ("parent_page_url", "learning_path_url")
              if isinstance(value := source.get(field), str) and value}
     if isinstance(context, dict):
+        context = dict(context)
+        for field in ("url", "parent_page_url", "learning_path_url"):
+            value = context.get(field)
+            if isinstance(value, str) and not (field == "url" and row.get("doc_type") == "Intrinsic"):
+                context[field] = _canonical_url(value)
         pages = context.get("learning_path_pages")
+        if isinstance(pages, list):
+            pages = [_canonical_url(value) if isinstance(value, str) else value for value in pages]
+            context["learning_path_pages"] = pages
         if isinstance(pages, list) and pages and isinstance(pages[0], str) and pages[0]:
             roots.add(pages[0])
         if "learning_path_url" in context:
-            context = dict(context)
             legacy_root = context.pop("learning_path_url")
             if context.get("parent_page_url") in (None, ""):
                 context["parent_page_url"] = legacy_root
-            row = {**row, "document_context": context}
+        row = {**row, "document_context": context}
     context_url = context.get("url") if isinstance(context, dict) else None
     url = context_url if isinstance(context_url, str) and context_url else _fallback_document_url(row)
     return row, url, roots
@@ -230,6 +248,10 @@ class DocumentContextIndex:
                     split_positions[parent] = None
         for key in rows_by_document:
             keys_by_url.setdefault(key[0], []).append(key)
+            # Sibling evidence identifies the root even when the root's own
+            # parent fields are absent. Do not silently treat it as standalone.
+            if key[0] in members or key[0] in invalid_parents:
+                known_parents[key].add(key[0])
 
         # Record errors at the narrowest scope: a bad parent need not prevent
         # reading a valid page, and a bad page need not block another document.
