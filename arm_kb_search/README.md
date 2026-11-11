@@ -29,32 +29,21 @@ results = search(
 Reuse the loaded resources across requests. Create new resources when replacing
 the corpus; metadata and indexes are treated as a fixed snapshot.
 
-Results optionally include `page_url` and `parent_page_url`. Earlier experimental
-`learning_path_url` metadata is accepted on read; output uses the new name.
+`scope="chunks"` (default) returns ranked matching chunks. Use `scope="page"`
+for all stored chunks from each matched page, or `scope="parent_resource"` for
+all stored pages in each matched parent. Sources without a known parent use page
+scope. Expansion preserves stored order and returns shared pages once. Filters
+and `k` select initial matches only; they do not limit expanded content.
 
-`search(..., scope="page")` returns all stored chunks for every matched document.
-`scope="parent_resource"` expands each matched parent in stored page order,
-falling back to page scope when no parent is known. Default `scope="chunks"`
-keeps ranked search. Filters and `k` select seeds only; shared documents are
-returned once and embedding pieces are reassembled into logical chunks.
-The first non-empty expansion prepares and validates a document/parent catalog
-for the fixed resource snapshot; subsequent calls reuse its ordered entries.
-Validation errors are retained per document or parent, so an invalid parent can
-still have readable pages and unrelated valid documents remain available.
-Catalog identity treats absent, null, and empty optional platform/edition/version
-fields alike while keeping non-empty variant labels distinct. Duplicate chunks
-must agree on canonical document identity, content, and ordering metadata;
-their original citation URLs may differ and are preserved in results. Parent
-aliases, manifests, and recognized Arm Learning Path URLs provide membership
-evidence for completeness checks. Neither a URL nor a manifest supplies missing
-document-order or parent metadata; incomplete parent expansion raises an error.
+Results preserve source citations and may include `page_url` and `parent_page_url`.
+The legacy `learning_path_url` field is accepted on input. Expanded results also
+include position/count metadata and null scores. No live pages are fetched.
 
-Expansion needs `document_context` format 1: document identity, zero-based chunk
-index/count, and a parent URL/ordered page manifest for parent expansion.
-Regenerate chunk/vector artifacts to populate these fields. Missing or conflicting
-data raises `ValueError`. Parent manifests are currently acquired for Arm Learning
-Paths; other multi-page sources need corresponding ingestion support. No live
-URLs are fetched. Expanded results include position/count metadata and null scores.
+Expansion requires regenerated KB artifacts with `document_context` format 1:
+document identity, zero-based chunk index, chunk count, and a parent URL/page manifest for
+parent expansion. Missing or conflicting context raises `ValueError` for the
+affected scope; valid pages and unrelated documents remain available. Parent
+manifests are currently acquired for Arm Learning Paths.
 
 ## Startup preparation
 
@@ -75,18 +64,14 @@ Runtime loading writes no files. Keep metadata and synonyms unchanged during loa
 `filters` accepts a `SearchFilters` instance or a dictionary with optional
 `doc_type`, `product`, `platform`, and `edition` fields.
 
-- Each field accepts a string or a non-empty list of strings. Values match
-  complete metadata labels after trimming whitespace and case folding.
-  Alternatives within a field combine with OR; fields combine with AND.
-  For example, `{"platform": ["linux", "windows"], "doc_type": ["Install Guides", "Learning Paths"]}`
-  matches either platform and either document type. `k` limits the combined results.
-  Duplicate alternatives are removed; caller lists are copied into immutable
-  tuples. Python callers may also supply tuples. Single strings stay strings.
+- Each field accepts a string or non-empty list of strings (also tuples in Python).
+  For example, `{"platform": ["linux", "windows"]}` matches either label.
+  Values within a field use OR; fields use AND. Matching ignores case, surrounding
+  whitespace, and duplicate choices.
 - Omitted filters, `None`, and `{}` leave search unrestricted. A field set to
   `None` is ignored. Missing or blank metadata cannot match an active filter.
-- Invalid keys, empty lists/tuples, blank strings, and non-string list items
-  raise `ValueError`. Unknown labels match nothing, while other alternatives
-  can still match. No matching chunks returns an empty list.
+- Unknown fields, empty lists or tuples, and blank or non-string labels raise
+  `ValueError`. Unknown labels match nothing; no matches returns an empty list.
 
 Filters restrict candidates before ranking and deduplication. Vector retrieval
 uses exact search over the full corpus, or only eligible vectors when filtered.

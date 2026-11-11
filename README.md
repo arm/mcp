@@ -168,41 +168,34 @@ After updating the configuration, restart your MCP client to load the Arm MCP se
 
 ## Knowledge-base search
 
-`knowledge_base_search` accepts optional `filters`, `k`, and `scope`. Omitting
-these options keeps the default unfiltered search with up to five matching chunks.
+`knowledge_base_search` returns up to five ranked chunks by default. Optional settings:
+
+- `k`: a positive integer limiting initial matches. Agents should use 20 or fewer.
+- `filters`: `doc_type`, `product`, `platform`, or `edition`, each accepting a
+  label or non-empty list. Values within a field use OR; fields use AND.
+  Matching ignores case and surrounding whitespace. Use known metadata labels;
+  records with missing tags cannot match a filter.
 
 ```json
 {"query": "How do SVE predicated loads work?", "filters": {"doc_type": "Intrinsic", "product": "SVE"}, "k": 3}
 ```
 
-- `filters`: each `doc_type`, `product`, `platform`, or `edition` accepts a string
-  or non-empty list, e.g. `"platform": ["linux", "windows"]`. Alternatives within
-  a field combine with OR; different fields combine with AND. Matching ignores
-  case, surrounding whitespace, and duplicate choices. Empty lists and blank or
-  non-string items are rejected. Missing tags cannot match; use known labels.
-  Platform/edition coverage is currently sparse.
-- `k`: any positive integer, default 5 when omitted/null. Limits ranked seed
-  results, not tokens or expanded chunks. Fewer results may be available.
-  Agents are instructed to use at most 20; this is guidance, not an API limit.
-  Direct calls such as `k=100` use the same interface without special configuration.
-  Invalid types and non-positive values are rejected.
+Choose `scope` for the amount of context:
 
 | Scope | Content returned |
 | --- | --- |
 | `chunks` (default) | Ranked matching chunks. |
-| `page` | Every matched document's stored chunks, in order. |
-| `parent_resource` | Every matched parent's stored pages/chunks, in order; page scope when no parent is known. |
+| `page` | All stored chunks from each matched page, in order. |
+| `parent_resource` | All stored pages in each matched parent, in order; falls back to `page` when no parent is known. |
 
-Expansion deduplicates shared documents. Filters and `k` apply only to seed
-matches; expanded sibling pages are unrestricted. Results include stored
-`page_url`/`parent_page_url` links and, for expansion, position/count metadata.
-Request wider context only when the user asks; responses can be large and client
-output limits apply. Links and expansion do not fetch live pages.
+Expanded scopes return shared pages once. Filters and `k` select initial matches;
+they do not limit expanded content. Use expansion only when the user requests
+wider context, since responses can be large. No live pages are fetched.
 
-Expansion requires regenerated chunk/vector artifacts with complete ordering
-metadata; missing or conflicting data returns an error. Parent manifests are
-currently acquired for Arm Learning Paths. See the [shared search documentation](arm_kb_search/README.md)
-for metadata details and other-source limitations.
+Expansion requires regenerated KB artifacts with complete ordering metadata;
+missing or conflicting context returns an error. Parent page ordering is currently
+acquired for Arm Learning Paths. See the [shared search documentation](arm_kb_search/README.md)
+for API and metadata details.
 
 ## Logging
 
