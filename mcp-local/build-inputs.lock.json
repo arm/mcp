@@ -18,7 +18,7 @@
       "verification": "OCI manifest-list digest"
     },
     "embeddings": {
-      "reference": "ghcr.io/arm/mcp-embedding-vectorstore@sha256:499a52e27a8a171d48920b0d9902cde3b13274f3babccd6db060a28c01d63680",
+      "reference": "ghcr.io/arm/mcp-embedding-vectorstore@sha256:fd92662b408e752b1f1cc09c5872741edfd123b5e678d6acd72542bc8020f610",
       "architectures": [
         "arm64"
       ],
@@ -27,13 +27,13 @@
         "/embedding-data/metadata.json",
         "/embedding-data/usearch_index.bin"
       ],
-      "source_revision": "a7701957cc31671299e95afe57b0352fa36c920e",
+      "source_revision": "6588ebb818a645a0307f8f24f79d1b733b4e3447",
       "model": {
         "model_id": "sentence-transformers/all-MiniLM-L6-v2",
         "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41"
       },
       "verification": "private GHCR OCI image-index digest",
-      "workflow_run": "41291842949"
+      "workflow_run": "43054611616"
     },
     "mcp_build_inputs": {
       "reference": "ghcr.io/arm/mcp-build-inputs@sha256:5075cdb8480c7d2066bfbaa90f325f1d3d1e3d2b94e66eaff846ea9f7677124d",
