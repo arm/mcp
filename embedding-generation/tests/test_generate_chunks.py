@@ -41,6 +41,34 @@ FIXTURE_DIR = Path(__file__).parent
 SAMPLE_PPTX_FIXTURE = "sample_course_slides.pptx"
 
 
+@pytest.mark.parametrize("max_tokens", [25, 600])
+def test_saved_html_chunks_preserve_highlighted_code_indentation(gc, monkeypatch, tmp_path, max_tokens):
+    import yaml
+
+    code = 'def run():\n    for item in items:\n        print("two  spaces", item)\n\n\n    return True'
+    html = (
+        '<main><h1>Example</h1><h2 id="run">Run</h2><p>Run this example.</p>'
+        '<pre><code><span>def</span> run():\n    <span>for</span> item in items:\n'
+        '        print("two  spaces", item)\n\n\n    return True</code></pre>'
+        '<p>Check the result.</p></main>'
+    )
+    doc = parse_document_content(
+        "https://example.com/", "https://example.com/", html.encode(), "text/html", "Example"
+    )
+    chunks = chunk_parsed_document(doc, "Guide", [], min_tokens=10, max_tokens=max_tokens, overlap_tokens=5)
+    monkeypatch.setattr(gc, "yaml_dir", str(tmp_path))
+    details = tmp_path / "details.csv"
+    details.write_text("URL,Date,Number of Words,Number of Chunks,Chunk IDs\n")
+    monkeypatch.setattr(gc, "details_file", str(details))
+    for payload in chunks:
+        gc.chunkSaveAndTrack(payload["url"], gc.chunk_from_payload(payload, []))
+    saved = [yaml.safe_load(path.read_text())["content"] for path in tmp_path.glob("chunk_*.yaml")]
+    examples = [text for text in saved if "def run():" in text]
+    assert len(examples) == 1
+    assert f"```\n{code}\n```" in examples[0]
+    assert all(text.count("```") % 2 == 0 for text in saved)
+
+
 def test_relative_link_evidence_is_retained_when_url_prefix_is_embedded():
     text = "[Home](/) [Guide](https://learn.arm.com/guide)"
     links = extract_markdown_links(text, "https://learn.arm.com/example/")

@@ -458,11 +458,20 @@ def test_leading_blank_lines_do_not_hide_hugo_frontmatter():
     assert "title:" not in doc.sections[0].blocks[0].text
 
 
+@pytest.mark.parametrize("wrapped", [False, True])
+@pytest.mark.parametrize("transcript", [False, True])
 def test_source_validation_failure_preserves_existing_csv_and_chunks(
-    gc, monkeypatch, tmp_path
+    gc, monkeypatch, tmp_path, wrapped, transcript
 ):
     csv_path = tmp_path / "sources.csv"
-    original = "Site Name,License Type,Display Name,URL,Keywords\nInsights,CC4.0,SVE,https://learn.arm.com/insights/sve/,SVE\n"
+    url = "https://learn.arm.com/insights/sve/"
+    if wrapped:
+        url = "chrome-extension://reader/" + url.replace("https://", "https:/")
+    source_url = "https://example.com/video" if transcript else url
+    original = (
+        "Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL\n"
+        f"Insights,CC4.0,SVE,{source_url},SVE,{url if transcript else ''}\n"
+    )
     csv_path.write_text(original)
     output = tmp_path / "yaml_data"
     output.mkdir()
@@ -523,12 +532,19 @@ def test_frontmatter_knowledge_and_code_examples_survive():
     assert "int main() {\nreturn 0;\n}" in text and "-O3" in text
 
 
-def test_parent_and_child_rows_do_not_emit_duplicate_chunks(gc, monkeypatch, tmp_path):
+@pytest.mark.parametrize("child_first", [False, True])
+def test_parent_and_child_rows_do_not_emit_duplicate_chunks(gc, monkeypatch, tmp_path, child_first):
+    import yaml
+
     csv_path = tmp_path / "sources.csv"
+    rows = [
+        "Install Guides,CC4.0,Docker,https://learn.arm.com/install-guides/docker/,containers\n",
+        "Install Guides,CC4.0,Engine,https://learn.arm.com/install-guides/docker/engine/,systemd daemon control; containers\n",
+    ]
+    if child_first:
+        rows.reverse()
     csv_path.write_text(
-        "Site Name,License Type,Display Name,URL,Keywords\n"
-        "Install Guides,CC4.0,Docker,https://learn.arm.com/install-guides/docker/,containers\n"
-        "Install Guides,CC4.0,Engine,https://learn.arm.com/install-guides/docker/engine/,containers\n"
+        "Site Name,License Type,Display Name,URL,Keywords\n" + "".join(rows)
     )
     sources = LearnSources(None)
     sources.repositories["learning_paths"] = repository(
@@ -546,10 +562,63 @@ def test_parent_and_child_rows_do_not_emit_duplicate_chunks(gc, monkeypatch, tmp
     monkeypatch.setattr(gc, "details_file", str(tmp_path / "details.csv"))
     monkeypatch.setattr(gc, "prepare_intrinsic_chunks", lambda: None)
     monkeypatch.setattr(gc, "reconcile_ecosystem_sources", lambda **_: None)
-    saved = []
-    monkeypatch.setattr(gc, "chunkSaveAndTrack", lambda _, chunk: saved.append(chunk))
     monkeypatch.setattr("sys.argv", ["generate-chunks.py", str(csv_path)])
     monkeypatch.setenv("SKIP_DISCOVERY", "1")
     gc.main()
+    saved = [yaml.safe_load(path.read_text()) for path in (tmp_path / "chunks").glob("*.yaml")]
     assert len(saved) == 2
-    assert len({chunk.url for chunk in saved}) == 2
+    assert len({chunk["url"] for chunk in saved}) == 2
+    child = next(chunk for chunk in saved if chunk["url"].endswith("/engine/"))
+    assert set(gc.parse_keywords(child["keywords"])) == {
+        "containers", "docker", "engine", "systemd daemon control"
+    }
+    parent = next(chunk for chunk in saved if chunk["url"].endswith("/docker/"))
+    assert "systemd daemon control" not in parent["keywords"]
+
+
+def test_comments_are_removed_without_changing_code_literals():
+    body = '''Inline `print("<!--inline-->")` and `` ` <!--wide--> ` ``.
+<!-- unpublished {{< unsupported >}} `example` -->
+```python
+print("<!--fenced-->")
+```
+~~~html
+<!--tilde-->
+~~~
+
+    print("<!--indented-->")
+
+Visible text. <!--hidden--> More text.
+'''
+    repo = repository({"content/install-guides/demo.md": markdown("Demo", body)})
+    doc = repo.documents("https://learn.arm.com/install-guides/demo/")[0]
+    text = "\n".join(c["content"] for c in chunk_parsed_document(doc, "Guide", []))
+    for literal in ("inline", "wide", "fenced", "tilde", "indented"):
+        assert f"<!--{literal}-->" in text
+    assert "unpublished" not in text and "hidden" not in text
+    assert "Visible text." in text and "More text." in text
+
+
+@pytest.mark.parametrize(
+    "pane,code",
+    [("tabpane code=true", True), ("tabpane-normal", False),
+     ('tabpane-normal language="python"', False)],
+)
+def test_language_less_tabs_keep_their_content_type(pane, code):
+    body = f'''## Setup
+{{{{< {pane} >}}}}
+{{{{< tab header="Linux" >}}}}
+# Install the package
+sudo apt install example
+{{{{< /tab >}}}}
+{{{{< /{pane.split()[0]} >}}}}
+'''
+    repo = repository({"content/install-guides/demo.md": markdown("Demo", body)})
+    doc = repo.documents("https://learn.arm.com/install-guides/demo/")[0]
+    chunks = chunk_parsed_document(doc, "Guide", [])
+    assert any(block.kind == "code" for section in doc.sections for block in section.blocks) == code
+    if code:
+        assert all(chunk["url"].endswith("#setup") for chunk in chunks)
+        assert "# Install the package\nsudo apt install example" in chunks[0]["content"]
+    else:
+        assert any(chunk["url"].endswith("#install-the-package") for chunk in chunks)

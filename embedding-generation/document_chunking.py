@@ -357,6 +357,21 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
+FENCED_CODE = re.compile(
+    r"^ {0,3}(`{3,}|~{3,})[^\n]*\n.*?^ {0,3}\1[ \t]*(?=\n|$)", re.M | re.S
+)
+
+
+def clean_chunk_text(text: str) -> str:
+    """Normalize prose while preserving whitespace within fenced examples."""
+    parts, start = [], 0
+    for match in FENCED_CODE.finditer(text):
+        parts.extend((clean_text(text[start:match.start()]), match[0]))
+        start = match.end()
+    parts.append(clean_text(text[start:]))
+    return "\n\n".join(part for part in parts if part)
+
+
 def tokenize_link_text(text: str) -> list[str]:
     return [
         token.lower()
@@ -634,7 +649,12 @@ def parse_html(
     for tag in root.find_all(list(HTML_BLOCK_TAGS)):
         if _should_skip_html_tag(tag):
             continue
-        text = clean_text(tag.get_text("\n" if tag.name == "pre" else " ", strip=True))
+        if tag.name in {"pre", "code"}:
+            # Syntax highlighting may split a line across many spans. Concatenate
+            # their text without inserting separators or stripping indentation.
+            text = tag.get_text().strip("\n")
+        else:
+            text = clean_text(tag.get_text(" ", strip=True))
         if not text or is_boilerplate_line(text):
             continue
         if tag.name in HTML_HEADING_TAGS:
@@ -1136,15 +1156,26 @@ def merge_code_context(blocks: list[Block]) -> list[str]:
         else:
             merged.append(block.text)
         i += 1
-    return [clean_text(item) for item in merged if clean_text(item)]
+    return [clean_chunk_text(item) for item in merged if item.strip()]
 
 
 def split_text_recursively(text: str, max_tokens: int) -> list[str]:
-    text = clean_text(text)
+    text = clean_chunk_text(text)
     if not text:
         return []
     if estimate_tokens(text) <= max_tokens:
         return [text]
+    fences = list(FENCED_CODE.finditer(text))
+    if fences:
+        # Keep examples intact even when one exceeds the target chunk size.
+        # Splitting code by words destroys indentation and executable syntax.
+        parts, start = [], 0
+        for match in fences:
+            parts.extend(split_text_recursively(text[start:match.start()], max_tokens))
+            parts.append(match[0])
+            start = match.end()
+        parts.extend(split_text_recursively(text[start:], max_tokens))
+        return parts
     parts = [
         clean_text(part) for part in re.split(r"\n\s*\n", text) if clean_text(part)
     ]
@@ -1172,6 +1203,10 @@ def split_text_recursively(text: str, max_tokens: int) -> list[str]:
 
 
 def overlap_tail(text: str, overlap_tokens: int) -> str:
+    fences = list(FENCED_CODE.finditer(text))
+    if fences:
+        # Only overlap trailing prose; partial code would lose its fence/indent.
+        text = text[fences[-1].end():].strip()
     words = WORD_PATTERN.findall(text)
     if len(words) <= overlap_tokens:
         return text
@@ -1220,7 +1255,7 @@ def build_chunk_text(title: str, heading_path: list[str], body: str) -> str:
     heading_label = (
         " > ".join(normalized_heading_path) if normalized_heading_path else title
     )
-    return clean_text(
+    return clean_chunk_text(
         f"Document Title: {title}\nHeading Path: {heading_label}\n\n{body}"
     )
 

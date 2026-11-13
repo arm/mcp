@@ -44,6 +44,29 @@ _MARKDOWN = MarkdownIt("commonmark", {"html": True}).enable("table")
 _MARKDOWN.renderer.rules["image"] = _image_caption
 
 
+def strip_markdown_comments(body):
+    """Remove unpublished comments without changing code literals."""
+    lines = body.splitlines(keepends=True)
+    protected = [
+        token.map
+        for token in _MARKDOWN.parse(body)
+        if token.type in {"fence", "code_block"} and token.map
+    ]
+    # Match code spans before looking for comments inside them. Matching the
+    # entire comment also keeps backticks in unpublished text from leaking out.
+    spans_or_comments = re.compile(r"(`+)(?!`)(.*?)(?<!`)\1(?!`)|<!--.*?-->", re.S)
+
+    def strip(text):
+        return spans_or_comments.sub(lambda match: match[0] if match[1] else "", text)
+
+    result, start = [], 0
+    for first, last in protected:
+        result.extend((strip("".join(lines[start:first])), "".join(lines[first:last])))
+        start = last
+    result.append(strip("".join(lines[start:])))
+    return "".join(result)
+
+
 def parse_repository_markdown(markdown, source_url, resolved_url, title):
     """Use the shared content parser on locally rendered source Markdown.
 
@@ -289,7 +312,7 @@ class Repository:
 
     def markdown(self, page, body):
         """Retain callout text, code tabs, links and embedded example source."""
-        body = re.sub(r"<!--.*?-->", "", body, flags=re.S)
+        body = strip_markdown_comments(body)
         body = re.sub(
             r"\{\{[<%]\s*knowledge-check-completion\s*[>%]\}\}.*?\{\{[<%]\s*/knowledge-check-completion\s*[>%]\}\}",
             "",
@@ -351,12 +374,16 @@ class Repository:
                 if closing:
                     tab_languages.pop()
                 else:
-                    tab_languages.append(args.get("language", ""))
+                    language = args.get("language", "")
+                    if name == "tabpane-normal":
+                        language = None
+                    elif not language and args.get("code", "").lower() == "true":
+                        language = "text"
+                    tab_languages.append(language)
                 return "\n\n"
             if name == "tab":
-                language = args.get(
-                    "language", tab_languages[-1] if tab_languages else ""
-                )
+                inherited = tab_languages[-1] if tab_languages else ""
+                language = (args.get("language") or inherited) if inherited is not None else ""
                 if closing:
                     return "\n```\n\n" if code_tabs.pop() else "\n\n"
                 code_tabs.append(bool(language))

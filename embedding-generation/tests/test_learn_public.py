@@ -82,6 +82,30 @@ def test_single_lesson_does_not_fetch_siblings():
     assert http.calls == [LESSON]
 
 
+def test_course_without_discovered_lessons_fails_preflight(gc, monkeypatch, tmp_path):
+    csv_path = tmp_path / "sources.csv"
+    original = (
+        "Site Name,License Type,Display Name,URL,Keywords\n"
+        f"Educational Course,CC4.0,Example,{COURSE},Arm\n"
+    )
+    csv_path.write_text(original)
+    output = tmp_path / "chunks"
+    output.mkdir()
+    existing = output / "chunk_existing.yaml"
+    existing.write_text("existing")
+    sources = LearnSources(session({COURSE: "<main><h1>Example</h1><p>Overview.</p></main>"}))
+    monkeypatch.setattr(gc, "learn_sources", sources)
+    monkeypatch.setattr(gc, "yaml_dir", str(output))
+    monkeypatch.setattr(gc, "prepare_intrinsic_chunks", lambda: None)
+    monkeypatch.setattr(gc, "reconcile_ecosystem_sources", lambda **_: None)
+    monkeypatch.setattr("sys.argv", ["generate-chunks.py", str(csv_path)])
+    monkeypatch.setenv("SKIP_DISCOVERY", "1")
+    with pytest.raises(ValueError, match="No published lessons"):
+        gc.main()
+    assert csv_path.read_text() == original
+    assert existing.read_text() == "existing"
+
+
 def insight_entry(anchor, question, answer):
     return f'''<div class="insight-entry" id="{anchor}"><ads-expansion-panel>
       <div slot="toggle"><span class="insight-entry__question-text">{question}</span></div>

@@ -170,6 +170,8 @@ class PublicLearnSources:
                     f"No instructional content on public course page: {page_url}"
                 )
             documents.append(document)
+        if len(urlsplit(url).path.strip("/").split("/")) == 2 and len(documents) == 1:
+            raise ValueError(f"No published lessons found for course: {url}")
         return documents
 
     def insight_documents(self, soup, url):

@@ -803,7 +803,9 @@ def main():
     # Validate Learn sources before modifying the CSV or deleting old chunks.
     # This also applies to SKIP_DISCOVERY and explicit transcript sources.
     for source in all_sources:
-        url = source.get("transcript_source_url") or source["url"]
+        url = normalize_source_url(
+            source.get("transcript_source_url")
+        ) or normalize_source_url(source["url"])
         if is_learn_url(url):
             learn_sources.documents(url)
     save_sources_csv(sources_file)
@@ -825,7 +827,7 @@ def main():
     # 1) Get URLs and details from CSV
     csv_dict, csv_length = readInCSV(sources_file)
 
-    seen_learn_chunks = set()
+    learn_chunks = {}
     print(f"Starting to loop over CSV file {sources_file} ......")
     for i in range(csv_length):
         url = csv_dict["urls"][i]
@@ -833,17 +835,28 @@ def main():
         doc_type = csv_dict["site_names"][i]
         keywords_value = csv_dict["focus"][i]
         transcript_url = csv_dict["transcript_urls"][i]
+        effective_url = normalize_source_url(transcript_url) or normalize_source_url(url)
 
         for chunk in create_chunks_for_source(
             url, source_name, doc_type, keywords_value, transcript_url
         ):
-            if is_learn_url(url):
+            if is_learn_url(effective_url):
                 # A parent guide and an explicitly listed child may overlap.
                 identity = (chunk.url, chunk.resolved_url, chunk.content)
-                if identity in seen_learn_chunks:
+                if identity in learn_chunks:
+                    _, existing = learn_chunks[identity]
+                    keywords = dict.fromkeys(
+                        parse_keywords(existing.keywords) + parse_keywords(chunk.keywords)
+                    )
+                    existing.keywords = existing.formatKeywords(keywords)
                     continue
-                seen_learn_chunks.add(identity)
-            chunkSaveAndTrack(url, chunk)
+                learn_chunks[identity] = (url, chunk)
+            else:
+                chunkSaveAndTrack(url, chunk)
+
+    # Emit only after all overlapping rows have contributed their keywords.
+    for url, chunk in learn_chunks.values():
+        chunkSaveAndTrack(url, chunk)
 
     # Save updated sources CSV with all discovered sources
     save_sources_csv(sources_file)
