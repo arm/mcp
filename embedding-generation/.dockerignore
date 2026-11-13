@@ -24,6 +24,7 @@
 !embedding-model.lock.json
 !acquire-model.py
 !document_chunking.py
+!agi_product_brief.py
 !ecosystem_dashboard.py
 !learn_repository.py
 !learn_public.py

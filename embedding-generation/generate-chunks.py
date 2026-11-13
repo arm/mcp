@@ -26,6 +26,7 @@ import yaml
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from agi_product_brief import is_agi_product_brief
 from document_chunking import (
     arm_service_url_to_developer_url,
     chunk_parsed_document,
@@ -802,12 +803,23 @@ def main():
     reconcile_ecosystem_sources(discover=not skip_discovery)
     # Validate Learn sources before modifying the CSV or deleting old chunks.
     # This also applies to SKIP_DISCOVERY and explicit transcript sources.
+    validated_brief_chunks = {}
     for source in all_sources:
         url = normalize_source_url(
             source.get("transcript_source_url")
         ) or normalize_source_url(source["url"])
         if is_learn_url(url):
             learn_sources.documents(url)
+        elif is_agi_product_brief(url):
+            # This adapter rejects unfamiliar table layouts. Validate before
+            # replacing outputs, and reuse the result from this exact download.
+            chunks = create_chunks_for_source(
+                source["url"], source["display_name"], source["site_name"],
+                source["keywords"], source.get("transcript_source_url", ""),
+            )
+            if not chunks:
+                raise ValueError(f"Cannot acquire Arm AGI CPU product brief: {url}")
+            validated_brief_chunks[(normalize_source_url(source["url"]), url)] = chunks
     save_sources_csv(sources_file)
 
     # 0) Initialize files
@@ -837,9 +849,12 @@ def main():
         transcript_url = csv_dict["transcript_urls"][i]
         effective_url = normalize_source_url(transcript_url) or normalize_source_url(url)
 
-        for chunk in create_chunks_for_source(
-            url, source_name, doc_type, keywords_value, transcript_url
-        ):
+        chunks = validated_brief_chunks.get((normalize_source_url(url), effective_url))
+        if chunks is None:
+            chunks = create_chunks_for_source(
+                url, source_name, doc_type, keywords_value, transcript_url
+            )
+        for chunk in chunks:
             if is_learn_url(effective_url):
                 # A parent guide and an explicitly listed child may overlap.
                 identity = (chunk.url, chunk.resolved_url, chunk.content)

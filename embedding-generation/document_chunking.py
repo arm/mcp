@@ -18,6 +18,8 @@ from zipfile import BadZipFile, ZipFile
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
 
+from agi_product_brief import extract_agi_product_brief, is_agi_product_brief
+
 TOKEN_PATTERN = re.compile(r"\w+|[^\w\s]", re.UNICODE)
 WORD_PATTERN = re.compile(r"\S+")
 SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+")
@@ -728,6 +730,17 @@ def parse_pdf(
     pdf_bytes: bytes, source_url: str, resolved_url: str, fallback_title: str
 ) -> ParsedDocument:
     reader = PdfReader(BytesIO(pdf_bytes))
+    if is_agi_product_brief(source_url) or is_agi_product_brief(resolved_url):
+        return ParsedDocument(
+            source_url=source_url,
+            resolved_url=resolved_url,
+            display_title=fallback_title,
+            content_type="pdf",
+            sections=[
+                Section(headings, [Block("paragraph", text)], f"page={number}")
+                for headings, text, number in extract_agi_product_brief(reader)
+            ],
+        )
     sections: list[Section] = []
     document_title = fallback_title
     for page_number, page in enumerate(reader.pages, start=1):
@@ -756,7 +769,7 @@ def parse_pdf(
                 continue
             blocks.append(Block("paragraph", paragraph))
         if blocks:
-            sections.append(Section(heading_path, blocks))
+            sections.append(Section(heading_path, blocks, f"page={page_number}"))
     if not sections:
         sections.append(Section([], [Block("paragraph", fallback_title)]))
     return ParsedDocument(
@@ -1085,7 +1098,7 @@ def parse_document_content(
     fallback_title: str,
 ) -> ParsedDocument:
     content_type = (content_type or "").lower()
-    if "pdf" in content_type or resolved_url.lower().endswith(".pdf"):
+    if "pdf" in content_type or urlparse(resolved_url).path.lower().endswith(".pdf"):
         return parse_pdf(response_content, source_url, resolved_url, fallback_title)
     # Raw GitHub-hosted PPTX files may be served as generic binary content; use
     # the resolved path before attempting to decode the file as UTF-8 text.

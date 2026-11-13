@@ -266,6 +266,26 @@ uv run --locked pytest
 
 
 
+## Arm AGI CPU product brief ingestion
+
+`agi_product_brief.py` handles the public Arm AGI CPU product brief PDF. It
+extracts the specification table using PDF layout information and emits a
+self-contained chunk per CPU variant/SKU. Specification values come from the
+downloaded PDF, including multiline cells; they are not maintained in code.
+Introduction, benefits, individual highlights, rack-level overview, and reference
+platforms receive descriptive headings. Performance-estimate and configurable-TDP
+qualifications remain attached to the relevant content.
+
+The adapter validates the expected headings, table rows, nonempty cells, and
+unique variant/SKU identities. An unfamiliar or incomplete structure raises an
+error rather than falling back to ambiguous flattened specifications. It is
+selected only for the brief's Arm-hosted URL. Other PDFs retain generic parsing.
+Acquisition and validation happen before rewriting the sources CSV or deleting
+existing chunks; the validated chunks are reused without a second download.
+All parsed PDF pages now cite `#page=N`, while `resolved_url` retains the fetched
+document URL. Rebuild the toolchain and regenerate chunks/vector artifacts to
+publish these changes.
+
 ## Ecosystem Dashboard ingestion
 
 `ecosystem_dashboard.py` resolves the dashboard repository's `main` branch once

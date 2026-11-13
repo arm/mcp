@@ -9,6 +9,7 @@ on:
       - embedding-generation/Dockerfile.toolchain
       - embedding-generation/acquire-model.py
       - embedding-generation/document_chunking.py
+      - embedding-generation/agi_product_brief.py
       - embedding-generation/ecosystem_dashboard.py
       - embedding-generation/learn_repository.py
       - embedding-generation/learn_public.py
