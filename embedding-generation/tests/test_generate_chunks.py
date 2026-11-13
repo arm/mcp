@@ -41,6 +41,34 @@ FIXTURE_DIR = Path(__file__).parent
 SAMPLE_PPTX_FIXTURE = "sample_course_slides.pptx"
 
 
+@pytest.mark.parametrize("max_tokens", [25, 600])
+def test_saved_html_chunks_preserve_highlighted_code_indentation(gc, monkeypatch, tmp_path, max_tokens):
+    import yaml
+
+    code = 'def run():\n    for item in items:\n        print("two  spaces", item)\n\n\n    return True'
+    html = (
+        '<main><h1>Example</h1><h2 id="run">Run</h2><p>Run this example.</p>'
+        '<pre><code><span>def</span> run():\n    <span>for</span> item in items:\n'
+        '        print("two  spaces", item)\n\n\n    return True</code></pre>'
+        '<p>Check the result.</p></main>'
+    )
+    doc = parse_document_content(
+        "https://example.com/", "https://example.com/", html.encode(), "text/html", "Example"
+    )
+    chunks = chunk_parsed_document(doc, "Guide", [], min_tokens=10, max_tokens=max_tokens, overlap_tokens=5)
+    monkeypatch.setattr(gc, "yaml_dir", str(tmp_path))
+    details = tmp_path / "details.csv"
+    details.write_text("URL,Date,Number of Words,Number of Chunks,Chunk IDs\n")
+    monkeypatch.setattr(gc, "details_file", str(details))
+    for payload in chunks:
+        gc.chunkSaveAndTrack(payload["url"], gc.chunk_from_payload(payload, []))
+    saved = [yaml.safe_load(path.read_text())["content"] for path in tmp_path.glob("chunk_*.yaml")]
+    examples = [text for text in saved if "def run():" in text]
+    assert len(examples) == 1
+    assert f"```\n{code}\n```" in examples[0]
+    assert all(text.count("```") % 2 == 0 for text in saved)
+
+
 def test_relative_link_evidence_is_retained_when_url_prefix_is_embedded():
     text = "[Home](/) [Guide](https://learn.arm.com/guide)"
     links = extract_markdown_links(text, "https://learn.arm.com/example/")
@@ -658,73 +686,6 @@ class TestSourceTracking:
         assert gc.all_sources[0]["site_name"] == "Test Site"
         assert gc.all_sources[0]["display_name"] == "Test Display"
         assert gc.all_sources[0]["keywords"] == "test"
-
-    def test_valid_child_is_added_and_emitted_when_enabled(self, gc, monkeypatch):
-        """A valid child is registered and emitted when chunking is enabled."""
-        prefix = "https://learn.arm.com/install-guides/"
-        listing_url = "https://learn.arm.com/install-guides"
-        docker_url = f"{prefix}docker/"
-        child_url = f"{docker_url}docker-engine/"
-        responses = {
-            listing_url: _html_response(_install_listing({docker_url})),
-            docker_url: _html_response(
-                '<h1 id="install-guide-title">Docker</h1>'
-                '<div class="multi-install-card" '
-                'link="/install-guides/docker/docker-engine/"></div>'
-            ),
-            child_url: _html_response(
-                '<h1 id="ads-masthead-title"><span>Docker Engine</span></h1>'
-            ),
-        }
-        monkeypatch.setattr(
-            gc.http_session,
-            "get",
-            lambda url, timeout: responses[url],
-        )
-        fetched_urls = []
-
-        def fake_fetch(url):
-            fetched_urls.append(url)
-            return None
-
-        monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
-
-        gc.processLearningPath("/install-guides", "Install Guide", emit_chunks=True)
-
-        child_source = next(
-            source for source in gc.all_sources if source["url"] == child_url
-        )
-        assert child_source["display_name"] == "Install Guide - Docker Engine"
-        assert child_source["keywords"].startswith("Docker Engine; Docker;")
-        assert fetched_urls == [
-            "https://raw.githubusercontent.com/ArmDeveloperEcosystem/"
-            "arm-learning-paths/refs/heads/production/content/"
-            "install-guides/docker/docker-engine.md"
-        ]
-
-    def test_invalid_child_titles_are_rejected(self, gc, monkeypatch):
-        """Unavailable or malformed child pages do not produce a title."""
-        child_url = "https://learn.arm.com/install-guides/docker/docker-engine/"
-
-        monkeypatch.setattr(
-            gc.http_session,
-            "get",
-            lambda url, timeout: _html_response("", ok=False, status_code=404),
-        )
-        assert gc.get_install_guide_title(child_url) is None
-
-        def raise_request_exception(url, timeout):
-            raise gc.requests.exceptions.RequestException("network failure")
-
-        monkeypatch.setattr(gc.http_session, "get", raise_request_exception)
-        assert gc.get_install_guide_title(child_url) is None
-
-        monkeypatch.setattr(
-            gc.http_session,
-            "get",
-            lambda url, timeout: _html_response("<html></html>"),
-        )
-        assert gc.get_install_guide_title(child_url) is None
 
     def test_register_source_inserts_after_matching_site_group(self, gc):
         """Test that new sources stay grouped with existing sources from the same site."""
@@ -1574,9 +1535,9 @@ class TestCreateTranscriptChunks:
         monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
 
         chunks = gc.create_chunks_for_source(
-            source_url="https://learn.arm.com/learning-paths/example/",
+            source_url="https://example.com/documentation/",
             source_name="Example",
-            doc_type="Learning Paths",
+            doc_type="Documentation",
             keywords_value="arm",
             transcript_url="   ",
         )

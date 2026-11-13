@@ -38,6 +38,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "huggingface-hub" },
+    { name = "markdown-it-py" },
     { name = "numpy" },
     { name = "pypdf" },
     { name = "pyyaml" },
@@ -60,6 +61,7 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4" },
     { name = "huggingface-hub" },
+    { name = "markdown-it-py" },
     { name = "numpy" },
     { name = "pypdf" },
     { name = "pyyaml" },

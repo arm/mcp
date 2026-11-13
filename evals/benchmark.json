@@ -5,7 +5,8 @@
     "intent": "setup",
     "question": "I want an Ubuntu EC2 instance that runs on Graviton. Which image architecture should I select in the launch wizard?",
     "expected_urls": [
-      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/csp/aws/#select-os-image"
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/csp/aws/#select-os-image",
+      "https://learn.arm.com/learning-paths/servers-and-cloud-computing/arcee-foundation-model-on-aws/01_launching_a_graviton4_instance/#launch-and-configure-the-ec2-instance"
     ]
   },
   {
@@ -887,7 +888,8 @@
     "intent": "conceptual",
     "question": "In the i.MX 93 TinyML deployment example, why are both a .pte file and executor_runner firmware needed?",
     "expected_urls": [
-      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/observing-ethos-u-on-nxp/7-build-executorch-pte/#executorch-deployment-components"
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/observing-ethos-u-on-nxp/7-build-executorch-pte/#executorch-deployment-components",
+      "https://learn.arm.com/learning-paths/embedded-and-microcontrollers/observing-ethos-u-on-nxp/9-build-executorch-runner-for-cm33/#executorch-deployment-components"
     ]
   },
   {
@@ -2246,7 +2248,8 @@
     "intent": "conceptual",
     "question": "Why does using C[i-1] to compute C[i] make straightforward SIMD vectorization of a loop difficult?",
     "expected_urls": [
-      "https://learn.arm.com/learning-paths/cross-platform/loop-reflowing/autovectorization-limits/#no-data-inter-dependency-between-iterations"
+      "https://learn.arm.com/learning-paths/cross-platform/loop-reflowing/autovectorization-limits/#no-data-inter-dependency-between-iterations",
+      "https://learn.arm.com/insights/sve/#code-patterns-difficult"
     ]
   },
   {
@@ -3670,6 +3673,141 @@
     "question": "What does the Azure Dpsv5 workload brief say about running AI inference workloads on Ampere-based virtual machines?",
     "expected_urls": [
       "https://amperecomputing.com/briefs/ai-inference-on-azure-brief"
+    ]
+  },
+  {
+    "id": "B410",
+    "topic": "performance",
+    "intent": "troubleshooting",
+    "question": "I am benchmarking GPT-2 on a Raspberry Pi. Portable ExecuTorch is slower than PyTorch eager; how should I compare it with the XNNPACK artifact using warmups and repeated measurements?",
+    "expected_urls": [
+      "https://learn.arm.com/courses/executorch-on-arm/compare-transformer-inference/evaluate-a-decoder-only-transformer-deployment/gpt2-benchmark-on-raspberry-pi/"
+    ]
+  },
+  {
+    "id": "B411",
+    "topic": "ai-ml",
+    "intent": "troubleshooting",
+    "question": "I lowered GPT-2 with XNNPACK, but layer normalization still appears as an ordinary operator. How can I inspect the exported and lowered graphs to check what was actually delegated?",
+    "expected_urls": [
+      "https://learn.arm.com/courses/executorch-on-arm/compare-transformer-inference/evaluate-a-decoder-only-transformer-deployment/inspect-gpt2-delegation-with-model-explorer/"
+    ]
+  },
+  {
+    "id": "B412",
+    "topic": "performance",
+    "intent": "conceptual",
+    "question": "My GPT-2 app on Raspberry Pi takes much longer to generate a sentence than its single-forward benchmark suggests. What work does a generation loop without a KV cache repeat?",
+    "expected_urls": [
+      "https://learn.arm.com/courses/executorch-on-arm/compare-transformer-inference/evaluate-a-decoder-only-transformer-deployment/run-the-gpt2-text-generation-demo/"
+    ]
+  },
+  {
+    "id": "B413",
+    "topic": "ai-ml",
+    "intent": "troubleshooting",
+    "question": "Quantizing my MobileNetV2 model with XNNPACK reduced the .pte size by much less than four times. Why can an INT8 deployment still contain substantial FP32 data and other overhead?",
+    "expected_urls": [
+      "https://learn.arm.com/courses/executorch-on-arm/optimize-image-classification/quantize-mobilenetv2-to-int8-with-xnnpack/create-the-calibration-image-set/#quantize-and-lower-the-model"
+    ]
+  },
+  {
+    "id": "B414",
+    "topic": "ai-ml",
+    "intent": "reference",
+    "question": "The lowered MobileNetV2 graph has one XNNPACK delegate and a remaining getitem operation. Does that fallback mean the convolutions missed acceleration, and what do these counts actually tell me?",
+    "expected_urls": [
+      "https://learn.arm.com/courses/executorch-on-arm/optimize-image-classification/export-and-lower-mobilenetv2-with-executorch-and-xnnpack/inspect-the-delegation-summary/"
+    ]
+  },
+  {
+    "id": "B415",
+    "topic": "mobile-graphics",
+    "intent": "troubleshooting",
+    "question": "I packaged an ExecuTorch .pte under Android assets, but Module.load needs a filesystem path. How should I make the model available to the native runtime?",
+    "expected_urls": [
+      "https://learn.arm.com/courses/executorch-on-arm/android-semantic-segmentation/inspect-the-android-runtime-code/load-the-model-asset/"
+    ]
+  },
+  {
+    "id": "B416",
+    "topic": "mobile-graphics",
+    "intent": "reference",
+    "question": "I am integrating ExecuTorch into an Android Activity. How should I schedule inference and release the Module so the UI stays responsive and an in-flight forward call is not interrupted?",
+    "expected_urls": [
+      "https://learn.arm.com/courses/executorch-on-arm/android-semantic-segmentation/inspect-the-android-runtime-code/run-executorch-and-validate-the-output/#keep-runtime-work-off-the-ui-thread"
+    ]
+  },
+  {
+    "id": "B417",
+    "topic": "ai-ml",
+    "intent": "reference",
+    "question": "Before shipping an INT8 segmentation model, I want to compare its foreground masks with the FP32 version. How do pixel agreement, IoU, and Dice help, and do they establish ground-truth accuracy?",
+    "expected_urls": [
+      "https://learn.arm.com/courses/executorch-on-arm/android-semantic-segmentation/quantize-and-validate-the-int8-model/validate-the-int8-cutout/#measure-mask-agreement"
+    ]
+  },
+  {
+    "id": "B418",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "troubleshooting",
+    "question": "Exporting FP32 MobileNetV2 for Ethos-U produced a .pte file but zero NPU delegate calls. Why did this happen, and does successful export prove the program will run on the target?",
+    "expected_urls": [
+      "https://learn.arm.com/courses/executorch-on-arm/ethos-u-acceleration/compare-mobilenetv2-delegation-outcomes/test-fp32-ethos-u-delegation/"
+    ]
+  },
+  {
+    "id": "B419",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "troubleshooting",
+    "question": "Adding LocalResponseNorm to my quantized MobileNetV2 split Ethos-U execution into two regions with avg_pool3d left over. What should I inspect before assuming the NPU will still give a speedup?",
+    "expected_urls": [
+      "https://learn.arm.com/courses/executorch-on-arm/ethos-u-acceleration/compare-mobilenetv2-delegation-outcomes/test-how-operator-support-changes-delegation/"
+    ]
+  },
+  {
+    "id": "B420",
+    "topic": "embedded-bare-metal-rtos",
+    "intent": "reference",
+    "question": "My INT8 MobileNetV2 run on Corstone-320 produced out-0.bin. How should I interpret the output data type and convert the raw scores into ImageNet class predictions?",
+    "expected_urls": [
+      "https://learn.arm.com/courses/executorch-on-arm/ethos-u-acceleration/run-mobilenetv2-on-corstone-320-fvp/decode-the-output/"
+    ]
+  },
+  {
+    "id": "B421",
+    "topic": "performance",
+    "intent": "reference",
+    "question": "I captured an ETDump from MobileNetV2 running with XNNPACK on a Raspberry Pi. How can I measure delegate-call durations using the matching ETRecord?",
+    "expected_urls": [
+      "https://learn.arm.com/courses/executorch-on-arm/optimize-image-classification/optional-profile-executorch-runtime/profile-with-etdump/#read-delegate-timing-with-inspector"
+    ]
+  },
+  {
+    "id": "B422",
+    "topic": "ai-ml",
+    "intent": "troubleshooting",
+    "question": "My delegated ExecuTorch model exports successfully but the selective target build reports an unregistered fallback operator. What kernel and linker coverage should I verify in the deployed application?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/executorch/#happens-operators-not"
+    ]
+  },
+  {
+    "id": "B423",
+    "topic": "simd-matrix-extensions",
+    "intent": "reference",
+    "question": "I am adding an SME2 path to a portable Linux AArch64 library. How should runtime dispatch check OS-exposed capabilities while keeping detection code safe on machines without SME?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/sme/#detect-at-runtime"
+    ]
+  },
+  {
+    "id": "B424",
+    "topic": "simd-matrix-extensions",
+    "intent": "reference",
+    "question": "I am porting a float-array loop to SVE. How do I choose the loop increment and final-iteration predicate so it works at different vector lengths without reading past the array?",
+    "expected_urls": [
+      "https://learn.arm.com/insights/sve/#handle-tail-remaining"
     ]
   }
 ]

@@ -81,6 +81,52 @@ Example Docs,CC4.0,Example Arm Guide,https://example.com/arm-guide,arm; migratio
 
 Use clear keywords that users might include in questions. The `URL` is also what retrieval eval uses for expected matches.
 
+### Learn content from public sources
+
+All Learn acquisition uses public sources and requires no GitHub credentials.
+
+| Content | Acquisition source |
+| --- | --- |
+| Learning Paths, Install Guides, migration and other Learn pages | Public `ArmDeveloperEcosystem/arm-learning-paths` repository |
+| Courses | Published `https://learn.arm.com/courses/` pages and their lesson navigation |
+| Insights | Published `https://learn.arm.com/insights/` pages and answer panels |
+
+The Learning Paths repository's `production` branch is resolved once, then a
+commit-pinned archive is streamed and only source files are retained. Override
+`LEARN_LEARNING_PATHS_REF` with a branch, tag or commit SHA to choose its revision.
+The parser uses Hugo frontmatter URLs, slugs and aliases, lowercases generated
+page paths, and preserves the original case in repository source links. Drafts
+(including cascaded drafts), future and expired pages are excluded. Retired or
+unpublished repository-backed CSV rows are reported and omitted during reconciliation.
+
+Courses and Insights are fetched from the public website, never their private
+repositories. Course rows include lessons linked in the published curriculum;
+a single lesson row includes just that lesson. Insights answers are parsed
+separately, retaining each question in the heading path and its public answer
+anchor even when answers reuse inner headings. Published quiz questions retain
+correct/incorrect labels and explanatory feedback; completion and survey controls
+are omitted. Discovery reads the public course and Insights listing cards.
+
+Public page URLs stay in `url`. For repository content, `resolved_url` records
+the public repository commit and source file; for courses and Insights it records
+the public page URL. Web pages are reused within an acquisition run but can change
+between runs, even when the Learning Paths repository revision is pinned.
+`SKIP_DISCOVERY=1` prevents adding rows while still validating and acquiring the
+specified public sources. Public website rows are not removed based on repository
+contents. Learn fetch and parsing errors stop acquisition before the CSV or existing
+chunks are replaced. Overlapping parent/child rows emit identical Learn chunks once.
+
+Repository Markdown is rendered locally and passed through the shared content
+parser. Code, tables, callouts, code-tab labels, prerequisites, learning objectives,
+generated FAQs and further-reading links are retained. Heading IDs follow Hugo's
+raw-heading sanitization and duplicate handling. Learning Path frontmatter sections
+use the published `about-marker` and `generated-summary-faq` anchors. Unknown Hugo
+shortcodes fail explicitly so new content formats cannot silently lose text.
+
+Changes to this parsing code require rebuilding the toolchain and merging its
+`automation/pin-embedding-generator` PR before rebuilding the corpus. The pinned
+toolchain, not the current checkout, supplies the acquisition Python modules.
+
 ## Discover developer.arm.com Sources
 
 `discover-developer-arm-com-sources.py` searches developer.arm.com and appends any new relevant pages (currently SME-related guides, programmer's guides, and blog posts) to `vector-db-sources.csv`. Existing rows are never modified, so it is safe to re-run occasionally to pick up new content.
@@ -181,7 +227,7 @@ questions alongside the MCP integration tests against the candidate image. Every
 must retrieve an accepted source in the top five results; a miss or execution
 error fails the required integration check and blocks merging.
 
-The recurring embedding workflow runs all 408 benchmark questions in a separate
+The recurring embedding workflow runs all 423 benchmark questions in a separate
 job with read-only permissions. It evaluates the published candidate by digest,
 or the same saved image in a dry run, after verifying its original image ID.
 Evaluation runs without networking in the digest-pinned generator image, using
@@ -219,6 +265,26 @@ uv run --locked pytest
 ```
 
 
+
+## Arm AGI CPU product brief ingestion
+
+`agi_product_brief.py` handles the public Arm AGI CPU product brief PDF. It
+extracts the specification table using PDF layout information and emits a
+self-contained chunk per CPU variant/SKU. Specification values come from the
+downloaded PDF, including multiline cells; they are not maintained in code.
+Introduction, benefits, individual highlights, rack-level overview, and reference
+platforms receive descriptive headings. Performance-estimate and configurable-TDP
+qualifications remain attached to the relevant content.
+
+The adapter validates the expected headings, table rows, nonempty cells, and
+unique variant/SKU identities. An unfamiliar or incomplete structure raises an
+error rather than falling back to ambiguous flattened specifications. It is
+selected only for the brief's Arm-hosted URL. Other PDFs retain generic parsing.
+Acquisition and validation happen before rewriting the sources CSV or deleting
+existing chunks; the validated chunks are reused without a second download.
+All parsed PDF pages now cite `#page=N`, while `resolved_url` retains the fetched
+document URL. Rebuild the toolchain and regenerate chunks/vector artifacts to
+publish these changes.
 
 ## Ecosystem Dashboard ingestion
 
