@@ -683,6 +683,13 @@ def test_source_links_preserve_five_ranked_results_without_fetching(monkeypatch,
         assert hit.get("parent_page_url") == by_url[hit["url"]].get(parent_field)
 
 
+def test_library_search_can_return_more_than_twenty_results():
+    rows = [chunk(i, original_text=f"needle {i}") for i in range(25)]
+    state = SearchResources(rows, QueryModel(), index_for([[i / 100, 0] for i in range(25)]),
+                            build_bm25_index(rows), include_disclaimers=False)
+    assert len(search("needle", state, k=25)) == 25
+
+
 @pytest.mark.parametrize("name", ["doc_type", "product", "platform", "edition"])
 def test_filter_matching_normalizes_values_and_excludes_missing_metadata(name):
     metadata = [{name: value} for value in [" Linux ", "LINUX", "windows", "", None, ["linux"]]]
@@ -693,7 +700,7 @@ def test_filter_matching_normalizes_values_and_excludes_missing_metadata(name):
     choices = [" LINUX ", "windows", "linux", "unknown"]
     filters = SearchFilters.parse({name: choices})
     assert getattr(filters, name) == ("linux", "windows", "unknown")
-    assert replace(filters) == filters  # Normalized tuples can be reused by Python callers.
+    assert SearchFilters.model_validate(filters.model_dump()) == filters  # Python tuples can be reused.
     assert choices == [" LINUX ", "windows", "linux", "unknown"]
     choices.clear()
     assert lookup.eligible_ids(filters) == (0, 1, 2)

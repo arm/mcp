@@ -1,38 +1,44 @@
 """Metadata equality filters and reusable chunk eligibility lookups."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass, fields
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+FilterValue = str | Annotated[tuple[str, ...], Field(min_length=1)] | None
 
 
-FilterValue = str | list[str] | tuple[str, ...] | None
-
-
-def normalize_filter_value(value: FilterValue) -> str | tuple[str, ...] | None:
-    """Keep scalars compatible and copy alternatives into an immutable, unique tuple."""
-    if value is None:
-        return None
-    scalar = isinstance(value, str)
-    choices = [value] if scalar else value
-    if (not isinstance(choices, (list, tuple)) or not choices
-            or any(not isinstance(item, str) or not item.strip() for item in choices)):
-        raise ValueError("Filter values must be a non-empty string, a non-empty list/tuple of non-empty strings, or null")
-    normalized = tuple(dict.fromkeys(item.strip().casefold() for item in choices))
-    return normalized[0] if scalar else normalized
-
-
-@dataclass(frozen=True)
-class SearchFilters:
+class SearchFilters(BaseModel):
     """Exact labels: OR within a field, AND across fields; lists normalize to tuples."""
 
-    doc_type: FilterValue = None
-    product: FilterValue = None
-    platform: FilterValue = None
-    edition: FilterValue = None
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    def __post_init__(self) -> None:
-        for field in fields(self):
-            object.__setattr__(self, field.name, normalize_filter_value(getattr(self, field.name)))
+    doc_type: FilterValue = Field(default=None, description=(
+        "Exact document category, for example Learning Paths, Install Guides, Intrinsic, "
+        "or Ecosystem Dashboard. Use labels present in returned metadata."))
+    product: FilterValue = Field(default=None, description=(
+        "Exact corpus product label, for example Arm, AWS Graviton, Neon, SVE, or SVE2. "
+        "This is not generally the software name: Jenkins documentation may have product Arm."))
+    platform: FilterValue = Field(default=None, description=(
+        "Exact platform label, for example linux or windows. Mainly populated for ecosystem "
+        "compatibility records; filtering on it excludes tutorials with missing platform metadata."))
+    edition: FilterValue = Field(default=None, description=(
+        "Exact edition label, for example commercial or open-source. Mainly populated for "
+        "ecosystem compatibility records; missing metadata cannot match."))
+
+    @field_validator("doc_type", "product", "platform", "edition", mode="before")
+    @classmethod
+    def normalize_value(cls, value: Any) -> str | tuple[str, ...] | None:
+        """Copy alternatives into an immutable, normalized, unique tuple."""
+        if value is None:
+            return None
+        scalar = isinstance(value, str)
+        choices = [value] if scalar else value
+        if (not isinstance(choices, (list, tuple)) or not choices
+                or any(not isinstance(item, str) or not item.strip() for item in choices)):
+            raise ValueError("Filter values must be a non-empty string, a non-empty list/tuple of non-empty strings, or null")
+        normalized = tuple(dict.fromkeys(item.strip().casefold() for item in choices))
+        return normalized[0] if scalar else normalized
 
     @classmethod
     def parse(cls, value: "SearchFilters | Mapping[str, Any] | None") -> "SearchFilters":
@@ -44,10 +50,7 @@ class SearchFilters:
         if not isinstance(value, Mapping):
             # All invalid request filters use the same validation exception.
             raise ValueError("'filters' must be a SearchFilters instance, mapping, or None")  # noqa: TRY004
-        allowed = {field.name for field in fields(cls)}
-        if any(key not in allowed for key in value):
-            raise ValueError(f"Unknown filter field; supported fields: {', '.join(sorted(allowed))}")
-        return cls(**value)
+        return cls.model_validate(dict(value))
 
 
 class MetadataFilterIndex:
@@ -55,7 +58,7 @@ class MetadataFilterIndex:
 
     def __init__(self, metadata: list[dict[str, Any]]) -> None:
         self._postings: dict[str, dict[str, set[int]]] = {
-            field.name: {} for field in fields(SearchFilters)
+            name: {} for name in SearchFilters.model_fields
         }
         for row_id, item in enumerate(metadata):
             for name, values in self._postings.items():

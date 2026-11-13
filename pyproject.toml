@@ -4,6 +4,7 @@ version = "0.6.0"
 requires-python = ">=3.10"
 dependencies = [
   "numpy",
+  "pydantic>=2,<3",
   "rank-bm25",
   "regex",
   "sentence-transformers>=6.1.0",

@@ -64,6 +64,14 @@ Runtime loading writes no files. Keep metadata and synonyms unchanged during loa
 `filters` accepts a `SearchFilters` instance or a dictionary with optional
 `doc_type`, `product`, `platform`, and `edition` fields.
 
+`SearchFilters` is the shared Pydantic model used by MCP and available to endpoint
+request models. Use `SearchFilters.model_json_schema()` to generate its schema and
+`filters.model_dump(mode="json", exclude_none=True)` for a JSON-compatible payload.
+It replaces the dataclass: use `model_dump()` and `model_copy()` instead of
+`dataclasses.asdict()` and `dataclasses.replace()`. Construct a new model to validate
+changed values. Instances remain frozen; alternatives are stored as tuples in
+Python and serialized as arrays in JSON.
+
 - Each field accepts a string or non-empty list of strings (also tuples in Python).
   For example, `{"platform": ["linux", "windows"]}` matches either label.
   Values within a field use OR; fields use AND. Matching ignores case, surrounding

@@ -15,9 +15,9 @@
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from typing import Annotated, List, Dict, Any, Optional, Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import Field
 import arm_kb_search
-from arm_kb_search.filters import normalize_filter_value
+from arm_kb_search import SearchFilters
 from utils.config import (
     DEFAULT_ARCH,
     METADATA_PATH,
@@ -49,65 +49,50 @@ SEARCH_RESOURCES = arm_kb_search.load_search_resources(
 )
 
 
-FilterValue = str | Annotated[list[str], Field(min_length=1)] | None
-
-
-class KnowledgeBaseFilters(BaseModel):
-    """Exact labels or lists of alternatives; fields combine with AND."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    doc_type: FilterValue = Field(default=None, description=(
-        "Exact document category, for example Learning Paths, Install Guides, Intrinsic, "
-        "or Ecosystem Dashboard. Use labels present in returned metadata."))
-    product: FilterValue = Field(default=None, description=(
-        "Exact corpus product label, for example Arm, AWS Graviton, Neon, SVE, or SVE2. "
-        "This is not generally the software name: Jenkins documentation may have product Arm."))
-    platform: FilterValue = Field(default=None, description=(
-        "Exact platform label, for example linux or windows. Mainly populated for ecosystem "
-        "compatibility records; filtering on it excludes tutorials with missing platform metadata."))
-    edition: FilterValue = Field(default=None, description=(
-        "Exact edition label, for example commercial or open-source. Mainly populated for "
-        "ecosystem compatibility records; missing metadata cannot match."))
-
-    @field_validator("doc_type", "product", "platform", "edition")
-    @classmethod
-    def normalize_value(cls, value: FilterValue) -> str | list[str] | None:
-        normalized = normalize_filter_value(value)
-        return list(normalized) if isinstance(normalized, tuple) else normalized
-
-
 # error formatter now lives in utils/error_handling.py
 
 
 @mcp.tool(
-    description="If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your strategy. Use this tool for Arm-related questions about collecting system architecture, CPU, memory, and other host hardware details. Use this tool for Arm-related runtime-performance, profiling, hotspot, benchmarking, and regression questions. Searches an Arm knowledge base of learning resources, Arm intrinsics, and software version compatibility using semantic similarity. Given a natural language query, returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful for finding documentation, tutorials, or version compatibility for Arm migrations. Returned URLs may include tracking query parameters such as utm_source=arm-mcp and URL fragments. When sharing or citing returned URLs, preserve each URL exactly as returned, including query parameters and fragments; do not remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context. Optional filters restrict eligible records before ranking: each field accepts a string or non-empty list of strings. Values match complete metadata strings ignoring case and surrounding whitespace. Alternatives within a field combine with OR; different fields combine with AND. Duplicate alternatives are ignored. Omitted/null fields and empty filters leave search unrestricted. Use filters only when their metadata labels fit the question; do not guess product names or apply platform/edition to general tutorials. Unknown labels match nothing; other alternatives can still match. If filtering removes needed evidence, relax the filter; do not conclude the KB has no information. Optional k limits final ranked result entries, not tokens, pages, or embedding pieces: positive integer, default 5 when omitted/null. Fewer than k results may be available. Agents should use at most 20 results. Start with the default unless the task calls for fewer or more sources; additional searches should address a specific evidence gap. Invalid option types, empty lists, blank or non-string list items, unknown filter fields, and non-positive k are rejected. Optional scope selects matching chunks (default), every matched source page (page), or all stored pages in each matched parent resource (parent_resource). Expanded scopes cover all initial hits and deduplicate shared documents; k and filters limit initial matches only. Sources without a known parent use page scope. Expansion uses stored content only, requires complete ordering metadata, and can be large. Returned source links do not load their contents. Use expanded scope only when the user requests wider context; otherwise ask first. Clients must enforce this user-choice boundary."
+    description=(
+        'If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your '
+        'strategy. Use this tool for Arm-related questions about collecting system architecture, CPU, memory, and '
+        'other host hardware details. '
+        'Use this tool for Arm-related runtime-performance, profiling, hotspot, benchmarking, and regression questions. '
+        'Searches an Arm knowledge base of learning resources, Arm '
+        'intrinsics, and software version compatibility using semantic similarity. Given a natural language query, '
+        'returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful '
+        'for finding documentation, tutorials, or version compatibility for Arm migrations. Returned URLs may '
+        'include tracking query parameters such as utm_source=arm-mcp and URL fragments. When sharing or citing '
+        'returned URLs, preserve each URL exactly as returned, including query parameters and fragments; do not '
+        "remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can "
+        'briefly explain why it is calling this tool to provide additional context. Use filters with known '
+        'metadata labels to narrow results; alternatives within a field combine with OR, and different fields '
+        'combine with AND. Relax filters if needed evidence is missing. Start with the default chunks scope. When '
+        'more surrounding context from the matched pages is needed, use scope="page" after the user requests or '
+        'approves expansion. Page scope returns all stored chunks from those pages in order and can produce large '
+        'responses.'
+    )
 )
 def knowledge_base_search(
     query: str,
     invocation_reason: Optional[str] = None,
-    filters: Optional[KnowledgeBaseFilters] = None,
-    k: Annotated[Optional[int], Field(strict=True, ge=1,
-        description="Maximum ranked result entries (not tokens or pages); positive integer, default 5 when omitted/null. Agents should use at most 20.")] = None,
-    scope: Annotated[Literal["chunks", "page", "parent_resource"], Field(description=(
+    filters: Optional[SearchFilters] = None,
+    k: Annotated[int, Field(strict=True, ge=1, le=20,
+        description="Maximum ranked result entries (not tokens or pages); integer from 1 to 20, default 5 when omitted.")] = 5,
+    scope: Annotated[Literal["chunks", "page"], Field(description=(
         "chunks (default): ranked matching chunks. page: all stored chunks from every matched "
-        "document. parent_resource: all stored pages in each matched parent resource. Sources "
-        "without a known parent use page scope. Shared documents are returned once, in stored order. k and filters "
-        "select initial hits only; expansion is not limited to k chunks or filtered sibling pages. "
+        "document. Shared documents are returned once, in stored order. k and filters "
+        "select initial hits only; expansion is not limited to k chunks. "
         "Requires complete ordering metadata. Expansion can be large; use only when requested."
     ))] = "chunks",
 ) -> List[Dict[str, Any]]:
-    options = {}
-    if filters is not None:
-        values = filters.model_dump(exclude_none=True)
-        if values:
-            options["filters"] = values
-    if k is not None:
-        options["k"] = k
-    if scope != "chunks":
-        options["scope"] = scope
-    call_args = {"query": query, **options}
-    # Preserve the existing query-only log and search call when options are omitted.
+    call_args = {
+        "query": query,
+        "filters": filters.model_dump(mode="json", exclude_none=True) if filters is not None else None,
+        "k": k,
+        "scope": scope,
+    }
+    # Log the effective options and retain the ID for the paired search result.
     entry_id = log_invocation_reason(
         tool="knowledge_base_search",
         reason=invocation_reason,
@@ -123,19 +108,15 @@ def knowledge_base_search(
         List of dictionaries with metadata including url and text snippets.
     """
     try:
-        results = arm_kb_search.search(query, SEARCH_RESOURCES, **options)
+        results = arm_kb_search.search(
+            query, SEARCH_RESOURCES, filters=filters, k=k, scope=scope
+        )
         log_tool_result(entry_id, "knowledge_base_search", results)
         return results
     except Exception as e:
-        if scope != "chunks":
-            error = format_tool_error(tool="knowledge_base_search", exc=e, args=call_args)
-            log_tool_result(entry_id, "knowledge_base_search", error)
-            raise ToolError(str(e)) from e
-        return format_tool_error(
-            tool="knowledge_base_search",
-            exc=e,
-            args=call_args,
-        )
+        error = format_tool_error(tool="knowledge_base_search", exc=e, args=call_args)
+        log_tool_result(entry_id, "knowledge_base_search", error)
+        raise ToolError(str(e)) from e
 
 
 @mcp.tool(
