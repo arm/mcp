@@ -29,6 +29,22 @@ results = search(
 Reuse the loaded resources across requests. Create new resources when replacing
 the corpus; metadata and indexes are treated as a fixed snapshot.
 
+`scope="chunks"` (default) returns ranked matching chunks. Use `scope="page"`
+for all stored chunks from each matched page, or `scope="parent_resource"` for
+all stored pages in each matched parent. Sources without a known parent use page
+scope. Expansion preserves stored order and returns shared pages once. Filters
+and `k` select initial matches only; they do not limit expanded content.
+
+Results preserve source citations and may include `page_url` and `parent_page_url`.
+The legacy `learning_path_url` field is accepted on input. Expanded results also
+include position/count metadata and null scores. No live pages are fetched.
+
+Expansion requires regenerated KB artifacts with `document_context` format 1:
+document identity, zero-based chunk index, chunk count, and a parent URL/page manifest for
+parent expansion. Missing or conflicting context raises `ValueError` for the
+affected scope; valid pages and unrelated documents remain available. Parent
+manifests are currently acquired for Arm Learning Paths.
+
 ## Startup preparation
 
 MCP images cache keyword tokens in `metadata.keywords.json.gz` beside
@@ -48,12 +64,22 @@ Runtime loading writes no files. Keep metadata and synonyms unchanged during loa
 `filters` accepts a `SearchFilters` instance or a dictionary with optional
 `doc_type`, `product`, `platform`, and `edition` fields.
 
-- Values match complete metadata strings after trimming whitespace and case
-  folding. Multiple fields combine with AND; use values present in your corpus.
+`SearchFilters` is the shared Pydantic model used by MCP and available to endpoint
+request models. Use `SearchFilters.model_json_schema()` to generate its schema and
+`filters.model_dump(mode="json", exclude_none=True)` for a JSON-compatible payload.
+It replaces the dataclass: use `model_dump()` and `model_copy()` instead of
+`dataclasses.asdict()` and `dataclasses.replace()`. Construct a new model to validate
+changed values. Instances remain frozen; alternatives are stored as tuples in
+Python and serialized as arrays in JSON.
+
+- Each field accepts a string or non-empty list of strings (also tuples in Python).
+  For example, `{"platform": ["linux", "windows"]}` matches either label.
+  Values within a field use OR; fields use AND. Matching ignores case, surrounding
+  whitespace, and duplicate choices.
 - Omitted filters, `None`, and `{}` leave search unrestricted. A field set to
   `None` is ignored. Missing or blank metadata cannot match an active filter.
-- Invalid dictionary keys, blank strings, and non-string filter values raise
-  `ValueError`. No matching chunks returns an empty list.
+- Unknown fields, empty lists or tuples, and blank or non-string labels raise
+  `ValueError`. Unknown labels match nothing; no matches returns an empty list.
 
 Filters restrict candidates before ranking and deduplication. Vector retrieval
 uses exact search over the full corpus, or only eligible vectors when filtered.

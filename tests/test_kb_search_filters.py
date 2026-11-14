@@ -28,6 +28,7 @@ from usearch.index import Index
 
 from arm_kb_search import SearchFilters, SearchResources, resources, search
 from arm_kb_search.analysis import Synonyms, analyze, atom, name_keys
+from arm_kb_search.context import DocumentContextIndex
 from arm_kb_search.filters import MetadataFilterIndex
 from arm_kb_search.search import (
     bm25_search,
@@ -38,6 +39,590 @@ from arm_kb_search.search import (
 )
 
 search_module = importlib.import_module("arm_kb_search.search")
+
+
+def context_row(url, index=0, count=1, *, pages=None, **extra):
+    context = {"format": 1, "url": url, "chunk_index": index, "chunk_count": count}
+    if pages:
+        context.update(parent_page_url=pages[0], learning_path_pages=pages)
+    return {"url": url + "#section", "chunk_uuid": f"{url}:{index}",
+            "original_text": f"{url} chunk {index}", "document_context": context, **extra}
+
+
+def context_resources(monkeypatch, rows, selected):
+    monkeypatch.setattr(resources, "hybrid_search", lambda *a, **kw: [
+        {"metadata": row, "distance": 0.1} for row in selected])
+    return SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
+
+
+@pytest.mark.parametrize("field", ["platform", "edition", "version"])
+@pytest.mark.parametrize("layout", ["split", "duplicate", "unordered"])
+def test_context_normalizes_absent_identity_fields(field, layout):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(pages[0], pages=pages),
+            context_row(pages[1], 0, 2, pages=pages), context_row(pages[1], 1, 2, pages=pages)]
+    rows[1][field] = ""
+    rows[2][field] = None
+    if layout == "duplicate":
+        copies = deepcopy(rows)
+        for copy in copies:
+            copy.pop(field, None)
+        rows.extend(copies)
+    elif layout == "unordered":
+        rows[1][field] = None
+        rows.append({"url": pages[1] + "#unordered", "original_text": "Unordered section"})
+    before = deepcopy(rows)
+    state = SearchResources(rows, QueryModel(), None, None, include_disclaimers=False)
+    catalog = DocumentContextIndex(rows, state)
+    for scope in ("page", "parent_resource"):
+        if layout == "unordered":
+            with pytest.raises(ValueError, match="missing document-order metadata"):
+                catalog.expand([{"metadata": rows[2]}], scope)
+        else:
+            hits = catalog.expand([{"metadata": rows[2]}], scope)
+            expected = rows[1:3] if scope == "page" else rows[:3]
+            assert [state.snippet_for(h["metadata"]) for h in hits] == [r["original_text"] for r in expected]
+    assert rows == before
+
+
+@pytest.mark.parametrize("citation", [
+    "https://learn.arm.com/learning-paths/cross-platform/example",
+    "https://learn.arm.com/learning-paths/cross-platform/example/?utm_source=test#intro",
+])
+@pytest.mark.parametrize("conflicting_text", [False, True])
+def test_context_compares_document_identity_independently_of_citations(citation, conflicting_text):
+    url = "https://learn.arm.com/learning-paths/cross-platform/example/"
+    original = context_row(url, pages=[url])
+    copy = deepcopy(original)
+    copy["url"] = citation
+    if conflicting_text:
+        copy["original_text"] = "A different revision"
+    for rows in ([original, copy], [copy, original]):
+        before = deepcopy(rows)
+        state = SearchResources(rows, QueryModel(), None, None)
+        catalog = DocumentContextIndex(rows, state)
+        for scope in ("page", "parent_resource"):
+            if conflicting_text:
+                with pytest.raises(ValueError, match="conflicting chunks"):
+                    catalog.expand([{"metadata": copy}], scope)
+            else:
+                hits = catalog.expand([{"metadata": copy}], scope)
+                assert len(hits) == 1
+                assert state.snippet_for(hits[0]["metadata"]) == original["original_text"]
+                assert hits[0]["context"]["page_url"] == url
+                assert hits[0]["metadata"]["url"] in (original["url"], citation)
+        assert rows == before
+
+
+@pytest.mark.parametrize("identity", ["document", "citation", "missing"])
+@pytest.mark.parametrize("parent_alias", [None, "https://example.org/other-parent/"])
+def test_context_retains_manifest_only_parent_evidence(identity, parent_alias):
+    root, step, extra = "https://example.org/path/", "https://example.org/path/step/", "https://example.org/path/extra/"
+    rows = [context_row(url, pages=[root, step]) for url in (root, step)]
+    sibling = context_row(extra, pages=[root, step, extra])
+    sibling["document_context"].pop("parent_page_url")
+    if parent_alias:
+        sibling["document_context"]["parent_page_url"] = parent_alias
+    if identity != "document":
+        sibling["document_context"].pop("url")
+    if identity == "missing":
+        sibling.pop("url")
+    unrelated = context_row("https://example.org/unrelated/", pages=["https://example.org/unrelated/"])
+    rows.extend([sibling, unrelated])
+    before = deepcopy(rows)
+    state = SearchResources(rows, QueryModel(), None, None)
+    catalog = DocumentContextIndex(rows, state)
+    with pytest.raises(ValueError, match="Regenerate chunks"):
+        catalog.expand([{"metadata": rows[0]}], "parent_resource")
+    assert len(catalog.expand([{"metadata": rows[0]}], "page")) == 1
+    assert len(catalog.expand([{"metadata": unrelated}], "parent_resource")) == 1
+    assert rows == before
+
+
+@pytest.mark.parametrize("field", ["page_url", "url", "resolved_url"])
+@pytest.mark.parametrize("suffix", ["", "/?utm_source=test#intro"])
+def test_context_fallback_recognizes_acquisition_root_identity(field, suffix):
+    root = "https://learn.arm.com/learning-paths/cross-platform/example/"
+    row = context_row(root, pages=[root])
+    unordered = {field: root.rstrip("/") + suffix, "original_text": "Unordered section"}
+    rows = [row, unordered]
+    state = SearchResources(rows, QueryModel(), None, None)
+    catalog = DocumentContextIndex(rows, state)
+    for scope in ("page", "parent_resource"):
+        with pytest.raises(ValueError, match="missing document-order metadata"):
+            catalog.expand([{"metadata": row}], scope)
+
+
+def test_context_malformed_fallback_url_only_blocks_its_known_parent():
+    root, other = "https://example.org/path/", "https://example.org/unrelated/"
+    rows = [context_row(root, pages=[root]), context_row(other, pages=[other]),
+            {"url": "https://[broken", "parent_page_url": root, "original_text": "Unknown sibling"}]
+    state = SearchResources(rows, QueryModel(), None, None)
+    catalog = DocumentContextIndex(rows, state)
+    assert len(catalog.expand([{"metadata": rows[1]}], "parent_resource")) == 1
+    assert len(catalog.expand([{"metadata": rows[0]}], "page")) == 1
+    with pytest.raises(ValueError, match="Regenerate chunks"):
+        catalog.expand([{"metadata": rows[0]}], "parent_resource")
+
+
+@pytest.mark.parametrize("suffix", ["", "/?utm_source=test#intro"])
+@pytest.mark.parametrize("evidence", ["document", "parent", "legacy_parent", "manifest", "missing_url"])
+def test_context_canonicalizes_all_parent_membership_evidence(suffix, evidence):
+    root = "https://learn.arm.com/learning-paths/cross-platform/example/"
+    alias = root.rstrip("/") + suffix
+    valid = context_row(root, pages=[root])
+    orphan = {"url": root + "extra/", "original_text": "Must not be omitted"}
+    if evidence == "document":
+        orphan["document_context"] = {"url": alias}
+    elif evidence in ("parent", "legacy_parent"):
+        orphan["learning_path_url" if evidence == "legacy_parent" else "parent_page_url"] = alias
+    else:
+        orphan["document_context"] = {"learning_path_pages": [alias, root + "extra/"]}
+        if evidence == "missing_url":
+            orphan.pop("url")
+    unrelated = context_row("https://example.org/unrelated/", pages=["https://example.org/unrelated/"])
+    rows = [valid, orphan, unrelated]
+    before = deepcopy(rows)
+    state = SearchResources(rows, QueryModel(), None, None)
+    catalog = DocumentContextIndex(rows, state)
+    with pytest.raises(ValueError, match="Regenerate chunks"):
+        catalog.expand([{"metadata": valid}], "parent_resource")
+    if evidence == "document":
+        with pytest.raises(ValueError, match="Regenerate chunks"):
+            catalog.expand([{"metadata": valid}], "page")
+    else:
+        assert len(catalog.expand([{"metadata": valid}], "page")) == 1
+    assert len(catalog.expand([{"metadata": unrelated}], "parent_resource")) == 1
+    assert rows == before
+
+
+@pytest.mark.parametrize("evidence", ["parent", "legacy_parent", "manifest", "missing_url"])
+def test_context_known_root_cannot_fall_back_to_page_when_parent_metadata_is_missing(evidence):
+    root = "https://learn.arm.com/learning-paths/cross-platform/example/"
+    standalone = context_row(root)
+    sibling = context_row(root + "step/")
+    alias = root.rstrip("/")
+    if evidence in ("parent", "legacy_parent"):
+        sibling["learning_path_url" if evidence == "legacy_parent" else "parent_page_url"] = alias
+    else:
+        sibling["document_context"]["learning_path_pages"] = [alias, root + "step/"]
+        if evidence == "missing_url":
+            sibling["document_context"].pop("url")
+            sibling.pop("url")
+    unrelated = context_row("https://example.org/standalone/")
+    rows = [standalone, sibling, unrelated]
+    before = deepcopy(rows)
+    state = SearchResources(rows, QueryModel(), None, None)
+    catalog = DocumentContextIndex(rows, state)
+    with pytest.raises(ValueError, match="Regenerate chunks"):
+        catalog.expand([{"metadata": standalone}], "parent_resource")
+    assert len(catalog.expand([{"metadata": standalone}], "page")) == 1
+    assert len(catalog.expand([{"metadata": unrelated}], "parent_resource")) == 1
+    assert rows == before
+
+
+def test_context_canonical_identity_is_shared_by_catalog_and_seeds():
+    root = "https://learn.arm.com/learning-paths/cross-platform/example/"
+    step = root + "step/"
+    rows = [context_row(root, pages=[root, step]), context_row(step, pages=[root, step])]
+    copies = deepcopy(rows)
+    copies[0]["document_context"]["url"] = root.rstrip("/")
+    for copy in copies:
+        context = copy["document_context"]
+        context["parent_page_url"] = root + "?utm_source=parent"
+        context["learning_path_url"] = root.rstrip("/")
+        context["learning_path_pages"][0] = root + "#intro"
+    records = [*copies, *rows]
+    before = deepcopy(records)
+    state = SearchResources(records, QueryModel(), None, None)
+    catalog = DocumentContextIndex(records, state)
+    for seed in (rows[0], copies[0], copies[1]):
+        hits = catalog.expand([{"metadata": seed}], "parent_resource")
+        assert [h["context"]["page_url"] for h in hits] == [root, step]
+        assert [state.snippet_for(h["metadata"]) for h in hits] == [r["original_text"] for r in rows]
+    assert records == before
+
+
+@pytest.mark.parametrize("failure", [None, "text", "count", "range", "missing_field", "missing_piece", "position"])
+def test_context_duplicate_embedding_slices_preserve_completeness(failure):
+    url = "https://example.org/document/"
+    row = context_row(url, pages=[url])
+    pieces = [{**deepcopy(row), "parent_uuid": "p", "parent_chunk_uuid": "c", "chunk_uuid": str(i),
+               "original_text": text, "source_start": start, "source_end": start + len(text),
+               "source_part": i, "source_parts": 2}
+              for i, start, text in [(1, 0, "first "), (2, 6, "second")]]
+    duplicates = deepcopy(pieces)
+    if failure == "text":
+        duplicates[0]["original_text"] = "other "
+    elif failure == "count":
+        duplicates[0]["source_parts"] = 3
+    elif failure == "range":
+        duplicates[0]["source_end"] = 5
+    elif failure == "missing_field":
+        duplicates[0].pop("source_start")
+    elif failure == "missing_piece":
+        pieces, duplicates = pieces[:1], duplicates[:1]
+    elif failure == "position":
+        duplicates[0]["document_context"]["chunk_index"] = 1
+    other = context_row("https://example.org/other/")
+    for copies in (duplicates[:1], duplicates):
+        rows = [*reversed(pieces), *copies, other]
+        before = deepcopy(rows)
+        state = SearchResources(rows, QueryModel(), None, None)
+        catalog = DocumentContextIndex(rows, state)
+        for scope in ("page", "parent_resource"):
+            if failure:
+                with pytest.raises(ValueError, match="Regenerate chunks"):
+                    catalog.expand([{"metadata": pieces[0]}], scope)
+            else:
+                hits = catalog.expand([{"metadata": pieces[0]}], scope)
+                assert len(hits) == 1 and state.snippet_for(hits[0]["metadata"]) == "first second"
+        assert len(catalog.expand([{"metadata": other}], "parent_resource")) == 1
+        assert rows == before
+
+
+def test_context_scope_expands_all_hits_once_in_stored_order(monkeypatch):
+    pages = ["https://example.org/path/", "https://example.org/path/z/", "https://example.org/path/a/"]
+    rows = [context_row(url, i, 2, pages=pages) for url in pages for i in range(2)]
+    other = context_row("https://example.org/manual.pdf")
+    state = context_resources(monkeypatch, [other, *reversed(rows)], [rows[3], rows[2], rows[5], other])
+    default = search("needle", state, k=4)
+    assert search("needle", state, k=4, scope="chunks") == default
+    assert len(default) == 4 and all("context" not in hit for hit in default)
+    expanded = search("needle", state, k=4, scope="page")
+    assert [hit["snippet"] for hit in expanded] == [r["original_text"] for r in (*rows[2:], other)]
+    assert all(hit["score"] is None and hit["distance"] is None for hit in expanded)
+    # k counts seeds; even one seed expands all three pages. Navigation order is
+    # z then a, independent of metadata storage order and lexicographic URL order.
+    path = search("needle", state, k=1, scope="parent_resource")
+    assert [hit["snippet"] for hit in path] == [r["original_text"] for r in rows]
+    assert [(h["context"]["page_index"], h["context"]["page_count"], h["context"]["chunk_index"], h["context"]["chunk_count"])
+            for h in path] == [(page, 3, chunk, 2) for page in range(3) for chunk in range(2)]
+    assert all(hit["context"]["scope"] == "parent_resource" for hit in path)
+    mixed = search("needle", state, k=4, scope="parent_resource")
+    assert len(mixed) == 7 and mixed[-1]["context"]["scope"] == "page"
+    assert search("needle", state, k=4) == default  # expansion does not mutate the snapshot
+
+    standalone = deepcopy(rows[3])
+    standalone["document_context"].pop("learning_path_pages")
+    state = context_resources(monkeypatch, [standalone, *reversed(rows)], [standalone])
+    assert [h["snippet"] for h in search("needle", state, scope="parent_resource")] == [r["original_text"] for r in rows]
+
+    legacy = deepcopy(rows)
+    for row in legacy:
+        context = row["document_context"]
+        context["learning_path_url"] = context.pop("parent_page_url")
+    before = deepcopy(legacy)
+    state = context_resources(monkeypatch, [*legacy, *rows], [legacy[3]])
+    expanded = search("needle", state, scope="parent_resource")
+    assert [h["snippet"] for h in expanded] == [r["original_text"] for r in rows]
+    assert all(h["context"]["parent_page_url"] == pages[0] and "learning_path_url" not in h["context"] for h in expanded)
+    assert legacy == before
+
+
+@pytest.mark.parametrize("missing_index", [0, 1])
+def test_context_parent_scope_rejects_partial_parent_identity(monkeypatch, missing_index):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(pages[0], pages=pages),
+            *[context_row(pages[1], i, 2, pages=pages) for i in range(2)]]
+    rows[1 + missing_index]["document_context"].pop("parent_page_url")
+    state = context_resources(monkeypatch, rows, [rows[-1]])
+    with pytest.raises(ValueError, match="inconsistent parent"):
+        search("needle", state, scope="parent_resource")
+
+
+@pytest.mark.parametrize("empty_parent", [None, ""])
+def test_context_legacy_parent_fallback_accepts_empty_new_fields(monkeypatch, empty_parent):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(url, i, 2, pages=pages) for url in pages for i in range(2)]
+    legacy = deepcopy(rows)
+    for row in legacy:
+        row["document_context"].update(parent_page_url=empty_parent, learning_path_url=pages[0])
+        row.update(parent_page_url=empty_parent, learning_path_url=pages[0])
+    before = deepcopy(legacy)
+    # Legacy and current copies describe the same logical chunks.
+    state = context_resources(monkeypatch, [*legacy, *rows], [legacy[-1]])
+    hits = search("needle", state, scope="parent_resource")
+    assert [hit["snippet"] for hit in hits] == [row["original_text"] for row in rows]
+    assert all(hit["context"]["parent_page_url"] == pages[0] for hit in hits)
+    assert all(hit["parent_page_url"] == pages[0] for hit in hits)
+    assert search("needle", state)[0]["parent_page_url"] == pages[0]
+    assert legacy == before
+
+
+@pytest.mark.parametrize("field", ["version", "platform", "edition"])
+def test_context_parent_scope_resolves_siblings_by_their_own_identity(monkeypatch, field):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(url, pages=pages, **{field: value})
+            for url, value in zip(pages, ("root-value", "step-value"))]
+    state = context_resources(monkeypatch, rows, [rows[1]])
+    hits = search("needle", state, scope="parent_resource")
+    assert [hit["snippet"] for hit in hits] == [row["original_text"] for row in rows]
+    assert [hit["context"]["page_index"] for hit in hits] == [0, 1]
+
+
+@pytest.mark.parametrize("field,ordered", [
+    ("version", True), ("platform", True), ("edition", True), ("version", False),
+])
+def test_context_parent_scope_rejects_ambiguous_sibling_variants(monkeypatch, field, ordered):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(url, pages=pages) for url in pages]
+    variant = context_row(pages[1], pages=pages, **{field: "another-variant"})
+    if not ordered:
+        variant.pop("document_context")
+    state = context_resources(monkeypatch, [*rows, variant], [rows[1]])
+    with pytest.raises(ValueError, match="ambiguous document"):
+        search("needle", state, scope="parent_resource")
+    assert [h["snippet"] for h in search("needle", state, scope="page")] == [rows[1]["original_text"]]
+
+
+@pytest.mark.parametrize("selected_indices,ordered", [
+    ((1,), True), ((1, 2), True), ((2, 1), True), ((1,), False),
+])
+def test_context_parent_scope_rejects_omitted_siblings(monkeypatch, selected_indices, ordered):
+    root, a, b = "https://example.org/path/", "https://example.org/path/a/", "https://example.org/path/b/"
+    sibling = context_row(b, pages=[root, b], parent_page_url=root)
+    if not ordered:
+        sibling.pop("document_context")
+    rows = [context_row(root, pages=[root, a]), context_row(a, pages=[root, a]), sibling]
+    selected = [rows[i] for i in selected_indices]
+    state = context_resources(monkeypatch, rows, selected)
+    with pytest.raises(ValueError, match="inconsistent parent"):
+        search("needle", state, scope="parent_resource")
+    assert [h["snippet"] for h in search("needle", state, scope="page")] == [r["original_text"] for r in selected]
+
+
+@pytest.mark.parametrize("failure", ["legacy", "missing_chunk", "bad_index", "conflict", "missing_page", "manifest"])
+def test_context_scope_rejects_incomplete_or_unordered_data(monkeypatch, failure):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    row = context_row(pages[0], pages=pages)
+    rows = [row, context_row(pages[1], pages=pages)]
+    if failure == "legacy":
+        row.pop("document_context")
+    elif failure == "missing_chunk":
+        row["document_context"]["chunk_count"] = 2
+    elif failure == "bad_index":
+        row["document_context"]["chunk_index"] = True
+    elif failure == "conflict":
+        rows.append({**row, "original_text": "conflicting revision"})
+    elif failure == "missing_page":
+        rows.pop()
+    elif failure == "manifest":
+        rows[1]["document_context"].pop("learning_path_pages")
+    state = context_resources(monkeypatch, rows, [row])
+    with pytest.raises(ValueError, match="Regenerate chunks"):
+        search("needle", state, scope="parent_resource")
+    assert len(search("needle", state)) == 1
+
+
+@pytest.mark.parametrize("failure", [
+    None, "positions", "different_document", "missing_context",
+    "missing_parent_uuid", "missing_parent_chunk_uuid", "missing_piece",
+])
+def test_context_reassembles_embedding_pieces_without_duplicate_chunks(monkeypatch, failure):
+    row = context_row("https://example.org/notebook.ipynb")
+    rows = [{**row, "original_text": text, "parent_uuid": "p", "parent_chunk_uuid": "p",
+             "chunk_uuid": str(i), "source_start": start, "source_end": start + len(text),
+             "source_part": i, "source_parts": 2}
+            for i, start, text in [(1, 0, "first "), (2, 6, "second")]]
+    if failure == "positions":
+        rows = [{**piece, "document_context": {**piece["document_context"], "chunk_index": i, "chunk_count": 2}}
+                for i, piece in enumerate(rows)]
+    elif failure == "different_document":
+        rows[1]["document_context"] = {**rows[1]["document_context"], "url": "https://example.org/other.ipynb"}
+    elif failure == "missing_context":
+        rows[1].pop("document_context")
+    elif failure:
+        rows = rows[:1]
+        if failure != "missing_piece":
+            rows[0].pop(failure.removeprefix("missing_"))
+    state = context_resources(monkeypatch, rows, rows[:1] if failure else rows)
+    for scope in ("page", "parent_resource"):
+        if failure:
+            with pytest.raises(ValueError, match="Regenerate chunks"):
+                search("needle", state, scope=scope)
+        else:
+            assert [h["snippet"] for h in search("needle", state, scope=scope)] == ["first second"]
+    assert search("needle", state)  # Ranked chunks keep their existing fallback behavior.
+
+
+@pytest.mark.parametrize("field,value", [
+    ("parent_uuid", "p"), ("parent_chunk_uuid", "p"), ("source_start", 0),
+    ("source_end", 5), ("source_part", 1), ("source_parts", 2),
+])
+def test_context_rejects_partial_split_metadata(monkeypatch, field, value):
+    row = context_row("https://example.org/manual.pdf", **{field: value})
+    state = context_resources(monkeypatch, [row], [row])
+    with pytest.raises(ValueError, match="Regenerate chunks"):
+        search("needle", state, scope="page")
+    assert len(search("needle", state)) == 1
+
+
+@pytest.mark.parametrize("page_url", [None, "", [], "https://example.org/path/step/"])
+@pytest.mark.parametrize("context", [None, {}, [], {"url": None}, {"url": ""}])
+def test_context_rejects_unindexable_same_document_records(monkeypatch, context, page_url):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(url, pages=pages) for url in pages]
+    unindexed = {"url": pages[1] + "#other", "page_url": page_url, "original_text": "Unordered section"}
+    if context is not None:
+        unindexed["document_context"] = context
+    state = context_resources(monkeypatch, [*rows, unindexed], [rows[1]])
+    baseline = search("needle", state, k=1)
+    for scope in ("page", "parent_resource"):
+        with pytest.raises(ValueError, match="missing document-order metadata"):
+            search("needle", state, k=1, scope=scope)
+    assert search("needle", state, k=1) == baseline
+    # A valid root must also reject an unordered, unselected sibling.
+    state = context_resources(monkeypatch, [*rows, unindexed], [rows[0]])
+    assert len(search("needle", state, scope="page")) == 1
+    with pytest.raises(ValueError, match="missing document-order metadata"):
+        search("needle", state, scope="parent_resource")
+
+
+@pytest.mark.parametrize("field,value", [
+    ("page_url", "https://example.org/other/"), ("version", "v2"),
+    ("platform", "linux"), ("edition", "commercial"),
+])
+def test_context_unindexable_records_preserve_other_documents(monkeypatch, field, value):
+    url = "https://example.org/guide/"
+    selected = context_row(url)
+    unindexed = {"url": url + "#other", "original_text": "Unordered section", field: value}
+    state = context_resources(monkeypatch, [selected, unindexed], [selected])
+    assert [h["snippet"] for h in search("needle", state, scope="page")] == [selected["original_text"]]
+
+
+@pytest.mark.parametrize("source,citation,extra,affected", [
+    ("manual.pdf", "manual.pdf", {}, True),
+    ("notebook.ipynb", "notebook.ipynb", {}, True),
+    ("slides.pptx", "slides.pptx", {}, True),
+    ("transcript.vtt", "transcript.vtt", {}, True),
+    ("manual.pdf", "manual.pdf#page=2", {}, True),
+    ("guide/", "guide/#section", {"url": None, "resolved_url": "https://example.org/guide/#section"}, True),
+    ("dashboard?package=a", "dashboard?package=a#section", {}, True),
+    ("dashboard?package=a", "dashboard?package=b", {}, False),
+    ("intrinsics/#q=a", "intrinsics/#q=a", {}, True),
+    ("intrinsics/#q=a", "intrinsics/#q=b", {}, False),
+    ("intrinsics/#a", "intrinsics/#a", {"doc_type": "Intrinsic"}, True),
+    ("intrinsics/#a", "intrinsics/#b", {"doc_type": "Intrinsic"}, False),
+    ("guide/", "guide/#section", {"document_context": {"url": "https://example.org/other/"}}, False),
+])
+def test_context_citation_fallback_preserves_document_identity(monkeypatch, source, citation, extra, affected):
+    row = context_row("https://example.org/" + source)
+    unindexed = {"url": "https://example.org/" + citation, "original_text": "Unordered section", **extra}
+    state = context_resources(monkeypatch, [row, unindexed], [row])
+    baseline = search("needle", state)
+    for scope in ("page", "parent_resource"):
+        if affected:
+            with pytest.raises(ValueError, match="missing document-order metadata"):
+                search("needle", state, scope=scope)
+        else:
+            assert [h["snippet"] for h in search("needle", state, scope=scope)] == [row["original_text"]]
+    assert search("needle", state) == baseline
+
+
+@pytest.mark.parametrize("parent_location", ["context", "legacy_context", "row", "legacy_row"])
+@pytest.mark.parametrize("invalid_url", [None, "", []])
+def test_context_parent_rejects_members_without_document_urls(monkeypatch, parent_location, invalid_url):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(url, pages=pages) for url in pages]
+    orphan = {"url": invalid_url, "page_url": invalid_url, "resolved_url": invalid_url,
+              "platform": [], "original_text": "Stored content with lost document identity",
+              "document_context": {"url": invalid_url}}
+    target = orphan["document_context"] if "context" in parent_location else orphan
+    target["learning_path_url" if parent_location.startswith("legacy") else "parent_page_url"] = pages[0]
+    if parent_location.startswith("legacy"):
+        target["parent_page_url"] = None  # An empty new field must not hide legacy evidence.
+    unrelated = context_row("https://example.org/other/", pages=["https://example.org/other/"])
+    selected = [rows[0]]
+    state = context_resources(monkeypatch, [*rows, orphan, unrelated], selected)
+    before = deepcopy(state.metadata)
+    baseline = search("needle", state)
+    with pytest.raises(ValueError, match="stored sibling has no usable document URL"):
+        search("needle", state, scope="parent_resource")
+    assert search("needle", state) == baseline
+    assert len(search("needle", state, scope="page")) == 1
+    selected[:] = [unrelated]
+    assert [h["snippet"] for h in search("needle", state, scope="parent_resource")] == [unrelated["original_text"]]
+    assert state.metadata == before
+
+
+@pytest.mark.parametrize("location", ["context", "row"])
+def test_context_rejects_conflicting_parent_aliases(monkeypatch, location):
+    roots = ["https://example.org/one/", "https://example.org/two/"]
+    rows = [context_row(root, pages=[root]) for root in roots]
+    sibling = context_row("https://example.org/sibling/")
+    target = sibling["document_context"] if location == "context" else sibling
+    target.update(parent_page_url=roots[0], learning_path_url=roots[1])
+    selected = []
+    state = context_resources(monkeypatch, [*rows, sibling], selected)
+    for row in rows:
+        selected[:] = [row]
+        with pytest.raises(ValueError, match="stored sibling is omitted"):
+            search("needle", state, scope="parent_resource")
+        assert len(search("needle", state, scope="page")) == 1
+
+
+def test_context_catalog_keeps_unrelated_failures_local(monkeypatch):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(url, pages=pages) for url in pages]
+    broken_url = "https://example.org/broken/"
+    broken = context_row(broken_url, count=2, pages=[broken_url])
+    selected = [rows[1]]
+    state = context_resources(monkeypatch, [broken, *rows], selected)
+    expected = search("needle", state, scope="parent_resource")
+    assert [hit["context"]["page_url"] for hit in expected] == pages
+    selected[:] = [broken]
+    with pytest.raises(ValueError, match="chunks are missing"):
+        search("needle", state, scope="page")
+    selected[:] = [rows[1]]
+    assert search("needle", state, scope="parent_resource") == expected
+
+
+@pytest.mark.parametrize("field", ["platform", "edition", "version"])
+@pytest.mark.parametrize("value,ordered", [([], True), ({}, True), ([], False), (3, True)])
+def test_context_invalid_identity_is_local_but_never_silently_dropped(monkeypatch, field, value, ordered):
+    pages = ["https://example.org/path/", "https://example.org/path/step/"]
+    rows = [context_row(url, pages=pages) for url in pages]
+    malformed = context_row(pages[1], pages=pages, **{field: value})
+    if not ordered:
+        malformed.pop("document_context")  # Citation fallback must retain invalid records too.
+    other = context_row("https://example.org/other/", doc_type="Install Guides")
+    selected = [other]
+    state = context_resources(monkeypatch, [malformed, *rows, other], selected)
+    baseline = search("needle", state)
+    for scope in ("page", "parent_resource"):
+        # Filtering excludes the bad seed but the catalog still sees the whole snapshot.
+        hits = search("needle", state, filters={"doc_type": "Install Guides"}, scope=scope)
+        assert [hit["snippet"] for hit in hits] == [other["original_text"]]
+    selected[:] = [rows[0]]
+    assert len(search("needle", state, scope="page")) == 1
+    with pytest.raises(ValueError, match="Regenerate chunks"):
+        search("needle", state, scope="parent_resource")
+    # A valid variant at the affected URL must not conceal the malformed content.
+    for seed in [rows[1], *([malformed] if ordered else [])]:
+        selected[:] = [seed]
+        for scope in ("page", "parent_resource"):
+            with pytest.raises(ValueError, match=f"invalid {field} identity"):
+                search("needle", state, scope=scope)
+    selected[:] = [other]
+    assert search("needle", state) == baseline
+    assert len(search("needle", state, scope="page")) == 1
+
+
+def test_context_keeps_intrinsic_dashboard_and_edition_identities(monkeypatch):
+    urls = ["https://developer.arm.com/intrinsics/#q=a", "https://developer.arm.com/intrinsics/#q=b",
+            "https://developer.arm.com/ecosystem-dashboard/linux?package=a",
+            "https://developer.arm.com/ecosystem-dashboard/linux?package=b"]
+    rows = [{**context_row(url), "url": url} for url in urls]
+    rows.append(context_row(urls[2], edition="commercial", original_text="commercial edition"))
+    state = context_resources(monkeypatch, rows, [rows[0], rows[2]])
+    assert [h["snippet"] for h in search("needle", state, scope="parent_resource")] == [rows[0]["original_text"], rows[2]["original_text"]]
+
+
+@pytest.mark.parametrize("scope", [None, [], "parent", "learning_path", "PAGE"])
+def test_invalid_context_scope_is_rejected(scope):
+    with pytest.raises(ValueError, match="scope must be"):
+        search("needle", SearchResources([], QueryModel(), None, None), scope=scope)
 
 
 class QueryModel:
@@ -68,6 +653,43 @@ def index_for(vectors):
     return index
 
 
+@pytest.mark.parametrize("parent_field", ["parent_page_url", "learning_path_url"])
+def test_source_links_preserve_five_ranked_results_without_fetching(monkeypatch, parent_field):
+    import requests
+
+    def unexpected_fetch(*args, **kwargs):
+        pytest.fail("Search must not fetch source links")
+
+    monkeypatch.setattr(requests.sessions.Session, "request", unexpected_fetch)
+    rows = [chunk(i, original_text=f"needle {i}") for i in range(6)]
+    rows[0]["url"] = "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=vadd_s8"
+    rows[1]["url"] = "https://developer.arm.com/ecosystem-dashboard/linux?package=jenkins"
+    state = SearchResources(rows, QueryModel(), index_for([[i / 10, 0] for i in range(6)]),
+                            build_bm25_index(rows), include_disclaimers=False)
+    baseline = search("needle", state)
+    assert all(not {"page_url", "parent_page_url"} & hit.keys() for hit in baseline)
+    for row in rows[2:]:
+        row.update(page_url=f"https://example.org/source/{row['chunk_uuid']}?version=2",
+                   **{parent_field: "https://learn.arm.com/learning-paths/cross-platform/example/"})
+    before = deepcopy(rows)
+    hits = search("needle", state)
+    assert len(hits) == len(baseline) == 5 and rows == before
+    assert [{k: v for k, v in hit.items() if k not in {"page_url", "parent_page_url"}}
+            for hit in hits] == baseline
+    by_url = {row["url"]: row for row in rows}
+    for hit in hits:
+        assert "learning_path_url" not in hit
+        assert hit.get("page_url") == by_url[hit["url"]].get("page_url")
+        assert hit.get("parent_page_url") == by_url[hit["url"]].get(parent_field)
+
+
+def test_library_search_can_return_more_than_twenty_results():
+    rows = [chunk(i, original_text=f"needle {i}") for i in range(25)]
+    state = SearchResources(rows, QueryModel(), index_for([[i / 100, 0] for i in range(25)]),
+                            build_bm25_index(rows), include_disclaimers=False)
+    assert len(search("needle", state, k=25)) == 25
+
+
 @pytest.mark.parametrize("name", ["doc_type", "product", "platform", "edition"])
 def test_filter_matching_normalizes_values_and_excludes_missing_metadata(name):
     metadata = [{name: value} for value in [" Linux ", "LINUX", "windows", "", None, ["linux"]]]
@@ -75,6 +697,16 @@ def test_filter_matching_normalizes_values_and_excludes_missing_metadata(name):
     lookup = MetadataFilterIndex(metadata)
     assert lookup.eligible_ids(SearchFilters.parse({name: " linux "})) == (0, 1)
     assert lookup.eligible_ids(SearchFilters.parse({name: "unknown"})) == ()
+    choices = [" LINUX ", "windows", "linux", "unknown"]
+    filters = SearchFilters.parse({name: choices})
+    assert getattr(filters, name) == ("linux", "windows", "unknown")
+    assert SearchFilters.model_validate(filters.model_dump()) == filters  # Python tuples can be reused.
+    assert choices == [" LINUX ", "windows", "linux", "unknown"]
+    choices.clear()
+    assert lookup.eligible_ids(filters) == (0, 1, 2)
+    assert lookup.eligible_ids(SearchFilters.parse({name: ["linux"]})) == (0, 1)
+    assert lookup.eligible_ids(SearchFilters.parse({name: ["unknown"]})) == ()
+    assert lookup.eligible_ids(SearchFilters.parse({name: "linux,windows"})) == ()
     assert metadata[0][name] == " Linux "  # Matching never rewrites returned metadata.
 
 
@@ -83,7 +715,8 @@ def test_empty_filters_are_unrestricted(filters):
     assert MetadataFilterIndex([{}]).eligible_ids(SearchFilters.parse(filters)) is None
 
 
-@pytest.mark.parametrize("value", ["", "  ", [], {}, 1, True])
+@pytest.mark.parametrize("value", ["", "  ", [], (), {}, 1, True,
+                                   [None], ["linux", " "], ["linux", 1], [["linux"]]])
 def test_invalid_filter_values(value):
     with pytest.raises(ValueError, match="non-empty string"):
         SearchFilters.parse({"product": value})
@@ -93,6 +726,22 @@ def test_invalid_filter_values(value):
 def test_invalid_filter_objects(value):
     with pytest.raises(ValueError):
         SearchFilters.parse(value)
+
+
+def test_filter_alternatives_combine_before_ranking_and_share_k():
+    tags = [("linux", "Install Guides"), ("windows", "Learning Paths"),
+            ("windows", "Install Guides"), ("macos", "Learning Paths"),
+            ("linux", "Intrinsic"), (None, "Install Guides"), ("linux", None)]
+    rows = [chunk(i, platform=platform, doc_type=doc_type, original_text=f"Jenkins setup instructions {i}")
+            for i, (platform, doc_type) in enumerate(tags)]
+    state = SearchResources(rows, QueryModel(), index_for([[i / 10, 0] for i in range(len(rows))]),
+                            build_bm25_index(rows), include_disclaimers=False)
+    filters = {"platform": ["linux", "windows"], "doc_type": ["Install Guides", "Learning Paths"]}
+    assert MetadataFilterIndex(rows).eligible_ids(SearchFilters.parse(filters)) == (0, 1, 2)
+    hits = search("needle", state, k=10, filters=filters)
+    assert {hit["url"] for hit in hits} == {rows[i]["url"] for i in (0, 1, 2)}
+    assert search("needle", state, k=2, filters=filters) == hits[:2]
+    assert [h["url"] for h in search("needle", state, filters={**filters, "platform": "linux"})] == [rows[0]["url"]]
 
 
 def test_combined_filters_apply_before_dashboard_deduplication():

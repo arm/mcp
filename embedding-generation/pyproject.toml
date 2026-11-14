@@ -20,6 +20,7 @@ dependencies = [
     "transformers==5.17.0",
     "usearch",
     # Offline retrieval evaluation in the generator image
+    "pydantic>=2,<3",
     "rank-bm25",
 ]
 

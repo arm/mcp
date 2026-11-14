@@ -290,6 +290,8 @@ def main():
                 "platform": yaml_content.get("platform", ""),
                 "edition": yaml_content.get("edition", ""),
                 "search_text": search_text,
+                **{key: yaml_content[key] for key in ("page_url", "parent_page_url", "document_context")
+                   if yaml_content.get(key)},
             }
         )
 

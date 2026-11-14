@@ -13,8 +13,11 @@
 # limitations under the License.
 
 from fastmcp import FastMCP
-from typing import List, Dict, Any, Optional
+from fastmcp.exceptions import ToolError
+from typing import Annotated, List, Dict, Any, Optional, Literal
+from pydantic import Field
 import arm_kb_search
+from arm_kb_search import SearchFilters
 from utils.config import (
     DEFAULT_ARCH,
     METADATA_PATH,
@@ -50,14 +53,50 @@ SEARCH_RESOURCES = arm_kb_search.load_search_resources(
 
 
 @mcp.tool(
-    description="If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your strategy. Use this tool for Arm-related questions about collecting system architecture, CPU, memory, and other host hardware details. Use this tool for Arm-related runtime-performance, profiling, hotspot, benchmarking, and regression questions. Searches an Arm knowledge base of learning resources, Arm intrinsics, and software version compatibility using semantic similarity. Given a natural language query, returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful for finding documentation, tutorials, or version compatibility for Arm migrations. Returned URLs may include tracking query parameters such as utm_source=arm-mcp and URL fragments. When sharing or citing returned URLs, preserve each URL exactly as returned, including query parameters and fragments; do not remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can briefly explain why it is calling this tool to provide additional context."
+    description=(
+        'If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your '
+        'strategy. Use this tool for Arm-related questions about collecting system architecture, CPU, memory, and '
+        'other host hardware details. '
+        'Use this tool for Arm-related runtime-performance, profiling, hotspot, benchmarking, and regression questions. '
+        'Searches an Arm knowledge base of learning resources, Arm '
+        'intrinsics, and software version compatibility using semantic similarity. Given a natural language query, '
+        'returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful '
+        'for finding documentation, tutorials, or version compatibility for Arm migrations. Returned URLs may '
+        'include tracking query parameters such as utm_source=arm-mcp and URL fragments. When sharing or citing '
+        'returned URLs, preserve each URL exactly as returned, including query parameters and fragments; do not '
+        "remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can "
+        'briefly explain why it is calling this tool to provide additional context. Use filters with known '
+        'metadata labels to narrow results; alternatives within a field combine with OR, and different fields '
+        'combine with AND. Relax filters if needed evidence is missing. Start with the default chunks scope. When '
+        'more surrounding context from the matched pages is needed, use scope="page" after the user requests or '
+        'approves expansion. Page scope returns all stored chunks from those pages in order and can produce large '
+        'responses.'
+    )
 )
-def knowledge_base_search(query: str, invocation_reason: Optional[str] = None) -> List[Dict[str, Any]]:
-    # Log the call and retain its ID for the paired search result.
+def knowledge_base_search(
+    query: str,
+    invocation_reason: Optional[str] = None,
+    filters: Optional[SearchFilters] = None,
+    k: Annotated[int, Field(strict=True, ge=1, le=20,
+        description="Maximum ranked result entries (not tokens or pages); integer from 1 to 20, default 5 when omitted.")] = 5,
+    scope: Annotated[Literal["chunks", "page"], Field(description=(
+        "chunks (default): ranked matching chunks. page: all stored chunks from every matched "
+        "document. Shared documents are returned once, in stored order. k and filters "
+        "select initial hits only; expansion is not limited to k chunks. "
+        "Requires complete ordering metadata. Expansion can be large; use only when requested."
+    ))] = "chunks",
+) -> List[Dict[str, Any]]:
+    call_args = {
+        "query": query,
+        "filters": filters.model_dump(mode="json", exclude_none=True) if filters is not None else None,
+        "k": k,
+        "scope": scope,
+    }
+    # Log the effective options and retain the ID for the paired search result.
     entry_id = log_invocation_reason(
         tool="knowledge_base_search",
         reason=invocation_reason,
-        args={"query": query},
+        args=call_args,
     )
     """
     Search for learning resources relevant to the given query using embedding similarity.
@@ -69,15 +108,15 @@ def knowledge_base_search(query: str, invocation_reason: Optional[str] = None) -
         List of dictionaries with metadata including url and text snippets.
     """
     try:
-        results = arm_kb_search.search(query, SEARCH_RESOURCES)
+        results = arm_kb_search.search(
+            query, SEARCH_RESOURCES, filters=filters, k=k, scope=scope
+        )
         log_tool_result(entry_id, "knowledge_base_search", results)
         return results
     except Exception as e:
-        return format_tool_error(
-            tool="knowledge_base_search",
-            exc=e,
-            args={"query": query},
-        )
+        error = format_tool_error(tool="knowledge_base_search", exc=e, args=call_args)
+        log_tool_result(entry_id, "knowledge_base_search", error)
+        raise ToolError(str(e)) from e
 
 
 @mcp.tool(

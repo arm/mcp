@@ -20,6 +20,7 @@ import os
 import re
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 import yaml
@@ -31,6 +32,7 @@ from document_chunking import (
     arm_service_url_to_developer_url,
     chunk_parsed_document,
     is_arm_developer_documentation_url,
+    learn_learning_path_root_url,
     learn_learning_path_step_urls,
     normalize_source_url,
     parse_arm_documentation_api_json,
@@ -234,6 +236,9 @@ class Chunk:
         content_type="",
         platform="",
         edition="",
+        page_url="",
+        parent_page_url="",
+        document_context=None,
     ):
         self.title = title
         self.url = url
@@ -248,6 +253,13 @@ class Chunk:
         self.content_type = content_type
         self.platform = platform
         self.edition = edition
+        self.context_metadata = {
+            key: value for key, value in {
+                "page_url": page_url, "parent_page_url": parent_page_url,
+            }.items() if value and value != url
+        }
+        if document_context:
+            self.context_metadata["document_context"] = document_context
 
         # Translate keyword list into comma-separated string, and add similar words to keywords.
         self.keywords = self.formatKeywords(keywords)
@@ -273,6 +285,7 @@ class Chunk:
             "content_type": self.content_type,
             "platform": self.platform,
             "edition": self.edition,
+            **self.context_metadata,
         }
 
     def __repr__(self):
@@ -789,6 +802,14 @@ def create_chunks_for_source(
         return []
 
     sources_to_parse = [(normalized_source_url, response)]
+    ordered_steps = learn_learning_path_step_urls(
+        normalized_source_url, response.content, ordered_only=True
+    )
+    # Keep failed or unparseable pages in the expected manifest. Retrieval must
+    # detect incomplete stored paths instead of silently presenting a partial one.
+    parent_url = learn_learning_path_root_url(normalized_source_url)
+    is_parent = parent_url and urlparse(normalized_source_url).path.rstrip("/") == urlparse(parent_url).path.rstrip("/")
+    manifest = [parent_url, *ordered_steps] if is_parent and ordered_steps else None
     for step_url in learn_learning_path_step_urls(
         normalized_source_url, response.content
     ):
@@ -811,6 +832,10 @@ def create_chunks_for_source(
         for payload in chunk_parsed_document(
             parsed_document, doc_type=doc_type or "Documentation", keywords=keywords
         ):
+            context = payload["document_context"]
+            if (manifest and context["url"] in manifest
+                    and context.get("parent_page_url") == parent_url):
+                context["learning_path_pages"] = manifest
             chunks.append(chunk_from_payload(payload, keywords))
     return chunks
 
