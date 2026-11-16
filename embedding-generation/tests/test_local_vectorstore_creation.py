@@ -26,6 +26,7 @@ import torch
 import yaml
 from arm_kb_search import resources
 from arm_kb_search.analysis import Synonyms, analyze, name_keys
+from arm_kb_search.context import DocumentContextIndex
 from transformers import AutoTokenizer
 
 import document_chunking as intrinsic_source
@@ -46,7 +47,9 @@ def test_load_local_yaml_files_requires_intrinsic_chunks(tmp_path, monkeypatch):
 def test_serialized_search_text_preserves_field_and_body_boundaries(tmp_path, monkeypatch):
     body = 'CLI\n\nUse PyTorch.'
     record = {"uuid": "a", "chunk_uuid": "a", "url": "https://example.org/guide", "title": "AWS",
-              "heading": "CLI", "heading_path": ["AWS", "CLI"], "keywords": "", "content": body}
+              "heading": "CLI", "heading_path": ["AWS", "CLI"], "keywords": "", "content": body,
+              "page_url": "https://example.org/source?version=2", "parent_page_url": "https://learn.arm.com/path/",
+              "document_context": {"format": 1, "url": "https://example.org/guide", "chunk_index": 0, "chunk_count": 1}}
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["local_vectorstore_creation.py", "--model-path", "unused"])
     monkeypatch.setattr(vectorstore, "load_local_yaml_files", lambda: [record])
@@ -59,6 +62,11 @@ def test_serialized_search_text_preserves_field_and_body_boundaries(tmp_path, mo
     assert row["original_text"] == body
     assert vectorstore.embedding_input(row) == body
     assert row["search_text"].endswith(body)
+    for key in ("page_url", "parent_page_url"):
+        assert row[key] == record[key]
+        assert row[key] not in row["search_text"]
+    assert row["document_context"] == record["document_context"]
+    assert "chunk_index" not in row["search_text"]
 
 
 def test_vectorstore_serialization_preserves_dashboard_scope(tmp_path, monkeypatch):
@@ -100,6 +108,7 @@ def test_vectorstore_serialization_preserves_dashboard_scope(tmp_path, monkeypat
     )
     assert metadata[0]["product"] == metadata[0]["version"] == ""
     assert metadata[1]["platform"] == metadata[1]["edition"] == ""
+    assert all(not {"page_url", "parent_page_url"} & row.keys() for row in metadata)
 
 
 @pytest.mark.parametrize("reverse", [False, True])
@@ -174,6 +183,30 @@ def test_cap_preserves_exact_text_metadata_and_piece_identity(tokenizer, identif
             assert piece[key] == row[key]
     assert cursor == len(text)
     assert vectorstore.split_embedding_inputs([row], tokenizer) == pieces
+
+
+def test_duplicate_generated_pieces_expand_complete_context_once(tokenizer):
+    root = "https://learn.arm.com/learning-paths/cross-platform/example/"
+    pages = [root, root + "step/"]
+    rows = [record("\tint café = foo(a, b);  // 雪\r\n" * 400 + "  \n", "root"),
+            record("Second page", "step")]
+    for row, url in zip(rows, pages):
+        row["document_context"] = dict(format=1, url=url, chunk_index=0, chunk_count=1,
+                                       parent_page_url=root, learning_path_pages=pages)
+    duplicate = deepcopy(rows[0])
+    duplicate["document_context"].update(url=root.rstrip("/"), parent_page_url=root + "?utm_source=copy",
+                                         learning_path_pages=[root + "#intro", pages[1]])
+    pieces = vectorstore.split_embedding_inputs([*rows, duplicate], tokenizer)
+    assert sum(piece.get("parent_uuid") == "root" for piece in pieces) > 2
+    pieces.reverse()
+    before = deepcopy(pieces)
+    state = resources.SearchResources(pieces, None, None, None)
+    catalog = DocumentContextIndex(pieces, state)
+    for scope, expected in (("page", rows[:1]), ("parent_resource", rows)):
+        hits = catalog.expand([{"metadata": pieces[0]}], scope)
+        assert [state.snippet_for(hit["metadata"]) for hit in hits] == [row["original_text"] for row in expected]
+        assert [hit["context"]["page_url"] for hit in hits] == pages[:len(expected)]
+    assert pieces == before
 
 
 def test_bad_search_text_is_rejected(tokenizer):

@@ -220,6 +220,9 @@ class Chunk:
         content_type="",
         platform="",
         edition="",
+        page_url="",
+        parent_page_url="",
+        document_context=None,
     ):
         self.title = title
         self.url = url
@@ -234,6 +237,13 @@ class Chunk:
         self.content_type = content_type
         self.platform = platform
         self.edition = edition
+        self.context_metadata = {
+            key: value for key, value in {
+                "page_url": page_url, "parent_page_url": parent_page_url,
+            }.items() if value and value != url
+        }
+        if document_context:
+            self.context_metadata["document_context"] = document_context
 
         # Translate keyword list into comma-separated string, and add similar words to keywords.
         self.keywords = self.formatKeywords(keywords)
@@ -259,6 +269,7 @@ class Chunk:
             "content_type": self.content_type,
             "platform": self.platform,
             "edition": self.edition,
+            **self.context_metadata,
         }
 
     def __repr__(self):
@@ -377,10 +388,18 @@ def reconcile_learn_sources(discover=True):
 def create_learn_chunks(source_url, source_name, doc_type, keywords_value):
     keywords = parse_keywords(keywords_value, source_name)
     chunks = []
+    manifest = learn_sources.learning_path_pages(source_url)
     for document in learn_sources.documents(source_url):
         for payload in chunk_parsed_document(
             document, doc_type=doc_type or "Documentation", keywords=keywords
         ):
+            context = payload["document_context"]
+            if (
+                manifest
+                and context["url"] in manifest
+                and context.get("parent_page_url") == manifest[0]
+            ):
+                context["learning_path_pages"] = manifest
             chunks.append(chunk_from_payload(payload, keywords))
     return chunks
 

@@ -15,7 +15,11 @@ import requests
 import yaml
 from markdown_it import MarkdownIt
 
-from document_chunking import parse_html, split_frontmatter
+from document_chunking import (
+    learn_learning_path_root_url,
+    parse_html,
+    split_frontmatter,
+)
 from learn_public import PublicLearnSources, is_public_learn_url
 
 SITE = "https://learn.arm.com"
@@ -418,6 +422,10 @@ class Repository:
             )
             overview = []
             for key, label in (
+                ("overview", "Overview"),
+                ("demo_steps", "Demo steps"),
+                ("stats_description", "Statistics"),
+                ("example_user_prompts", "Example prompts"),
                 ("description", "Description"),
                 ("who_is_this_for", "Audience"),
                 ("target_audience", "Audience"),
@@ -597,6 +605,36 @@ class LearnSources:
                 else self.repository_for_url(key).documents(key)
             )
         return self._documents[key]
+
+    def learning_path_pages(self, url):
+        """Keep the full expected path order, including pages with no chunks."""
+        if not learn_learning_path_root_url(url):
+            return None
+        repo = self.repository_for_url(url)
+        page = repo.by_url.get(public_url(url))
+        root_url = learn_learning_path_root_url(page.url) if page else None
+        if not root_url or root_url not in repo.by_url:
+            return None
+        root = repo.by_url[root_url]
+        weighted = {}
+        for child in repo.selected_pages(root_url):
+            if child.path == root.path:
+                continue
+            # The standard Next Steps file is an empty Hugo template. Its
+            # related links already appear in the introduction. Keep authored
+            # Next Steps content, and never omit an empty ordinary lesson.
+            if (
+                PurePosixPath(child.path).name == "_next-steps.md"
+                and not self.documents(child.url)
+            ):
+                continue
+            weight = str(child.metadata.get("weight", ""))
+            # Match the published navigation's unique positive weights. Do not
+            # invent an order from filenames when that evidence is unavailable.
+            if not weight.isdecimal() or int(weight) <= 0 or int(weight) in weighted:
+                return None
+            weighted[int(weight)] = child.url
+        return [root.url, *(weighted[key] for key in sorted(weighted))] if weighted else None
 
     def discovered_sources(self):
         for kind in REPOSITORIES:
