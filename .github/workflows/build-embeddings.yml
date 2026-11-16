@@ -83,6 +83,11 @@ jobs:
           GENERATOR_IMAGE: ${{ steps.inputs.outputs.generator_image }}
         run: python3 .github/scripts/build-input-fingerprint.py toolchain --image "$GENERATOR_IMAGE"
 
+      - name: Verify pinned MCP bundle before generating embeddings
+        run: |
+          input_image="$(jq -er '.container_images.mcp_build_inputs.reference' mcp-local/build-inputs.lock.json)"
+          python3 .github/scripts/build-input-fingerprint.py mcp-inputs --image "$input_image"
+
       - name: Verify existing chunk package is private
         if: ${{ env.PUBLISH_IMAGES == 'true' }}
         env:

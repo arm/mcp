@@ -34,6 +34,25 @@ def test_scanned_and_published_bundle_have_identical_labels():
     )
 
 
+def test_mcp_bundle_is_checked_before_expensive_embedding_builds():
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/build-embeddings.yml").read_text()
+    )
+    steps = workflow["jobs"]["acquire-and-publish-chunks"]["steps"]
+    check_index = next(
+        i
+        for i, step in enumerate(steps)
+        if "build-input-fingerprint.py mcp-inputs" in step.get("run", "")
+    )
+    assert not steps[check_index].get("continue-on-error", False)
+    assert "if" not in steps[check_index]
+    assert all(
+        check_index < i
+        for i, step in enumerate(steps)
+        if step.get("uses", "").startswith("docker/build-push-action@")
+    )
+
+
 @pytest.mark.parametrize("kind", ["toolchain", "mcp-inputs"])
 def test_fingerprint_tracks_inputs_but_ignores_promotions_and_generation_code(
     tmp_path, kind
@@ -82,4 +101,6 @@ def test_image_check_passes_only_with_matching_label(monkeypatch, capsys, actual
         with pytest.raises(SystemExit) as failure:
             fingerprints.main()
         assert failure.value.code == 1
-        assert "merge its pin-update PR" in capsys.readouterr().out
+        message = capsys.readouterr().out
+        assert "Check for a pending pin-update PR" in message
+        assert "merge its pin-update PR" in message

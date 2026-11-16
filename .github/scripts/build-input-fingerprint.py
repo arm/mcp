@@ -56,8 +56,10 @@ def check(kind: str, expected: str, actual: str, image: str) -> None:
         raise ValueError(
             f"Pinned {kind} image is stale or missing its fingerprint: {image}. "
             f"Expected {expected}; found {actual or 'missing'}. "
-            f"Run {workflow} on main with dry_run=false, merge its pin-update PR, "
-            "then rerun this workflow."
+            "Check for a pending pin-update PR with matching inputs and merge it after review. "
+            f"If none is available or its inputs are outdated, run {workflow} on main "
+            "with dry_run=false and merge its pin-update PR after review. "
+            "Then start a new workflow run from updated main."
         )
 
 

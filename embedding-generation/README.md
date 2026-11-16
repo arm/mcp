@@ -49,11 +49,14 @@ still require rebuilding the toolchain and merging its pin update before running
 the pipeline. Generation code is identified by the workflow source commit; the
 environment is identified by the pinned toolchain digest.
 
-Before acquiring chunks, the pipeline checks that the pinned toolchain's input
-fingerprint matches the checkout. The MCP release workflow checks the runtime
-build-input bundle in the same way before the final offline build. If a
-fingerprint is stale or missing, rebuild the corresponding image on `main` with
-`dry_run=false`, merge its pin-update PR, and rerun the failed workflow.
+Before acquiring chunks, the pipeline checks that both the pinned toolchain and
+runtime build-input bundle match the checkout, avoiding expensive embedding runs
+with stale dependencies. The MCP release workflow checks the runtime bundle
+again before the final offline build. If a fingerprint is stale or missing,
+check for a pending pin-update PR with matching inputs. If none is available or
+its inputs are outdated, rebuild the corresponding image on `main` with
+`dry_run=false`. Review and merge the pin update, then start a new workflow run
+from updated `main`.
 
 For runtime OS-package or migrate-ease lock changes, start **Build MCP Input
 Bundle** manually. Changes to `mcp-local/build-inputs.lock.json` do not trigger
