@@ -49,6 +49,16 @@ still require rebuilding the toolchain and merging its pin update before running
 the pipeline. Generation code is identified by the workflow source commit; the
 environment is identified by the pinned toolchain digest.
 
+Before acquiring chunks, the pipeline checks that the pinned toolchain's input
+fingerprint matches the checkout. The MCP release workflow checks the runtime
+build-input bundle in the same way before the final offline build. If a
+fingerprint is stale or missing, rebuild the corresponding image on `main` with
+`dry_run=false`, merge its pin-update PR, and rerun the failed workflow.
+
+For runtime OS-package or migrate-ease lock changes, start **Build MCP Input
+Bundle** manually. Changes to `mcp-local/build-inputs.lock.json` do not trigger
+bundle builds automatically because promotion PRs also update that file.
+
 ## Promote an Embedding Build into MCP
 
 The embedding pipeline publishes candidates; it does not cause the MCP image

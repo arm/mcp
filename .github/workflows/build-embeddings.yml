@@ -78,6 +78,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
+      - name: Verify pinned toolchain matches checkout
+        env:
+          GENERATOR_IMAGE: ${{ steps.inputs.outputs.generator_image }}
+        run: python3 .github/scripts/build-input-fingerprint.py toolchain --image "$GENERATOR_IMAGE"
+
       - name: Verify existing chunk package is private
         if: ${{ env.PUBLISH_IMAGES == 'true' }}
         env:
