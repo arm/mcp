@@ -208,33 +208,20 @@ def test_mcp_stdio_transport_responds(platform):
         assert expected_nginx_urls & actual_nginx_urls, "Test Failed: MCP check_nginx tool failed: content mismatch., Expected one of: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_NGINX_RESPONSE,indent=2), json.dumps(check_nginx_response.get("result")["structuredContent"],indent=2))
         print("\n***Test Passed: MCP check_nginx tool succeeded")
 
-def test_bundled_clis_run_without_mcp(tmp_path):
+def test_cli_tooling_is_not_bundled():
     image = os.getenv("MCP_IMAGE", constants.MCP_DOCKER_IMAGE)
-    source = tmp_path / "source"
-    reports = tmp_path / "reports"
-    source.mkdir()
-    reports.mkdir()
-    (source / "example.cpp").write_text("#include <immintrin.h>\n")
-    (source / "loop.s").write_text("add x1, x1, x2\n")
-
-    def run(executable, *arguments):
-        return subprocess.run(
-            ["docker", "run", "--rm", "--network", "none",
-             "--mount", f"type=bind,src={source},dst=/workspace,readonly",
-             "--mount", f"type=bind,src={reports},dst=/results",
-             "--entrypoint", executable, image, *arguments],
-            check=True, capture_output=True, text=True, timeout=120,
-        )
-
-    run("skopeo", "--version")
-    for language in ("cpp", "python", "go", "js", "java"):
-        run(f"migrate-ease-{language}", "--help")
-    run("migrate-ease-cpp", "--march", "armv8-a", "--output", "/results/cpp.json", "/workspace")
-    report = json.loads((reports / "cpp.json").read_text())
-    assert report["issues"], "The x86-only include should produce a migration finding"
-    analysis = run("llvm-mca", "--mtriple=aarch64", "--mcpu=neoverse-n1", "/workspace/loop.s")
-    assert "Iterations:" in analysis.stdout
-    assert "Block RThroughput:" in analysis.stdout
+    subprocess.run(
+        [
+            "docker", "run", "--rm", "--network", "none", "--entrypoint", "sh",
+            image, "-c",
+            "for command in skopeo llvm-mca git migrate-ease-cpp; do "
+            "! command -v \"$command\" || exit 1; done",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
 
 
 if __name__ == "__main__":

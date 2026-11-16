@@ -121,13 +121,14 @@ def test_all_architecture_specific_inputs_cover_release_architectures() -> None:
     assert set(build_inputs["architectures"]) == expected
     assert set(build_inputs["manifests"]) == expected
     assert set(LOCK["python"]["architectures"]) == expected
-    assert set(LOCK["migrate_ease"]["architectures"]) == expected
     assert set(LOCK["os_packages"]["bundles"]) == expected
 
 
-def test_native_tool_packages_are_explicitly_requested() -> None:
-    runtime = set(LOCK["os_packages"]["roles"]["runtime"])
-    assert {"git", "libmagic1", "llvm-18", "python3", "skopeo"} <= runtime
+def test_os_package_roles_are_minimal() -> None:
+    assert LOCK["os_packages"]["roles"] == {
+        "builder": ["python3", "python3-venv"],
+        "runtime": ["python3"],
+    }
     assert re.fullmatch(r"[0-9]{8}T[0-9]{6}Z", LOCK["os_packages"]["snapshot"])
 
 
@@ -144,14 +145,6 @@ def test_os_package_bundles_are_hash_locked() -> None:
                 for digest in artifacts.values()
             )
 
-
-def test_external_inputs_are_immutable_and_have_digests() -> None:
-    migration = LOCK["migrate_ease"]
-    assert migration["repository"] == "https://github.com/migrate-ease/migrate-ease"
-    assert migration["revision"] in migration["url"]
-    assert re.fullmatch(r"[0-9a-f]{40}", migration["revision"])
-    assert re.fullmatch(r"[0-9a-f]{64}", migration["sha256"])
-    assert migration["verification"].startswith("locally calculated SHA256")
 
 def test_python_dependencies_have_one_exactly_pinned_source() -> None:
     pyproject = tomllib.loads((MCP_LOCAL / "pyproject.toml").read_text())
@@ -186,11 +179,9 @@ def test_dockerfile_consumes_only_staged_third_party_inputs() -> None:
     assert "--from=mcp-inputs /mcp-build-inputs/debs/builder/" in DOCKERFILE
     assert "--from=mcp-inputs /mcp-build-inputs/debs/runtime/" in DOCKERFILE
     assert "performix" not in DOCKERFILE.lower()
-    assert "--from=mcp-inputs /mcp-build-inputs/migrate-ease.tar.gz" in DOCKERFILE
-    assert (
-        'export PYTHONPATH="/opt/arm-migration-tools/migrate-ease'
-        '${PYTHONPATH:+:$PYTHONPATH}"'
-    ) in DOCKERFILE
+    assert "migrate-ease" not in DOCKERFILE
+    assert "skopeo" not in DOCKERFILE
+    assert "llvm-mca" not in DOCKERFILE
     assert "mcp-local/build-inputs/" not in DOCKERFILE
     assert "!mcp-local/build-inputs/" not in ROOT_DOCKERIGNORE
     assert "--from=embeddings /embedding-data/embedding-model/" in DOCKERFILE
@@ -1482,7 +1473,7 @@ def test_input_artifact_has_one_platform_neutral_layout() -> None:
     assert "build-inputs/${TARGETARCH}/wheels/" in INPUT_DOCKERFILE
     assert "build-inputs/${TARGETARCH}/debs/" in INPUT_DOCKERFILE
     assert "performix" not in INPUT_DOCKERFILE.lower()
-    assert "build-inputs/migrate-ease.tar.gz" in INPUT_DOCKERFILE
+    assert "migrate-ease" not in INPUT_DOCKERFILE
     assert "build-inputs/requirements.lock" in INPUT_DOCKERFILE
     assert "build-inputs/arm-kb-search.pyproject.toml" in INPUT_DOCKERFILE
     assert "/mcp-build-inputs/metadata/" in INPUT_DOCKERFILE

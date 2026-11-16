@@ -22,7 +22,6 @@ ARG TARGETARCH
 
 COPY build-inputs/${TARGETARCH}/wheels/ /mcp-build-inputs/wheels/
 COPY build-inputs/${TARGETARCH}/debs/ /mcp-build-inputs/debs/
-COPY build-inputs/migrate-ease.tar.gz /mcp-build-inputs/migrate-ease.tar.gz
 
 # Preserve the dependency declarations, uv lock, and generated pip lock beside
 # the acquired bytes so the GHCR artifact can be audited independently.

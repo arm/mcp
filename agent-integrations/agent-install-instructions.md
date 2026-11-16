@@ -44,12 +44,12 @@ args = [
 ```
 
 The `/workspace` mount is optional and stores MCP invocation/error logs. CLI scans
-run through the client shell with their own workspace mount.
+run through the client shell using the client's source and report paths.
 
 ## Load the CLI skills
 
 The only MCP tool is `knowledge_base_search`. Load the server resources or prompts
-`arm-container-inspect`, `arm-migration-scan`, and `arm-assembly-analyze` before
+`arm-container-inspect`, `arm-migrate-ease-scan`, and `arm-assembly-analyze` before
 using the corresponding CLI workflow. See [client compatibility and local skill
 installation](../docs/skills.md). Shell access is required to execute commands.
 
