@@ -22,24 +22,32 @@ The toolchain image:
 1. Installs the exact Python dependencies recorded in `uv.lock`.
 2. Acquires the sentence-transformer revision recorded in `embedding-model.lock.json`.
 3. Confirms that the saved model loads with networking disabled.
-4. Copies the locked environment, local model, and generation scripts into the
+4. Copies the locked environment, local model, and model lock into the
    final image without `uv`, `pip`, or `ensurepip` and its bundled pip wheel.
 
 When a file baked into the toolchain changes on `main`, including its
-Dockerfile, Python or model locks, acquisition code, or generation scripts,
+Dockerfile, Python or model locks, or model acquisition code,
 GitHub Actions rebuilds this image and opens or updates
 `automation/pin-embedding-generator`. That PR updates
 `pipeline-inputs.lock.json` to the new immutable digest. The workflow also
 supports manual branch runs, which publish an image without opening a PR.
 
-`Dockerfile.acquire` uses this toolchain for network-enabled discovery and
-content acquisition, then publishes only the acquired chunk snapshot from a
-scratch stage. `Dockerfile.vectorstore` uses the same toolchain and that
-immutable chunk snapshot to build `metadata.json` and `usearch_index.bin`
+`Dockerfile.acquire` copies `generate-chunks.py`, `document_chunking.py`, and
+`ecosystem_dashboard.py` from the workflow checkout and uses this toolchain for
+network-enabled discovery and content acquisition, then publishes only the
+acquired chunk snapshot from a scratch stage. `Dockerfile.vectorstore` copies
+`local_vectorstore_creation.py` from the same checkout and uses the same toolchain
+and that immutable chunk snapshot to build `metadata.json` and `usearch_index.bin`
 without network access. The scratch output also includes the exact local model
 used to generate the index, keeping the model, metadata, and index together as
 one immutable artifact. It is published privately as
 `ghcr.io/arm/mcp-embedding-vectorstore`.
+
+Generation-script changes take effect on the next embedding pipeline run without
+a toolchain rebuild or pin update. Changes to Python, dependencies, or the model
+still require rebuilding the toolchain and merging its pin update before running
+the pipeline. Generation code is identified by the workflow source commit; the
+environment is identified by the pinned toolchain digest.
 
 ## Promote an Embedding Build into MCP
 
@@ -284,7 +292,8 @@ the operation, signature, and type descriptions. The builder embeds it once in
 the shared index, preserves the full source for responses, and excludes
 `embedding_text` from saved metadata.
 
-Rebuild and pin the updated toolchain, then regenerate chunks before rebuilding
-the vector store. Intrinsic chunks require prepared metadata and `embedding_text`;
+Regenerate chunks with the updated acquisition scripts before rebuilding the
+vector store. Rebuild and pin the toolchain first if its dependencies or model
+changed. Intrinsic chunks require prepared metadata and `embedding_text`;
 missing preparation or descriptions over 500 tokens fail the build. Publish the
 model, metadata, and index together.
