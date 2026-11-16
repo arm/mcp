@@ -5,6 +5,8 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from arm_kb_search import SearchResources
+from arm_kb_search.context import DocumentContextIndex
 
 from document_chunking import chunk_parsed_document
 from learn_public import PublicLearnSources
@@ -111,6 +113,59 @@ def insight_entry(anchor, question, answer):
       <div slot="toggle"><span class="insight-entry__question-text">{question}</span></div>
       <div class="insight-entry__answer" slot="content">{answer}</div>
       </ads-expansion-panel></div>'''
+
+
+@pytest.mark.parametrize("with_overview", [False, True])
+@pytest.mark.parametrize("scope", ["page", "parent_resource"])
+def test_insights_expand_only_selected_answers(gc, monkeypatch, with_overview, scope):
+    overview = (
+        '<section class="insight-overview"><h2 id="overview">Overview</h2>'
+        '<p>SVE overview.</p></section>' if with_overview else ""
+    )
+    page = '<main><h1>SVE Insights</h1>' + overview
+    page += insight_entry(
+        "tail", "How do I handle tails?",
+        '<p>Use predication.</p><h2 id="example">Example</h2>'
+        '<pre><code>svwhilelt_b32(i, n);</code></pre>',
+    )
+    page += insight_entry(
+        "length", "How do I choose vector length?", '<p>Use svcntw().</p>',
+    )
+    monkeypatch.setattr(gc, "learn_sources", LearnSources(session({INSIGHT: page + "</main>"})))
+    records = [c.toDict() for c in gc.create_chunks_for_source(
+        INSIGHT, "SVE Insights", "Insights", "SVE",
+    )]
+    # Stored vector rows need not be in authored page order.
+    rows = list(reversed(records))
+    state = SearchResources(rows, None, None, None)
+    catalog = DocumentContextIndex(rows, state)
+    tail = [r for r in records if r["url"] == INSIGHT + "#tail"]
+    length = [r for r in records if r["url"] == INSIGHT + "#length"]
+    assert len(tail) == 2 and len(length) == 1
+    cases = [
+        ([tail[-1]], tail),
+        ([length[0]], length),
+        ([tail[-1], tail[0]], tail),  # Multiple hits in one FAQ expand it once.
+        ([length[0], tail[-1]], length + tail),
+    ]
+    if with_overview:
+        overview = [r for r in records if r["url"] == INSIGHT + "#overview"]
+        cases.append((overview, overview))
+    for seeds, expected in cases:
+        hits = catalog.expand([{"metadata": r} for r in seeds], scope)
+        assert [state.snippet_for(h["metadata"]) for h in hits] == [r["content"] for r in expected]
+        assert [h["metadata"]["url"] for h in hits] == [r["url"] for r in expected]
+        assert [h["context"]["chunk_index"] for h in hits] == [r["document_context"]["chunk_index"] for r in expected]
+        assert all("parent_page_url" not in h["context"] for h in hits)
+    assert all(r["document_context"]["url"] == INSIGHT + "#tail" for r in tail)
+    assert [r["document_context"]["chunk_index"] for r in tail] == [0, 1]
+    assert all(r["document_context"]["chunk_count"] == 2 for r in tail)
+    incomplete = [r for r in rows if r is not tail[0]]
+    partial_state = SearchResources(incomplete, None, None, None)
+    partial = DocumentContextIndex(incomplete, partial_state)
+    with pytest.raises(ValueError, match="one or more chunks are missing"):
+        partial.expand([{"metadata": tail[-1]}], scope)
+    assert len(partial.expand([{"metadata": length[0]}], scope)) == 1
 
 
 def test_insights_preserve_question_boundaries_and_public_anchors():

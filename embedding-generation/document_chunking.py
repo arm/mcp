@@ -218,6 +218,8 @@ class ParsedDocument:
     version: str = ""
     platform: str = ""
     edition: str = ""
+    # A separately expandable unit within a source page, such as an Insights FAQ.
+    context_url: str = ""
 
 
 def normalize_source_url(url: str) -> str:
@@ -1376,7 +1378,9 @@ def chunk_parsed_document(
             )
     page_url = urlunparse(urlparse(parsed_document.source_url)._replace(fragment=""))
     parent_page_url = learn_learning_path_root_url(page_url)
-    document_url = parsed_document.source_url if doc_type == "Intrinsic" else page_url
+    document_url = parsed_document.context_url or (
+        parsed_document.source_url if doc_type == "Intrinsic" else page_url
+    )
     # Normalize the parent's stored identity while retaining original citation URLs.
     if parent_page_url and urlparse(page_url).path.rstrip("/") == urlparse(parent_page_url).path.rstrip("/"):
         document_url = parent_page_url

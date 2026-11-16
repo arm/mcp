@@ -197,6 +197,8 @@ class PublicLearnSources:
             if not question or not document.sections:
                 raise ValueError(f"Empty published Insights answer at {url}#{anchor}")
             document.display_title = title
+            # Expand this complete FAQ answer without including neighbouring FAQs.
+            document.context_url = f"{url}#{anchor}"
             for section in document.sections:
                 section.heading_path.insert(0, question)
                 section.url_fragment = anchor
