@@ -16,7 +16,7 @@
 
 # Keep these defaults synchronized with mcp-local/build-inputs.lock.json.
 ARG EMBEDDINGS_IMAGE=ghcr.io/arm/mcp-embedding-vectorstore@sha256:fd92662b408e752b1f1cc09c5872741edfd123b5e678d6acd72542bc8020f610
-ARG MCP_BUILD_INPUTS_IMAGE=ghcr.io/arm/mcp-build-inputs@sha256:ff31f0cc454389c1504e0c8a9aad7b6f6d4ebc6ba2ca02f0769c60bf60e982f0
+ARG MCP_BUILD_INPUTS_IMAGE=ghcr.io/arm/mcp-build-inputs@sha256:fa41d51e8865cf4dd9f290c0b1242a8d4a089db77a857d955345306984b4f013
 ARG UBUNTU_IMAGE=ubuntu:24.04@sha256:24737cef17f4e22b1977df7d9a05e77c4e28b7da5b8911f8d8ccda136bf3573c
 
 FROM ${MCP_BUILD_INPUTS_IMAGE} AS mcp-inputs
