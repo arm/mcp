@@ -34,6 +34,26 @@ def test_scanned_and_published_bundle_have_identical_labels():
     )
 
 
+@pytest.mark.parametrize(
+    "kind,workflow_name",
+    [
+        ("toolchain", "build-embedding-toolchain.yml"),
+        ("mcp-inputs", "build-mcp-inputs.yml"),
+    ],
+)
+def test_build_triggers_match_fingerprint_inputs(kind, workflow_name):
+    # BaseLoader preserves GitHub's "on" key instead of treating it as a boolean.
+    workflow = yaml.load(
+        (ROOT / ".github/workflows" / workflow_name).read_text(), Loader=yaml.BaseLoader
+    )
+    expected = set(fingerprints.INPUTS[kind]) | {
+        ".github/scripts/build-input-fingerprint.py"
+    }
+    # Promotions update this lock too; OS/migrate-ease changes need a manual build.
+    expected.discard("mcp-local/build-inputs.lock.json")
+    assert set(workflow["on"]["push"]["paths"]) == expected
+
+
 def test_mcp_bundle_is_checked_before_expensive_embedding_builds():
     workflow = yaml.safe_load(
         (ROOT / ".github/workflows/build-embeddings.yml").read_text()
