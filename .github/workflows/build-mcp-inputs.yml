@@ -199,6 +199,7 @@ jobs:
           provenance: mode=max
           tags: ${{ env.IMAGE }}:${{ env.PUBLICATION_TAG }}-${{ matrix.arch }}
           labels: |
+            com.arm.mcp.build-input-fingerprint=${{ steps.fingerprint.outputs.value }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.title=Arm MCP immutable build inputs

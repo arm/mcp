@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
@@ -14,6 +15,23 @@ SPEC = importlib.util.spec_from_file_location(
 )
 fingerprints = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(fingerprints)
+
+
+def test_scanned_and_published_bundle_have_identical_labels():
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/build-mcp-inputs.yml").read_text()
+    )
+    builds = [
+        step["with"]
+        for step in workflow["jobs"]["acquire-and-publish-architecture"]["steps"]
+        if step.get("uses", "").startswith("docker/build-push-action@")
+    ]
+    assert len(builds) == 2
+    assert builds[0]["labels"] == builds[1]["labels"]
+    assert (
+        f"{fingerprints.LABEL}=${{{{ steps.fingerprint.outputs.value }}}}"
+        in builds[0]["labels"].splitlines()
+    )
 
 
 @pytest.mark.parametrize("kind", ["toolchain", "mcp-inputs"])
