@@ -16,14 +16,12 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from urllib.request import urlopen
 
 MCP_LOCAL = Path(__file__).resolve().parents[1]
 REPOSITORY = MCP_LOCAL.parent
 LOCK_PATH = MCP_LOCAL / "build-inputs.lock.json"
 PLATFORM_MACHINES = {"amd64": "x86_64", "arm64": "aarch64"}
 DOCKER_PLATFORMS = {"amd64": "linux/amd64", "arm64": "linux/arm64"}
-DOWNLOAD_TIMEOUT_SECONDS = 5 * 60
 
 
 def ca_certificate_bundle() -> Path:
@@ -51,29 +49,6 @@ def sha256(path: Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
-
-
-def download(url: str, destination: Path, expected_sha256: str | None = None) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists() and (
-        expected_sha256 is None or sha256(destination) == expected_sha256
-    ):
-        return
-
-    temporary = destination.with_suffix(destination.suffix + ".part")
-    temporary.unlink(missing_ok=True)
-    with urlopen(url, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response, temporary.open(
-        "wb"
-    ) as output:
-        shutil.copyfileobj(response, output)
-    if expected_sha256 is not None:
-        actual = sha256(temporary)
-        if actual != expected_sha256:
-            temporary.unlink()
-            raise RuntimeError(
-                f"SHA256 mismatch for {url}: expected {expected_sha256}, got {actual}"
-            )
-    temporary.replace(destination)
 
 
 def export_install_requirements(output: Path) -> Path:
@@ -307,13 +282,6 @@ def main() -> None:
     )
     requirements = export_install_requirements(output)
 
-    migration = lock["migrate_ease"]
-    assert isinstance(migration, dict)
-    download(
-        str(migration["url"]),
-        output / "migrate-ease.tar.gz",
-        str(migration["sha256"]),
-    )
     arches = PLATFORM_MACHINES if args.arch == "all" else (args.arch,)
     for arch in arches:
         if not args.skip_os_packages:

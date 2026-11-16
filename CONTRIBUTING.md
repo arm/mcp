@@ -47,8 +47,8 @@ minimum supported Python version.
 
 ## Reproducible MCP Build Inputs
 
-The final MCP image build does not resolve or download Python packages, Ubuntu
-packages, or migrate-ease. Those inputs are acquired separately by
+The final MCP image build does not resolve or download Python or Ubuntu
+packages. Those inputs are acquired separately by
 the manually triggered **Build MCP Input Bundle** workflow and published as a
 private, multi-architecture OCI image at `ghcr.io/arm/mcp-build-inputs`.
 
@@ -59,8 +59,7 @@ architecture it:
 2. downloads the exact Python wheels allowed by those hashes;
 3. downloads the complete `.deb` closures from the recorded Ubuntu snapshot
    and checks every package against `mcp-local/build-inputs.lock.json`;
-4. downloads and verifies the pinned migrate-ease source archive; and
-5. publishes those bytes and their lock metadata in a scratch image, then
+4. publishes those bytes and their lock metadata in a scratch image, then
    combines both architecture images into one private OCI image index.
 
 `mcp-local/Dockerfile` selects the matching architecture from that index and
@@ -71,7 +70,7 @@ currently approved input bundle is recorded in
 `mcp-local/build-inputs.lock.json` and defaults to:
 
 ```text
-ghcr.io/arm/mcp-build-inputs@sha256:8db95af8e7d819b82adbed0bd1c9eadcd1d0f2afdd144c52618b58bccfbf07cf
+ghcr.io/arm/mcp-build-inputs@sha256:8587f10da108cb7320c0b11536e2d995afc34abe5a04da10c14758b55a26abc9
 ```
 
 ### Why the Build Uses Multiple Dockerfiles
@@ -79,7 +78,7 @@ ghcr.io/arm/mcp-build-inputs@sha256:8db95af8e7d819b82adbed0bd1c9eadcd1d0f2afdd14
 Each Dockerfile represents a different trust or network boundary:
 
 - `mcp-local/Dockerfile.inputs` has no `RUN` commands and starts from
-  `scratch`. It packages the verified wheels, `.deb` files, archives, and lock
+  `scratch`. It packages the verified wheels, `.deb` files, and lock
   metadata into the multi-architecture OCI artifact that GHCR can store.
 - `mcp-local/Dockerfile` is the final application build. It consumes the
   approved MCP-input and embedding artifacts by digest and installs their
@@ -157,7 +156,7 @@ docker buildx build --pull \
 ```
 
 This copies `server.py`, `utils/`, and `arm_kb_search/` over the released image
-and reuses its Python environment, executables, and knowledge base. Omit
+and reuses its Python environment and knowledge base. Omit
 `--pull` during repeated edits to reuse the cached base, or select a particular
 release with `--build-arg BASE_IMAGE=armlimited/arm-mcp:VERSION`.
 
@@ -166,7 +165,7 @@ before the source copies in `Dockerfile.local`. This modifies only the derived
 image's existing `/app/.venv`; a fresh environment would require reinstalling
 the release dependencies. This shortcut does not install changes from
 `pyproject.toml` or `uv.lock` automatically. Use the full build above for OS,
-built-in executable, or knowledge-base artifact changes.
+Python dependency, or knowledge-base artifact changes.
 
 ### Testing a Local MCP Image
 
@@ -179,11 +178,10 @@ docker run --rm \
   --entrypoint sh \
   arm-mcp:local \
   -c 'set -eu
-      skopeo --version
-      llvm-mca --version
-      git --version
-      migrate-ease-cpp --help >/dev/null
-      python -c "import magic, requests; from arm_mcp_definitions import register_capabilities"'
+      python -c "import arm_kb_search; from arm_mcp_definitions import register_capabilities"
+      for command in skopeo llvm-mca git migrate-ease-cpp; do
+        ! command -v "$command" || exit 1
+      done'
 ```
 
 The packaged embedding model can be checked separately without network

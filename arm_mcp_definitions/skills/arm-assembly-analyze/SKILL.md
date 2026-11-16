@@ -11,24 +11,17 @@ source with the project's compiler and target flags (for example, Clang `-S`),
 or extract a suitable instruction region from disassembly. Preprocess `.S` files
 before analysis. Retain instruction syntax and target architecture.
 
-Use the installed `llvm-mca` (sometimes version-suffixed), or the LLVM 18 CLI
-bundled in the Arm MCP image. Set `ARM_MCP_IMAGE` to the configured version/digest
-or a local build; examples default to `armlimited/arm-mcp:latest`.
+This skill runs in the user's environment; LLVM is not installed in the Arm MCP
+server image. Use an installed `llvm-mca` (sometimes version-suffixed). If it is
+absent, ask before installing LLVM with the user's platform package manager,
+then resolve the installed binary (for example `llvm-mca-18` or a package-manager
+LLVM `bin` directory). Do not modify the server container.
 
 ```sh
+command -v llvm-mca || command -v llvm-mca-18
 llvm-mca --mtriple=aarch64 --mcpu=help
 llvm-mca --mtriple=aarch64 --mcpu=neoverse-n1 \
   --iterations=100 --bottleneck-analysis --resource-pressure loop.s
-```
-
-Docker equivalent, from the directory containing `loop.s`:
-
-```sh
-docker run --rm --network none \
-  --mount "type=bind,src=$PWD,dst=/workspace,readonly" \
-  --entrypoint llvm-mca "${ARM_MCP_IMAGE:-armlimited/arm-mcp:latest}" \
-  --mtriple=aarch64 --mcpu=neoverse-n1 --iterations=100 \
-  --bottleneck-analysis --resource-pressure /workspace/loop.s
 ```
 
 Choose the CPU matching the requested deployment; `neoverse-n1` is only an

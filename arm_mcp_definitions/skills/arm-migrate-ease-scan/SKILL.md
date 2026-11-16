@@ -18,7 +18,14 @@ description: Download and run migrate-ease compatibility scanners to assess Arm 
 2. **Isolate Environment:** 
 Run all tool setup tasks outside the current workspace tree (inside `/tmp`) to protect local Git change tracking from context bloat and trailing artifacts.
 
-3. **Install Migrate Ease from GitHub:**
+3. **Verify User-Environment Prerequisites:**
+This skill runs in the user's environment; migrate-ease and its dependencies are
+not installed in the Arm MCP server image. Require `git`, Python 3 with `venv`
+support, and `jq` for multi-report consolidation. Ask before installing missing
+prerequisites with the user's platform package manager. Do not modify the server
+container.
+
+4. **Install Migrate Ease from GitHub:**
 Download Migrate Ease from its canonical GitHub repository into the isolated temporary area, install its Python requirements in a dedicated virtual environment, and record the resolved Git commit. Do not install into the system Python environment or use `sudo`.
 
 ```sh
@@ -34,7 +41,7 @@ git -C "$tool_root/migrate-ease" rev-parse HEAD
 export PYTHONPATH="$tool_root/migrate-ease"
 ```
 
-4. **Execute Scanner Environment:**
+5. **Execute Scanner Environment:**
 Invoke the module using its specific language-scanner designation. 
 
 * **For Local Directories:**
@@ -49,15 +56,15 @@ Invoke the module using its specific language-scanner designation.
   ```sh
   "$tool_root/venv/bin/python" -m {scanner_name} --vendor {vendor} --instance-type {instance} --output "$report_dir/{scanner_name}.json" "$source_dir"
   ```
-5. **Scale Control (Repositories > 1 GB):** Split scopes by independent sub-directories. Execute scanner processes in parallel and surface completed partial chunks dynamically.
+6. **Scale Control (Repositories > 1 GB):** Split scopes by independent sub-directories. Execute scanner processes in parallel and surface completed partial chunks dynamically.
 
-6. **Report Consolidation:**
+7. **Report Consolidation:**
 For multi-directory or multi-language split scans, consolidate individual JSON results using `jq` into a unified report array before rendering:
 ```sh
 jq -s '.' "$report_dir"/*.json > "$report_dir/consolidated_report.json"
 ```
 
-7. **Interactive HTML View:** After presenting the scan summary, explicitly ask the user whether they want the report opened in a web browser, then end the turn and wait for their response. Only after the user explicitly confirms may the agent start a report server and open the consolidated profile.
+8. **Interactive HTML View:** After presenting the scan summary, explicitly ask the user whether they want the report opened in a web browser, then end the turn and wait for their response. Only after the user explicitly confirms may the agent start a report server and open the consolidated profile.
    * Convert `consolidated_report.json` into `consolidated_report.html`. The HTML must present the scan summary, coverage, findings, scanner errors, and source-file details; it may load the JSON as a companion file from the same directory. Preserve the original JSON as the source of truth.
    * Serve the report directory with a loopback-only localhost server and open the HTML URL with the platform's browser opener. Choose an unused port if the example port is occupied. Confirm that the server returns the HTML successfully; if the browser does not appear, give the user the localhost URL.
    ```sh
