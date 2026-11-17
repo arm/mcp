@@ -65,10 +65,22 @@ corresponding release action; it opens a separate reviewed version PR.
 ## Intrinsic Catalog Snapshot
 
 Builds reuse the snapshot pinned by `intrinsic_chunks_image` in `pipeline-inputs.lock.json`.
-To refresh it, prepare new and updated catalog records with `prepare_intrinsic_chunk`,
-preserve their existing IDs and URLs, and publish the full snapshot at
-`/embedding-data/intrinsic_chunks/` in a new image.
-Update the pin to its published digest; builds use the previous snapshot until then.
+To refresh it, run **Refresh Intrinsic Snapshot** in GitHub Actions on `main`.
+Leave `dry_run` enabled to validate without publishing; disable it to publish a
+new private `ghcr.io/arm/mcp-intrinsic-chunks` image. The workflow downloads the
+current Arm catalog and operations, refreshes every record, and preserves
+existing filenames, IDs and URLs. The image contains only the prepared YAML
+records and a manifest with source checksums and record counts.
+
+The run summary reports the published digest. Update `intrinsic_chunks_image`
+to that immutable reference in a reviewed PR. The normal Sunday embedding
+pipeline consumes it after that PR merges; the normal release PR still requires
+review. This workflow does not build embeddings, change pins or release MCP.
+
+An empty/invalid catalog, missing existing records, unsupported families,
+missing operations or descriptions over 500 embedding tokens fail before
+publication. Existing snapshots remain available. Repeated runs with identical
+inputs produce identical YAML; publication uses a unique tag for each run.
 
 ## Add Documents
 
