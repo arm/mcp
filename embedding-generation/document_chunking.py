@@ -176,6 +176,9 @@ def prepare_intrinsic_chunk(chunk: dict) -> dict:
     if not is_intrinsic_chunk(chunk):
         return chunk
     normalized = normalize_intrinsic_chunk(chunk)
+    normalized["document_context"] = {
+        "format": 1, "url": normalized["url"], "chunk_index": 0, "chunk_count": 1,
+    }
     normalized.pop("embedding_texts", None)
     record = {**normalized, "original_text": normalized["content"]}
     return {**normalized, "embedding_text": intrinsic_embedding_text(record)}
@@ -233,7 +236,18 @@ def is_learn_learning_path_url(url: str) -> bool:
     )
 
 
-def learn_learning_path_step_urls(source_url: str, html: str | bytes) -> list[str]:
+def learn_learning_path_root_url(source_url: str) -> str | None:
+    parsed = urlparse(normalize_source_url(source_url))
+    segments = parsed.path.strip("/").split("/")
+    if not is_learn_learning_path_url(source_url) or len(segments) < 3:
+        return None
+    return urlunparse((parsed.scheme, parsed.netloc.lower(),
+                       "/" + "/".join(segments[:3]) + "/", "", "", ""))
+
+
+def learn_learning_path_step_urls(
+    source_url: str, html: str | bytes, *, ordered_only: bool = False,
+) -> list[str]:
     source_url = normalize_source_url(source_url)
     if not is_learn_learning_path_url(source_url):
         return []
@@ -244,7 +258,24 @@ def learn_learning_path_step_urls(source_url: str, html: str | bytes) -> list[st
     step_urls: list[str] = []
     seen: set[str] = set()
 
-    for link in soup.find_all("a", href=True):
+    links = soup.find_all("a", href=True)
+    if ordered_only:
+        # Only the published step-navigation weights establish step order. Generic
+        # hyperlinks still support discovery, but cannot certify a path manifest.
+        weighted = {}
+        for link in links:
+            classes = link.get("class", [])
+            if "inner-learning-path-navbar-element" not in classes:
+                continue
+            weights = [int(m[1]) for value in classes if (m := re.fullmatch(r"(\d+)-weight", value))]
+            if "content-individual-a-mobile" in classes or weights == [0]:
+                continue
+            if len(weights) != 1 or weights[0] in weighted:
+                return []
+            weighted[weights[0]] = link
+        links = [weighted[index] for index in sorted(weighted)]
+
+    for link in links:
         candidate = normalize_source_url(urljoin(source_url, link.get("href", "")))
         parsed = urlparse(candidate)
         if (
@@ -1286,4 +1317,20 @@ def chunk_parsed_document(
                     ),
                 }
             )
+    page_url = urlunparse(urlparse(parsed_document.source_url)._replace(fragment=""))
+    parent_page_url = learn_learning_path_root_url(page_url)
+    document_url = parsed_document.source_url if doc_type == "Intrinsic" else page_url
+    # Normalize the parent's stored identity while retaining original citation URLs.
+    if parent_page_url and urlparse(page_url).path.rstrip("/") == urlparse(parent_page_url).path.rstrip("/"):
+        document_url = parent_page_url
+    for index, chunk in enumerate(chunks):
+        chunk["document_context"] = {
+            "format": 1, "url": document_url,
+            "chunk_index": index, "chunk_count": len(chunks),
+            **({"parent_page_url": parent_page_url} if parent_page_url else {}),
+        }
+        if page_url != chunk["url"] and doc_type != "Intrinsic":
+            chunk["page_url"] = page_url
+        if parent_page_url and urlparse(parent_page_url).path.rstrip("/") != urlparse(page_url).path.rstrip("/"):
+            chunk["parent_page_url"] = parent_page_url
     return chunks

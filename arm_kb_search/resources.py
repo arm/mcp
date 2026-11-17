@@ -33,6 +33,7 @@ from usearch.index import Index
 
 from . import analysis
 from .config import K_RESULTS
+from .context import CONTEXT_SCOPES, DocumentContextIndex
 from .filters import MetadataFilterIndex, SearchFilters
 from .loaders import load_metadata, load_usearch_index
 from .response import add_disclaimer_to_arm_results, add_utm_source_to_results
@@ -131,6 +132,32 @@ def _load_keyword_cache(
         return None
 
 
+def _reassemble_pieces(pieces: list[dict[str, Any]]) -> str | None:
+    """Collapse identical slices, then require one complete, consistent sequence."""
+    unique: dict[int, tuple] = {}
+    for piece in pieces:
+        part, count, start, end = (piece.get(field) for field in
+                                   ("source_part", "source_parts", "source_start", "source_end"))
+        text = piece.get("original_text")
+        if (any(type(value) is not int for value in (part, count, start, end))
+                or not isinstance(text, str) or not 1 <= part <= count
+                or start < 0 or end <= start or end != start + len(text)):
+            return None
+        signature = (count, start, end, text)
+        if part in unique and unique[part] != signature:
+            return None
+        unique[part] = signature
+    expected_start = 0
+    texts = []
+    for number, part in enumerate(sorted(unique), 1):
+        count, start, end, text = unique[part]
+        if part != number or count != len(unique) or start != expected_start:
+            return None
+        texts.append(text)
+        expected_start = end
+    return "".join(texts) if texts else None
+
+
 @dataclass
 class SearchResources:
     metadata: list[dict[str, Any]]
@@ -143,27 +170,20 @@ class SearchResources:
     synonyms: analysis.Synonyms = field(default=analysis.EMPTY, repr=False)
     _filter_index: MetadataFilterIndex = field(init=False, repr=False, compare=False)
     _parent_texts: dict[tuple[str, str], str] = field(init=False, repr=False, compare=False)
+    _document_context: DocumentContextIndex | None = field(default=None, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         self._filter_index = MetadataFilterIndex(self.metadata)
         parents: dict[tuple[str, str], list[dict[str, Any]]] = {}
         for row in self.metadata:
-            if row.get("parent_uuid") and row.get("parent_chunk_uuid"):
-                key = (row["parent_uuid"], row["parent_chunk_uuid"])
+            key = (row.get("parent_uuid"), row.get("parent_chunk_uuid"))
+            if all(isinstance(value, str) and value for value in key):
                 parents.setdefault(key, []).append(row)
         self._parent_texts = {}
         for key, pieces in parents.items():
-            pieces.sort(key=lambda piece: piece["source_start"])
-            expected_starts = [0] + [piece["source_end"] for piece in pieces[:-1]]
-            complete = all(
-                piece["source_part"] == number
-                and piece["source_parts"] == len(pieces)
-                and piece["source_start"] == expected_starts[number - 1]
-                and piece["source_end"] == piece["source_start"] + len(piece["original_text"])
-                for number, piece in enumerate(pieces, 1)
-            )
-            if complete:
-                self._parent_texts[key] = "".join(piece["original_text"] for piece in pieces)
+            text = _reassemble_pieces(pieces)
+            if text is not None:
+                self._parent_texts[key] = text
 
     def snippet_for(self, metadata: dict[str, Any]) -> str:
         """Expand a ranked piece to its complete original chunk when available."""
@@ -262,8 +282,11 @@ def search(
     k: int | None = None,
     *,
     filters: SearchFilters | Mapping[str, Any] | None = None,
+    scope: str = "chunks",
 ) -> list[dict[str, Any]]:
     """Search a resource snapshot, optionally restricting eligible metadata values."""
+    if not isinstance(scope, str) or scope not in CONTEXT_SCOPES:
+        raise ValueError("scope must be 'chunks', 'page', or 'parent_resource'")
     eligible_ids = resources._filter_index.eligible_ids(SearchFilters.parse(filters))
     if eligible_ids == ():
         return []
@@ -296,6 +319,12 @@ def search(
     if len(search_results) < resolved_k and can_expand and expanded_pool_size > pool_size:
         search_results = ranked_candidates(expanded_pool_size)
 
+    selected = search_results[:resolved_k]
+    if scope != "chunks" and selected:
+        if resources._document_context is None:
+            resources._document_context = DocumentContextIndex(resources.metadata, resources)
+        selected = resources._document_context.expand(selected, scope)
+
     formatted = [
         {
             "url": item["metadata"].get("url") or item["metadata"].get("resolved_url"),
@@ -308,8 +337,14 @@ def search(
             "edition": item["metadata"].get("edition", ""),
             "distance": item.get("distance"),
             "score": item.get("rerank_score", item.get("rrf_score")),
+            **({"context": item["context"]} if "context" in item else {}),
+            **{key: value for key, value in {
+                "page_url": item["metadata"].get("page_url"),
+                "parent_page_url": item["metadata"].get("parent_page_url")
+                    or item["metadata"].get("learning_path_url"),
+            }.items() if isinstance(value, str) and value},
         }
-        for item in search_results[:resolved_k]
+        for item in selected
     ]
     formatted = add_utm_source_to_results(formatted, resources.utm_source)
     if resources.include_disclaimers:

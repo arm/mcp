@@ -1,0 +1,300 @@
+# Copyright © 2026, Arm Limited and Contributors. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Expand ranked hits using stored document identities and acquisition order only."""
+
+from typing import Any
+from urllib.parse import urlparse, urlunparse
+
+
+CONTEXT_SCOPES = {"chunks", "page", "parent_resource"}
+
+
+def _learning_path_root(url: str, *, root_only: bool = False) -> str | None:
+    """Recognize acquisition's Learning Path root without inventing page order."""
+    if url.partition("#")[2].startswith("q="):
+        return None
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return None
+    segments = parsed.path.strip("/").split("/")
+    if (parsed.scheme in {"http", "https"}
+            and parsed.netloc.lower() == "learn.arm.com"
+            and parsed.path.startswith("/learning-paths/")
+            and len(segments) >= 3 and (not root_only or len(segments) == 3)):
+        return urlunparse((parsed.scheme, parsed.netloc.lower(),
+                           "/" + "/".join(segments[:3]) + "/", "", "", ""))
+    return None
+
+
+def _canonical_url(url: str) -> str:
+    """Normalize Learning Path roots, preserving other and malformed identities."""
+    return _learning_path_root(url, root_only=True) or url
+
+
+def _document_key(row: dict, url: str) -> tuple:
+    # Keep versioned documents and query/fragment identities distinct.
+    if row.get("doc_type") != "Intrinsic":
+        url = _canonical_url(url)
+    variants = []
+    for field in ("platform", "edition", "version"):
+        value = row.get(field)
+        if value is not None and not isinstance(value, str):
+            raise _unavailable(url, f"invalid {field} identity; expected a string or null")
+        variants.append(value or "")
+    return (url, *variants)
+
+
+def _fallback_document_url(row: dict) -> str | None:
+    """Associate unordered rows with a document without inventing chunk order."""
+    for field in ("page_url", "url", "resolved_url"):
+        url = row.get(field)
+        if isinstance(url, str) and url:
+            page, _, fragment = url.partition("#")
+            if row.get("doc_type") == "Intrinsic" or fragment.startswith("q="):
+                return url
+            return _canonical_url(url if field == "page_url" else page)
+    return None
+
+
+def _normalize_record(row: dict) -> tuple[dict, str | None, set[str]]:
+    """Resolve supported identity representations without changing citations.
+
+    Parent evidence is collected before normalizing aliases. It constrains
+    completeness checks even when the record cannot supply ordered content.
+    A manifest is evidence of membership, not a replacement for missing fields.
+    """
+    context = row.get("document_context")
+    roots = {_canonical_url(value) for source in (context, row) if isinstance(source, dict)
+             for field in ("parent_page_url", "learning_path_url")
+             if isinstance(value := source.get(field), str) and value}
+    if isinstance(context, dict):
+        context = dict(context)
+        for field in ("url", "parent_page_url", "learning_path_url"):
+            value = context.get(field)
+            if isinstance(value, str) and not (field == "url" and row.get("doc_type") == "Intrinsic"):
+                context[field] = _canonical_url(value)
+        pages = context.get("learning_path_pages")
+        if isinstance(pages, list):
+            pages = [_canonical_url(value) if isinstance(value, str) else value for value in pages]
+            context["learning_path_pages"] = pages
+        if isinstance(pages, list) and pages and isinstance(pages[0], str) and pages[0]:
+            roots.add(pages[0])
+        if "learning_path_url" in context:
+            legacy_root = context.pop("learning_path_url")
+            if context.get("parent_page_url") in (None, ""):
+                context["parent_page_url"] = legacy_root
+        row = {**row, "document_context": context}
+    context_url = context.get("url") if isinstance(context, dict) else None
+    url = context_url if isinstance(context_url, str) and context_url else _fallback_document_url(row)
+    # URL structure also identifies stored siblings that lost all explicit
+    # parent fields. This evidence constrains validation; it supplies no order.
+    if url and row.get("doc_type") != "Intrinsic":
+        root = _learning_path_root(url)
+        if root:
+            roots.add(root)
+    return row, url, roots
+
+
+def _unavailable(url: str, reason: str) -> ValueError:
+    return ValueError(
+        f"Cannot expand stored context for {url}: {reason}. "
+        "Regenerate chunks and the KB artifacts with complete document-order metadata; "
+        "scope='chunks' remains available."
+    )
+
+
+def _prepare(validate, *args):
+    """Retain a validation failure without blocking unrelated documents."""
+    try:
+        return validate(*args)
+    except ValueError as exc:
+        return ValueError(str(exc))
+
+
+def _require(value):
+    if isinstance(value, ValueError):
+        raise ValueError(str(value))
+    return value
+
+
+def _ordered_chunks(key: tuple, rows: list[dict], resources, split_positions: dict) -> tuple[dict, ...]:
+    chunks: dict[int, dict] = {}
+    expected_count = None
+    split_fields = ("parent_uuid", "parent_chunk_uuid", "source_start", "source_end", "source_part", "source_parts")
+    for row in rows:
+        context = row.get("document_context")
+        if not isinstance(context, dict) or not isinstance(context.get("url"), str) or not context["url"]:
+            raise _unavailable(key[0], "a same-document record is missing document-order metadata")
+        index, count = context.get("chunk_index"), context.get("chunk_count")
+        if (context.get("format") != 1 or type(index) is not int or type(count) is not int
+                or count < 1 or not 0 <= index < count):
+            raise _unavailable(key[0], "invalid chunk ordering metadata")
+        if expected_count is not None and count != expected_count:
+            raise _unavailable(key[0], "conflicting document revisions")
+        expected_count = count
+        if any(field in row for field in split_fields):
+            parent = (row.get("parent_uuid"), row.get("parent_chunk_uuid"))
+            if not all(isinstance(value, str) and value for value in parent):
+                raise _unavailable(key[0], "a split chunk is missing parent identifiers")
+            if parent not in resources._parent_texts:
+                raise _unavailable(key[0], "an original chunk has missing or invalid embedding pieces")
+            if split_positions.get(parent) != (key, index):
+                raise _unavailable(key[0], "a split chunk has conflicting or missing document positions")
+        # Collapse embedding pieces/import copies by logical position. A copy
+        # acquired through its parent can supply a missing navigation manifest.
+        if index in chunks:
+            previous = chunks[index]
+            previous_context = previous["document_context"]
+            old_pages, new_pages = (c.get("learning_path_pages") for c in (previous_context, context))
+            # The grouping key already establishes document identity. Citations
+            # may differ across equivalent acquisitions of that same document.
+            if (any(previous.get(f) != row.get(f) for f in ("heading", "title"))
+                    or resources.snippet_for(previous) != resources.snippet_for(row)
+                    or {k: v for k, v in previous_context.items() if k != "learning_path_pages"}
+                    != {k: v for k, v in context.items() if k != "learning_path_pages"}
+                    or (old_pages is not None and new_pages is not None and old_pages != new_pages)):
+                raise _unavailable(key[0], "conflicting chunks at the same position")
+            if old_pages is None and new_pages is not None:
+                chunks[index] = row
+        else:
+            chunks[index] = row
+    if len(chunks) != expected_count:
+        raise _unavailable(key[0], "one or more chunks are missing")
+    return tuple(chunks[index] for index in range(expected_count))
+
+
+def _parent_url(key: tuple, document, known_parents: set[str]) -> str | None:
+    chunks = _require(document)
+    root = chunks[0]["document_context"].get("parent_page_url")
+    if root is not None and (not isinstance(root, str) or not root):
+        raise _unavailable(key[0], "invalid parent identity")
+    if (any(chunk["document_context"].get("parent_page_url") != root for chunk in chunks)
+            or (known_parents and known_parents != {root})):
+        raise _unavailable(key[0], "inconsistent parent identity across chunks")
+    if root is None and any("learning_path_pages" in chunk["document_context"] for chunk in chunks):
+        raise _unavailable(key[0], "parent manifest has no parent identity")
+    return root
+
+
+def _unique_key(url: str, keys_by_url: dict) -> tuple:
+    keys = keys_by_url.get(url, [])
+    if len(keys) != 1:
+        raise _unavailable(url, "document is missing" if not keys else "ambiguous document variants")
+    return keys[0]
+
+
+def _parent_pages(root: str, members: set[tuple], keys_by_url: dict, documents: dict, parents: dict) -> tuple:
+    root_chunks = _require(documents[_unique_key(root, keys_by_url)])
+    pages = root_chunks[0]["document_context"].get("learning_path_pages")
+    if (not isinstance(pages, list) or not pages
+            or any(not isinstance(url, str) or not url for url in pages)
+            or pages[0] != root or len(set(pages)) != len(pages)):
+        raise _unavailable(root, "the parent resource page order is absent or invalid")
+    keys = tuple(_unique_key(url, keys_by_url) for url in pages)
+    if not members.issubset(keys):
+        raise _unavailable(root, "inconsistent parent resource manifests: a stored sibling is omitted")
+    for key in keys:
+        chunks = _require(documents[key])
+        if (_require(parents[key]) != root
+                or any(chunk["document_context"].get("learning_path_pages") != pages for chunk in chunks)):
+            raise _unavailable(root, "inconsistent parent resource manifests")
+    return keys
+
+
+class DocumentContextIndex:
+    """Prepare a fixed snapshot once; expansion only reads validated catalog entries."""
+
+    def __init__(self, metadata: list[dict[str, Any]], resources):
+        rows_by_document: dict[tuple, list[dict]] = {}
+        invalid_documents: dict[str, ValueError] = {}
+        invalid_parents: dict[str, ValueError] = {}
+        known_parents: dict[tuple, set[str]] = {}
+        members: dict[str, set[tuple]] = {}
+        keys_by_url: dict[str, list[tuple]] = {}
+        split_positions: dict[tuple, tuple | None] = {}
+        for row in metadata:
+            position = None
+            row, url, roots = _normalize_record(row)
+            context = row.get("document_context")
+            context_url = context.get("url") if isinstance(context, dict) else None
+            if isinstance(url, str) and url:
+                try:
+                    key = _document_key(row, url)
+                except ValueError as exc:
+                    invalid_documents[url] = ValueError(str(exc))
+                    # Retain unknown variants and parent membership. Any expansion
+                    # of this URL is unsafe; unrelated URLs remain usable.
+                    key = (url,)
+                rows_by_document.setdefault(key, []).append(row)
+                if isinstance(context_url, str) and context_url:
+                    position = (key, context.get("chunk_index"))
+                known_parents.setdefault(key, set()).update(roots)
+                for root in roots:
+                    members.setdefault(root, set()).add(key)
+            else:
+                for root in roots:
+                    invalid_parents[root] = _unavailable(root, "a stored sibling has no usable document URL")
+            parent = (row.get("parent_uuid"), row.get("parent_chunk_uuid"))
+            if all(isinstance(value, str) and value for value in parent):
+                if parent not in split_positions:
+                    split_positions[parent] = position
+                elif split_positions[parent] != position:
+                    split_positions[parent] = None
+        for key in rows_by_document:
+            keys_by_url.setdefault(key[0], []).append(key)
+            # Sibling evidence identifies the root even when the root's own
+            # parent fields are absent. Do not silently treat it as standalone.
+            if key[0] in members or key[0] in invalid_parents:
+                known_parents[key].add(key[0])
+
+        # Record errors at the narrowest scope: a bad parent need not prevent
+        # reading a valid page, and a bad page need not block another document.
+        self.documents = {key: invalid_documents[key[0]] if key[0] in invalid_documents else
+                          _prepare(_ordered_chunks, key, rows, resources, split_positions)
+                          for key, rows in rows_by_document.items()}
+        self.document_parents = {key: _prepare(_parent_url, key, document, known_parents[key])
+                                 for key, document in self.documents.items()}
+        self.parents = {root: _prepare(_parent_pages, root, keys, keys_by_url, self.documents, self.document_parents)
+                        for root, keys in members.items()}
+        self.parents.update(invalid_parents)
+
+    def expand(self, seeds: list[dict], scope: str) -> list[dict]:
+        output = []
+        seen = set()
+        for seed in seeds:
+            row = seed["metadata"]
+            context = row.get("document_context")
+            if not isinstance(context, dict) or not isinstance(context.get("url"), str) or not context["url"]:
+                raise _unavailable(row.get("url", ""), "document metadata is absent")
+            key = _document_key(row, context["url"])
+            _require(self.documents.get(key, _unavailable(key[0], "document is missing")))
+            root = _require(self.document_parents[key]) if scope == "parent_resource" else None
+            pages = _require(self.parents[root]) if root else (key,)
+            for page_index, page_key in enumerate(pages):
+                if page_key in seen:
+                    continue
+                seen.add(page_key)
+                chunks = _require(self.documents[page_key])
+                for chunk in chunks:
+                    output.append({"metadata": chunk, "context": {
+                        "scope": "parent_resource" if root else "page",
+                        "page_url": page_key[0],
+                        "chunk_index": chunk["document_context"]["chunk_index"],
+                        "chunk_count": len(chunks),
+                        **({"parent_page_url": root, "page_index": page_index,
+                            "page_count": len(pages)} if root else {}),
+                    }})
+        return output
