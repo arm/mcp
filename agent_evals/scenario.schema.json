@@ -24,6 +24,10 @@
       "minLength": 1,
       "pattern": "\\S"
     },
+    "gitCommit": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$"
+    },
     "identifier": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9._-]*$"
@@ -38,7 +42,7 @@
       "properties": {
         "kind": {"const": "git"},
         "repository": {"$ref": "#/$defs/nonEmptyString"},
-        "revision": {"$ref": "#/$defs/nonEmptyString"}
+        "revision": {"$ref": "#/$defs/gitCommit"}
       },
       "additionalProperties": false
     },
@@ -64,7 +68,7 @@
         "id": {"$ref": "#/$defs/identifier"},
         "kind": {"const": "git"},
         "repository": {"$ref": "#/$defs/nonEmptyString"},
-        "revision": {"$ref": "#/$defs/nonEmptyString"}
+        "revision": {"$ref": "#/$defs/gitCommit"}
       },
       "additionalProperties": false
     },
@@ -143,16 +147,7 @@
         "name": {"$ref": "#/$defs/mcpServerName"},
         "source": {"$ref": "#/$defs/source"},
         "version": {"$ref": "#/$defs/nonEmptyString"},
-        "enabled_tools": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {"$ref": "#/$defs/nonEmptyString"}
-        },
-        "skills": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {"$ref": "#/$defs/identifier"}
-        },
+        "skills_root": {"$ref": "#/$defs/nonEmptyString"},
         "build": {"$ref": "#/$defs/command"},
         "launch": {"$ref": "#/$defs/command"},
         "default_tools_approval_mode": {

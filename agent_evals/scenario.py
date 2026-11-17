@@ -115,6 +115,13 @@ def _validate_local_references(document: dict[str, Any], scenario_dir: Path) -> 
     else:
         request = task["request"]
 
+    verifier_command = task["verifier"]["command"]
+    if (Path(verifier_command[0]).name.startswith("python")
+            and "-c" not in verifier_command and "-m" not in verifier_command):
+        script = next((arg for arg in verifier_command[1:] if arg.endswith(".py")), None)
+        if script is not None and not Path(script).is_absolute():
+            _existing_file(script, scenario_dir, "task.verifier.command script", allow_parent=True)
+
     _unique_ids(task.get("inputs", []), "task.inputs")
     for index, task_input in enumerate(task.get("inputs", [])):
         if task_input["kind"] == "local":
@@ -132,6 +139,11 @@ def _validate_local_references(document: dict[str, Any], scenario_dir: Path) -> 
         servers = configuration.get("mcp_servers", [])
         _unique_ids(servers, f"{where}.mcp_servers", field="name")
         for server_index, server in enumerate(servers):
+            skills_root = server.get("skills_root")
+            if skills_root is not None:
+                _relative_source_path(
+                    skills_root, f"{where}.mcp_servers[{server_index}].skills_root"
+                )
             source = server.get("source")
             if source is not None and source["kind"] == "local":
                 _require_directory(
@@ -139,8 +151,25 @@ def _validate_local_references(document: dict[str, Any], scenario_dir: Path) -> 
                     scenario_dir,
                     f"{where}.mcp_servers[{server_index}].source.path",
                 )
+            if skills_root is not None and (source is None or source["kind"] == "local"):
+                source_path = Path(source["path"] if source is not None else ".").expanduser()
+                if not source_path.is_absolute():
+                    source_path = scenario_dir / source_path
+                source_path = source_path.resolve()
+                root = (source_path / skills_root).resolve()
+                if not root.is_relative_to(source_path) or not root.is_dir():
+                    raise ScenarioError(
+                        f"{where}.mcp_servers[{server_index}].skills_root "
+                        f"does not exist within the local server source: {root}"
+                    )
 
     return request
+
+
+def _relative_source_path(path: str, where: str) -> None:
+    if ("\\" in path or re.match(r"^[a-zA-Z]:", path) or
+            Path(path).is_absolute() or ".." in Path(path).parts):
+        raise ScenarioError(f"{where} must be a relative path within its server source")
 
 
 def _unique_ids(

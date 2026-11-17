@@ -104,25 +104,26 @@ def _docker_socket() -> Path:
     return path
 
 
-def _skill_dir(source_dir: Path, name: str) -> Path:
-    matches = [path.parent for path in source_dir.rglob("SKILL.md")
-               if path.parent.name == name]
-    if len(matches) != 1:
-        raise RunnerError(f"expected one bundled skill {name!r} in {source_dir}; found {len(matches)}")
-    return matches[0]
-
-
 def _install_skills(
     servers: list[tuple[dict[str, Any], Path]], profile_home: Path,
 ) -> list[str]:
     installed: list[str] = []
     for server, source_dir in servers:
-        for name in server.get("skills", []):
+        if "skills_root" not in server:
+            continue
+        root = (source_dir / server["skills_root"]).resolve()
+        if not root.is_relative_to(source_dir.resolve()) or not root.is_dir():
+            raise RunnerError(f"invalid skills_root for {server['name']!r}: {root}")
+        skill_files = sorted(root.glob("*/SKILL.md"))
+        if not skill_files:
+            raise RunnerError(f"no bundled skills in {root}")
+        for skill_file in skill_files:
+            name = skill_file.parent.name
             destination = profile_home / ".agents" / "skills" / name
             if destination.exists():
-                raise RunnerError(f"skill {name!r} is selected by more than one server")
+                raise RunnerError(f"skill {name!r} is bundled by more than one server")
             destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(_skill_dir(source_dir, name), destination, symlinks=True)
+            shutil.copytree(skill_file.parent, destination, symlinks=True)
             installed.append(name)
     return installed
 
@@ -169,8 +170,6 @@ def run_codex(
         args.extend(["-c", f"{prefix}.args={_toml_value(server['launch'][1:])}"])
         args.extend(["-c", f"{prefix}.cwd={_toml_value(str(source_dir))}"])
         args.extend(["-c", f"{prefix}.required=true"])
-        if "enabled_tools" in server:
-            args.extend(["-c", f"{prefix}.enabled_tools={_toml_value(server['enabled_tools'])}"])
         if "default_tools_approval_mode" in server:
             args.extend(["-c", f"{prefix}.default_tools_approval_mode="
                          f"{_toml_value(server['default_tools_approval_mode'])}"])
@@ -254,10 +253,19 @@ def run_codex_trial(
     docker_access: bool = False,
     executable: str = "codex",
 ) -> tuple[dict[str, Any], list[str]]:
-    """Install selected Codex skills, then run the agent."""
+    """Install every bundled Codex skill, then run the agent."""
+    try:
+        version_probe = subprocess.run(
+            [executable, "--version"], capture_output=True, text=True, timeout=10,
+        )
+        cli_version = (version_probe.stdout.strip() or None
+                       if version_probe.returncode == 0 else None)
+    except (OSError, subprocess.TimeoutExpired):
+        cli_version = None
     installed = _install_skills(servers, trial_dir / "profile")
     result = run_codex(
         configuration, servers, workspace, trial_dir, prompt, timeout_seconds,
         docker_access=docker_access, executable=executable,
     )
+    result["cli_version"] = cli_version
     return result, installed

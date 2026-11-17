@@ -18,13 +18,47 @@ from unittest.mock import Mock, call, patch
 
 from agent_evals import Scenario, load_scenario
 from agent_evals.codex_adapter import (
-    _docker_socket, _write_provider_config, run_codex,
+    _docker_socket, _install_skills, _write_provider_config, run_codex,
     run_codex_trial, tomllib,
 )
-from agent_evals.runner import RunnerError, _command, _patch, _stop_process_group, _verify, run_scenario
+from agent_evals.runner import (
+    RunnerError, _built_image_metadata, _command, _patch, _stop_process_group,
+    _verify, run_scenario,
+)
 
 
 class RunnerTests(unittest.TestCase):
+    def test_records_the_image_built_and_launched_for_an_mcp_server(self):
+        server = {
+            "build": ["docker", "buildx", "build", "--load", "-t", "arm-mcp:test", "."],
+            "launch": ["docker", "run", "--rm", "-i", "arm-mcp:test"],
+        }
+        image = {"Id": "sha256:abc", "Os": "linux", "Architecture": "arm64",
+                 "RepoDigests": []}
+        with patch("agent_evals.runner.subprocess.run") as run:
+            run.return_value = subprocess.CompletedProcess(
+                [], 0, json.dumps(image), "",
+            )
+            metadata = _built_image_metadata(server, {"DOCKER_CONTEXT": "test"})
+        self.assertEqual(metadata, {
+            "reference": "arm-mcp:test", "id": "sha256:abc", "os": "linux",
+            "architecture": "arm64", "repo_digests": [],
+        })
+        self.assertEqual(run.call_args.kwargs["env"]["DOCKER_CONTEXT"], "test")
+
+    def test_skills_root_is_explicit_and_must_exist_in_source(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "server"
+            skill = source / "skills" / "example-skill"
+            skill.mkdir(parents=True)
+            (skill / "SKILL.md").write_text("Example skill.\n", encoding="utf-8")
+            profile = root / "profile"
+            self.assertEqual(_install_skills([({"name": "server"}, source)], profile), [])
+            self.assertFalse((profile / ".agents" / "skills").exists())
+            with self.assertRaisesRegex(RunnerError, "invalid skills_root"):
+                _install_skills([({"name": "server", "skills_root": "missing"}, source)], profile)
+
     def test_timeout_still_verifies_saved_workspace(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -414,10 +448,16 @@ class RunnerTests(unittest.TestCase):
                                                cwd=repository, text=True).strip()
 
             server_source = root / "server"
-            skill = server_source / "skills" / "example-skill"
-            skill.mkdir(parents=True)
-            (skill / "SKILL.md").write_text("---\nname: example-skill\n"
-                                                  "description: Test skill\n---\nDo work.\n",
+            for name in ("example-skill", "second-skill"):
+                skill = server_source / "bundled" / "skills" / name
+                skill.mkdir(parents=True)
+                (skill / "SKILL.md").write_text(
+                    f"---\nname: {name}\ndescription: Test skill\n---\nDo work.\n",
+                    encoding="utf-8",
+                )
+            unrelated = server_source / "agent-integrations" / "codex" / "arm-enablement"
+            unrelated.mkdir(parents=True)
+            (unrelated / "SKILL.md").write_text("Separate Codex integration skill.\n",
                                                   encoding="utf-8")
 
             scenario_dir = root / "scenario"
@@ -445,7 +485,7 @@ class RunnerTests(unittest.TestCase):
                     {"id": "with-mcp", "agent": {"kind": "codex", "model": "test"},
                      "prompt": "prompt.md", "mcp_servers": [{
                          "name": "test-server", "source": {"kind": "local", "path": str(server_source)},
-                         "skills": ["example-skill"], "enabled_tools": ["search"],
+                         "skills_root": "bundled/skills",
                          "build": [sys.executable, "-c",
                                    "from pathlib import Path; Path('built.txt').write_text('built')"],
                          "launch": [sys.executable, "-c", "print('server')"],
@@ -459,16 +499,22 @@ class RunnerTests(unittest.TestCase):
             fake_codex.write_text(
                 f"#!{sys.executable}\n"
                 "import json, os, sys\nfrom pathlib import Path\n"
+                "if sys.argv[1:] == ['--version']:\n"
+                "    print('codex-cli 0.test')\n"
+                "    raise SystemExit(0)\n"
                 "args = sys.argv[1:]\n"
                 "workspace = Path(args[args.index('-C') + 1])\n"
                 "answer = Path(args[args.index('-o') + 1])\n"
                 "prompt = sys.stdin.read()\n"
                 "assert '--ignore-user-config' not in args\n"
                 "with_mcp = 'Use the selected skill.' in prompt\n"
-                "skill = Path(os.environ['HOME']) / '.agents/skills/example-skill/SKILL.md'\n"
-                "assert skill.is_file() == with_mcp\n"
+                "skills = Path(os.environ['HOME']) / '.agents/skills'\n"
+                "for name in ('example-skill', 'second-skill'):\n"
+                "    assert (skills / name / 'SKILL.md').is_file() == with_mcp\n"
+                "assert not (skills / 'arm-enablement').exists()\n"
                 "assert any(arg.startswith('mcp_servers.test-server.command=') "
                 "for arg in args) == with_mcp\n"
+                "assert not any('enabled_tools' in arg for arg in args)\n"
                 "(workspace / 'agent-output.txt').write_text(prompt)\n"
                 "(workspace / 'build-arm').mkdir()\n"
                 "(workspace / 'build-arm/CMakeCache.txt').write_text('generated')\n"
@@ -491,17 +537,25 @@ class RunnerTests(unittest.TestCase):
                               "example-skill").exists())
             self.assertTrue((variant / "profile" / ".agents" / "skills" /
                              "example-skill" / "SKILL.md").is_file())
+            self.assertTrue((variant / "profile" / ".agents" / "skills" /
+                             "second-skill" / "SKILL.md").is_file())
             self.assertTrue((output / "sources" / "server-with-mcp+test-server" /
                              "built.txt").is_file())
             result = json.loads((variant / "result.json").read_text(encoding="utf-8"))
             self.assertEqual(result["trial_id"], variant.name)
             self.assertEqual(result["agent"]["usage"]["total_tokens"], 14)
+            self.assertNotIn("cli_version", result["agent"])
+            self.assertEqual(result["skills"], ["example-skill", "second-skill"])
             self.assertEqual(result["verifier"]["result"]["application_execution_seconds"], 1.5)
             comparison = json.loads((output / "report.json").read_text(encoding="utf-8"))
             self.assertEqual((comparison["scored"], comparison["passing"]), (2, 2))
             sources = json.loads((output / "sources.json").read_text(encoding="utf-8"))
             self.assertEqual(sources["inputs"]["repo"]["commit"], revision)
             self.assertEqual(sources["mcp_servers"]["with-mcp"][0]["name"], "test-server")
+            self.assertIsNone(sources["mcp_servers"]["with-mcp"][0]["image"])
+            run_metadata = json.loads((output / "run.json").read_text(encoding="utf-8"))
+            self.assertTrue(run_metadata["host"]["architecture"])
+            self.assertEqual(run_metadata["agent_versions"], {"codex": ["codex-cli 0.test"]})
             patch = (variant / "changes.patch").read_text(encoding="utf-8")
             self.assertIn("agent-output.txt", patch)
             self.assertNotIn("example-skill", patch)

@@ -189,6 +189,8 @@ def _markdown(report: dict[str, Any]) -> str:
         f"# Comparison report: {_cell(report['scenario_id'])}", "",
         f"Recorded {report['recorded']} of {report['planned']} planned trials; "
         f"{report['not_recorded']} not recorded.", "",
+        "Run metadata: [run.json](run.json), [scenario.json](scenario.json), "
+        "[sources.json](sources.json).", "",
         "End-to-end success rate requires a completed agent and passing verifier; agent failures and "
         "timeouts are scored failures. Verifier pass rate uses all scored verifier runs, "
         "including timed-out agents. Verifier errors are excluded from that rate. "

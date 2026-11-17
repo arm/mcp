@@ -14,7 +14,7 @@ A **scenario** is a JSON file with three parts:
 | Part | What it defines |
 | --- | --- |
 | `task` | The shared request, optional repository or local directory inputs, and the command that verifies the agent's result. |
-| `configurations` | The agent and model to run, plus any configuration-specific prompt, MCP servers, enabled tools, and bundled skills. |
+| `configurations` | The agent and model to run, plus any configuration-specific prompt and MCP servers. |
 | `run` | Local execution settings, including repetitions and the agent timeout. |
 
 One **trial** is one task input run once under one configuration. The runner
@@ -30,8 +30,9 @@ The runner handles the common lifecycle:
 2. For each trial, create a fresh workspace and assemble the agent input:
    configuration prompt (if set), then the shared task request.
 3. Select the adapter for `configurations[].agent.kind`. The adapter installs
-   selected skills, connects MCP servers, starts the agent, and records its
-   trace, reported token use, and elapsed time.
+   the servers' bundled skills, connects MCP servers with all their tools
+   available, starts the agent, and records its trace, reported token use, and
+   elapsed time.
 4. Save the resulting workspace and a Git patch for Git inputs. If the agent
    completed or timed out, run the task's verifier against that workspace.
 5. Write one result per trial and a comparison report for the full run.
@@ -51,7 +52,8 @@ agent_evals/
   runner.py                 Source setup, trial workspaces, verifier, artifacts
   codex_adapter.py          Codex CLI launch, MCP/skill setup, trace and usage
   report.py                 Result classification and comparison reports
-  cli.py                    validate, plan, run, and report commands
+  preflight.py              Local prerequisite and prepared-skill checks
+  cli.py                    preflight, run, and report commands
   scenarios/<name>/         A scenario and its task-specific files
   tests/                    Framework tests
 ```
@@ -77,8 +79,9 @@ review code, or exercise a new MCP tool or skill.
 a UTF-8 file in the scenario folder. `task.inputs` is optional. When
 present, it contains one or more named repository or directory inputs:
 
-- `kind: "git"` supplies a repository and a Git revision (branch, tag, or
-  commit). The runner resolves it and starts each trial from a fresh checkout.
+- `kind: "git"` supplies a repository and a full commit SHA in `revision`.
+  The runner starts each trial from that commit in a fresh checkout. Branch
+  and tag names are not accepted because they can change between runs.
 - `kind: "local"` supplies a directory, which the runner copies for each
   trial. Git is not required.
 Omit `task.inputs` for a request-only task, such as one knowledge question.
@@ -89,6 +92,7 @@ The runner then creates one empty workspace per configuration and repetition.
 elements are its literal arguments. The verifier decides what success means
 for this task. It can run build or functional checks, inspect a produced
 artifact, call a judge, or calculate an application-specific measure.
+Scenario loading checks that a relative Python verifier script exists.
 
 ### Configurations
 
@@ -110,17 +114,23 @@ The framework is intended to support three ways to supply an MCP server:
   resolve or pull a release from `version`.
 
 For source builds, an entry in `mcp_servers` can define `source`, `build`,
-`launch`, an `enabled_tools` allowlist, and bundled `skills`. The runner
-snapshots each source once per run and installs the selected skills from that
-snapshot in the trial's isolated agent profile. The intended version-based
-path must also obtain the matching skills. Currently, `version` is recorded
-in results but does not select the server that runs; that selection will be
-added when the published-version path is implemented.
+and `launch`. The runner snapshots each source once per run. The Codex adapter
+exposes all tools registered by each server. Set `skills_root` to the directory
+containing that server's bundled skill folders, relative to its source root
+(for example, `arm_mcp_definitions/skills`). The adapter installs every
+`*/SKILL.md` skill under that directory in the trial's isolated profile.
+Omit `skills_root` when there are no bundled skills to install. The intended
+version-based path must also obtain the matching skills. Currently, `version`
+is recorded in results but does not select the server that runs; that
+selection will be added when the published-version path is implemented.
+Scenario loading checks that a local source's `skills_root` directory exists.
+For Git sources, this check runs after the source is fetched.
 
 The launch command starts a local MCP process that speaks over stdin and
 stdout. A configuration can name more than one MCP server. The current Codex
-adapter uses a temporary Codex home so the trial gets its selected servers
-and skills while retaining the developer's model provider and CLI login.
+adapter uses a temporary Codex home so the trial gets its configured servers
+and their bundled skills while retaining the developer's model provider and
+CLI login.
 
 ### Run settings
 
@@ -128,7 +138,7 @@ and skills while retaining the developer's model provider and CLI login.
 many times each input and configuration is tried, and
 `agent_timeout_seconds` limits each agent run. The optional `docker_access`
 setting lets the Codex agent use the local Docker daemon when the task or
-selected skills require Docker commands.
+bundled skills require Docker commands.
 
 ## Run a scenario locally
 
@@ -138,13 +148,24 @@ From the repository root, use Python 3.10+ and install the evaluation package:
 python -m pip install -e agent_evals
 ```
 
-This installs the `arm-agent-evals` command. Validate and inspect the
-planned trial set before starting agents:
+This installs the `arm-agent-evals` command. Its three subcommands have
+different purposes:
+
+| Command | What it does |
+| --- | --- |
+| `preflight SCENARIO` | Validates the scenario, checks the verifier, Codex executable, skills in local MCP sources, and Docker daemon when Docker is explicitly used, then summarizes the planned run. It does not fetch or build sources or run trials. |
+| `run SCENARIO --output DIR` | Repeats preflight, prepares sources and servers, checks skills in prepared sources, runs each agent and verifier, and writes trial artifacts and a comparison report. |
+| `report DIR` | Reads results saved by an earlier `run` and regenerates the comparison report. It does not rerun agents or verifiers. |
+
+Start by checking the scenario and planned trial count:
 
 ```sh
-arm-agent-evals validate agent_evals/scenarios/megahit-arm64/scenario.json
-arm-agent-evals plan agent_evals/scenarios/megahit-arm64/scenario.json
+arm-agent-evals preflight agent_evals/scenarios/megahit-arm64/scenario.json
 ```
+
+The summary shows each input's repository or local path and each configuration ID.
+It also lists the checks that passed. Use `--json` for the same information in a
+machine-readable form.
 
 The MEGAHIT example requires Codex CLI authentication and a working Docker
 daemon. Its MCP source is pinned to a revision before PR #259 while its
@@ -159,8 +180,11 @@ arm-agent-evals run agent_evals/scenarios/megahit-arm64/scenario.json \
 Omit `--repetitions` to use the scenario's configured count. The output path
 must be new and outside any local input or MCP server source. During a run,
 the CLI prints setup, agent, and verifier progress to stderr; the final JSON
-summary goes to stdout. `validate` and `plan` do not fetch repositories,
-build servers, or launch agents.
+summary goes to stdout. Preflight does not fetch Git sources or run build
+commands; `run` checks those and prepared skill files before the first agent
+trial.
+`run` writes a report automatically; use `report` only when you need to
+regenerate it from the saved results.
 
 ## Verify results and read the report
 
@@ -181,11 +205,20 @@ measures to `AGENT_EVAL_VERIFIER_RESULT`. A verifier can use common helpers,
 but its success checks and optional measures belong to its use case.
 
 The output directory contains `sources/`, `setup-logs/`, one directory under
-`trials/` per trial, `results.jsonl`, `sources.json`, `summary.json`,
+`trials/` per trial, `run.json`, `results.jsonl`, `sources.json`, `summary.json`,
 `report.json`, and `report.md`. A trial directory holds the assembled prompt,
 agent trace, final answer when available, stderr, verifier output when run,
 and a patch for Git inputs. That patch includes tracked changes and untracked
 files that Git does not ignore, so generated files may appear in it.
+
+For reproduction, `run.json` records the host OS, architecture, Python version,
+repetition count, and observed agent CLI versions (including `codex --version`).
+The saved `scenario.json` contains the agent configuration; each trial's
+`result.json` records its outcome.
+`sources.json` records resolved Git commits and source snapshots. When an MCP
+server is built as a tagged Docker image and launched from that tag, it also
+records the image reference, image ID, OS, architecture, and available registry
+digests. An unavailable CLI version or non-Docker image is recorded as `null`.
 
 The report links to those artifacts. Its end-to-end success rate requires both a
 completed agent and a passing verifier. A timed-out agent remains an agent
@@ -209,7 +242,7 @@ arm-agent-evals report /tmp/agent-eval-example
 
 To add a use case, define its request and inputs in a new scenario, write a
 verifier for its expected outcome, and choose the configurations to compare.
-Use `validate` and `plan` to check the scenario before running a small trial.
+Use `preflight` to check the scenario before running a small trial.
 To add another agent, implement an adapter for its launch, MCP and skill
 setup, trace, and usage format, then register its `agent.kind` in
 `runner.py`.

@@ -23,7 +23,7 @@ class ReportTests(unittest.TestCase):
                 "schema_version": 1, "id": "sample",
                 "task": {"request": "Migrate the code.", "inputs": [
                     {"id": "code", "kind": "git", "repository": "https://example.invalid/repo",
-                     "revision": "main"},
+                     "revision": "a" * 40},
                 ], "verifier": {"command": ["python3", "verify.py"]}},
                 "run": {"execution_target": "local", "repetitions": 4,
                         "agent_timeout_seconds": 30},

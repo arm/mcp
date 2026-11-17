@@ -5,15 +5,18 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import shutil
 import signal
 import subprocess
+import sys
 import time
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .preflight import PreflightError, check_prepared_launch, check_prepared_skills
 from .report import run_summary, write_report
 from .scenario import Scenario, planned_trials
 
@@ -110,6 +113,48 @@ def _prepare_source(
     original = original.resolve()
     _copy_source(original, destination)
     return {"kind": "local", "path": str(original)}
+
+
+def _built_image_metadata(
+    server: dict[str, Any], environment: dict[str, str],
+) -> dict[str, Any] | None:
+    """Identify the Docker image built for this server's launch command."""
+    build = server.get("build", [])
+    launch = server["launch"]
+    if (not build or Path(build[0]).name != "docker" or
+            not (build[1:2] == ["build"] or build[1:3] == ["buildx", "build"]) or
+            Path(launch[0]).name != "docker" or launch[1:2] != ["run"]):
+        return None
+    tags: list[str] = []
+    for index, argument in enumerate(build):
+        if argument in ("-t", "--tag") and index + 1 < len(build):
+            tags.append(build[index + 1])
+        elif argument.startswith("--tag="):
+            tags.append(argument.split("=", 1)[1])
+    launched_tags = [tag for tag in tags if tag in launch]
+    if len(launched_tags) != 1:
+        return None
+    reference = launched_tags[0]
+    try:
+        inspection = subprocess.run(
+            [build[0], "image", "inspect", "--format", "{{json .}}", reference],
+            capture_output=True, text=True, env=environment, timeout=30,
+        )
+        if inspection.returncode:
+            raise RunnerError(f"cannot inspect built MCP image {reference!r}: "
+                              f"{inspection.stderr.strip()}")
+        image = json.loads(inspection.stdout)
+        image_id = image["Id"]
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError,
+            KeyError, TypeError) as exc:
+        raise RunnerError(f"cannot inspect built MCP image {reference!r}: {exc}") from exc
+    return {
+        "reference": reference,
+        "id": image_id,
+        "os": image.get("Os"),
+        "architecture": image.get("Architecture"),
+        "repo_digests": image.get("RepoDigests") or [],
+    }
 
 
 def _prompt(scenario: Scenario, configuration: dict[str, Any], task_input: dict[str, Any]) -> str:
@@ -224,11 +269,19 @@ def run_scenario(
             progress(message)
 
     announce(f"Preparing {scenario.id}: {total_trials} trial(s)")
-    _write_json(output / "run.json", {
+    run_metadata = {
         "scenario": str(scenario.path), "scenario_id": scenario.id,
         "started_at": datetime.now(timezone.utc).isoformat(),
         "repetitions": repetitions,
-    })
+        "agent_versions": {},
+        "host": {
+            "os": platform.system(),
+            "os_release": platform.release(),
+            "architecture": platform.machine(),
+            "python_version": sys.version.split()[0],
+        },
+    }
+    _write_json(output / "run.json", run_metadata)
     shutil.copy2(scenario.path, output / "scenario.json")
     inputs: dict[str, tuple[Path | None, dict[str, str]]] = {}
     for task_input in scenario.inputs:
@@ -251,19 +304,29 @@ def run_scenario(
             source = server.get("source", {"kind": "local", "path": "."})
             announce(f"Preparing MCP server {config['id']}/{server['name']} ({source['kind']})")
             source_info = _prepare_source(source, scenario_dir, destination, logs)
-            source_records.append({
+            prepared.append((server, destination))
+            try:
+                check_prepared_skills({config["id"]: prepared})
+            except PreflightError as exc:
+                raise RunnerError(f"MCP skill preflight failed: {exc}") from exc
+            source_record = {
                 "name": server["name"], "version": server.get("version"),
                 "source": source_info, "snapshot": str(destination.relative_to(output)),
-            })
+            }
+            environment = os.environ.copy()
+            environment.update(config.get("environment", {}))
             if "build" in server:
-                environment = os.environ.copy()
-                environment.update(config.get("environment", {}))
                 log = logs / f"build-{config['id']}+{server['name']}.log"
                 announce(f"Building MCP server {config['id']}/{server['name']} (log: {log})")
                 if _command(server["build"], destination, log, environment=environment) != 0:
                     raise RunnerError(f"MCP build failed; see {log}")
                 announce(f"Built MCP server {config['id']}/{server['name']}")
-            prepared.append((server, destination))
+            try:
+                check_prepared_launch(server, destination)
+            except PreflightError as exc:
+                raise RunnerError(f"MCP launch preflight failed: {exc}") from exc
+            source_record["image"] = _built_image_metadata(server, environment)
+            source_records.append(source_record)
         servers_by_config[config["id"]] = prepared
         server_sources[config["id"]] = source_records
     _write_json(output / "sources.json", {
@@ -309,6 +372,12 @@ def run_scenario(
                 prompt, scenario.document["run"]["agent_timeout_seconds"],
                 docker_access=scenario.document["run"].get("docker_access", False),
             )
+            version = agent.pop("cli_version", None)
+            if isinstance(version, str) and version:
+                versions = run_metadata["agent_versions"].setdefault(config["agent"]["kind"], [])
+                if version not in versions:
+                    versions.append(version)
+                    _write_json(output / "run.json", run_metadata)
             elapsed = agent.get("elapsed_seconds")
             duration = f" in {elapsed:.1f}s" if isinstance(elapsed, (int, float)) else ""
             announce(f"{label}: agent {agent['status']}{duration}")

@@ -11,6 +11,7 @@ from agent_evals import ScenarioError, load_scenario, planned_trials
 
 HERE = Path(__file__).resolve().parents[1]
 MEGAHIT = HERE / "scenarios" / "megahit-arm64" / "scenario.json"
+EXAMPLE_COMMIT = "a" * 40
 
 
 def question_document():
@@ -29,6 +30,7 @@ class ScenarioTests(unittest.TestCase):
     def load_question(self, document, setup=None):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
+            (folder / "judge.py").write_text("pass\n", encoding="utf-8")
             if setup:
                 setup(folder)
             path = folder / "scenario.json"
@@ -51,9 +53,9 @@ class ScenarioTests(unittest.TestCase):
             "repository": "https://github.com/arm/mcp.git",
             "revision": "5950b0f1f7f7a4f2a68347eb2119c858a3d7376d",
         })
-        self.assertEqual(server["skills"], [
-            "arm-container-inspect", "arm-migration-scan", "arm-assembly-analyze"
-        ])
+        self.assertEqual(server["skills_root"], "arm_mcp_definitions/skills")
+        self.assertNotIn("skills", server)
+        self.assertNotIn("enabled_tools", server)
         verifier = scenario.document["task"]["verifier"]
         self.assertEqual(verifier, {"command": ["python3", "verify.py"]})
 
@@ -100,11 +102,27 @@ class ScenarioTests(unittest.TestCase):
     def test_multiple_git_inputs_plan_separately(self):
         document = question_document()
         document["task"]["inputs"] = [
-            {"id": "repo-a", "kind": "git", "repository": "https://example.invalid/a", "revision": "main"},
-            {"id": "repo-b", "kind": "git", "repository": "https://example.invalid/b", "revision": "main"},
+            {"id": "repo-a", "kind": "git", "repository": "https://example.invalid/a", "revision": EXAMPLE_COMMIT},
+            {"id": "repo-b", "kind": "git", "repository": "https://example.invalid/b", "revision": EXAMPLE_COMMIT},
         ]
         scenario = self.load_question(document)
         self.assertEqual(len(list(planned_trials(scenario))), 4)
+
+    def test_git_inputs_and_server_sources_require_full_commit(self):
+        for source_location in ("input", "server"):
+            with self.subTest(source_location=source_location):
+                document = question_document()
+                source = {"kind": "git", "repository": "https://example.invalid/repo",
+                          "revision": "main"}
+                if source_location == "input":
+                    document["task"]["inputs"] = [{"id": "repo", **source}]
+                else:
+                    document["configurations"][0]["mcp_servers"] = [{
+                        "name": "example", "source": source,
+                        "launch": ["python3", "-m", "server"],
+                    }]
+                with self.assertRaisesRegex(ScenarioError, "revision"):
+                    self.load_question(document)
 
     def test_local_input_accepts_directory_without_git(self):
         document = question_document()
@@ -151,14 +169,12 @@ class ScenarioTests(unittest.TestCase):
         document["configurations"][0]["mcp_servers"] = [
             {
                 "name": "arm-mcp",
-                "source": {"kind": "git", "repository": "https://github.com/arm/mcp.git", "revision": "main"},
-                "skills": ["arm-migration-scan"],
+                "source": {"kind": "git", "repository": "https://github.com/arm/mcp.git", "revision": EXAMPLE_COMMIT},
                 "launch": ["python3", "-m", "arm_mcp"],
             },
             {
                 "name": "local-helper",
                 "source": {"kind": "local", "path": "helper"},
-                "skills": ["helper-skill"],
                 "launch": ["python3", "-m", "helper"],
             },
         ]
@@ -167,8 +183,29 @@ class ScenarioTests(unittest.TestCase):
         scenario = self.load_question(document, setup)
         servers = scenario.configurations[0]["mcp_servers"]
         self.assertEqual([server["source"]["kind"] for server in servers], ["git", "local"])
-        self.assertEqual(servers[0]["skills"], ["arm-migration-scan"])
-        self.assertEqual(servers[1]["skills"], ["helper-skill"])
+
+    def test_mcp_server_cannot_select_tools_or_skills(self):
+        for field, value in (("skills", ["arm-migration-scan"]),
+                             ("enabled_tools", ["knowledge_base_search"])):
+            with self.subTest(field=field):
+                document = question_document()
+                document["configurations"][0]["mcp_servers"] = [{
+                    "name": "arm-mcp", "launch": ["python3", "-m", "arm_mcp"],
+                    field: value,
+                }]
+                with self.assertRaisesRegex(ScenarioError, field):
+                    self.load_question(document)
+
+    def test_skills_root_must_stay_within_server_source(self):
+        for path in ("../other", "/tmp/skills", "C:/skills", "skills\\other"):
+            with self.subTest(path=path):
+                document = question_document()
+                document["configurations"][0]["mcp_servers"] = [{
+                    "name": "arm-mcp", "launch": ["python3", "-m", "arm_mcp"],
+                    "skills_root": path,
+                }]
+                with self.assertRaisesRegex(ScenarioError, "skills_root"):
+                    self.load_question(document)
 
     def test_mcp_server_name_rejects_dot(self):
         document = question_document()
@@ -205,7 +242,7 @@ class ScenarioTests(unittest.TestCase):
             "prompt": "prompt.md",
             "mcp_servers": [{
                 "name": "arm-mcp",
-                "source": {"kind": "git", "repository": "https://github.com/arm/mcp.git", "revision": "main"},
+                "source": {"kind": "git", "repository": "https://github.com/arm/mcp.git", "revision": EXAMPLE_COMMIT},
                 "launch": ["python3", "-m", "arm_mcp"],
             }],
         })
@@ -218,7 +255,7 @@ class ScenarioTests(unittest.TestCase):
 
     def test_configuration_source_and_skills_are_rejected(self):
         for field, value in (
-            ("source", {"kind": "git", "repository": "https://github.com/arm/mcp.git", "revision": "main"}),
+            ("source", {"kind": "git", "repository": "https://github.com/arm/mcp.git", "revision": EXAMPLE_COMMIT}),
             ("skills", ["arm-migration-scan"]),
         ):
             with self.subTest(field=field):
@@ -260,6 +297,7 @@ class ScenarioTests(unittest.TestCase):
             (root / "outside.md").write_text("Existing request.", encoding="utf-8")
             scenario_dir = root / "scenario"
             scenario_dir.mkdir()
+            (scenario_dir / "judge.py").write_text("pass\n", encoding="utf-8")
             path = scenario_dir / "scenario.json"
             path.write_text(json.dumps(document), encoding="utf-8")
             with self.assertRaisesRegex(ScenarioError, "must stay within"):

@@ -49,14 +49,7 @@
             "repository": "https://github.com/arm/mcp.git",
             "revision": "5950b0f1f7f7a4f2a68347eb2119c858a3d7376d"
           },
-          "skills": [
-            "arm-container-inspect",
-            "arm-migration-scan",
-            "arm-assembly-analyze"
-          ],
-          "enabled_tools": [
-            "knowledge_base_search"
-          ],
+          "skills_root": "arm_mcp_definitions/skills",
           "default_tools_approval_mode": "approve",
           "build": [
             "docker",
