@@ -22,33 +22,33 @@ def entry(name="example", families=("Neon",), **extra):
             "Architectures": ["A64"], "SIMD_ISA": list(families), **extra}
 
 
-def setup_source(tmp_path):
-    source, existing = tmp_path / "source", tmp_path / "existing"
-    source.mkdir()
+@pytest.fixture
+def source(tmp_path, monkeypatch):
+    existing = tmp_path / "existing"
     existing.mkdir()
     row = build_intrinsic_chunk(entry("old"), {})
     row["uuid"] = "existing-id"
     (existing / "chunk_original.yaml").write_text(yaml.safe_dump(row))
-    (source / "intrinsics.json").write_text(json.dumps([
-        entry("old", ("SME and SME2", "SVE2"), description="Updated operation."),
-        entry("added", Operation="operation"),
-    ]))
-    (source / "operations.json").write_text(json.dumps([
-        {"item": {"id": "operation", "content": "<h3>Operation</h3><pre>return;</pre>"}},
-    ]))
-    return source, existing
+    data = {
+        "intrinsics.json": [entry("old", ("SME and SME2", "SVE2"), description="Updated operation."),
+                            entry("added", Operation="operation")],
+        "operations.json": [{"item": {"id": "operation", "content": "<h3>Operation</h3><pre>return;</pre>"}}],
+    }
+    monkeypatch.setattr("intrinsic_catalog.requests.get", lambda url, **kwargs:
+                        Mock(content=json.dumps(data[url.rsplit("/", 1)[1]]).encode()))
+    return data, existing
 
 
 def tokenizer(text, **kwargs):
     return {"input_ids": text.split()}
 
 
-def test_refresh_updates_old_records_and_preserves_identity(tmp_path):
-    source, existing = setup_source(tmp_path)
+def test_refresh_updates_old_records_and_preserves_identity(tmp_path, source):
+    _, existing = source
     original = (existing / "chunk_original.yaml").read_bytes()
     outputs = [tmp_path / "first", tmp_path / "second"]
     for output in outputs:
-        report = refresh_catalog(existing, output, tokenizer, source_dir=source)
+        report = refresh_catalog(existing, output, tokenizer)
         assert report["records"] == 2 and report["added"] == report["updated"] == 1
         old = yaml.safe_load((output / "chunk_original.yaml").read_text())
         assert old["uuid"] == "existing-id"
@@ -64,7 +64,7 @@ def test_refresh_updates_old_records_and_preserves_identity(tmp_path):
         p.name: p.read_bytes() for p in outputs[1].iterdir()}
 
     third = tmp_path / "third"
-    report = refresh_catalog(outputs[0], third, tokenizer, source_dir=source)
+    report = refresh_catalog(outputs[0], third, tokenizer)
     assert report["added"] == report["updated"] == 0
     assert all((third / p.name).read_bytes() == p.read_bytes() for p in outputs[0].glob("*.yaml"))
 
@@ -83,10 +83,10 @@ def test_family_headers_and_required_features(families, header):
 
 
 @pytest.mark.parametrize("failure", ["empty", "duplicate", "missing-old", "operation", "long", "http", "schema"])
-def test_bad_refresh_does_not_write_a_snapshot(tmp_path, failure):
-    source, existing = setup_source(tmp_path)
+def test_bad_refresh_does_not_write_a_snapshot(tmp_path, monkeypatch, source, failure):
+    data, existing = source
     before = (existing / "chunk_original.yaml").read_bytes()
-    catalog = json.loads((source / "intrinsics.json").read_text())
+    catalog = data["intrinsics.json"]
     if failure == "empty":
         catalog = []
     elif failure == "duplicate":
@@ -96,14 +96,14 @@ def test_bad_refresh_does_not_write_a_snapshot(tmp_path, failure):
     elif failure == "schema":
         del catalog[0]["arguments"]
     if failure == "operation":
-        (source / "operations.json").write_text("[]")
-    (source / "intrinsics.json").write_text(json.dumps(catalog))
-    session = Mock()
-    session.get.side_effect = RuntimeError("download failed")
+        data["operations.json"] = []
+    data["intrinsics.json"] = catalog
+    if failure == "http":
+        monkeypatch.setattr("intrinsic_catalog.requests.get", Mock(side_effect=RuntimeError("download failed")))
     count = (lambda *args, **kwargs: {"input_ids": [0] * 501}) if failure == "long" else tokenizer
     output = tmp_path / "output"
     with pytest.raises((ValueError, RuntimeError)):
-        refresh_catalog(existing, output, count, source_dir=None if failure == "http" else source, session=session)
+        refresh_catalog(existing, output, count)
     assert not output.exists()
     assert (existing / "chunk_original.yaml").read_bytes() == before
 
@@ -120,7 +120,8 @@ def test_workflow_only_publishes_manual_main_runs():
     assert "github.ref == 'refs/heads/main'" in guard and "!inputs.dry_run" in guard
     steps = workflow["jobs"]["refresh"]["steps"]
     build = next(s for s in steps if s.get("uses", "").startswith("docker/build-push-action@"))
-    assert build["with"]["no-cache"] == "true" and build["with"]["push"] == "false"
-    publish = next(s for s in steps if "docker push" in s.get("run", ""))
-    assert publish["if"] == "${{ env.PUBLISH_IMAGE == 'true' }}"
-    assert steps.index(build) < steps.index(publish)
+    assert build["with"]["no-cache"] == "true"
+    assert build["with"]["push"] == "${{ env.PUBLISH_IMAGE == 'true' }}"
+    assert build["with"]["outputs"] == "type=local,dest=${{ runner.temp }}/intrinsic-snapshot"
+    attest = next(s for s in steps if s.get("uses", "").startswith("actions/attest@"))
+    assert attest["with"]["subject-digest"] == "${{ steps.snapshot.outputs.digest }}"

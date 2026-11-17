@@ -121,19 +121,16 @@ def build_intrinsic_chunk(row: dict, operations: dict[str, str]) -> dict:
     })
 
 
-def refresh_catalog(existing_dir: Path, output_dir: Path, tokenizer, *, source_dir=None, session=None) -> dict:
+def refresh_catalog(existing_dir: Path, output_dir: Path, tokenizer) -> dict:
     """Validate the full replacement before writing; retain existing names and IDs."""
     if output_dir.exists():
         raise ValueError(f"Output directory must not already exist: {output_dir}")
     hashes = {}
 
     def load(filename, url):
-        if source_dir is not None:
-            content = (Path(source_dir) / filename).read_bytes()
-        else:
-            response = (session or requests).get(url, timeout=60)
-            response.raise_for_status()
-            content = response.content
+        response = requests.get(url, timeout=60)
+        response.raise_for_status()
+        content = response.content
         hashes[filename] = hashlib.sha256(content).hexdigest()
         return json.loads(content)
 
@@ -193,11 +190,10 @@ def main():
     parser.add_argument("--existing", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--model-path", required=True)
-    parser.add_argument("--source-dir", type=Path, help="Read saved catalog JSON for offline validation")
     args = parser.parse_args()
     tokenizer = AutoTokenizer.from_pretrained(args.model_path, local_files_only=True, trust_remote_code=False)
     tokenizer.model_max_length = 512
-    report = refresh_catalog(args.existing, args.output, tokenizer, source_dir=args.source_dir)
+    report = refresh_catalog(args.existing, args.output, tokenizer)
     print(json.dumps(report, indent=2))
 
 
