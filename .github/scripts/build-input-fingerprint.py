@@ -52,18 +52,10 @@ def image_fingerprint(image: str, platform: str) -> str:
         [*inspect, "--format", "{{json .Image}}", "--", image], text=True
     )
     configs = json.loads(result) or {}
-    # Buildx omits default variants from the platform keys in its config map.
-    aliases = {
-        "linux/amd64/v1": "linux/amd64",
-        "linux/arm/v7": "linux/arm",
-        "linux/arm64/v8": "linux/arm64",
-    }
     # Buildx returns a bare config when the image has a single platform.
     if "os" in configs:
-        parts = (configs["os"], configs["architecture"], configs.get("variant"))
-        key = "/".join(filter(None, parts))
-        configs = {aliases.get(key, key): configs}
-    config = configs.get(aliases.get(platform, platform))
+        configs = {f"{configs['os']}/{configs['architecture']}": configs}
+    config = configs.get(platform)
     if config is None:
         raise ValueError(f"Pinned image {image} does not contain platform {platform}.")
     return (config.get("config", {}).get("Labels") or {}).get(LABEL, "")
@@ -93,7 +85,9 @@ def main() -> None:
         "--image",
         help="Check this digest-pinned image instead of printing a fingerprint",
     )
-    parser.add_argument("--platform", default="linux/arm64")
+    parser.add_argument(
+        "--platform", default="linux/arm64", help="Platform key (e.g. linux/arm64)"
+    )
     args = parser.parse_args()
     expected = fingerprint(args.kind)
     if not args.image:

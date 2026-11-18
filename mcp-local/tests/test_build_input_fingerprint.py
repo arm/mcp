@@ -106,7 +106,6 @@ def test_fingerprint_tracks_inputs_but_ignores_promotions_and_generation_code(
     "platform,label,error",
     [
         ("linux/arm64", "matching", None),
-        ("linux/arm64/v8", "matching", None),
         ("linux/arm64", "stale", "found stale"),
         ("linux/arm64", None, "found missing"),
         ("linux/s390x", "matching", "does not contain platform linux/s390x"),
