@@ -30,7 +30,8 @@ def result(
     }
 
 
-def test_dashboard_editions_survive_but_multiple_chunks_per_source_do_not():
+@pytest.mark.parametrize("curated", [False, True])
+def test_dashboard_editions_survive_but_multiple_chunks_per_source_do_not(curated):
     url = "https://developer.arm.com/ecosystem-dashboard/linux?package=calico"
     commercial = result(
         url,
@@ -46,6 +47,11 @@ def test_dashboard_editions_survive_but_multiple_chunks_per_source_do_not():
         url.replace("linux", "windows"),
         "https://raw.githubusercontent.com/repo/commit/content/windows/all_packages/calico.md",
     )
+    if curated:
+        for item in (commercial, opensource, windows):
+            item["metadata"]["filter_metadata"] = {
+                "doc_type": ["compatibility"], "platform": ["linux", "windows"],
+            }
     assert deduplicate_urls([commercial, opensource, commercial, windows]) == [
         commercial,
         opensource,
@@ -161,8 +167,29 @@ def test_search_response_retains_dashboard_scope_and_defaults_for_old_metadata(
     )
     state = resources.SearchResources([], None, None, None, include_disclaimers=False)
     hits = resources.search("query", state)
-    assert hits[0]["platform"] == "linux" and hits[0]["edition"] == "commercial"
-    assert hits[1]["platform"] == hits[1]["edition"] == ""
+    assert all("edition" not in hit for hit in hits)
+    assert hits[0]["platform"] == ["linux"]
+    assert hits[1]["platform"] == []
+    assert hits[1]["doc_type"] == ["Documentation"] and hits[1]["product"] == []
+
+    dashboard["metadata"]["filter_metadata"] = {
+        "doc_type": ["compatibility"], "product": ["arm"],
+        "platform": ["linux", "windows"],
+    }
+    legacy["metadata"].update(product=None, filter_metadata={"doc_type": ["guide"]})
+    snapshot = deepcopy([dashboard, legacy])
+    hits = resources.search("query", state)
+    assert {key: hits[0][key] for key in ("doc_type", "product", "platform")} == {
+        "doc_type": ["compatibility"], "product": ["arm"],
+        "platform": ["linux", "windows"],
+    }
+    assert all("edition" not in hit for hit in hits)
+    assert hits[1]["doc_type"] == ["guide"] and hits[1]["product"] == []
+    assert hits[1]["platform"] == []
+    for name in ("doc_type", "product", "platform"):
+        hits[0][name].append("caller mutation")
+    assert [dashboard, legacy] == snapshot
+    assert resources.search("query", state)[0]["platform"] == ["linux", "windows"]
 
 
 def pieces(parent_uuid, parent_chunk_uuid, texts):
@@ -213,8 +240,9 @@ def test_search_returns_exact_parent_without_changing_retrieval(monkeypatch, sel
     assert [hit["snippet"] for hit in hits] == ["".join(texts), "Unsplit text", "Legacy content"]
     assert [hit["score"] for hit in hits] == [0.8, 0.4, 0.2]
     assert hits[0]["distance"] == 0.25
-    for key in ("url", "title", "heading", "doc_type"):
+    for key in ("url", "title", "heading"):
         assert hits[0][key] == selected[key]
+    assert hits[0]["doc_type"] == [selected["doc_type"]]
     assert metadata == snapshot  # Neither dense nor BM25 inputs are expanded.
 
 
@@ -300,7 +328,8 @@ def test_hybrid_fuses_before_cutting_off_candidate_pool(monkeypatch):
     assert next(r for r in results if r["metadata"]["chunk_uuid"] == "8")["metadata"]["url"].endswith("#troubleshooting")
 
 
-def test_fusion_keeps_dashboard_editions_and_collapses_source_file_aliases():
+@pytest.mark.parametrize("curated", [False, True])
+def test_fusion_keeps_dashboard_editions_and_collapses_source_file_aliases(curated):
     url = "https://developer.arm.com/ecosystem-dashboard/linux?package=calico"
     items = [
         passage("commercial", url, 0.5, "https://raw.githubusercontent.com/repo/a.md"),
@@ -313,6 +342,9 @@ def test_fusion_keeps_dashboard_editions_and_collapses_source_file_aliases():
             edition="open-source" if item["metadata"]["chunk_uuid"] == "open" else "commercial",
         )
 
+    if curated:
+        for item in items:
+            item["metadata"]["filter_metadata"] = {"doc_type": ["compatibility"]}
     result = search_module.fuse_semantic_resource_ranks(items)
 
     assert [item["metadata"]["chunk_uuid"] for item in result] == ["commercial", "open"]
@@ -351,9 +383,15 @@ def package_record(name="Redis", platform="linux", **metadata):
 def test_support_question_prefers_package_record(question):
     card = package_record()
     guide = package_record(doc_type="Tutorial")
+    baseline = search_module.rerank_candidates(question, [guide, card])
+    for record, doc_type in ((guide, "learning"), (card, "compatibility")):
+        record["metadata"]["filter_metadata"] = {
+            "doc_type": [doc_type], "product": ["arm"], "platform": ["linux", "windows"],
+        }
     ranked = search_module.rerank_candidates(question, [guide, card])
     assert ranked[0]["metadata"]["doc_type"] == "Ecosystem Dashboard"
     assert ranked[0]["rerank_score"] > ranked[1]["rerank_score"]
+    assert [row["rerank_score"] for row in ranked] == [row["rerank_score"] for row in baseline]
 
 
 @pytest.mark.parametrize("question,name,platform,expected", [

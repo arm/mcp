@@ -22,7 +22,8 @@ results = search(
     "deploy containers",
     resources,
     k=5,
-    filters=SearchFilters(doc_type="Learning Paths", product="AWS Graviton"),
+    filters=SearchFilters(doc_type=["learning", "guide"], product="arm",
+                          platform=["linux", "windows"]),
 )
 ```
 
@@ -62,7 +63,7 @@ Runtime loading writes no files. Keep metadata and synonyms unchanged during loa
 ## Filters
 
 `filters` accepts a `SearchFilters` instance or a dictionary with optional
-`doc_type`, `product`, `platform`, and `edition` fields.
+`doc_type`, `product`, and `platform` fields.
 
 `SearchFilters` is the shared Pydantic model used by MCP and available to endpoint
 request models. Use `SearchFilters.model_json_schema()` to generate its schema and
@@ -75,14 +76,70 @@ Python and serialized as arrays in JSON.
 - Each field accepts a string or non-empty list of strings (also tuples in Python).
   For example, `{"platform": ["linux", "windows"]}` matches either label.
   Values within a field use OR; fields use AND. Matching ignores case, surrounding
-  whitespace, and duplicate choices.
+  whitespace, and duplicate choices. `k` limits the combined results.
 - Omitted filters, `None`, and `{}` leave search unrestricted. A field set to
   `None` is ignored. Missing or blank metadata cannot match an active filter.
 - Unknown fields, empty lists or tuples, and blank or non-string labels raise
   `ValueError`. Unknown labels match nothing; no matches returns an empty list.
 
+Edition is no longer accepted in filter objects, even as `null`, and is omitted
+from search results. Older stored Edition values remain usable internally for
+dashboard variant identity; they are not a public filter. Update clients that
+previously sent or read this field.
+
 Filters restrict candidates before ranking and deduplication. Vector retrieval
 uses exact search over the full corpus, or only eligible vectors when filtered.
+
+Curated snapshots use document-purpose tags for Doc Type (below) and document
+publishers (`arm`, `aws`, `google`, `ampere`) for Product. Product identifies the
+publisher, not the software discussed or its hosting provider.
+
+| Platform scope | Tags |
+|---|---|
+| Execution environment | `linux`, `windows`, `macos`, `android`, `baremetal`, `rtos`, `chromeos`, `freebsd` |
+| Intrinsic family or ISA taught by the document | `neon`, `sve`, `sve2`, `sme`, `sme2`, `helium` (MVE) |
+| Architecture or hardware family | `cme`, `mali`, `cortex-m` |
+| Documented hosted runtime | `google-colab` |
+
+Hardware and ISA tags do not imply OS compatibility, every hardware variant or
+additional tags. For example, SVE2 does not imply SVE. Use labels present in the
+loaded corpus; old artifacts retain their legacy labels. Source-level tags apply
+to every chunk from that source.
+
+For an SVE intrinsic definition, use
+`{"doc_type":"reference","product":"arm","platform":"sve"}`.
+Use `{"platform":["sve","sve2"]}` to include both families. The same OR rule
+applies to mixed values: `["linux","sve"]` matches Linux resources or SVE resources;
+it cannot express a Linux-and-SVE intersection. See the
+[ingestion schema](../embedding-generation/README.md#filter-tags-during-ingestion)
+for tag definitions and contributor examples.
+
+Choose Doc Type by the content needed:
+
+| Filter value | Plain-language meaning | Examples in this KB |
+|---|---|---|
+| `learning` | Tutorials and courses | Learning Paths, course lessons and worked exercises |
+| `guide` | How-to guides | Installation, configuration, migration, troubleshooting and tuning instructions |
+| `reference` | Technical reference and FAQs | Intrinsic definitions, instruction/register behavior, technical manuals/specifications and Insights Q&A |
+| `article` | Articles and overviews | Explanations, white papers, workload briefs and benchmark analysis |
+| `compatibility` | Software compatibility | Ecosystem dashboard and supported software/OS/version catalogs |
+
+For example, an intrinsic's definition belongs in `reference`, while a lesson on
+using it belongs in `learning`. Use `{"doc_type":["reference","learning"]}` when
+either would help. Omit Doc Type when unsure: a filter excludes other categories.
+These definitions and examples are also included in the Doc Type field description
+that MCP clients receive, so agents do not need to infer the meaning from the tag.
+
+Stored `filter_metadata` supplies curated values without changing the scalar
+source identities used for ranking and grouping. A missing map/field falls back
+to legacy metadata; an explicit empty array suppresses that fallback. A record
+can match any of its tags. Responses always return fresh arrays for `doc_type`,
+`product` and `platform`, including values inherited from legacy scalar metadata.
+Missing values return `[]`.
+Legacy document-type names remain accepted query aliases for tagged records,
+unless their public type is cleared. Legacy Product ISA names are not aliases
+for the publisher tag. Document-context expansion still applies filters to seeds
+only and reports each expanded record's own tags.
 
 ## Name synonyms
 

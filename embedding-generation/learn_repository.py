@@ -21,6 +21,7 @@ from document_chunking import (
     split_frontmatter,
 )
 from learn_public import PublicLearnSources, is_public_learn_url
+from source_metadata import learn_platform_tags
 
 SITE = "https://learn.arm.com"
 REPOSITORIES = {
@@ -295,6 +296,14 @@ class Repository:
         descendants = [p for p in self.pages.values() if p.path.startswith(prefix)]
         # Directory ancestry, not URL shape, defines course/module membership.
         return sorted(descendants, key=lambda p: (p.path != page.path, p.path))
+
+    def platform_tags(self, url):
+        page = self.by_url[public_url(url)]
+        root = self.by_url.get(learn_learning_path_root_url(page.url))
+        # A lesson inherits the path's authored taxonomy unless it supplies its
+        # own value for that field (including an explicit empty list).
+        metadata = {**(root.metadata if root else {}), **page.metadata}
+        return learn_platform_tags(metadata, page.url)
 
     def ref_url(self, page, target):
         path, _, fragment = target.partition("#")
@@ -596,6 +605,11 @@ class LearnSources:
 
     def has_page(self, url):
         return public_url(url) in self.repository_for_url(url).by_url
+
+    def platform_tags(self, url):
+        if is_public_learn_url(url):
+            return []
+        return self.repository_for_url(url).platform_tags(url)
 
     def documents(self, url):
         key = public_url(url)

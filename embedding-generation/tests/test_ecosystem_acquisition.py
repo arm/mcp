@@ -117,7 +117,7 @@ def test_explicit_revision_and_fetch_failure():
         acquire_catalog(session, "main")
 
 
-def test_catalog_retains_platform_and_same_url_editions():
+def test_catalog_retains_platform_and_same_url_editions(gc):
     package = (
         "---\nname: Example\ndescription: Useful software\nworks_on_arm: true\n---\n"
     )
@@ -140,6 +140,20 @@ def test_catalog_retains_platform_and_same_url_editions():
     assert len({p.document.resolved_url for p in linux}) == 2
     assert any("Commercial" in p.document.display_title for p in linux)
     assert any("Open source" in p.document.display_title for p in linux)
+    gc.ecosystem_dashboard_entries = catalog
+    discovered = gc.create_chunks_for_source(
+        f"{DASHBOARD_URL}/linux?package=example", "Example", "Ecosystem Dashboard", "")
+    assert discovered and all(c.filter_metadata == {
+        "doc_type": ["compatibility"], "product": ["arm"], "platform": ["linux"],
+    } for c in discovered)
+    overrides = {"doc_type": ["compatibility"], "product": ["arm"], "platform": []}
+    chunks = gc.create_chunks_for_source(
+        f"{DASHBOARD_URL}/linux?package=example", "Example", "Ecosystem Dashboard", "",
+        metadata_overrides=overrides)
+    assert {c.edition for c in chunks} == {"commercial", "open-source"}
+    assert all(c.doc_type == "Ecosystem Dashboard" for c in chunks)
+    assert all(c.platform == "linux" for c in chunks)
+    assert all(c.toDict()["filter_metadata"] == overrides for c in chunks)
 
 
 def test_catalog_warns_and_skips_individual_bad_records():

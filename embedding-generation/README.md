@@ -75,8 +75,8 @@ Update the pin to its published digest; builds use the previous snapshot until t
 Add one row to `vector-db-sources.csv` for each document:
 
 ```csv
-Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL
-Example Docs,CC4.0,Example Arm Guide,https://example.com/arm-guide,arm; migration; linux,
+Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL,Doc Type,Product,Platform
+Learning Paths,CC4.0,Example Arm Guide,https://example.com/arm-guide,arm; migration; linux,,learning,arm,linux
 ```
 
 Use clear keywords that users might include in questions. The `URL` is also what retrieval eval uses for expected matches.
@@ -126,6 +126,134 @@ shortcodes fail explicitly so new content formats cannot silently lose text.
 Changes to this parsing code require rebuilding the toolchain and merging its
 `automation/pin-embedding-generator` PR before rebuilding the corpus. The pinned
 toolchain, not the current checkout, supplies the acquisition Python modules.
+Acquisition first runs the pinned generator's CSV load/save roundtrip offline.
+It fails if tags or rows are lost. Acquisition and promotion also verify that
+retained sources preserve their overrides before replacing the CSV. Merge order:
+generator changes and guard, then the reviewed toolchain image pin, then rebuilt
+KB artifacts and their runtime pin. Never substitute an unverified image digest.
+
+### Filter tags during ingestion
+
+The optional `Doc Type`, `Product` and `Platform` CSV columns provide public
+search tags. `Site Name` still selects the ingestion path; `Keywords` help text
+retrieval and are not filter tags. Add only tags verified by the source.
+
+| CSV column | Search filter | Values |
+|---|---|---|
+| `Doc Type` | `doc_type` | `learning`, `guide`, `reference`, `article`, `compatibility` |
+| `Product` | `product` | Document publisher: currently `arm`, `aws`, `google`, `ampere` |
+| `Platform` | `platform` | Verified execution environment, ISA, architecture, hardware family or hosted runtime; see below |
+
+Choose Doc Type by the document's primary purpose:
+
+| Tag | Use for |
+|---|---|
+| `learning` | Tutorials, courses, lessons and worked exercises |
+| `guide` | Installation, operation, migration, tuning and troubleshooting instructions |
+| `reference` | Intrinsic/instruction definitions, technical manuals, specifications and Insights FAQs |
+| `article` | Explanations, overviews, white papers and benchmark analysis |
+| `compatibility` | Supported software, operating-system and version catalogs |
+
+Product identifies the **document publisher**, not the software discussed or the
+hosting service. An Arm-published Docker tutorial or ArmEducationX course uses
+`arm`; an AWS-published Graviton guide uses `aws`. Verify ownership before adding
+a publisher. All three fields have fixed vocabularies. Add a new publisher to
+`PRODUCTS` in `source_metadata.py` only after verifying ownership.
+
+| Cell value | Meaning |
+|---|---|
+| `linux` | One explicit tag |
+| `["linux","windows","macos"]` | Multiple tags in one cell |
+| blank / omitted column | Inherit source metadata when available |
+| `[]` | Explicitly clear this field, suppressing inherited tags |
+
+Case and surrounding whitespace are normalized; duplicate labels are removed.
+Unknown or inapplicable fields stay untagged. Do not enter placeholder labels
+such as `unknown`, `all` or `n/a`. Invalid values fail with the field and source URL.
+Use JSON arrays for multiple values, not comma- or semicolon-separated labels.
+Use the exact column names above; misspellings such as `platform` or `Platforms`
+fail validation instead of silently losing tags on save.
+
+In a spreadsheet, enter the JSON array in one cell and let CSV export quote it.
+When editing raw CSV, quote the cell and double its internal quotes:
+
+```csv
+Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL,Doc Type,Product,Platform
+Learning Paths,CC4.0,Example Arm Docker tutorial,https://example.com/arm-docker,docker; installation,,learning,arm,"[""linux"",""windows"",""macos""]"
+Graviton Getting Started Guide,CC4.0,Example AWS Graviton guide,https://example.com/aws-graviton,graviton; migration,,guide,aws,linux
+```
+
+#### Platform values
+
+| Scope | Accepted tags |
+|---|---|
+| Execution environment | `linux`, `windows`, `macos`, `android`, `baremetal`, `rtos`, `chromeos`, `freebsd` |
+| ISA family | `neon`, `sve`, `sve2`, `sme`, `sme2`, `helium` |
+| Architecture / hardware family | `cme`, `mali`, `cortex-m` |
+| Hosted runtime | `google-colab` |
+
+- Tag the environments or architectures the source substantively covers, including
+  verified host/target environments and explicitly required setup. Incidental
+  mentions, optional links and general software portability are insufficient.
+- `baremetal` means software running without an OS. Physical cloud servers running
+  Linux use `linux`. `Bare metal` and `Bare-metal` normalize to `baremetal`.
+- Intrinsic cards derive ISA tags from their catalog families: `MVE` maps to
+  `helium`, and combined groups receive each listed family. Unknown families remain
+  blank. SVE2 does not imply SVE; streaming SVE mode alone does not imply `sve`.
+- `cme` covers CME architecture, programming and performance monitoring. `mali`
+  covers Mali GPU guidance, including Neural Accelerator (NX) guidance. `cortex-m`
+  covers material explicitly targeting Cortex-M. These tags imply neither an OS,
+  support for every hardware variant, nor additional ISA tags.
+- `google-colab` requires a documented Colab execution environment. It implies no
+  OS, CPU architecture or GPU model and does not change the publisher tag.
+- Dashboard entries use their catalog platform (`linux` or `windows`), not every
+  OS supported by the package. Keep verified OS tags when adding hardware/ISA tags.
+
+#### Preservation and filtering
+
+CSV loading, saving and discovery preserve explicit overrides, including blank
+versus `[]`. Newly discovered sources have no override. Existing CSVs without tag
+columns keep their layout; files with a subset keep that subset. Conflicting
+explicit overrides for duplicate dashboard URLs fail validation.
+
+Blank cells inherit verified adapter defaults: Learning Paths use `learning` /
+`arm`, Install Guides use `guide` / `arm`, and dashboard records use
+`compatibility` / `arm` plus their catalog OS. Mixed-purpose adapters still need
+an explicit Doc Type. Learn Platform defaults come from the pinned repository's
+`operatingsystems`, exact Cortex-M/Mali `armips`, and exact ISA values in
+`tools_software_languages`. Lessons inherit their path's taxonomy unless the
+lesson overrides that field. Body text and general keywords do not infer tags.
+Install guides without structured platform metadata need a reviewed CSV tag.
+
+An explicit Platform cell replaces the entire derived list; include the verified
+OS and ISA/hardware tags together. Leave redundant overrides blank so future
+frontmatter changes can flow through. `[]` suppresses every inherited tag for
+that field. Builds print `[METADATA GAP]` with source URLs, unmapped OS warnings,
+and source-chunk coverage; unknown or inapplicable values remain untagged.
+
+For overlapping Learn sources, an explicitly configured child page or smaller
+resource takes precedence field by field. Blank child fields inherit the parent;
+`[]` clears them. Canonical membership, including aliases, determines precedence
+independently of CSV row order. Same-scope conflicts fail before replacing outputs.
+
+The dispatcher applies tags to every parsed chunk, including transcripts, child
+pages and API topics. YAML and vector JSON preserve them in `filter_metadata`;
+scalar metadata retains source identity for intrinsic ranking, dashboard variants
+and document context. Explicit intrinsic overrides take precedence over defaults.
+
+Search uses OR within a field and AND across fields; missing requested tags are
+excluded. `["linux","sve"]` means Linux **or** SVE, not their intersection.
+Older artifacts with a missing curated field fall back to legacy metadata;
+`[]` suppresses fallback. All three result fields are arrays, including legacy
+values; unknown values return `[]`. Legacy
+Doc Type names remain query aliases when the public type is nonempty. Legacy
+Product ISA labels are not aliases for publisher tags. Existing published
+artifacts retain their old tags until the generator and corpus are rebuilt and
+promoted. See the [search API](../arm_kb_search/README.md#filters) for client usage.
+
+Edition is removed from contributor tags and public filters/results. Remove the
+`Edition` column from older CSVs; ingestion rejects it with a migration message.
+Raw dashboard edition remains internal so catalog variants stay distinct.
 
 ## Discover developer.arm.com Sources
 
@@ -320,7 +448,7 @@ chunking through their pinned Markdown `resolved_url`. Retrieval keeps the
 highest-ranked hit per public URL and edition, so duplicate source files in the
 same edition do not consume additional result slots.
 
-Metadata for downstream dashboard search:
+Raw dashboard metadata for internal source identity:
 
 - `doc_type`: `Ecosystem Dashboard` for both platforms.
 - `platform`: `linux` or `windows`, from the source directory.
@@ -329,19 +457,15 @@ Metadata for downstream dashboard search:
 - `product` and `version`: explicitly empty. Package identity is separate from
   product taxonomy, and minimum/recommended versions remain distinct content facts.
 
-The shared chunker, YAML serialization, vector-store metadata, and shared search
-response preserve `platform` and `edition`. Other sources and older artifacts
-return empty values unless supplied. The shared search package version changes
-with this response extension; REST deployments must update their package pin to
-receive the fields. No request filters are added here.
+The shared chunker, YAML serialization and vector metadata retain the raw
+`platform` and `edition` values for source identity. Public search results expose
+only Doc Type, Product and Platform; Edition is not accepted as a filter or
+returned as a result field. Same-name catalog records can still disagree on
+support or minimum versions, so their facts and identities remain separate.
 
-The dashboard consumer's [proposed contract in PR #1092](https://github.com/ArmDeveloperEcosystem/ecosystem-dashboard-for-arm/pull/1092)
-requires `doc_type`, `platform`, and `edition` on Linux hits, plus filtering before
-top-k selection. STESOL-625 must coordinate these scope filters as well as its
-planned `product` filter. The consumer's live integration remains disabled until
-that contract is implemented and verified. Same-name source records may disagree
-on support or minimum versions; ingestion preserves their facts and reports shared
-URLs rather than selecting an authoritative record.
+The dashboard consumer's historical [proposed contract in PR #1092](https://github.com/ArmDeveloperEcosystem/ecosystem-dashboard-for-arm/pull/1092)
+requested an Edition result field. That proposal must be revised for this
+three-filter contract before enabling a consumer that depends on it.
 
 ## Intrinsic embedding records
 
@@ -349,6 +473,10 @@ Acquisition prepares clean intrinsic metadata and one `embedding_text` containin
 the operation, signature, and type descriptions. The builder embeds it once in
 the shared index, preserves the full source for responses, and excludes
 `embedding_text` from saved metadata.
+
+Public Platform tags come from the stored catalog family, independently of the
+embedding text. Adding support for a family label does not acquire that family's
+records; refreshing the intrinsic snapshot is a separate operation.
 
 Rebuild and pin the updated toolchain, then regenerate chunks before rebuilding
 the vector store. Intrinsic chunks require prepared metadata and `embedding_text`;

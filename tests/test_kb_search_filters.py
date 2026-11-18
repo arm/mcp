@@ -29,7 +29,7 @@ from usearch.index import Index
 from arm_kb_search import SearchFilters, SearchResources, resources, search
 from arm_kb_search.analysis import Synonyms, analyze, atom, name_keys
 from arm_kb_search.context import DocumentContextIndex
-from arm_kb_search.filters import MetadataFilterIndex
+from arm_kb_search.filters import MetadataFilterIndex, metadata_filter_value
 from arm_kb_search.search import (
     bm25_search,
     build_bm25_index,
@@ -39,6 +39,17 @@ from arm_kb_search.search import (
 )
 
 search_module = importlib.import_module("arm_kb_search.search")
+
+
+@pytest.mark.parametrize("name", ["doc_type", "product", "platform"])
+def test_public_filter_values_are_always_arrays(name):
+    rows = [{name: "Arm"}, {name: ""}, {}, {name: None},
+            {name: "Arm", "filter_metadata": {name: []}},
+            {name: "Arm", "filter_metadata": {name: ["arm", "aws"]}}]
+    before = deepcopy(rows)
+    assert [metadata_filter_value(row, name) for row in rows] == [["Arm"], [], [], [], [], ["arm", "aws"]]
+    metadata_filter_value(rows[-1], name).append("google")
+    assert rows == before
 
 
 def context_row(url, index=0, count=1, *, pages=None, **extra):
@@ -284,6 +295,9 @@ def test_context_duplicate_embedding_slices_preserve_completeness(failure):
 def test_context_scope_expands_all_hits_once_in_stored_order(monkeypatch):
     pages = ["https://example.org/path/", "https://example.org/path/z/", "https://example.org/path/a/"]
     rows = [context_row(url, i, 2, pages=pages) for url in pages for i in range(2)]
+    for i, row in enumerate(rows):
+        row["filter_metadata"] = {"platform": ["linux", "windows"],
+                                  "edition": [] if i % 2 else ["open-source"]}
     other = context_row("https://example.org/manual.pdf")
     state = context_resources(monkeypatch, [other, *reversed(rows)], [rows[3], rows[2], rows[5], other])
     default = search("needle", state, k=4)
@@ -299,6 +313,10 @@ def test_context_scope_expands_all_hits_once_in_stored_order(monkeypatch):
     assert [(h["context"]["page_index"], h["context"]["page_count"], h["context"]["chunk_index"], h["context"]["chunk_count"])
             for h in path] == [(page, 3, chunk, 2) for page in range(3) for chunk in range(2)]
     assert all(hit["context"]["scope"] == "parent_resource" for hit in path)
+    assert [hit["platform"] for hit in path] == [["linux", "windows"]] * 6
+    assert all("edition" not in hit for hit in path)
+    path[0]["platform"].append("android")
+    assert rows[0]["filter_metadata"]["platform"] == ["linux", "windows"]
     mixed = search("needle", state, k=4, scope="parent_resource")
     assert len(mixed) == 7 and mixed[-1]["context"]["scope"] == "page"
     assert search("needle", state, k=4) == default  # expansion does not mutate the snapshot
@@ -615,6 +633,9 @@ def test_context_keeps_intrinsic_dashboard_and_edition_identities(monkeypatch):
             "https://developer.arm.com/ecosystem-dashboard/linux?package=b"]
     rows = [{**context_row(url), "url": url} for url in urls]
     rows.append(context_row(urls[2], edition="commercial", original_text="commercial edition"))
+    for row in rows:
+        row["filter_metadata"] = {"doc_type": ["reference"], "product": ["arm"],
+                                  "platform": ["linux", "windows"]}
     state = context_resources(monkeypatch, rows, [rows[0], rows[2]])
     assert [h["snippet"] for h in search("needle", state, scope="parent_resource")] == [rows[0]["original_text"], rows[2]["original_text"]]
 
@@ -690,12 +711,21 @@ def test_library_search_can_return_more_than_twenty_results():
     assert len(search("needle", state, k=25)) == 25
 
 
-@pytest.mark.parametrize("name", ["doc_type", "product", "platform", "edition"])
+@pytest.mark.parametrize("name", ["doc_type", "product", "platform"])
 def test_filter_matching_normalizes_values_and_excludes_missing_metadata(name):
-    metadata = [{name: value} for value in [" Linux ", "LINUX", "windows", "", None, ["linux"]]]
-    metadata.append({})
+    metadata = [{name: value} for value in [" Linux ", "LINUX", "windows", "", None,
+                ["linux", " WINDOWS ", "Linux", "", None, 3, ["unknown"]]]]
+    metadata.extend([
+        {},
+        {name: "old", "filter_metadata": {name: [" Linux ", "windows", "LINUX", "", None, 3]}},
+        {name: "linux", "filter_metadata": {name: []}},
+        {name: "linux", "filter_metadata": {}},
+        {name: "linux", "filter_metadata": {name: None}},
+        {name: "linux", "filter_metadata": {name: [" ", None, 3]}},
+    ])
+    snapshot = deepcopy(metadata)
     lookup = MetadataFilterIndex(metadata)
-    assert lookup.eligible_ids(SearchFilters.parse({name: " linux "})) == (0, 1)
+    assert lookup.eligible_ids(SearchFilters.parse({name: " linux "})) == (0, 1, 5, 7, 9)
     assert lookup.eligible_ids(SearchFilters.parse({name: "unknown"})) == ()
     choices = [" LINUX ", "windows", "linux", "unknown"]
     filters = SearchFilters.parse({name: choices})
@@ -703,14 +733,16 @@ def test_filter_matching_normalizes_values_and_excludes_missing_metadata(name):
     assert SearchFilters.model_validate(filters.model_dump()) == filters  # Python tuples can be reused.
     assert choices == [" LINUX ", "windows", "linux", "unknown"]
     choices.clear()
-    assert lookup.eligible_ids(filters) == (0, 1, 2)
-    assert lookup.eligible_ids(SearchFilters.parse({name: ["linux"]})) == (0, 1)
+    assert lookup.eligible_ids(filters) == (0, 1, 2, 5, 7, 9)
+    assert lookup.eligible_ids(SearchFilters.parse({name: ["linux"]})) == (0, 1, 5, 7, 9)
     assert lookup.eligible_ids(SearchFilters.parse({name: ["unknown"]})) == ()
     assert lookup.eligible_ids(SearchFilters.parse({name: "linux,windows"})) == ()
-    assert metadata[0][name] == " Linux "  # Matching never rewrites returned metadata.
+    # Only legacy doc types are aliases; other overridden scalar values disappear.
+    assert lookup.eligible_ids(SearchFilters.parse({name: "old"})) == ((7,) if name == "doc_type" else ())
+    assert metadata == snapshot
 
 
-@pytest.mark.parametrize("filters", [None, {}, SearchFilters(), {"edition": None}])
+@pytest.mark.parametrize("filters", [None, {}, SearchFilters(), {"platform": None}])
 def test_empty_filters_are_unrestricted(filters):
     assert MetadataFilterIndex([{}]).eligible_ids(SearchFilters.parse(filters)) is None
 
@@ -728,23 +760,44 @@ def test_invalid_filter_objects(value):
         SearchFilters.parse(value)
 
 
-def test_filter_alternatives_combine_before_ranking_and_share_k():
-    tags = [("linux", "Install Guides"), ("windows", "Learning Paths"),
-            ("windows", "Install Guides"), ("macos", "Learning Paths"),
-            ("linux", "Intrinsic"), (None, "Install Guides"), ("linux", None)]
+@pytest.mark.parametrize("doc_types", [
+    ("Install Guides", "Learning Paths", "Intrinsic"),
+    ("guide", "learning", "reference"),
+])
+@pytest.mark.parametrize("curated", [False, True])
+@pytest.mark.parametrize("platforms", [("linux", "windows"), ("cme", "sme"), ("mali", "linux"),
+                                     ("google-colab", "linux"), ("cortex-m", "windows")])
+def test_filter_alternatives_combine_before_ranking_and_share_k(doc_types, curated, platforms):
+    guide, learning, reference = doc_types
+    first, second = platforms
+    tags = [(first, guide), (second, learning),
+            (second, guide), ("macos", learning),
+            (first, reference), (None, guide), (first, None)]
     rows = [chunk(i, platform=platform, doc_type=doc_type, original_text=f"Jenkins setup instructions {i}")
             for i, (platform, doc_type) in enumerate(tags)]
+    if curated:
+        for row in rows:
+            row["filter_metadata"] = {
+                "platform": [row["platform"], "android"] if row["platform"] else [],
+                "doc_type": [row["doc_type"], "article"] if row["doc_type"] else [],
+            }
+    snapshot = deepcopy(rows)
     state = SearchResources(rows, QueryModel(), index_for([[i / 10, 0] for i in range(len(rows))]),
                             build_bm25_index(rows), include_disclaimers=False)
-    filters = {"platform": ["linux", "windows"], "doc_type": ["Install Guides", "Learning Paths"]}
+    filters = {"platform": [first, second], "doc_type": [guide, learning]}
     assert MetadataFilterIndex(rows).eligible_ids(SearchFilters.parse(filters)) == (0, 1, 2)
     hits = search("needle", state, k=10, filters=filters)
     assert {hit["url"] for hit in hits} == {rows[i]["url"] for i in (0, 1, 2)}
     assert search("needle", state, k=2, filters=filters) == hits[:2]
-    assert [h["url"] for h in search("needle", state, filters={**filters, "platform": "linux"})] == [rows[0]["url"]]
+    assert rows == snapshot
+    assert [h["url"] for h in search("needle", state, filters={**filters, "platform": first})] == [rows[0]["url"]]
+    if curated:
+        hits = search("needle", state, k=10, filters={"platform": "android", "doc_type": "article"})
+        assert {hit["url"] for hit in hits} == {rows[i]["url"] for i in range(5)}
 
 
-def test_combined_filters_apply_before_dashboard_deduplication():
+@pytest.mark.parametrize("curated", [False, True])
+def test_combined_filters_apply_before_dashboard_deduplication(curated):
     common = {"doc_type": "Ecosystem Dashboard", "product": "Arm", "content_type": "markdown"}
     metadata = [
         chunk(0, **common, platform="linux", edition="commercial"),
@@ -753,6 +806,10 @@ def test_combined_filters_apply_before_dashboard_deduplication():
         chunk(3, **common, platform="windows", edition="open-source"),
         *[chunk(i, search_text="other") for i in range(4, 10)],
     ]
+    if curated:
+        for row in metadata[:4]:
+            row["filter_metadata"] = {"doc_type": ["compatibility"], "product": ["arm"],
+                                      "platform": [row["platform"]]}
     state = SearchResources(
         metadata, QueryModel(), index_for([[i / 10, 0] for i in range(10)]),
         build_bm25_index(metadata), include_disclaimers=False,
@@ -761,13 +818,18 @@ def test_combined_filters_apply_before_dashboard_deduplication():
     for filters in [None, {}, SearchFilters()]:
         assert search("needle", state, k=10, filters=filters) == baseline
     filters = SearchFilters(
-        doc_type=" ecosystem dashboard ", product="ARM", platform="Linux", edition="OPEN-SOURCE"
+        doc_type=" ecosystem dashboard ", product="ARM", platform="Linux"
     )
     hits = search("needle", state, k=10, filters=filters)
-    assert len(hits) == 1
-    assert (hits[0]["platform"], hits[0]["edition"], hits[0]["product"]) == (
-        "linux", "open-source", "Arm"
-    )
+    # Both catalog editions survive even though Edition is no longer public.
+    assert len(hits) == 2
+    assert all("edition" not in hit for hit in hits)
+    assert all((hit["platform"], hit["product"]) == (
+        (["linux"], ["arm"]) if curated else (["linux"], ["Arm"])
+    ) for hit in hits)
+    if curated:
+        assert hits[0]["doc_type"] == ["compatibility"]
+        assert search("needle", state, k=10, filters=SearchFilters(**{**filters.model_dump(), "doc_type": "compatibility"})) == hits
     calls = state.embedding_model.calls
     assert search("needle", state, filters={"platform": "missing"}) == []
     assert state.embedding_model.calls == calls
@@ -831,7 +893,7 @@ def test_refill_after_navigation_filtering_stays_within_metadata_filters():
     hits = search("needle", state, k=3, filters={"platform": "linux"})
 
     assert len(hits) == 3
-    assert all(hit["platform"] == "linux" and hit["snippet"] == "Useful needle instructions" for hit in hits)
+    assert all(hit["platform"] == ["linux"] and hit["snippet"] == "Useful needle instructions" for hit in hits)
 
 
 def candidate(key, title, url=None, **metadata):
@@ -1383,6 +1445,7 @@ def test_exact_api_identifier_overcomes_a_generic_competitor():
 @pytest.mark.parametrize("count", [1, 2])
 def test_canonical_names_survive_public_search_and_filters(catalog_name, query_format, short_name, count):
     target = intrinsic(catalog_name)["metadata"]
+    target["filter_metadata"] = {"doc_type": ["reference"], "product": ["arm"], "platform": ["neon"]}
     metadata = [target, intrinsic("unrelated_name")["metadata"]][:count]
     index = build_bm25_index(metadata)
     assets = SearchResources(metadata, object(), None, index, include_disclaimers=False)
@@ -1391,6 +1454,13 @@ def test_canonical_names_survive_public_search_and_filters(catalog_name, query_f
         analysis = search_module._analyze_query(query)
         assert search_module._reference_record_bonus(analysis, target, "intrinsic") == .45
         assert [hit["url"] for hit in search(query, assets, k=1)] == [target["url"]]
+        for doc_type in ("reference", "Intrinsic"):
+            hits = search(query, assets, k=1, filters={
+                "doc_type": doc_type, "product": "arm", "platform": ["linux", "neon"]})
+            assert [hit["url"] for hit in hits] == [target["url"]]
+            assert hits[0]["doc_type"] == ["reference"] and hits[0]["product"] == ["arm"]
+            assert hits[0]["platform"] == ["neon"]
+        assert search(query, assets, filters={"product": "arm", "platform": "linux"}) == []
         assert hybrid_search(query, None, metadata, object(), index, k=1, eligible_ids=(0,))[0]["metadata"] == target
         assert all(hit["metadata"] != target for hit in
                    hybrid_search(query, None, metadata, object(), index, eligible_ids=tuple(range(1, count))))
@@ -1403,6 +1473,8 @@ def test_canonical_names_survive_public_search_and_filters(catalog_name, query_f
 def test_public_intrinsic_aliases_respect_requested_family(query, expected, bonus):
     metadata = [intrinsic("vaddq_s8", "Neon")["metadata"],
                 intrinsic("[__arm_]vaddq[_s8]", "Helium")["metadata"]]
+    for row in metadata:
+        row["filter_metadata"] = {"doc_type": ["reference"], "product": ["arm"]}
     # Isolate name scoring from prose and heading fragments.
     index = build_bm25_index(metadata, tokenized_corpus=[["neutral"], ["neutral"]])
     if bonus == .45:
@@ -1432,11 +1504,13 @@ def test_neon_queries_rank_neon_above_helium_aliases(query):
 @pytest.mark.parametrize("family", ["SVE", "SVE2", "SME", "SME2", "SVE SME2"])
 def test_public_short_names_accept_combined_families(family):
     target = intrinsic("svadd[_f32]_m", "SME and SME2 / SVE2")["metadata"]
+    target["filter_metadata"] = {"doc_type": ["reference"], "product": ["arm"]}
     metadata = [target, intrinsic("unrelated_name")["metadata"]]
     assets = SearchResources(metadata, object(), None, build_bm25_index(metadata), include_disclaimers=False)
     query = family + " svadd_m"
     assert search(query, assets, k=1)[0]["url"] == target["url"]
-    assert search(query, assets, k=1, filters={"product": target["product"]})[0]["url"] == target["url"]
+    assert search(query, assets, k=1, filters={"product": "arm", "doc_type": "reference"})[0]["url"] == target["url"]
+    assert search(query, assets, k=1, filters={"product": target["product"]}) == []
     assert search_module._reference_record_bonus(search_module._analyze_query(query), target, "intrinsic") == .45
     # A shared-family row receives its alias score once, even for a multi-family query.
     index = build_bm25_index(metadata, tokenized_corpus=[["neutral"], ["neutral"]])

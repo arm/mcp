@@ -66,7 +66,11 @@ SEARCH_RESOURCES = arm_kb_search.load_search_resources(
         'returned URLs, preserve each URL exactly as returned, including query parameters and fragments; do not '
         "remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can "
         'briefly explain why it is calling this tool to provide additional context. Use filters with known '
-        'metadata labels to narrow results; alternatives within a field combine with OR, and different fields '
+        'metadata labels to narrow results before ranking; each field accepts a string or non-empty list. '
+        'Explicitly tagged fields return arrays; inherited fields and older snapshots may retain scalars. '
+        'Missing or explicitly cleared tags do not match requested filters. Product identifies the publisher. '
+        'The supported filters are doc_type, product and platform. Alternatives within a field '
+        'combine with OR, and different fields '
         'combine with AND. Relax filters if needed evidence is missing. Start with the default chunks scope. When '
         'more surrounding context from the matched pages is needed, use scope="page" after the user requests or '
         'approves expansion. Page scope returns all stored chunks from those pages in order and can produce large '

@@ -24,6 +24,13 @@ ENV INTRINSIC_CHUNKS_DIR=/snapshot/intrinsic_chunks \
 WORKDIR /work
 
 COPY vector-db-sources.csv vector-db-sources.csv
+COPY vector-db-sources.csv expected-sources.csv
+COPY validate-source-metadata.py source_metadata.py /work/validation/
+
+# Exercise the pinned image's CSV serializer before any network acquisition.
+RUN --network=none python /work/validation/validate-source-metadata.py \
+    /work/expected-sources.csv --generator /embedding-data/generate-chunks.py
+
 COPY --from=intrinsic-chunks \
     /embedding-data/intrinsic_chunks/ \
     /snapshot/intrinsic_chunks/
@@ -33,6 +40,10 @@ RUN --network=none mkdir -p "${YAML_OUTPUT_DIR}" /work/info
 # Discovery is intentionally enabled during this controlled network phase.
 RUN --network=default \
     python /embedding-data/generate-chunks.py /work/vector-db-sources.csv
+
+# Never publish chunks whose generated source catalog lost reviewed overrides.
+RUN --network=none python /work/validation/validate-source-metadata.py \
+    /work/expected-sources.csv /work/vector-db-sources.csv
 
 FROM scratch AS chunks
 

@@ -16,6 +16,7 @@ on:
       - embedding-generation/embedding-model.lock.json
       - embedding-generation/generate-chunks.py
       - embedding-generation/local_vectorstore_creation.py
+      - embedding-generation/source_metadata.py
       - embedding-generation/pyproject.toml
       - embedding-generation/uv.lock
   workflow_dispatch:

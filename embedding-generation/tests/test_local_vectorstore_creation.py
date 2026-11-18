@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import csv
 import json
 import os
 import sys
@@ -83,6 +84,8 @@ def test_vectorstore_serialization_preserves_dashboard_scope(tmp_path, monkeypat
             version="",
             platform="linux",
             edition="open-source",
+            filter_metadata={"doc_type": ["compatibility"], "product": ["arm"],
+                             "platform": ["linux", "windows"]},
         ),
         dict(
             uuid="b",
@@ -107,6 +110,8 @@ def test_vectorstore_serialization_preserves_dashboard_scope(tmp_path, monkeypat
         metadata[0]["platform"] == "linux" and metadata[0]["edition"] == "open-source"
     )
     assert metadata[0]["product"] == metadata[0]["version"] == ""
+    assert metadata[0]["filter_metadata"] == records[0]["filter_metadata"]
+    assert "filter_metadata" not in metadata[1]
     assert metadata[1]["platform"] == metadata[1]["edition"] == ""
     assert all(not {"page_url", "parent_page_url"} & row.keys() for row in metadata)
 
@@ -146,6 +151,7 @@ def record(text, identifier="doc"):
         url="https://example.com/guide?version=2#section",
         resolved_url="https://example.com/source#original", title="Original title",
         heading_path=["Chapter", "Section"], keywords="Arm", custom={"keep": True},
+        filter_metadata={"platform": ["linux", "windows"]},
     )
 
 
@@ -179,7 +185,7 @@ def test_cap_preserves_exact_text_metadata_and_piece_identity(tokenizer, identif
         assert piece["uuid"] != identifier and piece["chunk_uuid"] != identifier
         assert (piece["source_part"], piece["source_parts"]) == (number, len(pieces))
         assert piece["search_text"] == "Metadata title keywords " + piece["original_text"]
-        for key in ("url", "resolved_url", "title", "heading_path", "keywords", "custom"):
+        for key in ("url", "resolved_url", "title", "heading_path", "keywords", "custom", "filter_metadata"):
             assert piece[key] == row[key]
     assert cursor == len(text)
     assert vectorstore.split_embedding_inputs([row], tokenizer) == pieces
@@ -399,15 +405,32 @@ def test_nonintrinsic_chunk_is_unchanged():
 
 
 @pytest.mark.parametrize("legacy_views", [False, True])
-@pytest.mark.parametrize("isa,fallback", [
-    ("Neon", False), ("SME and SME2 / SVE2", False), ("SME and SME2 / SVE2", True),
+@pytest.mark.parametrize("isa,fallback,override,platforms", [
+    ("Neon", False, None, ["neon"]),
+    ("SVE", False, None, ["sve"]),
+    ("SVE2", False, None, ["sve2"]),
+    ("SME", False, None, ["sme"]),
+    ("SME2", True, None, ["sme2"]),
+    ("SME and SME2 / SVE2", False, None, ["sme", "sme2", "sve2"]),
+    ("SME and SME2 / SVE2", True, None, ["sme", "sme2", "sve2"]),
+    ("Neon / SVE / Neon", True, None, ["neon", "sve"]),
+    ("Helium", False, None, ["helium"]),
+    ("MVE", True, None, ["helium"]),
+    ("ACLE", True, None, None),
+    ("not-sve", False, None, None),
+    ("Neon", False, [], []),
+    ("Neon", False, ["windows"], ["windows"]),
 ])
-def test_prepared_chunks_roundtrip_without_reparsing(tmp_path, monkeypatch, gc, legacy_views, isa, fallback):
+def test_prepared_chunks_roundtrip_without_reparsing(
+    tmp_path, monkeypatch, gc, legacy_views, isa, fallback, override, platforms
+):
     source = tmp_path / "intrinsics"
     source.mkdir()
     monkeypatch.setenv("INTRINSIC_CHUNKS_DIR", str(source))
     monkeypatch.setenv("YAML_DATA_DIR", str(tmp_path / "guides"))
     raw = {**chunk(isa), "uuid": "a", "title": "Arm Intrinsics - vaddq_u8"}
+    if override is not None:
+        raw["filter_metadata"] = {"platform": override}
     if fallback:
         raw["product"] = isa
         raw["content"] = raw["content"].split("architecture. ", 1)[1]
@@ -420,7 +443,7 @@ def test_prepared_chunks_roundtrip_without_reparsing(tmp_path, monkeypatch, gc, 
     inputs = []
 
     def encode(metadata, *args):
-        inputs.append([r["embedding_text"] for r in metadata])
+        inputs.append([vectorstore.embedding_input(r) for r in metadata])
         return np.ones((len(metadata), 384), dtype=np.float32), metadata
 
     monkeypatch.setattr(vectorstore, "create_embeddings", encode)
@@ -433,6 +456,10 @@ def test_prepared_chunks_roundtrip_without_reparsing(tmp_path, monkeypatch, gc, 
     gc.prepare_intrinsic_chunks()
     assert path.read_text() == prepared
     record = yaml.safe_load(prepared)
+    expected_tags = {"doc_type": ["reference"], "product": ["arm"]}
+    if platforms is not None:
+        expected_tags["platform"] = platforms
+    assert record["filter_metadata"] == expected_tags
     assert record["product"] == isa
     assert record["heading_path"] == [isa, "vaddq_u8"]
     assert record["embedding_text"].startswith(f"{isa} intrinsic vaddq_u8.")
@@ -441,15 +468,38 @@ def test_prepared_chunks_roundtrip_without_reparsing(tmp_path, monkeypatch, gc, 
     assert "16 lanes of 8-bit unsigned integer" in record["embedding_text"]
     assert "embedding_texts" not in record
 
+    # Exercise the contributor CSV -> source parser -> YAML -> vector JSON path
+    # alongside the prepared intrinsic, using the existing round-trip fixture.
+    csv_path = tmp_path / "sources.csv"
+    with csv_path.open("w", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(["Site Name", "Display Name", "URL", "Doc Type", "Product", "Platform"])
+        writer.writerow(["Install Guides", "Guide", "https://example.org/guide", "guide", "arm",
+                         '["linux","windows","sme2","cme","mali","google-colab","cortex-m"]'])
+    config, count = gc.readInCSV(csv_path)
+    assert count == 1
+    monkeypatch.setattr(gc, "fetch_with_logging", lambda url: SimpleNamespace(
+        url=url, content=b"# Guide\n\nBuild an SME2 application on Linux or Windows, profile CME performance, and optimize Mali shaders.",
+        headers={"content-type": "text/markdown"}))
+    guide = gc.create_chunks_for_source(
+        config["urls"][0], config["source_names"][0], config["site_names"][0], "",
+        metadata_overrides=config["metadata_overrides"][0])[0].toDict()
+    (tmp_path / "guides").mkdir()
+    (tmp_path / "guides/guide.yaml").write_text(yaml.safe_dump(guide))
+
     def unexpected_parse(*args):
         raise AssertionError("Prepared chunks must not be parsed again")
 
     monkeypatch.setattr(intrinsic_source, "normalize_intrinsic_chunk", unexpected_parse)
     vectorstore.main()
-    assert inputs == [[record["embedding_text"]]]
-    saved = json.loads((tmp_path / "metadata.json").read_text())[0]
+    assert inputs == [[record["embedding_text"], guide["content"]]]
+    saved, saved_guide = json.loads((tmp_path / "metadata.json").read_text())
+    assert saved_guide["filter_metadata"] == config["metadata_overrides"][0]
+    assert saved_guide["doc_type"] == "Install Guides"
+    assert saved_guide["original_text"] == guide["content"]
     assert saved["original_text"] == record["content"]
     assert saved["doc_type"] == "Intrinsic"
+    assert saved["filter_metadata"] == record["filter_metadata"]
     assert saved["product"] == isa
     assert saved["heading_path"] == [isa, "vaddq_u8"]
     assert "embedding_text" not in saved

@@ -26,6 +26,9 @@ EXPECTED_COLUMNS = [
     "URL",
     "Keywords",
     "Transcript Source URL",
+    "Doc Type",
+    "Product",
+    "Platform",
 ]
 URL_COLUMNS = ("URL", "Transcript Source URL")
 
@@ -40,7 +43,7 @@ def is_http_url(value):
 
 
 def test_vector_db_sources_header_matches_schema():
-    """The sources CSV must keep the expected six-column schema."""
+    """The maintained source CSV includes filter tags after the legacy columns."""
     with SOURCES_FILE.open(newline="", encoding="utf-8") as sources:
         reader = csv.reader(sources)
         header = next(reader)
