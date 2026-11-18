@@ -13,6 +13,7 @@ from unittest.mock import Mock
 import pytest
 import yaml
 
+from document_chunking import prepare_intrinsic_chunk
 from intrinsic_catalog import build_intrinsic_chunk, refresh_catalog
 
 
@@ -44,7 +45,8 @@ def tokenizer(text, **kwargs):
 
 
 def test_refresh_updates_old_records_and_preserves_identity(tmp_path, source):
-    _, existing = source
+    data, existing = source
+    data["intrinsics.json"][0]["return_type"]["value"] = "int"
     original = (existing / "chunk_original.yaml").read_bytes()
     outputs = [tmp_path / "first", tmp_path / "second"]
     for output in outputs:
@@ -55,7 +57,7 @@ def test_refresh_updates_old_records_and_preserves_identity(tmp_path, source):
         assert old["url"] == yaml.safe_load(original)["url"]
         assert old["product"] == "SME and SME2 / SVE2"
         assert "Updated operation." in old["embedding_text"]
-        added = yaml.safe_load(next(output.glob("catalog_*.yaml")).read_text())
+        added = yaml.safe_load(next(p for p in output.glob("chunk_*.yaml") if p.name != "chunk_original.yaml").read_text())
         assert "return;" in added["content"]
         manifest = json.loads((output / "catalog-manifest.json").read_text())
         assert len(manifest["source_sha256"]["intrinsics.json"]) == 64
@@ -70,16 +72,56 @@ def test_refresh_updates_old_records_and_preserves_identity(tmp_path, source):
 
 
 @pytest.mark.parametrize("families,header", [
-    (("Helium",), "arm_mve.h"), (("SME and SME2", "SVE2"), "arm_sme.h"),
+    (("Helium",), "arm_mve.h"), (("SME and SME2", "SVE2"), "arm_sve.h"),
+    (("SME and SME2", "SVE"), "arm_sve.h"), (("SME and SME2",), "arm_sme.h"),
     (("Neon", "SVE"), "arm_neon_sve_bridge.h"), ((), "arm_acle.h"),
 ])
 def test_family_headers_and_required_features(families, header):
     row = entry(families=families, sme_modes=["__arm_streaming"],
                 required_streaming_features={"features": "FEAT_SME"})
     chunk = build_intrinsic_chunk(row, {})
-    assert header in chunk["content"]
+    assert f"Header declarations: `#include <{header}>`.\n" in chunk["content"]
     assert "__arm_streaming" in chunk["content"] and "FEAT_SME" in chunk["content"]
     assert "Signature: void example ();" in chunk["embedding_text"]
+
+
+def test_overloads_keep_identity_and_context_across_refreshes(tmp_path, source):
+    from arm_kb_search.context import DocumentContextIndex
+
+    data, existing = source
+    data["intrinsics.json"] = [entry("old"), entry("old", return_type={"value": "float32x4_t"},
+                                                arguments=["float32x4_t t"])]
+    first, second, third = (tmp_path / name for name in ("first", "second", "third"))
+    report = refresh_catalog(existing, first, tokenizer)
+    assert report["records"] == 2 and report["added"] == 1
+    rows = [yaml.safe_load(p.read_text()) for p in sorted(first.glob("*.yaml"))]
+    assert len({r["uuid"] for r in rows}) == 2
+    assert len({r["url"] for r in rows}) == 1
+    assert yaml.safe_load((first / "chunk_original.yaml").read_text())["uuid"] == "existing-id"
+    assert {r["document_context"]["chunk_index"] for r in rows} == {0, 1}
+    assert all(r["document_context"]["chunk_count"] == 2 for r in rows)
+    assert all(prepare_intrinsic_chunk(r) == r for r in rows)
+    context = DocumentContextIndex(rows, Mock())
+    assert len(context.expand([{"metadata": rows[0]}], "page")) == 2
+
+    data["intrinsics.json"].reverse()
+    refresh_catalog(existing, second, tokenizer)
+    assert {p.name: p.read_bytes() for p in first.glob("*.yaml")} == {
+        p.name: p.read_bytes() for p in second.glob("*.yaml")}
+    report = refresh_catalog(first, third, tokenizer)
+    assert report["added"] == report["updated"] == 0
+    assert all((third / p.name).read_bytes() == p.read_bytes() for p in first.glob("*.yaml"))
+    data["intrinsics.json"].pop()
+    with pytest.raises(ValueError, match="missing.*existing"):
+        refresh_catalog(first, tmp_path / "missing", tokenizer)
+    assert not (tmp_path / "missing").exists()
+
+
+def test_operation_text_keeps_word_boundaries():
+    chunk = build_intrinsic_chunk(entry(Operation="op"), {
+        "op": "<h3>Operation</h3><p>Return op1.</p><h3>Exceptions</h3><p>Active flags.</p><pre>x = 1;\ny = 2;</pre>"})
+    assert "Return op1. Exceptions Active flags." in chunk["content"]
+    assert "`x = 1;\ny = 2;`" in chunk["content"]
 
 
 @pytest.mark.parametrize("failure", ["empty", "duplicate", "missing-old", "operation", "long", "http", "schema"])

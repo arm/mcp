@@ -98,7 +98,10 @@ jobs:
             cat "$RUNNER_TEMP/intrinsic-snapshot/embedding-data/intrinsic_chunks/catalog-manifest.json"
             echo '```'
             if [[ "$PUBLISH_IMAGE" == 'true' ]]; then
-              [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+              if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+                echo '::error::Snapshot build returned an invalid image digest.' >&2
+                exit 1
+              fi
               echo "Update intrinsic_chunks_image in a reviewed PR to: \`$IMAGE@$DIGEST\`"
             fi
           } >> "$GITHUB_STEP_SUMMARY"

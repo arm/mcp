@@ -72,6 +72,14 @@ current Arm catalog and operations, refreshes every record, and preserves
 existing filenames, IDs and URLs. The image contains only the prepared YAML
 records and a manifest with source checksums and record counts.
 
+Overloads sharing a catalog name are kept as separate records with stable IDs
+based on their signatures and a shared catalog URL. Existing IDs are retained,
+and a missing overload fails validation just like a missing intrinsic. New files
+use the `chunk_<uuid>.yaml` naming convention. Refreshed descriptions use catalog
+requirements; the old generic `-march` recommendations are not carried forward.
+Merge the automatic generator-pin update containing these ingestion changes
+before promoting the refreshed snapshot, so acquisition preserves overload order.
+
 The run summary reports the published digest. Update `intrinsic_chunks_image`
 to that immutable reference in a reviewed PR. The normal Sunday embedding
 pipeline consumes it after that PR merges; the normal release PR still requires
