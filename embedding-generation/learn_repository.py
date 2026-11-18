@@ -299,7 +299,11 @@ class Repository:
 
     def platform_tags(self, url):
         page = self.by_url[public_url(url)]
-        root = self.by_url.get(learn_learning_path_root_url(page.url))
+        parts = PurePosixPath(page.path).parts
+        root = None
+        if parts[:2] == ("content", "learning-paths") and len(parts) >= 5:
+            root = self.pages.get(str(PurePosixPath(*parts[:4], "_index.md")))
+        # Source ancestry survives authored URL and slug overrides.
         # A lesson inherits the path's authored taxonomy unless it supplies its
         # own value for that field (including an explicit empty list).
         metadata = {**(root.metadata if root else {}), **page.metadata}

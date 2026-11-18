@@ -67,7 +67,8 @@ SEARCH_RESOURCES = arm_kb_search.load_search_resources(
         "remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can "
         'briefly explain why it is calling this tool to provide additional context. Use filters with known '
         'metadata labels to narrow results before ranking; each field accepts a string or non-empty list. '
-        'Explicitly tagged fields return arrays; inherited fields and older snapshots may retain scalars. '
+        'Result fields doc_type, product and platform always return arrays, including legacy tags; '
+        'missing tags return []. '
         'Missing or explicitly cleared tags do not match requested filters. Product identifies the publisher. '
         'The supported filters are doc_type, product and platform. Alternatives within a field '
         'combine with OR, and different fields '

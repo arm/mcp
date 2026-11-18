@@ -119,6 +119,7 @@ def parse_metadata_override(
             raise ValueError(f"{context}: expected a label or JSON array of labels")
     else:
         labels = [cell]
+    allowed = {"Doc Type": DOC_TYPES, "Product": PRODUCTS, "Platform": PLATFORMS}.get(column)
     result = []
     for label in labels:
         if not isinstance(label, str) or not label.strip():
@@ -130,20 +131,11 @@ def parse_metadata_override(
             )
         if column == "Platform":
             normalized = PLATFORM_ALIASES.get(normalized, normalized)
-            if normalized not in PLATFORMS:
-                raise ValueError(
-                    f"{context}: unsupported label {label!r}; "
-                    f"use one of {', '.join(sorted(PLATFORMS))} or a JSON array of them"
-                )
-        if column == "Doc Type" and normalized not in DOC_TYPES:
+        if allowed is not None and normalized not in allowed:
+            kind = "publisher" if column == "Product" else "label"
             raise ValueError(
-                f"{context}: unsupported label {label!r}; "
-                f"use one of {', '.join(sorted(DOC_TYPES))} or a JSON array of them"
-            )
-        if column == "Product" and normalized not in PRODUCTS:
-            raise ValueError(
-                f"{context}: unsupported publisher {label!r}; "
-                f"use one of {', '.join(sorted(PRODUCTS))} or a JSON array of them"
+                f"{context}: unsupported {kind} {label!r}; "
+                f"use one of {', '.join(sorted(allowed))} or a JSON array of them"
             )
         if normalized not in result:
             result.append(normalized)

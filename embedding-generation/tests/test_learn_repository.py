@@ -37,16 +37,20 @@ def repository(files, kind="arm-learning-paths"):
     )
 
 
-def test_discovered_sources_inherit_verified_tags_through_chunks(gc, monkeypatch, tmp_path):
-    root = "https://learn.arm.com/learning-paths/cross-platform/new/"
+@pytest.mark.parametrize("root_route", ["/learning-paths/cross-platform/new/", "/tutorials/new/"])
+@pytest.mark.parametrize("lesson_route", [None, "/lessons/demo-step/"])
+def test_discovered_sources_inherit_verified_tags_through_chunks(
+    gc, monkeypatch, tmp_path, root_route, lesson_route,
+):
+    root = "https://learn.arm.com" + root_route
     repo = repository({
         "content/learning-paths/cross-platform/new/_index.md": markdown(
-            "New AWS Graviton lesson", "Learn on Arm.",
+            "New AWS Graviton lesson", "Learn on Arm.", url=root_route,
             operatingsystems=["Linux", "Windows"], armips=["Cortex-M", "Mali"],
             tools_software_languages=["SME2", "SVE", "SVE2", "Neon", "Python"],
         ),
         "content/learning-paths/cross-platform/new/lesson.md": markdown(
-            "Lesson", "Build the example."),
+            "Lesson", "Build the example.", **({"url": lesson_route} if lesson_route else {})),
         "content/install-guides/new.md": markdown("New tool", "Install it.", tool_install=True),
     })
     sources = LearnSources(None)
@@ -91,6 +95,20 @@ def test_learn_platform_metadata_uses_authored_scope_and_flags_unknown_os():
     assert repo.platform_tags(root) == ["linux", "cortex-m", "sme2"]
     with pytest.warns(UserWarning, match="FutureOS"):
         assert repo.platform_tags(root + "child/") == []
+
+
+def test_relocated_lesson_inherits_only_fields_without_child_overrides():
+    repo = repository({
+        "content/learning-paths/cross-platform/new/_index.md": markdown(
+            "Root", "Learn.", url="/tutorials/new/", operatingsystems=["Linux"],
+            armips=["Cortex-M55"], tools_software_languages=["SME2"],
+        ),
+        "content/learning-paths/cross-platform/new/child.md": markdown(
+            "Child", "Build the example.", url="/lessons/demo-step/",
+            operatingsystems=["Windows"], armips=[],
+        ),
+    })
+    assert repo.platform_tags("https://learn.arm.com/lessons/demo-step/") == ["windows", "sme2"]
 
 
 def test_discovery_and_multipart_guides_share_the_repository(gc, monkeypatch):

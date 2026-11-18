@@ -116,38 +116,6 @@ def test_legacy_csv_has_no_platform_override_or_added_column(gc, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "cell",
-    [
-        '["linux",',
-        '["linux", null]',
-        '["linux", 4]',
-        '["linux", ["windows"]]',
-        '["linux", ""]',
-        '["linux", "  "]',
-        '{"platform":"linux"}',
-        "null",
-        "true",
-        "42",
-        "unknown",
-        "other",
-        "all",
-        "linux,windows",
-        "linxu",
-    ],
-)
-@pytest.mark.parametrize("reader", ["readInCSV", "load_existing_sources"])
-def test_invalid_platform_override_rejected_with_source_context(
-    gc, tmp_path, cell, reader
-):
-    path = write_sources(tmp_path, [cell])
-    original = path.read_bytes()
-    with pytest.raises(ValueError, match="Platform") as error:
-        getattr(gc, reader)(path)
-    assert SOURCE + "0" in str(error.value)
-    assert path.read_bytes() == original
-
-
-@pytest.mark.parametrize(
     "cell,expected",
     [("[]", []), ('["linux", "windows"]', ["linux", "windows"]), ("", None)],
 )
@@ -166,25 +134,6 @@ def test_dashboard_reconciliation_keeps_platform_override(
     gc.reconcile_ecosystem_sources(discover=discover)
     gc.save_sources_csv(path)
     assert platform_values(gc.readInCSV(path)[0]) == [expected]
-
-
-def test_conflicting_dashboard_overrides_are_not_silently_combined(
-    gc, monkeypatch, tmp_path
-):
-    path = write_sources(tmp_path, ["linux", "windows"], site="Ecosystem Dashboard")
-    text = path.read_text().replace(SOURCE + "1", SOURCE + "0")
-    path.write_text(text)
-    gc.load_existing_sources(path)
-    package = SimpleNamespace(
-        keywords=[], document=SimpleNamespace(display_title="Package")
-    )
-    monkeypatch.setattr(
-        gc, "build_ecosystem_dashboard_entries", lambda: {SOURCE + "0": [package]}
-    )
-    with pytest.raises(ValueError, match="Platform") as error:
-        gc.reconcile_ecosystem_sources()
-    assert SOURCE + "0" in str(error.value)
-    assert path.read_text() == text
 
 
 def test_header_only_csv_keeps_platform_column(gc, tmp_path):

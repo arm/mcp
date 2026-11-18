@@ -154,6 +154,7 @@ def test_blank_and_explicit_clear_survive_for_every_field(
         '["valid",4]',
         '["valid",[]]',
         '["valid",""]',
+        '["valid","  "]',
         '{"tag":"valid"}',
         '"valid"',
         "null",
@@ -166,10 +167,12 @@ def test_blank_and_explicit_clear_survive_for_every_field(
         "none",
         "not applicable",
         "linux,windows",
+        "typo",
     ],
 )
 @pytest.mark.parametrize("reader", ["readInCSV", "load_existing_sources"])
 def test_invalid_tag_cells_fail_with_field_and_url(gc, tmp_path, column, cell, reader):
+    cell = cell.replace("valid", {"Doc Type": "guide", "Product": "arm", "Platform": "linux"}[column])
     path = write_source(tmp_path, {column: cell})
     before = path.read_bytes()
     with pytest.raises(ValueError) as error:
