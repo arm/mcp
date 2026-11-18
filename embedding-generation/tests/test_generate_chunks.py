@@ -32,7 +32,6 @@ from arm_kb_search.context import DocumentContextIndex
 from document_chunking import (
     chunk_parsed_document,
     extract_markdown_links,
-    learn_learning_path_step_urls,
     link_text_with_urls,
     parse_document_content,
     split_frontmatter,
@@ -661,22 +660,6 @@ class TestDocumentChunkingAnchors:
         assert chunks[0]["page_url"] == parsed.source_url
         assert "parent_page_url" not in chunks[0]
 
-    def test_learn_learning_path_step_urls_discovers_same_path_steps(self):
-        html = (
-            b"<main>"
-            b"<a href='/learning-paths/cross-platform/example/1-get-started/'>Start</a>"
-            b"<a href='/learning-paths/cross-platform/example/1-get-started/#devices'>Devices</a>"
-            b"<a href='/learning-paths/cross-platform/other/1-get-started/'>Other</a>"
-            b"</main>"
-        )
-
-        assert learn_learning_path_step_urls(
-            "https://learn.arm.com/learning-paths/cross-platform/example/",
-            html,
-        ) == [
-            "https://learn.arm.com/learning-paths/cross-platform/example/1-get-started/"
-        ]
-
     def test_html_table_under_heading_is_returned_as_anchor_chunk(self):
         parsed = parse_document_content(
             source_url="https://learn.arm.com/example/1-get-started/",
@@ -1082,192 +1065,6 @@ class TestSourceTracking:
         assert gc.known_source_urls == {"https://example.com/test", "https://new.example.com"}
 
 
-class TestGetMarkdownGitHubURLsFromPage:
-    """Tests for getMarkdownGitHubURLsFromPage function."""
-
-    def test_migration_url(self, gc):
-        """Test handling of migration page URL."""
-        gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage(
-            "https://learn.arm.com/migration"
-        )
-
-        assert len(gh_urls) == 1
-        assert len(site_urls) == 1
-        parsed = urlparse(gh_urls[0])
-        assert parsed.hostname == "raw.githubusercontent.com"
-        assert "migration/_index.md" in gh_urls[0]
-        assert site_urls[0] == "https://learn.arm.com/migration"
-
-    def test_graviton_url(self, gc):
-        """Test handling of Graviton getting started URL."""
-        url = "https://github.com/aws/aws-graviton-getting-started/blob/main/README.md"
-        gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage(url)
-
-        assert len(gh_urls) == 1
-        assert len(site_urls) == 1
-        assert (
-            "raw.githubusercontent.com/aws/aws-graviton-getting-started" in gh_urls[0]
-        )
-        assert "README.md" in gh_urls[0]
-
-    def test_graviton_nested_url(self, gc):
-        """Test handling of nested Graviton URL."""
-        url = "https://github.com/aws/aws-graviton-getting-started/blob/main/machinelearning/pytorch.md"
-        gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage(url)
-
-        assert len(gh_urls) == 1
-        assert "machinelearning/pytorch.md" in gh_urls[0]
-
-    def test_unknown_url_returns_empty(self, gc, capsys):
-        """Test that unknown URLs return empty lists and print warning."""
-        gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage(
-            "https://unknown.com/page"
-        )
-
-        assert gh_urls == []
-        assert site_urls == []
-
-        captured = capsys.readouterr()
-        assert "doesnt match expected format" in captured.out
-
-
-class TestObtainTextSnippetsMarkdown:
-    """Tests for obtainTextSnippets__Markdown function."""
-
-    def test_single_short_content(self, gc):
-        """Test content shorter than min_words stays as one chunk."""
-        content = "This is a short piece of content with only a few words."
-
-        chunks = gc.obtainTextSnippets__Markdown(content, min_words=10, max_words=50)
-
-        assert len(chunks) == 1
-
-    def test_split_by_h2(self, gc):
-        """Test that content is split by h2 headings."""
-        content = (
-            """
-## Section One
-"""
-            + "word " * 350
-            + """
-
-## Section Two
-"""
-            + "word " * 350
-        )
-
-        chunks = gc.obtainTextSnippets__Markdown(content, min_words=300, max_words=500)
-
-        assert len(chunks) >= 2
-
-    def test_split_by_h3_when_h2_too_large(self, gc):
-        """Test that large h2 sections are split by h3."""
-        content = (
-            """
-## Large Section
-"""
-            + "word " * 200
-            + """
-### Subsection One
-"""
-            + "word " * 350
-            + """
-### Subsection Two
-"""
-            + "word " * 350
-        )
-
-        chunks = gc.obtainTextSnippets__Markdown(content, min_words=300, max_words=500)
-
-        # Should have multiple chunks due to h3 splitting
-        assert len(chunks) >= 2
-
-    def test_small_final_chunk_merged(self, gc):
-        """Test that small final chunks are merged with previous."""
-        content = "word " * 400 + "\n\n" + "short ending"
-
-        chunks = gc.obtainTextSnippets__Markdown(
-            content, min_words=300, max_words=500, min_final_words=50
-        )
-
-        # The small ending should be merged
-        assert len(chunks) == 1
-        assert "short ending" in chunks[0]
-
-    def test_empty_content(self, gc):
-        """Test handling of empty content."""
-        chunks = gc.obtainTextSnippets__Markdown("")
-
-        assert chunks == [] or chunks == [""]
-
-    def test_respects_max_words(self, gc):
-        """Test that chunks don't significantly exceed max_words when headers are present."""
-        # Create content with h2 headers to enable splitting
-        content = (
-            """
-## Section One
-"""
-            + "word " * 400
-            + """
-
-## Section Two
-"""
-            + "word " * 400
-            + """
-
-## Section Three
-"""
-            + "word " * 400
-        )
-
-        chunks = gc.obtainTextSnippets__Markdown(
-            content, min_words=100, max_words=200, min_final_words=50
-        )
-
-        # With headers, content should be split into multiple chunks
-        assert len(chunks) >= 2
-
-    def test_prepends_document_title_and_heading_path(self, gc):
-        """Structured chunks should carry the document title and heading path prefix."""
-        content = (
-            """
-# Deployment Guide
-
-## Install
-"""
-            + "word " * 350
-        )
-
-        chunks = gc.obtainTextSnippets__Markdown(content, min_words=150, max_words=400)
-
-        assert len(chunks) >= 1
-        assert chunks[0].startswith("Document Title: Deployment Guide")
-        assert "Heading Path: Install" in chunks[0]
-
-    def test_keeps_code_with_neighboring_explanation(self, gc):
-        """Code blocks should remain grouped with nearby explanatory text."""
-        content = """
-# Example Guide
-
-## Build
-First install dependencies and verify the environment is ready for compilation.
-
-```bash
-make build
-make test
-```
-
-Use the generated binary to verify the expected output and continue with setup.
-""" + ("\n\nAdditional context. " * 120)
-
-        chunks = gc.obtainTextSnippets__Markdown(content, min_words=100, max_words=250)
-
-        matching = [chunk for chunk in chunks if "make build" in chunk]
-        assert matching
-        assert "First install dependencies" in matching[0]
-        assert "Use the generated binary" in matching[0]
-
-
 class TestReadInCSV:
     """Tests for readInCSV function."""
 
@@ -1566,6 +1363,51 @@ class TestArmDocumentationParsing:
 
 class TestCreateChunksForSource:
     """Tests for generic source chunking."""
+
+    @pytest.mark.parametrize("path", ["README.md", "machinelearning/pytorch.md"])
+    def test_github_markdown_preserves_citations_headings_and_code_context(
+        self, gc, monkeypatch, path
+    ):
+        source_url = f"https://github.com/aws/aws-graviton-getting-started/blob/main/{path}"
+        raw_url = f"https://raw.githubusercontent.com/aws/aws-graviton-getting-started/refs/heads/main/{path}"
+        fetched_urls = []
+
+        def fetch(url):
+            fetched_urls.append(url)
+            return SimpleNamespace(
+                url=raw_url,
+                headers={"content-type": "text/plain"},
+                content=b"""# Deployment Guide
+
+## Build
+First install dependencies and verify the environment is ready for compilation.
+
+```bash
+make build
+make test
+```
+
+Use the generated binary to verify the expected output and continue with setup.
+""",
+            )
+
+        monkeypatch.setattr(gc, "fetch_with_logging", fetch)
+        chunks = gc.create_chunks_for_source(
+            "chrome-extension://reader/" + source_url.replace("https://", "https:/"),
+            "Graviton guide", "Documentation", "Arm; build",
+        )
+        assert fetched_urls == [raw_url]
+        assert len(chunks) == 1
+        chunk = chunks[0]
+        assert chunk.url == source_url
+        assert chunk.resolved_url == raw_url
+        assert chunk.title == "Deployment Guide"
+        assert chunk.heading_path == ["Build"]
+        assert chunk.content.startswith("Document Title: Deployment Guide\nHeading Path: Build")
+        assert "First install dependencies" in chunk.content
+        assert "make build\nmake test" in chunk.content
+        assert "Use the generated binary" in chunk.content
+        assert chunk.keywords == "arm, build, graviton guide"
 
     def test_unparseable_pptx_source_returns_empty_and_logs(
         self, gc, monkeypatch, capsys

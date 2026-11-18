@@ -249,55 +249,6 @@ def learn_learning_path_root_url(source_url: str) -> str | None:
                        "/" + "/".join(segments[:3]) + "/", "", "", ""))
 
 
-def learn_learning_path_step_urls(
-    source_url: str, html: str | bytes, *, ordered_only: bool = False,
-) -> list[str]:
-    source_url = normalize_source_url(source_url)
-    if not is_learn_learning_path_url(source_url):
-        return []
-
-    source = urlparse(source_url)
-    source_path = source.path.rstrip("/") + "/"
-    soup = BeautifulSoup(html, "html.parser")
-    step_urls: list[str] = []
-    seen: set[str] = set()
-
-    links = soup.find_all("a", href=True)
-    if ordered_only:
-        # Only the published step-navigation weights establish step order. Generic
-        # hyperlinks still support discovery, but cannot certify a path manifest.
-        weighted = {}
-        for link in links:
-            classes = link.get("class", [])
-            if "inner-learning-path-navbar-element" not in classes:
-                continue
-            weights = [int(m[1]) for value in classes if (m := re.fullmatch(r"(\d+)-weight", value))]
-            if "content-individual-a-mobile" in classes or weights == [0]:
-                continue
-            if len(weights) != 1 or weights[0] in weighted:
-                return []
-            weighted[weights[0]] = link
-        links = [weighted[index] for index in sorted(weighted)]
-
-    for link in links:
-        candidate = normalize_source_url(urljoin(source_url, link.get("href", "")))
-        parsed = urlparse(candidate)
-        if (
-            parsed.scheme not in {"http", "https"}
-            or parsed.netloc.lower() != "learn.arm.com"
-        ):
-            continue
-        path = parsed.path.rstrip("/") + "/"
-        if path == source_path or not path.startswith(source_path):
-            continue
-        step_url = urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
-        if step_url not in seen:
-            seen.add(step_url)
-            step_urls.append(step_url)
-
-    return step_urls
-
-
 def is_arm_developer_documentation_url(url: str) -> bool:
     parsed = urlparse(normalize_source_url(url))
     return (

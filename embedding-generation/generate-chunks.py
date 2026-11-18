@@ -66,16 +66,8 @@ def create_retry_session(
 http_session = create_retry_session()
 
 
-"""
-To fix:
-1. Prevent multiple learning paths from being used (compare URLs to existing chunks OR delete overlaps)
-2. Learning Path titles must come from index page...send through function along with Graviton.
-"""
-
 yaml_dir = os.getenv("YAML_OUTPUT_DIR", "yaml_data")
 details_file = os.getenv("CHUNK_DETAILS_FILE", "info/chunk_details.csv")
-
-chunk_index = 1
 
 # Reuse the same pinned source snapshots for discovery and chunking.
 learn_sources = LearnSources(http_session)
@@ -437,34 +429,6 @@ def readInCSV(csv_file):
     return csv_dict, len(csv_dict["urls"])
 
 
-def getMarkdownGitHubURLsFromPage(url):
-    GH_urls = []
-    SITE_urls = []
-
-    fetch_url = source_to_fetch_url(url)
-    if fetch_url != normalize_source_url(url):
-        SITE_urls.append(normalize_source_url(url))
-        GH_urls.append(fetch_url)
-    else:
-        print("url doesnt match expected format. Check function and try again.")
-        print("URL: ", url)
-
-    return GH_urls, SITE_urls
-
-
-def URLIsValidCheck(url):
-    try:
-        response = http_session.get(url, timeout=60)
-        response.raise_for_status()  # Ensure we got a valid response
-        return True
-    except requests.exceptions.HTTPError as http_err:
-        print(f"HTTP error occurred: {http_err}")
-        with open("info/errors.csv", "a", newline="") as csvfile:
-            csv_writer = csv.writer(csvfile)
-            csv_writer.writerow([url, str(http_err)])
-        return False
-
-
 def fetch_with_logging(url):
     try:
         response = http_session.get(url, timeout=60)
@@ -484,52 +448,9 @@ def fetch_with_logging(url):
         return None
 
 
-def obtainMarkdownContentFromGitHubMDFile(gh_url):
-    response = http_session.get(gh_url, timeout=60)
-    response.raise_for_status()  # Ensure we got a valid response
-    md_content = response.text
-
-    return md_content
-
-
-def obtainTextSnippets__Markdown(
-    content, min_words=300, max_words=500, min_final_words=200
-):
-    """Backward-compatible wrapper that now uses structured chunking."""
-    if not content or not content.strip():
-        return []
-    parsed_document = parse_document_content(
-        source_url="https://example.com",
-        resolved_url="https://example.com/doc.md",
-        response_content=content.encode("utf-8"),
-        content_type="text/markdown",
-        fallback_title="Document",
-    )
-    chunks = chunk_parsed_document(
-        parsed_document,
-        doc_type="Markdown",
-        keywords=[],
-        min_tokens=min_words,
-        max_tokens=max_words,
-        overlap_tokens=max(0, min_final_words // 4),
-    )
-    return [chunk["content"] for chunk in chunks]
-
-
 def chunk_from_payload(payload, keywords, **overrides):
     """Serialize shared chunker output without repeating its metadata field list."""
     return Chunk(uuid=str(uuid.uuid4()), keywords=keywords, **(payload | overrides))
-
-
-def printChunks(chunks):
-    for chunk_dict in chunks:
-        print("=" * 100)
-        print("Title:", chunk_dict["title"])
-        print("Keywords:", chunk_dict["keywords"])
-        print("URL:", chunk_dict["url"])
-        print("Unique ID:", chunk_dict["uuid"])
-        print("Content:", chunk_dict["content"])
-        print("=" * 100)
 
 
 def parse_keywords(keywords_value, title=""):
@@ -636,32 +557,28 @@ def create_chunks_for_source(
             source_url, source_name, doc_type, keywords_value
         )
 
-    normalized_source_url = normalize_source_url(source_url)
-    fetch_url = source_to_fetch_url(normalized_source_url)
+    fetch_url = source_to_fetch_url(source_url)
     response = fetch_with_logging(fetch_url)
     if response is None:
-        print(f"Fetch failed for {normalized_source_url}: {fetch_url}")
+        print(f"Fetch failed for {source_url}: {fetch_url}")
         return []
 
-    sources_to_parse = [(normalized_source_url, response)]
-
     keywords = parse_keywords(keywords_value, source_name)
-    chunks = []
-    for display_url, source_response in sources_to_parse:
-        parsed_document = parse_document_content(
-            source_url=display_url,
-            resolved_url=source_response.url,
-            response_content=source_response.content,
-            content_type=source_response.headers.get("content-type", ""),
-            fallback_title=source_name,
-        )
-        if log_no_parsed_sections(parsed_document, display_url, source_name):
-            continue
+    parsed_document = parse_document_content(
+        source_url=source_url,
+        resolved_url=response.url,
+        response_content=response.content,
+        content_type=response.headers.get("content-type", ""),
+        fallback_title=source_name,
+    )
+    if log_no_parsed_sections(parsed_document, source_url, source_name):
+        return []
+    return [
+        chunk_from_payload(payload, keywords)
         for payload in chunk_parsed_document(
             parsed_document, doc_type=doc_type or "Documentation", keywords=keywords
-        ):
-            chunks.append(chunk_from_payload(payload, keywords))
-    return chunks
+        )
+    ]
 
 
 def _arm_topic_links(topic):
