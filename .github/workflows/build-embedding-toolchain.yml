@@ -4,18 +4,12 @@ on:
   push:
     branches: [main]
     paths:
+      - .github/scripts/build-input-fingerprint.py
       - embedding-generation/.dockerignore
       - embedding-generation/.python-version
       - embedding-generation/Dockerfile.toolchain
       - embedding-generation/acquire-model.py
-      - embedding-generation/document_chunking.py
-      - embedding-generation/agi_product_brief.py
-      - embedding-generation/ecosystem_dashboard.py
-      - embedding-generation/learn_repository.py
-      - embedding-generation/learn_public.py
       - embedding-generation/embedding-model.lock.json
-      - embedding-generation/generate-chunks.py
-      - embedding-generation/local_vectorstore_creation.py
       - embedding-generation/pyproject.toml
       - embedding-generation/uv.lock
   workflow_dispatch:
@@ -65,6 +59,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
+      - name: Fingerprint toolchain inputs
+        id: fingerprint
+        run: |
+          value="$(python3 .github/scripts/build-input-fingerprint.py toolchain)"
+          echo "value=${value}" >> "$GITHUB_OUTPUT"
+
       - name: Build toolchain image locally
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
@@ -76,6 +76,7 @@ jobs:
           provenance: false
           tags: ${{ env.IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
           labels: |
+            com.arm.mcp.build-input-fingerprint=${{ steps.fingerprint.outputs.value }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.title=Arm MCP embedding toolchain

@@ -66,8 +66,7 @@ ENV PATH="/embedding-data/.venv/bin:${PATH}" \
 WORKDIR /embedding-data
 
 # uv is intentionally build-only. The final toolchain contains the locked
-# environment, local model, and generation programs, but no package manager.
+# environment and local model, but no generation programs or package manager.
 COPY --from=builder /embedding-data/.venv /embedding-data/.venv
 COPY --from=builder /embedding-data/embedding-model /embedding-data/embedding-model
-COPY document_chunking.py agi_product_brief.py ecosystem_dashboard.py learn_repository.py learn_public.py generate-chunks.py local_vectorstore_creation.py \
-    embedding-model.lock.json ./
+COPY embedding-model.lock.json ./

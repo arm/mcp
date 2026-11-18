@@ -1272,15 +1272,22 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
         ".python-version",
         "Dockerfile.toolchain",
         "acquire-model.py",
-        "document_chunking.py",
-        "ecosystem_dashboard.py",
         "embedding-model.lock.json",
-        "generate-chunks.py",
-        "local_vectorstore_creation.py",
         "pyproject.toml",
         "uv.lock",
     ):
         assert f"embedding-generation/{source}" in workflow_triggers
+    for source in (
+        "agi_product_brief.py",
+        "document_chunking.py",
+        "ecosystem_dashboard.py",
+        "generate-chunks.py",
+        "learn_public.py",
+        "learn_repository.py",
+        "local_vectorstore_creation.py",
+    ):
+        assert f"embedding-generation/{source}" not in workflow_triggers
+        assert source not in TOOLCHAIN_DOCKERFILE
     assert "propose-toolchain-pin:" in TOOLCHAIN_WORKFLOW
     assert "update-embedding-toolchain-pin.py" in TOOLCHAIN_WORKFLOW
     assert "automation/pin-embedding-generator" in TOOLCHAIN_WORKFLOW
@@ -1293,6 +1300,51 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
     assert "subject-name: ${{ env.IMAGE }}" in TOOLCHAIN_WORKFLOW
     assert "subject-digest: ${{ steps.publish.outputs.digest }}" in TOOLCHAIN_WORKFLOW
     assert "push-to-registry: true" in TOOLCHAIN_WORKFLOW
+
+
+def test_generation_stages_use_checkout_scripts_with_pinned_toolchain() -> None:
+    generation = REPOSITORY / "embedding-generation"
+    acquisition = (generation / "Dockerfile.acquire").read_text()
+    vectorstore = (generation / "Dockerfile.vectorstore").read_text()
+    dockerignore = (generation / ".dockerignore").read_text()
+    stage_scripts = (
+        (
+            acquisition,
+            (
+                "agi_product_brief.py",
+                "document_chunking.py",
+                "ecosystem_dashboard.py",
+                "generate-chunks.py",
+                "learn_public.py",
+                "learn_repository.py",
+            ),
+        ),
+        (vectorstore, ("local_vectorstore_creation.py",)),
+    )
+    for stage, scripts in stage_scripts:
+        assert "FROM toolchain AS " in stage
+        instructions = stage.replace("\\\n", " ").splitlines()
+        for script in scripts:
+            assert f"!{script}" in dockerignore
+            assert (generation / script).is_file()
+            assert any(
+                line.startswith("COPY ")
+                and script in line.split()[1:-1]
+                and line.split()[-1] == "/embedding-data/"
+                for line in instructions
+            )
+        assert stage.index("COPY ") < stage.index("RUN ")
+    assert "RUN --network=none" in vectorstore
+    assert "          network: none\n" in EMBEDDING_WORKFLOW
+    assert (
+        "toolchain=docker-image://${{ steps.inputs.outputs.generator_image }}"
+        in EMBEDDING_WORKFLOW
+    )
+    assert (
+        "toolchain=docker-image://${{ "
+        "needs.acquire-and-publish-chunks.outputs.generator-image }}"
+        in EMBEDDING_WORKFLOW
+    )
 
 
 def test_embedding_toolchain_uses_fixed_python_version() -> None:
