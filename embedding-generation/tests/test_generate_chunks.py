@@ -32,16 +32,66 @@ from arm_kb_search.context import DocumentContextIndex
 from document_chunking import (
     chunk_parsed_document,
     extract_markdown_links,
-    learn_learning_path_step_urls,
     link_text_with_urls,
     parse_document_content,
     split_frontmatter,
     strip_frontmatter,
 )
+from learn_repository import LearnSources, Repository
 
 FIXTURE_DIR = Path(__file__).parent
 SAMPLE_PPTX_FIXTURE = "sample_course_slides.pptx"
 LEARNING_PATH = "https://learn.arm.com/learning-paths/cross-platform/example/"
+
+
+def _repository_path(gc, monkeypatch, missing_step=False, weights=(10, 20), next_steps=""):
+    prefix = "content/learning-paths/cross-platform/example/"
+    body = "## First section {#z}\n\nFirst text.\n\n## Second section {#a}\n\nSecond text."
+    files = {
+        prefix + "_index.md": "---\ntitle: Intro\n---\nOverview.",
+        prefix + "z-first.md": f"---\ntitle: First\nweight: {weights[0]}\n---\n" + body,
+        prefix + "a-second.md": f"---\ntitle: Second\nweight: {weights[1]}\n---\n" + ("" if missing_step else body),
+        prefix + "_next-steps.md": "---\ntitle: Next Steps\nweight: 21\nlayout: learningpathall\n---\n" + next_steps,
+    }
+    sources = LearnSources(None)
+    sources.repositories["learning_paths"] = Repository("ArmDeveloperEcosystem/arm-learning-paths", "a" * 40, files)
+    monkeypatch.setattr(gc, "learn_sources", sources)
+    monkeypatch.setattr(gc, "fetch_with_logging", lambda *_: pytest.fail("Learning Paths must use the repository"))
+    return sources
+
+
+def test_authored_next_steps_remain_in_learning_path_context(gc, monkeypatch):
+    _repository_path(gc, monkeypatch, next_steps="## Extend the example\n\nAdd another Arm device.")
+    records = [c.toDict() for c in gc.create_chunks_for_source(LEARNING_PATH, "Example", "Learning Paths", "")]
+    manifest = [LEARNING_PATH, LEARNING_PATH + "z-first/", LEARNING_PATH + "a-second/", LEARNING_PATH + "_next-steps/"]
+    assert all(r["document_context"]["learning_path_pages"] == manifest for r in records)
+    state = SearchResources(records, None, None, None)
+    hits = DocumentContextIndex(records, state).expand([{"metadata": records[0]}], "parent_resource")
+    assert list(dict.fromkeys(h["context"]["page_url"] for h in hits)) == manifest
+    assert "Add another Arm device." in state.snippet_for(hits[-1]["metadata"])
+
+
+def test_frontmatter_only_demo_is_retained_in_parent_context(gc, monkeypatch):
+    sources = _repository_path(gc, monkeypatch)
+    files = dict(sources.repositories["learning_paths"].files)
+    files["content/learning-paths/cross-platform/example/_demo.md"] = (
+        "---\ntitle: Chatbot demo\nweight: 5\n"
+        "overview: Run an Arm chatbot.\n"
+        "demo_steps:\n  - Send a message.\n  - Read the response.\n"
+        "stats_description: The timing includes preprocessing.\n"
+        "example_user_prompts:\n  - How do I build for Arm?\n---\n"
+    )
+    sources.repositories["learning_paths"] = Repository("ArmDeveloperEcosystem/arm-learning-paths", "a" * 40, files)
+    records = [c.toDict() for c in gc.create_chunks_for_source(LEARNING_PATH, "Example", "Learning Paths", "")]
+    state = SearchResources(records, None, None, None)
+    hits = DocumentContextIndex(records, state).expand([{"metadata": records[0]}], "parent_resource")
+    assert list(dict.fromkeys(h["context"]["page_url"] for h in hits)) == [
+        LEARNING_PATH, LEARNING_PATH + "_demo/", LEARNING_PATH + "z-first/", LEARNING_PATH + "a-second/",
+    ]
+    demo = "\n".join(state.snippet_for(h["metadata"]) for h in hits if h["context"]["page_url"].endswith("/_demo/"))
+    for text in ("Run an Arm chatbot.", "Send a message.", "Read the response.",
+                 "The timing includes preprocessing.", "How do I build for Arm?"):
+        assert text in demo
 
 
 @pytest.mark.parametrize("source_url,missing_step", [
@@ -50,22 +100,8 @@ LEARNING_PATH = "https://learn.arm.com/learning-paths/cross-platform/example/"
 ])
 def test_document_context_preserves_chunks_and_verified_path_navigation(gc, monkeypatch, missing_step, source_url):
     first, second = LEARNING_PATH + "z-first/", LEARNING_PATH + "a-second/"
-    root = (f'<main><h1>Intro</h1><p>Overview.</p>'
-            f'<a class="inner-learning-path-navbar-element 20-weight" href="{second}">Second</a>'
-            f'<a class="inner-learning-path-navbar-element 10-weight" href="{first}">First</a>'
-            f'<a class="inner-learning-path-navbar-element 10-weight content-individual-a-mobile" href="{first}">Mobile</a></main>')
-    body = '<main><h2 id="z">First section</h2><p>First text.</p><h2 id="a">Second section</h2><p>Second text.</p></main>'
-    fetched = []
-    def fetch(url):
-        fetched.append(url)
-        if missing_step and url == second:
-            return None
-        return SimpleNamespace(url=LEARNING_PATH if url == source_url else url,
-                               content=(root if url == source_url else body).encode(),
-                               headers={"content-type": "text/html"})
-    monkeypatch.setattr(gc, "fetch_with_logging", fetch)
+    _repository_path(gc, monkeypatch, missing_step)
     records = [c.toDict() for c in gc.create_chunks_for_source(source_url, "Example", "Learning Paths", "")]
-    assert set(fetched) == {source_url, first, second}
     assert records
     manifest = [LEARNING_PATH, first, second]
     assert all(r["document_context"]["learning_path_pages"] == manifest for r in records)
@@ -76,29 +112,69 @@ def test_document_context_preserves_chunks_and_verified_path_navigation(gc, monk
     assert [r["document_context"]["chunk_index"] for r in page] == [0, 1]
     assert all(r["document_context"]["chunk_count"] == 2 for r in page)
     assert [r["heading"] for r in page] == ["First section", "Second section"]
-    assert not learn_learning_path_step_urls(LEARNING_PATH, f'<a href="{first}">Unordered link</a>', ordered_only=True)
+    state = SearchResources(records, None, None, None)
+    catalog = DocumentContextIndex(records, state)
+    if missing_step:
+        with pytest.raises(ValueError, match="document is missing"):
+            catalog.expand([{"metadata": records[-1]}], "parent_resource")
+    else:
+        hits = catalog.expand([{"metadata": records[-1]}], "parent_resource")
+        assert [h["context"]["page_url"] for h in hits] == [LEARNING_PATH, first, first, second, second]
 
 
 def test_acquired_parent_citation_variants_expand_together(gc, monkeypatch):
-    step = LEARNING_PATH + "step/"
-    root_html = (f'<main><h1>Intro</h1><p>Overview.</p>'
-                 f'<a class="inner-learning-path-navbar-element 10-weight" href="{step}">Step</a></main>')
-    step_html = '<main><h1>Step</h1><p>Step instructions.</p></main>'
-    def fetch(url):
-        return SimpleNamespace(url=step if url == step else LEARNING_PATH,
-                               content=(step_html if url == step else root_html).encode(),
-                               headers={"content-type": "text/html"})
-    monkeypatch.setattr(gc, "fetch_with_logging", fetch)
+    _repository_path(gc, monkeypatch)
     records = []
-    for url in (LEARNING_PATH, LEARNING_PATH.rstrip("/"), LEARNING_PATH + "?utm_source=test"):
+    # A child CSV row may be processed first and retained by deduplication.
+    for url in (LEARNING_PATH + "z-first/", LEARNING_PATH, LEARNING_PATH.rstrip("/"), LEARNING_PATH + "?utm_source=test"):
         records.extend(c.toDict() for c in gc.create_chunks_for_source(url, "Example", "Learning Paths", ""))
     state = SearchResources(records, None, None, None)
     catalog = DocumentContextIndex(records, state)
     hits = catalog.expand([{"metadata": records[-1]}], "parent_resource")
-    assert [h["context"]["page_url"] for h in hits] == [LEARNING_PATH, step]
-    assert [h["context"]["page_count"] for h in hits] == [2, 2]
+    assert [h["context"]["page_url"] for h in hits] == [LEARNING_PATH, *([LEARNING_PATH + "z-first/"] * 2), *([LEARNING_PATH + "a-second/"] * 2)]
+    assert [h["context"]["page_count"] for h in hits] == [3] * 5
     assert "Overview." in state.snippet_for(hits[0]["metadata"])
-    assert "Step instructions." in state.snippet_for(hits[1]["metadata"])
+    assert "First text." in state.snippet_for(hits[1]["metadata"])
+    assert records[0]["document_context"]["learning_path_pages"] == records[-1]["document_context"]["learning_path_pages"]
+
+
+@pytest.mark.parametrize("weights", [(10, 10), (10, 0), (10, -1), (10, "unknown"), (10, "")])
+def test_repository_does_not_invent_learning_path_order(gc, monkeypatch, weights):
+    _repository_path(gc, monkeypatch, weights=weights)
+    records = [c.toDict() for c in gc.create_chunks_for_source(LEARNING_PATH, "Example", "Learning Paths", "")]
+    assert records
+    assert all("learning_path_pages" not in r["document_context"] for r in records)
+    state = SearchResources(records, None, None, None)
+    with pytest.raises(ValueError, match="page order is absent or invalid"):
+        DocumentContextIndex(records, state).expand([{"metadata": records[-1]}], "parent_resource")
+
+
+@pytest.mark.parametrize("max_tokens", [25, 600])
+def test_saved_html_chunks_preserve_highlighted_code_indentation(gc, monkeypatch, tmp_path, max_tokens):
+    import yaml
+
+    code = 'def run():\n    for item in items:\n        print("two  spaces", item)\n\n\n    return True'
+    html = (
+        '<main><h1>Example</h1><h2 id="run">Run</h2><p>Run this example.</p>'
+        '<pre><code><span>def</span> run():\n    <span>for</span> item in items:\n'
+        '        print("two  spaces", item)\n\n\n    return True</code></pre>'
+        '<p>Check the result.</p></main>'
+    )
+    doc = parse_document_content(
+        "https://example.com/", "https://example.com/", html.encode(), "text/html", "Example"
+    )
+    chunks = chunk_parsed_document(doc, "Guide", [], min_tokens=10, max_tokens=max_tokens, overlap_tokens=5)
+    monkeypatch.setattr(gc, "yaml_dir", str(tmp_path))
+    details = tmp_path / "details.csv"
+    details.write_text("URL,Date,Number of Words,Number of Chunks,Chunk IDs\n")
+    monkeypatch.setattr(gc, "details_file", str(details))
+    for payload in chunks:
+        gc.chunkSaveAndTrack(payload["url"], gc.chunk_from_payload(payload, []))
+    saved = [yaml.safe_load(path.read_text())["content"] for path in tmp_path.glob("chunk_*.yaml")]
+    examples = [text for text in saved if "def run():" in text]
+    assert len(examples) == 1
+    assert f"```\n{code}\n```" in examples[0]
+    assert all(text.count("```") % 2 == 0 for text in saved)
 
 
 def test_relative_link_evidence_is_retained_when_url_prefix_is_embedded():
@@ -411,7 +487,7 @@ class TestDocumentChunkingAnchors:
         assert all(c["url"] == parsed.source_url for c in chunks)
         assert all(not {"page_url", "parent_page_url"} & c.keys() for c in chunks)
 
-    def test_pdf_chunks_keep_the_document_url(self, gc):
+    def test_pdf_chunks_keep_page_citations_and_document_identity(self, gc):
         from io import BytesIO
 
         from pypdf import PdfWriter
@@ -435,8 +511,9 @@ class TestDocumentChunkingAnchors:
         records = [gc.chunk_from_payload(c, []).toDict()
                    for c in chunk_parsed_document(parsed, "Documentation", [])]
         assert records and "package manager" in records[0]["content"]
-        assert all(r["url"] == url and r["content_type"] == "pdf" for r in records)
-        assert all(not {"page_url", "parent_page_url"} & r.keys() for r in records)
+        assert all(r["url"] == url + "#page=1" and r["content_type"] == "pdf" for r in records)
+        assert all(r["page_url"] == url and r["document_context"]["url"] == url for r in records)
+        assert all("parent_page_url" not in r for r in records)
 
     def test_notebook_text_outputs_skip_binary_payloads(self):
         notebook = {
@@ -582,22 +659,6 @@ class TestDocumentChunkingAnchors:
         assert chunks[0]["heading_path"] == ["Devices with native SME2 support"]
         assert chunks[0]["page_url"] == parsed.source_url
         assert "parent_page_url" not in chunks[0]
-
-    def test_learn_learning_path_step_urls_discovers_same_path_steps(self):
-        html = (
-            b"<main>"
-            b"<a href='/learning-paths/cross-platform/example/1-get-started/'>Start</a>"
-            b"<a href='/learning-paths/cross-platform/example/1-get-started/#devices'>Devices</a>"
-            b"<a href='/learning-paths/cross-platform/other/1-get-started/'>Other</a>"
-            b"</main>"
-        )
-
-        assert learn_learning_path_step_urls(
-            "https://learn.arm.com/learning-paths/cross-platform/example/",
-            html,
-        ) == [
-            "https://learn.arm.com/learning-paths/cross-platform/example/1-get-started/"
-        ]
 
     def test_html_table_under_heading_is_returned_as_anchor_chunk(self):
         parsed = parse_document_content(
@@ -766,73 +827,6 @@ class TestSourceTracking:
         assert gc.all_sources[0]["site_name"] == "Test Site"
         assert gc.all_sources[0]["display_name"] == "Test Display"
         assert gc.all_sources[0]["keywords"] == "test"
-
-    def test_valid_child_is_added_and_emitted_when_enabled(self, gc, monkeypatch):
-        """A valid child is registered and emitted when chunking is enabled."""
-        prefix = "https://learn.arm.com/install-guides/"
-        listing_url = "https://learn.arm.com/install-guides"
-        docker_url = f"{prefix}docker/"
-        child_url = f"{docker_url}docker-engine/"
-        responses = {
-            listing_url: _html_response(_install_listing({docker_url})),
-            docker_url: _html_response(
-                '<h1 id="install-guide-title">Docker</h1>'
-                '<div class="multi-install-card" '
-                'link="/install-guides/docker/docker-engine/"></div>'
-            ),
-            child_url: _html_response(
-                '<h1 id="ads-masthead-title"><span>Docker Engine</span></h1>'
-            ),
-        }
-        monkeypatch.setattr(
-            gc.http_session,
-            "get",
-            lambda url, timeout: responses[url],
-        )
-        fetched_urls = []
-
-        def fake_fetch(url):
-            fetched_urls.append(url)
-            return None
-
-        monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
-
-        gc.processLearningPath("/install-guides", "Install Guide", emit_chunks=True)
-
-        child_source = next(
-            source for source in gc.all_sources if source["url"] == child_url
-        )
-        assert child_source["display_name"] == "Install Guide - Docker Engine"
-        assert child_source["keywords"].startswith("Docker Engine; Docker;")
-        assert fetched_urls == [
-            "https://raw.githubusercontent.com/ArmDeveloperEcosystem/"
-            "arm-learning-paths/refs/heads/production/content/"
-            "install-guides/docker/docker-engine.md"
-        ]
-
-    def test_invalid_child_titles_are_rejected(self, gc, monkeypatch):
-        """Unavailable or malformed child pages do not produce a title."""
-        child_url = "https://learn.arm.com/install-guides/docker/docker-engine/"
-
-        monkeypatch.setattr(
-            gc.http_session,
-            "get",
-            lambda url, timeout: _html_response("", ok=False, status_code=404),
-        )
-        assert gc.get_install_guide_title(child_url) is None
-
-        def raise_request_exception(url, timeout):
-            raise gc.requests.exceptions.RequestException("network failure")
-
-        monkeypatch.setattr(gc.http_session, "get", raise_request_exception)
-        assert gc.get_install_guide_title(child_url) is None
-
-        monkeypatch.setattr(
-            gc.http_session,
-            "get",
-            lambda url, timeout: _html_response("<html></html>"),
-        )
-        assert gc.get_install_guide_title(child_url) is None
 
     def test_register_source_inserts_after_matching_site_group(self, gc):
         """Test that new sources stay grouped with existing sources from the same site."""
@@ -1069,192 +1063,6 @@ class TestSourceTracking:
         assert len(gc.all_sources) == 2
         assert "https://example.com/test" in gc.known_source_urls
         assert gc.known_source_urls == {"https://example.com/test", "https://new.example.com"}
-
-
-class TestGetMarkdownGitHubURLsFromPage:
-    """Tests for getMarkdownGitHubURLsFromPage function."""
-
-    def test_migration_url(self, gc):
-        """Test handling of migration page URL."""
-        gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage(
-            "https://learn.arm.com/migration"
-        )
-
-        assert len(gh_urls) == 1
-        assert len(site_urls) == 1
-        parsed = urlparse(gh_urls[0])
-        assert parsed.hostname == "raw.githubusercontent.com"
-        assert "migration/_index.md" in gh_urls[0]
-        assert site_urls[0] == "https://learn.arm.com/migration"
-
-    def test_graviton_url(self, gc):
-        """Test handling of Graviton getting started URL."""
-        url = "https://github.com/aws/aws-graviton-getting-started/blob/main/README.md"
-        gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage(url)
-
-        assert len(gh_urls) == 1
-        assert len(site_urls) == 1
-        assert (
-            "raw.githubusercontent.com/aws/aws-graviton-getting-started" in gh_urls[0]
-        )
-        assert "README.md" in gh_urls[0]
-
-    def test_graviton_nested_url(self, gc):
-        """Test handling of nested Graviton URL."""
-        url = "https://github.com/aws/aws-graviton-getting-started/blob/main/machinelearning/pytorch.md"
-        gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage(url)
-
-        assert len(gh_urls) == 1
-        assert "machinelearning/pytorch.md" in gh_urls[0]
-
-    def test_unknown_url_returns_empty(self, gc, capsys):
-        """Test that unknown URLs return empty lists and print warning."""
-        gh_urls, site_urls = gc.getMarkdownGitHubURLsFromPage(
-            "https://unknown.com/page"
-        )
-
-        assert gh_urls == []
-        assert site_urls == []
-
-        captured = capsys.readouterr()
-        assert "doesnt match expected format" in captured.out
-
-
-class TestObtainTextSnippetsMarkdown:
-    """Tests for obtainTextSnippets__Markdown function."""
-
-    def test_single_short_content(self, gc):
-        """Test content shorter than min_words stays as one chunk."""
-        content = "This is a short piece of content with only a few words."
-
-        chunks = gc.obtainTextSnippets__Markdown(content, min_words=10, max_words=50)
-
-        assert len(chunks) == 1
-
-    def test_split_by_h2(self, gc):
-        """Test that content is split by h2 headings."""
-        content = (
-            """
-## Section One
-"""
-            + "word " * 350
-            + """
-
-## Section Two
-"""
-            + "word " * 350
-        )
-
-        chunks = gc.obtainTextSnippets__Markdown(content, min_words=300, max_words=500)
-
-        assert len(chunks) >= 2
-
-    def test_split_by_h3_when_h2_too_large(self, gc):
-        """Test that large h2 sections are split by h3."""
-        content = (
-            """
-## Large Section
-"""
-            + "word " * 200
-            + """
-### Subsection One
-"""
-            + "word " * 350
-            + """
-### Subsection Two
-"""
-            + "word " * 350
-        )
-
-        chunks = gc.obtainTextSnippets__Markdown(content, min_words=300, max_words=500)
-
-        # Should have multiple chunks due to h3 splitting
-        assert len(chunks) >= 2
-
-    def test_small_final_chunk_merged(self, gc):
-        """Test that small final chunks are merged with previous."""
-        content = "word " * 400 + "\n\n" + "short ending"
-
-        chunks = gc.obtainTextSnippets__Markdown(
-            content, min_words=300, max_words=500, min_final_words=50
-        )
-
-        # The small ending should be merged
-        assert len(chunks) == 1
-        assert "short ending" in chunks[0]
-
-    def test_empty_content(self, gc):
-        """Test handling of empty content."""
-        chunks = gc.obtainTextSnippets__Markdown("")
-
-        assert chunks == [] or chunks == [""]
-
-    def test_respects_max_words(self, gc):
-        """Test that chunks don't significantly exceed max_words when headers are present."""
-        # Create content with h2 headers to enable splitting
-        content = (
-            """
-## Section One
-"""
-            + "word " * 400
-            + """
-
-## Section Two
-"""
-            + "word " * 400
-            + """
-
-## Section Three
-"""
-            + "word " * 400
-        )
-
-        chunks = gc.obtainTextSnippets__Markdown(
-            content, min_words=100, max_words=200, min_final_words=50
-        )
-
-        # With headers, content should be split into multiple chunks
-        assert len(chunks) >= 2
-
-    def test_prepends_document_title_and_heading_path(self, gc):
-        """Structured chunks should carry the document title and heading path prefix."""
-        content = (
-            """
-# Deployment Guide
-
-## Install
-"""
-            + "word " * 350
-        )
-
-        chunks = gc.obtainTextSnippets__Markdown(content, min_words=150, max_words=400)
-
-        assert len(chunks) >= 1
-        assert chunks[0].startswith("Document Title: Deployment Guide")
-        assert "Heading Path: Install" in chunks[0]
-
-    def test_keeps_code_with_neighboring_explanation(self, gc):
-        """Code blocks should remain grouped with nearby explanatory text."""
-        content = """
-# Example Guide
-
-## Build
-First install dependencies and verify the environment is ready for compilation.
-
-```bash
-make build
-make test
-```
-
-Use the generated binary to verify the expected output and continue with setup.
-""" + ("\n\nAdditional context. " * 120)
-
-        chunks = gc.obtainTextSnippets__Markdown(content, min_words=100, max_words=250)
-
-        matching = [chunk for chunk in chunks if "make build" in chunk]
-        assert matching
-        assert "First install dependencies" in matching[0]
-        assert "Use the generated binary" in matching[0]
 
 
 class TestReadInCSV:
@@ -1556,6 +1364,51 @@ class TestArmDocumentationParsing:
 class TestCreateChunksForSource:
     """Tests for generic source chunking."""
 
+    @pytest.mark.parametrize("path", ["README.md", "machinelearning/pytorch.md"])
+    def test_github_markdown_preserves_citations_headings_and_code_context(
+        self, gc, monkeypatch, path
+    ):
+        source_url = f"https://github.com/aws/aws-graviton-getting-started/blob/main/{path}"
+        raw_url = f"https://raw.githubusercontent.com/aws/aws-graviton-getting-started/refs/heads/main/{path}"
+        fetched_urls = []
+
+        def fetch(url):
+            fetched_urls.append(url)
+            return SimpleNamespace(
+                url=raw_url,
+                headers={"content-type": "text/plain"},
+                content=b"""# Deployment Guide
+
+## Build
+First install dependencies and verify the environment is ready for compilation.
+
+```bash
+make build
+make test
+```
+
+Use the generated binary to verify the expected output and continue with setup.
+""",
+            )
+
+        monkeypatch.setattr(gc, "fetch_with_logging", fetch)
+        chunks = gc.create_chunks_for_source(
+            "chrome-extension://reader/" + source_url.replace("https://", "https:/"),
+            "Graviton guide", "Documentation", "Arm; build",
+        )
+        assert fetched_urls == [raw_url]
+        assert len(chunks) == 1
+        chunk = chunks[0]
+        assert chunk.url == source_url
+        assert chunk.resolved_url == raw_url
+        assert chunk.title == "Deployment Guide"
+        assert chunk.heading_path == ["Build"]
+        assert chunk.content.startswith("Document Title: Deployment Guide\nHeading Path: Build")
+        assert "First install dependencies" in chunk.content
+        assert "make build\nmake test" in chunk.content
+        assert "Use the generated binary" in chunk.content
+        assert chunk.keywords == "arm, build, graviton guide"
+
     def test_unparseable_pptx_source_returns_empty_and_logs(
         self, gc, monkeypatch, capsys
     ):
@@ -1684,9 +1537,9 @@ class TestCreateTranscriptChunks:
         monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
 
         chunks = gc.create_chunks_for_source(
-            source_url="https://learn.arm.com/learning-paths/example/",
+            source_url="https://example.com/documentation/",
             source_name="Example",
-            doc_type="Learning Paths",
+            doc_type="Documentation",
             keywords_value="arm",
             transcript_url="   ",
         )
