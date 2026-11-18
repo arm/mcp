@@ -77,8 +77,11 @@ based on their signatures and a shared catalog URL. Existing IDs are retained,
 and a missing overload fails validation just like a missing intrinsic. New files
 use the `chunk_<uuid>.yaml` naming convention. Refreshed descriptions use catalog
 requirements; the old generic `-march` recommendations are not carried forward.
-Merge the automatic generator-pin update containing these ingestion changes
-before promoting the refreshed snapshot, so acquisition preserves overload order.
+Acquisition must use the updated `document_chunking.py` to preserve overload
+order. If `Dockerfile.acquire` copies generation scripts from the checkout,
+merging these changes is sufficient for the scripts. If it uses scripts baked
+into the generator image, merge the automatic generator-pin update first.
+Any separate dependency-image freshness checks must also pass.
 
 The run summary reports the published digest. Update `intrinsic_chunks_image`
 to that immutable reference in a reviewed PR. The normal Sunday embedding
