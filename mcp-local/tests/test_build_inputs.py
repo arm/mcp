@@ -1278,9 +1278,12 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
     ):
         assert f"embedding-generation/{source}" in workflow_triggers
     for source in (
+        "agi_product_brief.py",
         "document_chunking.py",
         "ecosystem_dashboard.py",
         "generate-chunks.py",
+        "learn_public.py",
+        "learn_repository.py",
         "local_vectorstore_creation.py",
     ):
         assert f"embedding-generation/{source}" not in workflow_triggers
@@ -1307,12 +1310,20 @@ def test_generation_stages_use_checkout_scripts_with_pinned_toolchain() -> None:
     stage_scripts = (
         (
             acquisition,
-            ("document_chunking.py", "ecosystem_dashboard.py", "generate-chunks.py"),
+            (
+                "agi_product_brief.py",
+                "document_chunking.py",
+                "ecosystem_dashboard.py",
+                "generate-chunks.py",
+                "learn_public.py",
+                "learn_repository.py",
+            ),
         ),
         (vectorstore, ("local_vectorstore_creation.py",)),
     )
     for stage, scripts in stage_scripts:
         assert "FROM toolchain AS " in stage
+        instructions = stage.replace("\\\n", " ").splitlines()
         for script in scripts:
             assert f"!{script}" in dockerignore
             assert (generation / script).is_file()
@@ -1320,7 +1331,7 @@ def test_generation_stages_use_checkout_scripts_with_pinned_toolchain() -> None:
                 line.startswith("COPY ")
                 and script in line.split()[1:-1]
                 and line.split()[-1] == "/embedding-data/"
-                for line in stage.splitlines()
+                for line in instructions
             )
         assert stage.index("COPY ") < stage.index("RUN ")
     assert "RUN --network=none" in vectorstore
