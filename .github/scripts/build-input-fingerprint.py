@@ -46,6 +46,29 @@ def fingerprint(kind: str, root: Path = ROOT) -> str:
     return hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()
 
 
+def image_fingerprint(image: str, platform: str) -> str:
+    inspect = ["docker", "buildx", "imagetools", "inspect"]
+    result = subprocess.check_output(
+        [*inspect, "--format", "{{json .Image}}", "--", image], text=True
+    )
+    configs = json.loads(result) or {}
+    # Buildx omits default variants from the platform keys in its config map.
+    aliases = {
+        "linux/amd64/v1": "linux/amd64",
+        "linux/arm/v7": "linux/arm",
+        "linux/arm64/v8": "linux/arm64",
+    }
+    # Buildx returns a bare config when the image has a single platform.
+    if "os" in configs:
+        parts = (configs["os"], configs["architecture"], configs.get("variant"))
+        key = "/".join(filter(None, parts))
+        configs = {aliases.get(key, key): configs}
+    config = configs.get(aliases.get(platform, platform))
+    if config is None:
+        raise ValueError(f"Pinned image {image} does not contain platform {platform}.")
+    return (config.get("config", {}).get("Labels") or {}).get(LABEL, "")
+
+
 def check(kind: str, expected: str, actual: str, image: str) -> None:
     if actual != expected:
         workflow = (
@@ -78,14 +101,8 @@ def main() -> None:
         return
     if not re.fullmatch(r"[^@\s]+@sha256:[0-9a-f]{64}", args.image):
         parser.error("--image must be pinned by sha256 digest")
-    subprocess.run(
-        ["docker", "pull", "--platform", args.platform, args.image], check=True
-    )
-    result = subprocess.check_output(
-        ["docker", "image", "inspect", args.image], text=True
-    )
-    actual = (json.loads(result)[0]["Config"].get("Labels") or {}).get(LABEL, "")
     try:
+        actual = image_fingerprint(args.image, args.platform)
         check(args.kind, expected, actual, args.image)
     except ValueError as error:
         print(f"::error::{error}")

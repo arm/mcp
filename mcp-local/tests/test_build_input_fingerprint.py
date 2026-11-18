@@ -101,26 +101,57 @@ def test_fingerprint_tracks_inputs_but_ignores_promotions_and_generation_code(
     assert fingerprints.fingerprint(kind, tmp_path) != original
 
 
-@pytest.mark.parametrize("actual", ["matching", "stale", None])
-def test_image_check_passes_only_with_matching_label(monkeypatch, capsys, actual):
+@pytest.mark.parametrize("multi_platform", [False, True])
+@pytest.mark.parametrize(
+    "platform,label,error",
+    [
+        ("linux/arm64", "matching", None),
+        ("linux/arm64/v8", "matching", None),
+        ("linux/arm64", "stale", "found stale"),
+        ("linux/arm64", None, "found missing"),
+        ("linux/s390x", "matching", "does not contain platform linux/s390x"),
+    ],
+)
+def test_image_check(monkeypatch, capsys, multi_platform, platform, label, error):
     image = "ghcr.io/arm/mcp-build-inputs@sha256:" + "a" * 64
     expected = fingerprints.fingerprint("mcp-inputs")
-    label = expected if actual == "matching" else actual
-    monkeypatch.setattr(sys, "argv", ["fingerprint", "mcp-inputs", "--image", image])
-    monkeypatch.setattr(fingerprints.subprocess, "run", lambda *args, **kwargs: None)
+    config = {
+        "os": "linux",
+        "architecture": "arm64",
+        "variant": "v8",
+        "config": {
+            "Labels": {fingerprints.LABEL: expected if label == "matching" else label}
+        },
+    }
+    metadata = config
+    if multi_platform:
+        metadata = {
+            "linux/arm64": config,
+            "linux/amd64": {"config": {"Labels": {fingerprints.LABEL: expected}}},
+        }
+    monkeypatch.setattr(
+        sys, "argv", ["fingerprint", "mcp-inputs", "--image", image, "--platform", platform]
+    )
+
+    def inspect(command, *, text):
+        assert command[:4] == ["docker", "buildx", "imagetools", "inspect"]
+        assert command[-1] == image and text
+        return json.dumps(metadata)
+
     monkeypatch.setattr(
         fingerprints.subprocess,
-        "check_output",
-        lambda *args, **kwargs: json.dumps(
-            [{"Config": {"Labels": {fingerprints.LABEL: label}}}]
-        ),
+        "run",
+        lambda *args, **kwargs: pytest.fail("unexpected pull"),
     )
-    if actual == "matching":
+    monkeypatch.setattr(fingerprints.subprocess, "check_output", inspect)
+    if error is None:
         fingerprints.main()
     else:
         with pytest.raises(SystemExit) as failure:
             fingerprints.main()
         assert failure.value.code == 1
         message = capsys.readouterr().out
-        assert "Check for a pending pin-update PR" in message
-        assert "merge its pin-update PR" in message
+        assert error in message
+        if label != "matching":
+            assert "Check for a pending pin-update PR" in message
+            assert "merge its pin-update PR" in message
