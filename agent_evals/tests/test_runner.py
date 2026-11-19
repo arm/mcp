@@ -59,7 +59,7 @@ class RunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(RunnerError, "invalid skills_root"):
                 _install_skills([({"name": "server", "skills_root": "missing"}, source)], profile)
 
-    def test_timeout_still_verifies_saved_workspace(self):
+    def test_timeout_and_cleanup_error_still_verify_saved_workspace(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             check = (
@@ -84,7 +84,8 @@ class RunnerTests(unittest.TestCase):
                                 timeout_seconds, *, docker_access=False):
                 (workspace / "working.txt").write_text("done\n", encoding="utf-8")
                 return ({"status": "timeout", "elapsed_seconds": 30.0,
-                         "usage": None, "trace": None, "final_answer": None}, [])
+                         "usage": None, "trace": None, "final_answer": None,
+                         "mcp_cleanup_error": "Docker daemon unavailable"}, [])
 
             output = root / "output"
             summary = run_scenario(
@@ -95,6 +96,7 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(result["agent"]["status"], "timeout")
             self.assertEqual(result["verifier"]["status"], "passed")
             self.assertEqual(result["status"], "timeout")
+            self.assertEqual(result["agent"]["mcp_cleanup_error"], "Docker daemon unavailable")
             self.assertEqual(summary["passed"], 0)
 
     def test_patch_respects_gitignore_and_captures_other_new_files(self):

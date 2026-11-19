@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import os
 import signal
+import subprocess
 import sys
 import tempfile
 import time
@@ -13,10 +14,93 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from agent_evals.codex_adapter import run_codex
+from agent_evals.codex_adapter import _cleanup_docker_mcp_containers, run_codex
+from agent_evals.runner import RunnerError
 
 
 class AdapterHardeningTests(unittest.TestCase):
+    def test_cleanup_continues_to_other_mcp_servers_after_an_error(self):
+        calls = []
+
+        def docker_command(args, **kwargs):
+            calls.append(args)
+            if args[1] == "ps" and args[-1] == "label=first":
+                return subprocess.CompletedProcess(args, 1, "", "daemon error")
+            if args[1] == "ps":
+                return subprocess.CompletedProcess(args, 0, "second-container\n", "")
+            return subprocess.CompletedProcess(args, 0, "second-container\n", "")
+
+        with patch("agent_evals.codex_adapter.subprocess.run", side_effect=docker_command):
+            with self.assertRaisesRegex(RunnerError, "daemon error"):
+                _cleanup_docker_mcp_containers(
+                    [("docker", "first"), ("docker", "second")], os.environ.copy(),
+                )
+        self.assertEqual(calls[-1],
+                         ["docker", "rm", "--force", "--volumes", "second-container"])
+
+    def test_docker_mcp_cleanup_preserves_agent_result_on_error(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake_codex = root / "fake-codex"
+            fake_codex.write_text(
+                f"#!{sys.executable}\n"
+                "import json, sys, time\n"
+                "from pathlib import Path\n"
+                "args = sys.argv[1:]\n"
+                "configs = dict(args[i + 1].split('=', 1) for i, arg in "
+                "enumerate(args[:-1]) if arg == '-c')\n"
+                "trial = Path(args[args.index('-o') + 1]).parent\n"
+                "(trial / 'mcp-args.json').write_text(configs['mcp_servers.arm.args'])\n"
+                "sys.stdin.read()\n"
+                "if (trial / 'hang').exists(): time.sleep(60)\n"
+                "print(json.dumps({'type': 'turn.completed', 'usage': "
+                "{'input_tokens': 1, 'output_tokens': 1}}))\n",
+                encoding="utf-8",
+            )
+            fake_codex.chmod(0o755)
+            server = {"name": "arm", "launch": ["docker", "run", "--rm", "-i", "test-image"]}
+
+            for hangs, cleanup_fails in ((False, False), (True, False), (False, True)):
+                with self.subTest(hangs=hangs, cleanup_fails=cleanup_fails):
+                    trial = root / ("timeout" if hangs else
+                                    "cleanup-error" if cleanup_fails else "completed")
+                    workspace = trial / "workspace"
+                    workspace.mkdir(parents=True)
+                    if hangs:
+                        (trial / "hang").touch()
+                    docker_calls = []
+
+                    def docker_command(args, **kwargs):
+                        docker_calls.append(args)
+                        if args[1] == "ps":
+                            if cleanup_fails:
+                                return subprocess.CompletedProcess(args, 1, "", "daemon error")
+                            return subprocess.CompletedProcess(args, 0, "owned-container\n", "")
+                        return subprocess.CompletedProcess(args, 0, "owned-container\n", "")
+
+                    with patch("agent_evals.codex_adapter.subprocess.run", side_effect=docker_command):
+                        result = run_codex(
+                            {"agent": {"kind": "codex", "model": "test"}},
+                            [(server, root)], workspace, trial, "Test.\n",
+                            0.2 if hangs else 10, executable=str(fake_codex),
+                        )
+
+                    self.assertEqual(result["status"], "timeout" if hangs else "completed")
+                    launch = json.loads((trial / "mcp-args.json").read_text(encoding="utf-8"))
+                    self.assertEqual(launch[:3], ["run", "--label", launch[2]])
+                    self.assertTrue(launch[2].startswith("arm-agent-evals.mcp="))
+                    self.assertEqual(docker_calls[0][1:],
+                                     ["ps", "--all", "--quiet", "--filter", f"label={launch[2]}"])
+                    if cleanup_fails:
+                        self.assertIn("daemon error", result["mcp_cleanup_error"])
+                        self.assertEqual(len(docker_calls), 1)
+                    else:
+                        self.assertNotIn("mcp_cleanup_error", result)
+                        self.assertEqual(docker_calls[1],
+                                         ["docker", "rm", "--force", "--volumes",
+                                          "owned-container"])
+                    self.assertEqual(server["launch"], ["docker", "run", "--rm", "-i", "test-image"])
+
     def test_normal_codex_exit_stops_background_child(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

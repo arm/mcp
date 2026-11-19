@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -128,6 +129,34 @@ def _install_skills(
     return installed
 
 
+def _cleanup_docker_mcp_containers(
+    launches: list[tuple[str, str]], environment: dict[str, str],
+) -> None:
+    """Remove only containers labeled by this Codex attempt's MCP launches."""
+    errors: list[str] = []
+    for executable, label in launches:
+        try:
+            found = subprocess.run(
+                [executable, "ps", "--all", "--quiet", "--filter", f"label={label}"],
+                capture_output=True, text=True, timeout=10, env=environment,
+            )
+            if found.returncode != 0:
+                raise RunnerError(f"cannot find MCP containers for {label}: {found.stderr.strip()}")
+            for container_id in found.stdout.split():
+                removed = subprocess.run(
+                    [executable, "rm", "--force", "--volumes", container_id],
+                    capture_output=True, text=True, timeout=10, env=environment,
+                )
+                if removed.returncode != 0 and "No such container" not in removed.stderr:
+                    errors.append(f"cannot remove MCP container {container_id}: {removed.stderr.strip()}")
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            errors.append(f"cannot clean up MCP containers for {label}: {exc}")
+        except RunnerError as exc:
+            errors.append(str(exc))
+    if errors:
+        raise RunnerError("; ".join(errors))
+
+
 def run_codex(
     configuration: dict[str, Any],
     servers: list[tuple[dict[str, Any], Path]],
@@ -164,10 +193,16 @@ def run_codex(
                     "stderr": stderr.name, "final_answer": None}
         args.extend(["--add-dir", str(docker_socket.parent),
                      "-c", "sandbox_workspace_write.network_access=true"])
+    docker_mcp_launches: list[tuple[str, str]] = []
     for server, source_dir in servers:
+        launch = list(server["launch"])
+        if Path(launch[0]).name == "docker" and launch[1:2] == ["run"]:
+            label = f"arm-agent-evals.mcp={uuid.uuid4().hex}"
+            launch[2:2] = ["--label", label]
+            docker_mcp_launches.append((launch[0], label))
         prefix = f"mcp_servers.{server['name']}"
-        args.extend(["-c", f"{prefix}.command={_toml_value(server['launch'][0])}"])
-        args.extend(["-c", f"{prefix}.args={_toml_value(server['launch'][1:])}"])
+        args.extend(["-c", f"{prefix}.command={_toml_value(launch[0])}"])
+        args.extend(["-c", f"{prefix}.args={_toml_value(launch[1:])}"])
         args.extend(["-c", f"{prefix}.cwd={_toml_value(str(source_dir))}"])
         args.extend(["-c", f"{prefix}.required=true"])
         if "default_tools_approval_mode" in server:
@@ -190,48 +225,60 @@ def run_codex(
     if docker_access:
         environment["DOCKER_HOST"] = f"unix://{docker_socket}"
         environment.pop("DOCKER_CONTEXT", None)
+    cleanup_environment = os.environ.copy()
+    cleanup_environment.update(configuration.get("environment", {}))
+    if docker_access:
+        cleanup_environment["DOCKER_HOST"] = environment["DOCKER_HOST"]
+        cleanup_environment.pop("DOCKER_CONTEXT", None)
     timed_out = False
+    cleanup_error = None
     # Keep user MCP servers and plugins out while retaining the provider and auth.
     # The temporary home (and its private auth copy) is removed after this turn.
-    with tempfile.TemporaryDirectory(prefix="arm-agent-eval-codex-") as codex_home:
-        _write_provider_config(original_codex_home, Path(codex_home))
-        auth_file = original_codex_home / "auth.json"
-        if auth_file.is_file():
-            auth_copy = Path(codex_home) / "auth.json"
-            descriptor = os.open(auth_copy, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(descriptor, "wb") as target, auth_file.open("rb") as source:
-                shutil.copyfileobj(source, target)
-        environment["CODEX_HOME"] = codex_home
-        started = time.monotonic()
-        with trace.open("wb") as stdout_file, stderr.open("wb") as stderr_file:
-            try:
-                process = subprocess.Popen(
-                    args + ["-"], stdin=subprocess.PIPE, stdout=stdout_file,
-                    stderr=stderr_file, cwd=workspace, env=environment,
-                    start_new_session=True,
-                )
-            except OSError as exc:
-                return {"status": "launch_error", "error": str(exc),
-                        "elapsed_seconds": None, "usage": None, "exit_code": None}
-            try:
-                process.communicate(input=prompt.encode("utf-8"), timeout=timeout_seconds)
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                _kill_process_group(process)
-                process.communicate()
-            except KeyboardInterrupt:
-                _kill_process_group(process)
-                process.communicate()
-                raise
-            else:
-                # Codex may exit while an MCP or shell child is still running.
-                _kill_process_group(process)
-        elapsed = time.monotonic() - started
+    try:
+        with tempfile.TemporaryDirectory(prefix="arm-agent-eval-codex-") as codex_home:
+            _write_provider_config(original_codex_home, Path(codex_home))
+            auth_file = original_codex_home / "auth.json"
+            if auth_file.is_file():
+                auth_copy = Path(codex_home) / "auth.json"
+                descriptor = os.open(auth_copy, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(descriptor, "wb") as target, auth_file.open("rb") as source:
+                    shutil.copyfileobj(source, target)
+            environment["CODEX_HOME"] = codex_home
+            started = time.monotonic()
+            with trace.open("wb") as stdout_file, stderr.open("wb") as stderr_file:
+                try:
+                    process = subprocess.Popen(
+                        args + ["-"], stdin=subprocess.PIPE, stdout=stdout_file,
+                        stderr=stderr_file, cwd=workspace, env=environment,
+                        start_new_session=True,
+                    )
+                except OSError as exc:
+                    return {"status": "launch_error", "error": str(exc),
+                            "elapsed_seconds": None, "usage": None, "exit_code": None}
+                try:
+                    process.communicate(input=prompt.encode("utf-8"), timeout=timeout_seconds)
+                except subprocess.TimeoutExpired:
+                    timed_out = True
+                    _kill_process_group(process)
+                    process.communicate()
+                except KeyboardInterrupt:
+                    _kill_process_group(process)
+                    process.communicate()
+                    raise
+                else:
+                    # Codex may exit while an MCP or shell child is still running.
+                    _kill_process_group(process)
+            elapsed = time.monotonic() - started
+    finally:
+        try:
+            _cleanup_docker_mcp_containers(docker_mcp_launches, cleanup_environment)
+        except RunnerError as exc:
+            cleanup_error = str(exc)
     usage, completed = _usage_from_trace(trace)
     status = ("timeout" if timed_out else
               "completed" if process.returncode == 0 and completed else
               "interrupted" if process.returncode < 0 else "failed")
-    return {
+    result = {
         "status": status,
         "exit_code": process.returncode,
         "elapsed_seconds": round(elapsed, 3),
@@ -240,6 +287,9 @@ def run_codex(
         "stderr": stderr.name,
         "final_answer": final_answer.name if final_answer.exists() else None,
     }
+    if cleanup_error is not None:
+        result["mcp_cleanup_error"] = cleanup_error
+    return result
 
 
 def run_codex_trial(
