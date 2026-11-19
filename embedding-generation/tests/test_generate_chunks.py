@@ -42,6 +42,8 @@ from learn_repository import LearnSources, Repository
 FIXTURE_DIR = Path(__file__).parent
 SAMPLE_PPTX_FIXTURE = "sample_course_slides.pptx"
 LEARNING_PATH = "https://learn.arm.com/learning-paths/cross-platform/example/"
+FILTER_TAGS = {"doc_type": ["learning"], "product": ["arm"],
+               "platform": ["linux", "windows"]}
 
 
 def _repository_path(gc, monkeypatch, missing_step=False, weights=(10, 20), next_steps=""):
@@ -98,10 +100,16 @@ def test_frontmatter_only_demo_is_retained_in_parent_context(gc, monkeypatch):
     (LEARNING_PATH, False), (LEARNING_PATH, True),
     (LEARNING_PATH.rstrip("/"), False), (LEARNING_PATH + "?utm_source=example", False),
 ])
-def test_document_context_preserves_chunks_and_verified_path_navigation(gc, monkeypatch, missing_step, source_url):
+@pytest.mark.parametrize("overrides", [None, FILTER_TAGS, {"product": None, "platform": []}])
+def test_document_context_preserves_chunks_and_verified_path_navigation(gc, monkeypatch, missing_step, source_url, overrides):
     first, second = LEARNING_PATH + "z-first/", LEARNING_PATH + "a-second/"
     _repository_path(gc, monkeypatch, missing_step)
-    records = [c.toDict() for c in gc.create_chunks_for_source(source_url, "Example", "Learning Paths", "")]
+    records = [c.toDict() for c in gc.create_chunks_for_source(
+        source_url, "Example", "Learning Paths", "", metadata_overrides=overrides)]
+    expected = {"doc_type": ["learning"], "product": ["arm"], "platform": []}
+    expected.update({k: v for k, v in (overrides or {}).items() if v is not None})
+    assert all(r.get("filter_metadata", {}) == expected for r in records)
+    assert all(r["doc_type"] == "Learning Paths" and isinstance(r["product"], str) for r in records)
     assert records
     manifest = [LEARNING_PATH, first, second]
     assert all(r["document_context"]["learning_path_pages"] == manifest for r in records)
@@ -1326,12 +1334,14 @@ class TestArmDocumentationParsing:
 
         monkeypatch.setattr(gc, "fetch_with_logging", fake_fetch)
 
-        chunks = gc.create_arm_documentation_chunks(
+        chunks = gc.create_chunks_for_source(
             source_url=source_url,
             source_name="Arm Reference Manual",
             doc_type="Reference",
             keywords_value="architecture; compiler",
+            metadata_overrides=FILTER_TAGS,
         )
+        assert all(c.toDict()["filter_metadata"] == FILTER_TAGS for c in chunks)
 
         assert fetched_urls == [root_fetch_url, overview_fetch_url, install_fetch_url]
         assert len(chunks) == 2
@@ -1485,7 +1495,9 @@ class TestCreateTranscriptChunks:
             doc_type="Educational Course",
             keywords_value="arm; ai; inference",
             transcript_url=transcript_url,
+            metadata_overrides=FILTER_TAGS,
         )
+        assert all(c.toDict()["filter_metadata"] == FILTER_TAGS for c in chunks)
 
         # The GitHub blob URL must be resolved to a raw fetch URL.
         assert fetched_urls == [raw_transcript_url]

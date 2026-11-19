@@ -1,7 +1,9 @@
 """Repository acquisition, Hugo source handling and Learn pipeline routing."""
 
+import csv
 import datetime as dt
 import io
+import json
 import tarfile
 from types import SimpleNamespace
 
@@ -33,6 +35,95 @@ def repository(files, kind="arm-learning-paths"):
         files,
         now=dt.datetime(2026, 10, 27, tzinfo=dt.timezone.utc),
     )
+
+
+@pytest.fixture
+def learn_build(gc, monkeypatch, tmp_path):
+    """Configure a Learn-only build; tests supply the CSV and repository."""
+    sources = LearnSources(None)
+    monkeypatch.setattr(gc, "learn_sources", sources)
+    monkeypatch.setattr(gc, "yaml_dir", str(tmp_path / "chunks"))
+    monkeypatch.setattr(gc, "details_file", str(tmp_path / "details.csv"))
+    monkeypatch.setattr(gc, "prepare_intrinsic_chunks", lambda: None)
+    monkeypatch.setattr(gc, "reconcile_ecosystem_sources", lambda **_: None)
+    monkeypatch.setattr("sys.argv", ["generate-chunks.py", str(tmp_path / "sources.csv")])
+    monkeypatch.setenv("SKIP_DISCOVERY", "1")
+    return sources
+
+
+@pytest.mark.parametrize("root_route", ["/learning-paths/cross-platform/new/", "/tutorials/new/"])
+@pytest.mark.parametrize("lesson_route", [None, "/lessons/demo-step/"])
+def test_discovered_sources_inherit_verified_tags_through_chunks(
+    gc, monkeypatch, tmp_path, root_route, lesson_route,
+):
+    root = "https://learn.arm.com" + root_route
+    repo = repository({
+        "content/learning-paths/cross-platform/new/_index.md": markdown(
+            "New AWS Graviton lesson", "Learn on Arm.", url=root_route,
+            operatingsystems=["Linux", "Windows"], armips=["Cortex-M", "Mali"],
+            tools_software_languages=["SME2", "SVE", "SVE2", "Neon", "Python"],
+            platforms=["Arm AGI CPU", "AWS Graviton"],
+        ),
+        "content/learning-paths/cross-platform/new/lesson.md": markdown(
+            "Lesson", "Build the example.", **({"url": lesson_route} if lesson_route else {})),
+        "content/install-guides/new.md": markdown("New tool", "Install it.", tool_install=True),
+    })
+    sources = LearnSources(None)
+    sources.repositories["learning_paths"] = repo
+    monkeypatch.setattr(sources.public, "discovered_sources", lambda: [])
+    monkeypatch.setattr(gc, "learn_sources", sources)
+    gc.discover_learn_sources()
+    path = tmp_path / "sources.csv"
+    gc.save_sources_csv(path)
+    config, count = gc.readInCSV(path)
+    assert count == 2
+    for i in range(count):
+        chunks = gc.create_chunks_for_source(
+            config["urls"][i], config["source_names"][i], config["site_names"][i],
+            config["focus"][i], metadata_overrides=config["metadata_overrides"][i],
+        )
+        expected = {"doc_type": ["guide"], "product": ["arm"], "platform": []}
+        if config["urls"][i] == root:
+            expected = {"doc_type": ["learning"], "product": ["arm"], "platform": [
+                "linux", "windows", "cortex-m", "mali", "sme2", "sve", "sve2", "neon", "agi-cpu",
+            ]}
+            assert len({chunk.url for chunk in chunks}) == 2
+        assert chunks and all(chunk.toDict()["filter_metadata"] == expected for chunk in chunks)
+    cleared = gc.create_chunks_for_source(root, "New", "Learning Paths", "", metadata_overrides={"platform": []})
+    assert cleared and all(chunk.filter_metadata == {
+        "doc_type": ["learning"], "product": ["arm"], "platform": [],
+    } for chunk in cleared)
+
+
+def test_learn_platform_metadata_uses_authored_scope_and_flags_unknown_os():
+    repo = repository({
+        "content/learning-paths/cross-platform/new/_index.md": markdown(
+            "Root", "Learn.", operatingsystems=["Linux"], armips=["Cortex-M55"],
+            tools_software_languages=["SME2"], platforms=["Arm AGI CPU"],
+        ),
+        "content/learning-paths/cross-platform/new/child.md": markdown(
+            "Child", "Neon is only an incidental mention.", operatingsystems=["FutureOS"],
+            armips=[], tools_software_languages=[], platforms=[],
+        ),
+    })
+    root = "https://learn.arm.com/learning-paths/cross-platform/new/"
+    assert repo.platform_tags(root) == ["linux", "cortex-m", "sme2", "agi-cpu"]
+    with pytest.warns(UserWarning, match="FutureOS"):
+        assert repo.platform_tags(root + "child/") == []
+
+
+def test_relocated_lesson_inherits_only_fields_without_child_overrides():
+    repo = repository({
+        "content/learning-paths/cross-platform/new/_index.md": markdown(
+            "Root", "Learn.", url="/tutorials/new/", operatingsystems=["Linux"],
+            armips=["Cortex-M55"], tools_software_languages=["SME2"],
+        ),
+        "content/learning-paths/cross-platform/new/child.md": markdown(
+            "Child", "Build the example.", url="/lessons/demo-step/",
+            operatingsystems=["Windows"], armips=[],
+        ),
+    })
+    assert repo.platform_tags("https://learn.arm.com/lessons/demo-step/") == ["windows", "sme2"]
 
 
 def test_discovery_and_multipart_guides_share_the_repository(gc, monkeypatch):
@@ -374,7 +465,9 @@ def test_learning_path_frontmatter_keeps_separate_sections_and_faq_answers():
     assert "Start the debugger." in debug["content"]
 
 
-def test_learn_transcript_never_fetches_html(gc, monkeypatch):
+@pytest.mark.parametrize("tags", [None, {"doc_type": ["learning"], "product": ["arm"],
+                                       "platform": ["linux", "windows"]}])
+def test_learn_transcript_never_fetches_html(gc, monkeypatch, tags):
     sources = LearnSources(None)
     sources.repositories["learning_paths"] = repository(
         {"content/demo.md": markdown("Transcript", "Instructions.")}
@@ -387,8 +480,10 @@ def test_learn_transcript_never_fetches_html(gc, monkeypatch):
         "Video",
         "Arm",
         "https://learn.arm.com/demo/",
+        metadata_overrides=tags,
     )
     assert chunks and chunks[0].url == "https://example.com/video"
+    assert all(chunk.toDict().get("filter_metadata", {}) == (tags or {"doc_type": [], "product": [], "platform": []}) for chunk in chunks)
 
 
 def test_reconciliation_omits_retired_pages_without_expanding_skip_discovery(
@@ -533,47 +628,134 @@ def test_frontmatter_knowledge_and_code_examples_survive():
 
 
 @pytest.mark.parametrize("child_first", [False, True])
-def test_parent_and_child_rows_do_not_emit_duplicate_chunks(gc, monkeypatch, tmp_path, child_first):
+@pytest.mark.parametrize("parent_tags,child_tags,expected", [
+    ({}, {}, {}),
+    ({"product": ["arm"]}, {"platform": ["linux"]}, {"product": ["arm"], "platform": ["linux"]}),
+    ({"doc_type": []}, {"product": ["arm"]}, {"doc_type": [], "product": ["arm"]}),
+    ({"platform": ["linux", "windows"]}, {"platform": ["windows", "linux"]}, {"platform": ["linux", "windows"]}),
+    ({"platform": ["linux", "windows"]}, {"platform": ["linux"]}, {"platform": ["linux"]}),
+    ({"platform": ["linux"]}, {"platform": ["windows"]}, {"platform": ["windows"]}),
+    ({"platform": []}, {"platform": ["linux"]}, {"platform": ["linux"]}),
+    ({"platform": ["linux"]}, {}, {"platform": ["linux"]}),
+    ({"platform": ["linux"]}, {"platform": []}, {"platform": []}),
+    ({"platform": ["linux", "windows"], "product": ["arm"]},
+     {"platform": ["linux"], "product": [], "doc_type": ["guide"]},
+     {"platform": ["linux"], "product": [], "doc_type": ["guide"]}),
+])
+def test_parent_and_child_rows_do_not_emit_duplicate_chunks(
+    gc, learn_build, tmp_path, child_first, parent_tags, child_tags, expected
+):
     import yaml
 
     csv_path = tmp_path / "sources.csv"
     rows = [
-        "Install Guides,CC4.0,Docker,https://learn.arm.com/install-guides/docker/,containers\n",
-        "Install Guides,CC4.0,Engine,https://learn.arm.com/install-guides/docker/engine/,systemd daemon control; containers\n",
+        ["Install Guides", "CC4.0", "Docker", "https://learn.arm.com/install-guides/docker/", "containers"],
+        ["Install Guides", "CC4.0", "Engine", "https://learn.arm.com/install-guides/docker/engine/", "systemd daemon control; containers"],
     ]
+    for row, tags in zip(rows, (parent_tags, child_tags)):
+        row.append("")
+        row.extend(gc.format_metadata_override(tags.get(field)) for field in gc.METADATA_COLUMNS.values())
     if child_first:
         rows.reverse()
-    csv_path.write_text(
-        "Site Name,License Type,Display Name,URL,Keywords\n" + "".join(rows)
-    )
-    sources = LearnSources(None)
-    sources.repositories["learning_paths"] = repository(
+    with csv_path.open("w", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(["Site Name", "License Type", "Display Name", "URL", "Keywords", "Transcript Source URL", *gc.METADATA_COLUMNS])
+        writer.writerows(rows)
+    learn_build.repositories["learning_paths"] = repository(
         {
             "content/install-guides/docker/_index.md": markdown(
                 "Docker", "Choose a runtime."
             ),
             "content/install-guides/docker/engine.md": markdown(
-                "Engine", "Install the engine."
+                "Engine", "Install the engine.",
+                url="/install-guides/container-engine/",
+                aliases=["/install-guides/docker/engine/"],
             ),
         }
     )
-    monkeypatch.setattr(gc, "learn_sources", sources)
-    monkeypatch.setattr(gc, "yaml_dir", str(tmp_path / "chunks"))
-    monkeypatch.setattr(gc, "details_file", str(tmp_path / "details.csv"))
-    monkeypatch.setattr(gc, "prepare_intrinsic_chunks", lambda: None)
-    monkeypatch.setattr(gc, "reconcile_ecosystem_sources", lambda **_: None)
-    monkeypatch.setattr("sys.argv", ["generate-chunks.py", str(csv_path)])
-    monkeypatch.setenv("SKIP_DISCOVERY", "1")
+    original_rows = list(csv.DictReader(io.StringIO(csv_path.read_text())))
     gc.main()
+    assert list(csv.DictReader(io.StringIO(csv_path.read_text()))) == original_rows
     saved = [yaml.safe_load(path.read_text()) for path in (tmp_path / "chunks").glob("*.yaml")]
     assert len(saved) == 2
     assert len({chunk["url"] for chunk in saved}) == 2
-    child = next(chunk for chunk in saved if chunk["url"].endswith("/engine/"))
+    defaults = {"doc_type": ["guide"], "product": ["arm"], "platform": []}
+    expected = defaults | expected
+    parent_tags = defaults | parent_tags
+    child = next(chunk for chunk in saved if chunk["url"].endswith("/container-engine/"))
+    assert {k: set(v) for k, v in child.get("filter_metadata", {}).items()} == {k: set(v) for k, v in expected.items()}
     assert set(gc.parse_keywords(child["keywords"])) == {
         "containers", "docker", "engine", "systemd daemon control"
     }
     parent = next(chunk for chunk in saved if chunk["url"].endswith("/docker/"))
+    assert parent.get("filter_metadata", {}) == parent_tags
     assert "systemd daemon control" not in parent["keywords"]
+
+
+@pytest.mark.parametrize("alias_first", [False, True])
+@pytest.mark.parametrize("alias_tags", [["windows"], []])
+def test_equal_authority_alias_conflict_preserves_previous_outputs(
+    gc, learn_build, tmp_path, alias_first, alias_tags
+):
+    csv_path = tmp_path / "sources.csv"
+    rows = [
+        ["Install Guides", "CC4.0", "Engine", "https://learn.arm.com/install-guides/engine/", "engine", "linux"],
+        ["Install Guides", "CC4.0", "Legacy Engine", "https://learn.arm.com/install-guides/legacy/", "containers", json.dumps(alias_tags)],
+    ]
+    if alias_first:
+        rows.reverse()
+    with csv_path.open("w", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(["Site Name", "License Type", "Display Name", "URL", "Keywords", "Platform"])
+        writer.writerows(rows)
+    original = csv_path.read_bytes()
+    output = tmp_path / "chunks"
+    output.mkdir()
+    (output / "chunk_existing.yaml").write_text("previous chunk")
+    details = tmp_path / "details.csv"
+    details.write_text("previous details")
+    learn_build.repositories["learning_paths"] = repository({
+        "content/install-guides/engine.md": markdown(
+            "Engine", "Install the engine.", aliases=["/install-guides/legacy/"]
+        ),
+    })
+    with pytest.raises(ValueError, match="Conflicting platform tags"):
+        gc.main()
+    assert csv_path.read_bytes() == original
+    assert (output / "chunk_existing.yaml").read_text() == "previous chunk"
+    assert details.read_text() == "previous details"
+
+
+def test_main_resolves_learn_transcript_metadata_by_document_identity(gc, learn_build, monkeypatch, tmp_path, capsys):
+    import yaml
+
+    csv_path = tmp_path / "sources.csv"
+    csv_path.write_text(
+        "Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL,Platform,Product\n"
+        "Install Guides,CC4.0,Docker,https://learn.arm.com/install-guides/docker/,containers,,\"[\"\"linux\"\",\"\"windows\"\"]\",arm\n"
+        "Video,CC4.0,Engine,https://example.com/video,engine,https://learn.arm.com/install-guides/docker/engine/,linux,\n"
+    )
+    learn_build.repositories["learning_paths"] = repository({
+        # A bodyless parent still defines a broader scope than its only child.
+        "content/install-guides/docker/_index.md": markdown("Docker"),
+        "content/install-guides/docker/engine.md": markdown("Engine", "## Setup\nInstall the engine."),
+    })
+    monkeypatch.setattr(gc, "fetch_with_logging", lambda *_: pytest.fail("HTML fetch"))
+    gc.main()
+    output = capsys.readouterr().out
+    assert "[METADATA GAP] https://example.com/video: doc_type" in output
+    assert "[METADATA COVERAGE] 2 source chunks" in output
+    assert output.count("[SOURCE CHUNKS]") == 2
+    assert " === Engine" not in output
+    saved = [yaml.safe_load(path.read_text()) for path in (tmp_path / "chunks").glob("*.yaml")]
+    assert len(saved) == 2
+    transcript = next(chunk for chunk in saved if chunk["url"] == "https://example.com/video")
+    assert transcript["document_context"]["url"] == "https://learn.arm.com/install-guides/docker/engine/"
+    for chunk in saved:
+        assert chunk["filter_metadata"] == {
+            "doc_type": [] if chunk["url"] == "https://example.com/video" else ["guide"],
+            "platform": ["linux"], "product": ["arm"],
+        }
 
 
 def test_comments_are_removed_without_changing_code_literals():

@@ -34,7 +34,7 @@ from usearch.index import Index
 from . import analysis
 from .config import K_RESULTS
 from .context import CONTEXT_SCOPES, DocumentContextIndex
-from .filters import MetadataFilterIndex, SearchFilters
+from .filters import MetadataFilterIndex, SearchFilters, metadata_filter_value
 from .loaders import load_metadata, load_usearch_index
 from .response import add_disclaimer_to_arm_results, add_utm_source_to_results
 from .search import (
@@ -331,10 +331,9 @@ def search(
             "snippet": resources.snippet_for(item["metadata"]),
             "title": item["metadata"].get("title", ""),
             "heading": item["metadata"].get("heading", ""),
-            "doc_type": item["metadata"].get("doc_type", ""),
-            "product": item["metadata"].get("product", ""),
-            "platform": item["metadata"].get("platform", ""),
-            "edition": item["metadata"].get("edition", ""),
+            "doc_type": metadata_filter_value(item["metadata"], "doc_type"),
+            "product": metadata_filter_value(item["metadata"], "product"),
+            "platform": metadata_filter_value(item["metadata"], "platform"),
             "distance": item.get("distance"),
             "score": item.get("rerank_score", item.get("rrf_score")),
             **({"context": item["context"]} if "context" in item else {}),

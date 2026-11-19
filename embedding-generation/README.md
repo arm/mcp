@@ -30,7 +30,8 @@ Dockerfile, Python or model locks, or model acquisition code,
 GitHub Actions rebuilds this image and opens or updates
 `automation/pin-embedding-generator`. That PR updates
 `pipeline-inputs.lock.json` to the new immutable digest. The workflow also
-supports manual branch runs, which publish an image without opening a PR.
+supports manual runs on `main` with `dry_run=false` to publish and propose a pin
+update. Branch runs build and scan only.
 
 `Dockerfile.acquire` copies `generate-chunks.py` and its local modules from the
 workflow checkout and uses this toolchain for network-enabled discovery and
@@ -96,8 +97,8 @@ Update the pin to its published digest; builds use the previous snapshot until t
 Add one row to `vector-db-sources.csv` for each document:
 
 ```csv
-Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL
-Example Docs,CC4.0,Example Arm Guide,https://example.com/arm-guide,arm; migration; linux,
+Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL,Doc Type,Product,Platform
+Learning Paths,CC4.0,Example Arm Guide,https://example.com/arm-guide,arm; migration; linux,,learning,arm,linux
 ```
 
 Use clear keywords that users might include in questions. The `URL` is also what retrieval eval uses for expected matches.
@@ -145,6 +146,56 @@ use the published `about-marker` and `generated-summary-faq` anchors. Unknown Hu
 shortcodes fail explicitly so new content formats cannot silently lose text.
 
 Regenerate chunks and vector artifacts to publish changes to this parsing code.
+Publish rebuilt artifacts and update the runtime pin; refresh stale build-input
+pins first.
+
+### Filter tags during ingestion
+
+Add verified tags using these optional CSV columns. `Site Name` and `Keywords`
+keep their existing roles.
+
+| Column | Values |
+|---|---|
+| `Doc Type` | `learning`, `guide`, `reference`, `article`, `compatibility` |
+| `Product` | Document publisher: `arm`, `aws`, `google`, `ampere` |
+| `Platform` | Execution environment, ISA or hardware; see below |
+
+Blank cells inherit tags; `[]` clears them. Use exact headers and supported values,
+with JSON arrays for multiple tags. Example tag columns appended to a source row:
+
+```csv
+Doc Type,Product,Platform
+learning,arm,"[""linux"",""windows""]"
+```
+
+See the [tag definitions](../arm_kb_search/README.md#filters) for category meanings.
+Allowed values are defined in `source_metadata.py`.
+
+#### Platform values
+
+| Scope | Accepted tags |
+|---|---|
+| Execution environment | `linux`, `windows`, `macos`, `android`, `baremetal` (no OS), `rtos`, `chromeos`, `freebsd` |
+| ISA family | `neon`, `sve`, `sve2`, `sme`, `sme2`, `helium` (MVE) |
+| Architecture / hardware family | `cme`, `mali` (including NX), `cortex-m`, `agi-cpu` (Arm AGI CPU) |
+| Hosted runtime | `google-colab` |
+
+Tag substantive coverage or required setup, not incidental mentions. Hardware and
+ISA tags do not imply an OS, every hardware variant or additional ISA support;
+SVE2 does not imply SVE. Cloud servers running Linux use `linux`, not `baremetal`.
+Dashboard records use their catalog OS; intrinsic records use their catalog family.
+
+#### Preservation and filtering
+
+Blank cells inherit source defaults or Learn frontmatter. Explicit tags replace
+the field's inherited list; `[]` clears it. Child overrides take precedence.
+
+Tags are preserved through CSV rewrites, chunks and vector metadata. Conflicting
+assignments at the same scope fail validation; builds report coverage gaps.
+
+Remove the retired `Edition` CSV column; dashboard edition remains internal.
+See the [search API](../arm_kb_search/README.md#filters) for filtering and
+compatibility details.
 
 ## Discover developer.arm.com Sources
 
@@ -338,7 +389,7 @@ chunking through their pinned Markdown `resolved_url`. Retrieval keeps the
 highest-ranked hit per public URL and edition, so duplicate source files in the
 same edition do not consume additional result slots.
 
-Metadata for downstream dashboard search:
+Raw dashboard metadata for internal source identity:
 
 - `doc_type`: `Ecosystem Dashboard` for both platforms.
 - `platform`: `linux` or `windows`, from the source directory.
@@ -347,19 +398,15 @@ Metadata for downstream dashboard search:
 - `product` and `version`: explicitly empty. Package identity is separate from
   product taxonomy, and minimum/recommended versions remain distinct content facts.
 
-The shared chunker, YAML serialization, vector-store metadata, and shared search
-response preserve `platform` and `edition`. Other sources and older artifacts
-return empty values unless supplied. The shared search package version changes
-with this response extension; REST deployments must update their package pin to
-receive the fields. No request filters are added here.
+The shared chunker, YAML serialization and vector metadata retain the raw
+`platform` and `edition` values for source identity. Public search results expose
+only Doc Type, Product and Platform; Edition is not accepted as a filter or
+returned as a result field. Same-name catalog records can still disagree on
+support or minimum versions, so their facts and identities remain separate.
 
-The dashboard consumer's [proposed contract in PR #1092](https://github.com/ArmDeveloperEcosystem/ecosystem-dashboard-for-arm/pull/1092)
-requires `doc_type`, `platform`, and `edition` on Linux hits, plus filtering before
-top-k selection. STESOL-625 must coordinate these scope filters as well as its
-planned `product` filter. The consumer's live integration remains disabled until
-that contract is implemented and verified. Same-name source records may disagree
-on support or minimum versions; ingestion preserves their facts and reports shared
-URLs rather than selecting an authoritative record.
+The dashboard consumer's historical [proposed contract in PR #1092](https://github.com/ArmDeveloperEcosystem/ecosystem-dashboard-for-arm/pull/1092)
+requested an Edition result field. That proposal must be revised for this
+three-filter contract before enabling a consumer that depends on it.
 
 ## Intrinsic embedding records
 
@@ -367,6 +414,10 @@ Acquisition prepares clean intrinsic metadata and one `embedding_text` containin
 the operation, signature, and type descriptions. The builder embeds it once in
 the shared index, preserves the full source for responses, and excludes
 `embedding_text` from saved metadata.
+
+Public Platform tags come from the stored catalog family, independently of the
+embedding text. Adding support for a family label does not acquire that family's
+records; refreshing the intrinsic snapshot is a separate operation.
 
 Regenerate chunks with the updated acquisition scripts before rebuilding the
 vector store. Rebuild and pin the toolchain first if its dependencies or model

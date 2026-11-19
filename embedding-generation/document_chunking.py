@@ -65,6 +65,11 @@ ARM_DEVELOPER_HOST = "developer.arm.com"
 _INTRINSIC_URL = "/instruction-sets/intrinsics/#q="
 _GENERIC_KEYWORDS = {"intrinsic", "sse", "avx", "streaming simd extension"}
 _ISAS = {"neon": "Neon", "sve": "SVE", "sve2": "SVE2"}
+_INTRINSIC_PLATFORMS = {
+    "neon": ("neon",), "sve": ("sve",), "sve2": ("sve2",),
+    "sme": ("sme",), "sme2": ("sme2",), "sme and sme2": ("sme", "sme2"),
+    "helium": ("helium",), "mve": ("helium",),
+}
 
 
 def is_intrinsic_chunk(chunk: dict) -> bool:
@@ -178,6 +183,17 @@ def prepare_intrinsic_chunk(chunk: dict) -> dict:
     if not is_intrinsic_chunk(chunk):
         return chunk
     normalized = normalize_intrinsic_chunk(chunk)
+    # Use exact catalog families, not incidental ISA mentions or OS assumptions.
+    platforms = list(dict.fromkeys(
+        tag for family in normalized["product"].split("/")
+        for tag in _INTRINSIC_PLATFORMS.get(family.strip().casefold(), ())
+    ))
+    # Public categories must not replace the ISA/type used by intrinsic ranking.
+    normalized["filter_metadata"] = {
+        "doc_type": ["reference"], "product": ["arm"],
+        **({"platform": platforms} if platforms else {}),
+        **normalized.get("filter_metadata", {}),
+    }
     normalized["document_context"] = {
         "format": 1, "url": normalized["url"], "chunk_index": 0, "chunk_count": 1,
     }
