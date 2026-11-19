@@ -916,9 +916,10 @@ def main():
         doc_type = csv_dict["site_names"][i]
         keywords_value = csv_dict["focus"][i]
         transcript_url = csv_dict["transcript_urls"][i]
-        effective_url = normalize_source_url(transcript_url) or normalize_source_url(url)
+        effective_url = normalize_source_url(transcript_url) or url
+        learn_source = is_learn_url(effective_url)
 
-        chunks = validated_brief_chunks.get((normalize_source_url(url), effective_url))
+        chunks = validated_brief_chunks.get((url, effective_url))
         if chunks is None:
             chunks = create_chunks_for_source(
                 url, source_name, doc_type, keywords_value, transcript_url,
@@ -926,7 +927,7 @@ def main():
             )
         print(f"[SOURCE CHUNKS] {url}: {len(chunks)}", flush=True)
         for chunk in chunks:
-            if is_learn_url(effective_url):
+            if learn_source:
                 # Transcript display links may be primary video URLs; the
                 # document context retains the canonical Learn page identity.
                 page = public_url(chunk.context_metadata["document_context"]["url"])
@@ -950,8 +951,6 @@ def main():
     for url, chunk in learn_chunks.values():
         save_chunk(url, chunk)
 
-    # Save updated sources CSV with all discovered sources
-    save_sources_csv(sources_file)
     print("\n=== Source tracking complete ===")
     print(f"Total sources in {sources_file}: {len(all_sources)}")
     for url, fields in sorted(metadata_gaps.items()):

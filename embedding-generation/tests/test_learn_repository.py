@@ -37,6 +37,20 @@ def repository(files, kind="arm-learning-paths"):
     )
 
 
+@pytest.fixture
+def learn_build(gc, monkeypatch, tmp_path):
+    """Configure a Learn-only build; tests supply the CSV and repository."""
+    sources = LearnSources(None)
+    monkeypatch.setattr(gc, "learn_sources", sources)
+    monkeypatch.setattr(gc, "yaml_dir", str(tmp_path / "chunks"))
+    monkeypatch.setattr(gc, "details_file", str(tmp_path / "details.csv"))
+    monkeypatch.setattr(gc, "prepare_intrinsic_chunks", lambda: None)
+    monkeypatch.setattr(gc, "reconcile_ecosystem_sources", lambda **_: None)
+    monkeypatch.setattr("sys.argv", ["generate-chunks.py", str(tmp_path / "sources.csv")])
+    monkeypatch.setenv("SKIP_DISCOVERY", "1")
+    return sources
+
+
 @pytest.mark.parametrize("root_route", ["/learning-paths/cross-platform/new/", "/tutorials/new/"])
 @pytest.mark.parametrize("lesson_route", [None, "/lessons/demo-step/"])
 def test_discovered_sources_inherit_verified_tags_through_chunks(
@@ -629,7 +643,7 @@ def test_frontmatter_knowledge_and_code_examples_survive():
      {"platform": ["linux"], "product": [], "doc_type": ["guide"]}),
 ])
 def test_parent_and_child_rows_do_not_emit_duplicate_chunks(
-    gc, monkeypatch, tmp_path, child_first, parent_tags, child_tags, expected
+    gc, learn_build, tmp_path, child_first, parent_tags, child_tags, expected
 ):
     import yaml
 
@@ -647,8 +661,7 @@ def test_parent_and_child_rows_do_not_emit_duplicate_chunks(
         writer = csv.writer(stream)
         writer.writerow(["Site Name", "License Type", "Display Name", "URL", "Keywords", "Transcript Source URL", *gc.METADATA_COLUMNS])
         writer.writerows(rows)
-    sources = LearnSources(None)
-    sources.repositories["learning_paths"] = repository(
+    learn_build.repositories["learning_paths"] = repository(
         {
             "content/install-guides/docker/_index.md": markdown(
                 "Docker", "Choose a runtime."
@@ -660,13 +673,6 @@ def test_parent_and_child_rows_do_not_emit_duplicate_chunks(
             ),
         }
     )
-    monkeypatch.setattr(gc, "learn_sources", sources)
-    monkeypatch.setattr(gc, "yaml_dir", str(tmp_path / "chunks"))
-    monkeypatch.setattr(gc, "details_file", str(tmp_path / "details.csv"))
-    monkeypatch.setattr(gc, "prepare_intrinsic_chunks", lambda: None)
-    monkeypatch.setattr(gc, "reconcile_ecosystem_sources", lambda **_: None)
-    monkeypatch.setattr("sys.argv", ["generate-chunks.py", str(csv_path)])
-    monkeypatch.setenv("SKIP_DISCOVERY", "1")
     original_rows = list(csv.DictReader(io.StringIO(csv_path.read_text())))
     gc.main()
     assert list(csv.DictReader(io.StringIO(csv_path.read_text()))) == original_rows
@@ -689,7 +695,7 @@ def test_parent_and_child_rows_do_not_emit_duplicate_chunks(
 @pytest.mark.parametrize("alias_first", [False, True])
 @pytest.mark.parametrize("alias_tags", [["windows"], []])
 def test_equal_authority_alias_conflict_preserves_previous_outputs(
-    gc, monkeypatch, tmp_path, alias_first, alias_tags
+    gc, learn_build, tmp_path, alias_first, alias_tags
 ):
     csv_path = tmp_path / "sources.csv"
     rows = [
@@ -708,19 +714,11 @@ def test_equal_authority_alias_conflict_preserves_previous_outputs(
     (output / "chunk_existing.yaml").write_text("previous chunk")
     details = tmp_path / "details.csv"
     details.write_text("previous details")
-    sources = LearnSources(None)
-    sources.repositories["learning_paths"] = repository({
+    learn_build.repositories["learning_paths"] = repository({
         "content/install-guides/engine.md": markdown(
             "Engine", "Install the engine.", aliases=["/install-guides/legacy/"]
         ),
     })
-    monkeypatch.setattr(gc, "learn_sources", sources)
-    monkeypatch.setattr(gc, "yaml_dir", str(output))
-    monkeypatch.setattr(gc, "details_file", str(details))
-    monkeypatch.setattr(gc, "prepare_intrinsic_chunks", lambda: None)
-    monkeypatch.setattr(gc, "reconcile_ecosystem_sources", lambda **_: None)
-    monkeypatch.setattr("sys.argv", ["generate-chunks.py", str(csv_path)])
-    monkeypatch.setenv("SKIP_DISCOVERY", "1")
     with pytest.raises(ValueError, match="Conflicting platform tags"):
         gc.main()
     assert csv_path.read_bytes() == original
@@ -728,7 +726,7 @@ def test_equal_authority_alias_conflict_preserves_previous_outputs(
     assert details.read_text() == "previous details"
 
 
-def test_main_resolves_learn_transcript_metadata_by_document_identity(gc, monkeypatch, tmp_path, capsys):
+def test_main_resolves_learn_transcript_metadata_by_document_identity(gc, learn_build, monkeypatch, tmp_path, capsys):
     import yaml
 
     csv_path = tmp_path / "sources.csv"
@@ -737,20 +735,12 @@ def test_main_resolves_learn_transcript_metadata_by_document_identity(gc, monkey
         "Install Guides,CC4.0,Docker,https://learn.arm.com/install-guides/docker/,containers,,\"[\"\"linux\"\",\"\"windows\"\"]\",arm\n"
         "Video,CC4.0,Engine,https://example.com/video,engine,https://learn.arm.com/install-guides/docker/engine/,linux,\n"
     )
-    sources = LearnSources(None)
-    sources.repositories["learning_paths"] = repository({
+    learn_build.repositories["learning_paths"] = repository({
         # A bodyless parent still defines a broader scope than its only child.
         "content/install-guides/docker/_index.md": markdown("Docker"),
         "content/install-guides/docker/engine.md": markdown("Engine", "## Setup\nInstall the engine."),
     })
-    monkeypatch.setattr(gc, "learn_sources", sources)
-    monkeypatch.setattr(gc, "yaml_dir", str(tmp_path / "chunks"))
-    monkeypatch.setattr(gc, "details_file", str(tmp_path / "details.csv"))
-    monkeypatch.setattr(gc, "prepare_intrinsic_chunks", lambda: None)
-    monkeypatch.setattr(gc, "reconcile_ecosystem_sources", lambda **_: None)
     monkeypatch.setattr(gc, "fetch_with_logging", lambda *_: pytest.fail("HTML fetch"))
-    monkeypatch.setattr("sys.argv", ["generate-chunks.py", str(csv_path)])
-    monkeypatch.setenv("SKIP_DISCOVERY", "1")
     gc.main()
     output = capsys.readouterr().out
     assert "[METADATA GAP] https://example.com/video: doc_type" in output

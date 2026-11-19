@@ -6,7 +6,6 @@
 import argparse
 import csv
 import sys
-from collections import defaultdict
 from pathlib import Path
 
 from source_metadata import (
@@ -17,7 +16,7 @@ from source_metadata import (
 
 
 def read_sources(path):
-    by_url = defaultdict(set)
+    by_url = {}
     with Path(path).open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         columns = reader.fieldnames or []
@@ -28,22 +27,13 @@ def read_sources(path):
             url = (row.get("URL") or "").strip()
             tags = read_metadata_overrides(row, url)
             if url:
-                # None (inherit) and () (explicit clear) must remain distinct.
-                values = tuple(
-                    None if tags.get(field) is None else tuple(sorted(tags[field]))
-                    for field in METADATA_COLUMNS.values()
-                )
-                by_url[url].add(values)
+                # Merge duplicate rows by field. Ignore inherited blanks, but
+                # retain explicit clears as () so losing [] fails validation.
+                assignments = by_url.setdefault(url, {})
+                for field, labels in tags.items():
+                    if labels is not None:
+                        assignments.setdefault(field, set()).add(tuple(sorted(labels)))
     return set(columns) & METADATA_COLUMNS.keys(), by_url
-
-
-def assignment_sets(rows):
-    # Dashboard reconciliation combines duplicate rows field by field. Ignore
-    # inherited blanks, but retain every explicit assignment, including [].
-    return tuple(
-        {tags[index] for tags in rows if tags[index] is not None}
-        for index in range(len(METADATA_COLUMNS))
-    )
 
 
 def validate(expected, actual):
@@ -56,7 +46,7 @@ def validate(expected, actual):
         if url not in actual_sources:
             print(f"Removed source: {url}")
             continue
-        if assignment_sets(actual_sources[url]) != assignment_sets(tags):
+        if actual_sources[url] != tags:
             raise ValueError(f"Generated CSV lost a source or changed metadata for {url}")
 
 

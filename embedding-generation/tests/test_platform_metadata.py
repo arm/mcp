@@ -97,8 +97,7 @@ def test_platform_override_survives_discovery_and_csv_roundtrip(
     assert platform_values(config) == [expected, None]
     assert config["transcript_urls"] == ["https://example.com/transcript", ""]
     assert config["source_names"] == ["Example, guide", "Discovered"]
-    with path.open(newline="", encoding="utf-8") as stream:
-        rows = list(csv.DictReader(stream))
+    rows = source_rows(path)
     assert "Platform" in rows[0]
     assert rows[1]["Platform"] == ""
     if expected == []:
@@ -117,14 +116,22 @@ def test_legacy_csv_has_no_platform_override_or_added_column(gc, tmp_path):
 
 
 @pytest.mark.parametrize(
-    "cell,expected",
-    [("[]", []), ('["linux", "windows"]', ["linux", "windows"]), ("", None)],
+    "cells,expected",
+    [
+        (["[]"], []),
+        (['["linux", "windows"]'], ["linux", "windows"]),
+        ([""], None),
+        (["", "[]"], []),
+        (['["linux", "windows"]', '["Windows", "Linux"]'], ["linux", "windows"]),
+    ],
 )
 @pytest.mark.parametrize("discover", [False, True])
 def test_dashboard_reconciliation_keeps_platform_override(
-    gc, monkeypatch, tmp_path, cell, expected, discover
+    gc, monkeypatch, tmp_path, cells, expected, discover
 ):
-    path = write_sources(tmp_path, [cell], site="Ecosystem Dashboard")
+    path = write_sources(tmp_path, cells, site="Ecosystem Dashboard")
+    # Multiple rows describe the same package and must retain one assignment.
+    path.write_text(path.read_text().replace(SOURCE + "1", SOURCE + "0"))
     gc.load_existing_sources(path)
     package = SimpleNamespace(
         keywords=["package"], document=SimpleNamespace(display_title="Package")
@@ -143,30 +150,6 @@ def test_header_only_csv_keeps_platform_column(gc, tmp_path):
     gc.save_sources_csv(path)
     with path.open(newline="", encoding="utf-8") as stream:
         assert next(csv.reader(stream)) == FIELDS + ["Platform"]
-
-
-@pytest.mark.parametrize(
-    "cells,expected",
-    [
-        (["", "[]"], []),
-        (['["linux", "windows"]', '["Windows", "Linux"]'], ["linux", "windows"]),
-    ],
-)
-def test_dashboard_duplicate_equivalent_overrides_keep_one_assignment(
-    gc, monkeypatch, tmp_path, cells, expected
-):
-    path = write_sources(tmp_path, cells, site="Ecosystem Dashboard")
-    path.write_text(path.read_text().replace(SOURCE + "1", SOURCE + "0"))
-    gc.load_existing_sources(path)
-    package = SimpleNamespace(
-        keywords=[], document=SimpleNamespace(display_title="Package")
-    )
-    monkeypatch.setattr(
-        gc, "build_ecosystem_dashboard_entries", lambda: {SOURCE + "0": [package]}
-    )
-    gc.reconcile_ecosystem_sources()
-    gc.save_sources_csv(path)
-    assert platform_values(gc.readInCSV(path)[0]) == [expected]
 
 
 @pytest.mark.parametrize("reader", ["readInCSV", "load_existing_sources"])

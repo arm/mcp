@@ -35,9 +35,6 @@ PLATFORMS = frozenset(
     }
 )
 PLATFORM_ALIASES = {"bare metal": "baremetal", "bare-metal": "baremetal"}
-UNTAGGED_LABELS = frozenset(
-    {"unknown", "other", "all", "n/a", "none", "null", "not applicable"}
-)
 
 # Site Name is the acquisition adapter, not necessarily the public document type.
 # Mixed-purpose adapters still need a contributor-supplied Doc Type.
@@ -127,17 +124,14 @@ def parse_metadata_override(
         if not isinstance(label, str) or not label.strip():
             raise ValueError(f"{context}: expected nonempty string labels")
         normalized = label.strip().casefold()
-        if normalized in UNTAGGED_LABELS:
-            raise ValueError(
-                f"{context}: leave unknown or inapplicable tags blank, or use [] to clear"
-            )
         if column == "Platform":
             normalized = PLATFORM_ALIASES.get(normalized, normalized)
         if allowed is not None and normalized not in allowed:
             kind = "publisher" if column == "Product" else "label"
             raise ValueError(
                 f"{context}: unsupported {kind} {label!r}; "
-                f"use one of {', '.join(sorted(allowed))} or a JSON array of them"
+                f"use one of {', '.join(sorted(allowed))} or a JSON array of them; "
+                "leave blank to inherit, or use [] to clear"
             )
         if normalized not in result:
             result.append(normalized)

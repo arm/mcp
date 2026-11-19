@@ -24,23 +24,12 @@ with (Path(__file__).resolve().parents[1] / "vector-db-sources.csv").open(
 
 def write_source(tmp_path, tags, *, site="Learning Paths"):
     path = tmp_path / "sources.csv"
-    row = dict(
-        zip(
-            LEGACY_COLUMNS,
-            [
-                site,
-                "CC4.0",
-                "Guide, with examples",
-                URL,
-                "arm; linux",
-                "https://example.com/transcript",
-            ],
-        )
-    )
+    row = [site, "CC4.0", "Guide, with examples", URL, "arm; linux",
+           "https://example.com/transcript"]
     with path.open("w", newline="", encoding="utf-8") as stream:
-        writer = csv.DictWriter(stream, fieldnames=LEGACY_COLUMNS + list(tags))
-        writer.writeheader()
-        writer.writerow(row | tags)
+        writer = csv.writer(stream)
+        writer.writerow(LEGACY_COLUMNS + list(tags))
+        writer.writerow(row + list(tags.values()))
     return path
 
 
@@ -53,13 +42,17 @@ def read_rows(path):
 @pytest.mark.parametrize("column,cell", [
     ("Product", "amr"), ("platform", "linux"), ("Platforms", "linux"),
     ("Doc Types", "learning"), ("product", "arm"),
+    ("Doc Type", "tutorial"), ("Doc Type", "learning paths"),
+    ("Doc Type", "bogus"), ("Doc Type", '["guide","bogus"]'),
+    ("Edition", "commercial"), ("Edition", ""),
 ])
 @pytest.mark.parametrize("reader", ["readInCSV", "load_existing_sources"])
-def test_mistyped_metadata_fails_before_csv_rewrite(gc, tmp_path, column, cell, reader):
+def test_invalid_metadata_fails_before_csv_rewrite(gc, tmp_path, column, cell, reader):
     path = write_source(tmp_path, {column: cell})
     before = path.read_bytes()
-    with pytest.raises(ValueError, match=column):
+    with pytest.raises(ValueError, match=column) as error:
         getattr(gc, reader)(path)
+    assert (URL if column in TAG_COLUMNS else str(path)) in str(error.value)
     assert path.read_bytes() == before
 
 
@@ -70,19 +63,6 @@ def test_chunk_entry_point_validates_tags_before_fetch(gc, monkeypatch, override
     monkeypatch.setattr(gc, "_create_source_chunks", lambda *args: pytest.fail("Fetched invalid source"))
     with pytest.raises(ValueError):
         gc.create_chunks_for_source(URL, "Guide", "Install Guides", "", metadata_overrides=overrides)
-
-
-@pytest.mark.parametrize("column,cell", [
-    ("Doc Type", cell) for cell in ["tutorial", "learning paths", "bogus", '["guide","bogus"]']
-] + [("Edition", "commercial"), ("Edition", "")])
-@pytest.mark.parametrize("reader", ["readInCSV", "load_existing_sources"])
-def test_unsupported_tag_fields_and_types_fail_before_ingestion(gc, tmp_path, column, cell, reader):
-    path = write_source(tmp_path, {column: cell})
-    before = path.read_bytes()
-    with pytest.raises(ValueError, match=column) as error:
-        getattr(gc, reader)(path)
-    assert (str(path) if column == "Edition" else URL) in str(error.value)
-    assert path.read_bytes() == before
 
 
 @pytest.mark.parametrize("site", SOURCE_TYPES)

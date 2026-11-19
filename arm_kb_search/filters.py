@@ -22,36 +22,18 @@ class SearchFilters(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
     doc_type: FilterValue = Field(default=None, description=(
-        "Choose the kind of content needed: learning = tutorials, courses, lessons and worked exercises; "
-        "guide = how-to instructions for installation, configuration, migration, troubleshooting or tuning; "
-        "reference = technical manuals/specifications, instruction and intrinsic definitions, register "
-        "behavior, and Insights technical FAQs; article = explanations, overviews, white papers and "
-        "benchmark analysis; compatibility = software/OS/version support catalogs such as the ecosystem "
-        "dashboard. For an intrinsic's definition use reference; for a lesson on using it use learning; "
-        "for either use [\"reference\",\"learning\"]. "
-        "Older KB snapshots still return detailed labels such as Learning Paths, Install Guides, "
-        "Intrinsic, and Ecosystem Dashboard. Tagged records also accept their legacy document "
-        "type as a query alias unless their public type was explicitly cleared. Omit this "
-        "filter when unsure or when a general topic question could need several types of evidence."))
+        "Content type: learning (tutorials and courses); guide (installation, configuration, migration, "
+        "troubleshooting and tuning); reference (manuals, specifications, intrinsics and Insights FAQs); "
+        "article (overviews, white papers and benchmark analysis); compatibility (software/OS/version "
+        "support catalogs). Omit when unsure."))
     product: FilterValue = Field(default=None, description=(
-        "Exact publisher tag: arm, aws, google, or ampere; not the software name or ISA family. "
-        "Older snapshots may return legacy labels such as Arm, AWS Graviton, Neon, SVE, or SVE2. "
-        "Legacy ISA labels do not match records tagged with a publisher."))
+        "Document publisher: arm, aws, google or ampere. Identifies who published the document, "
+        "not the software or hardware discussed."))
     platform: FilterValue = Field(default=None, description=(
-        "Exact platform tag: linux, windows, macos, android, baremetal, rtos, chromeos, or freebsd "
-        "for a verified execution environment; neon, sve, sve2, sme, sme2, or helium (MVE) "
-        "for an intrinsic family or an ISA taught by a document; cme for CME architecture, "
-        "programming, and performance-monitoring documentation; mali for Mali GPU guidance, "
-        "including neural-graphics guidance for Mali GPUs with a Neural Accelerator (NX). "
-        "Use cortex-m for lessons or guidance explicitly targeting Cortex-M processors, "
-        "including deployment, resource limits, and optimized kernels. "
-        "Use agi-cpu for material explicitly targeting Arm AGI CPU hardware. "
-        "Use google-colab for a documented Google Colab execution environment; it does not "
-        "imply an OS, CPU architecture, GPU model, or Google as the document publisher. "
-        "Hardware, architecture, and ISA tags do not imply OS compatibility, support for every "
-        "hardware variant, or additional tags. Multiple values use OR: [linux, sve] matches "
-        "Linux resources or SVE resources. "
-        "Records missing the requested tag do not match."))
+        "Verified execution environment: linux, windows, macos, android, baremetal (no OS), rtos, "
+        "chromeos, freebsd, google-colab. Intrinsic family or ISA taught: neon, sve, sve2, sme, sme2, "
+        "helium (MVE). Architecture or hardware: cme, mali (including NX), cortex-m, agi-cpu "
+        "(Arm AGI CPU). Tags do not imply other OS, ISA or hardware support."))
 
     @field_validator("doc_type", "product", "platform", mode="before")
     @classmethod

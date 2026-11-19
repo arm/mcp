@@ -73,73 +73,43 @@ It replaces the dataclass: use `model_dump()` and `model_copy()` instead of
 changed values. Instances remain frozen; alternatives are stored as tuples in
 Python and serialized as arrays in JSON.
 
-- Each field accepts a string or non-empty list of strings (also tuples in Python).
-  For example, `{"platform": ["linux", "windows"]}` matches either label.
-  Values within a field use OR; fields use AND. Matching ignores case, surrounding
-  whitespace, and duplicate choices. `k` limits the combined results.
-- Omitted filters, `None`, and `{}` leave search unrestricted. A field set to
-  `None` is ignored. Missing or blank metadata cannot match an active filter.
-- Unknown fields, empty lists or tuples, and blank or non-string labels raise
-  `ValueError`. Unknown labels match nothing; no matches returns an empty list.
-
-Edition is no longer accepted in filter objects, even as `null`, and is omitted
-from search results. Older stored Edition values remain usable internally for
-dashboard variant identity; they are not a public filter. Update clients that
-previously sent or read this field.
+- Values are strings or non-empty lists (also tuples in Python). Choices use OR
+  within a field; fields use AND. Matching ignores case, surrounding whitespace
+  and duplicate choices. `k` limits the combined results.
+- Omitted filters, `None` and `{}` leave search unrestricted; `None` fields are
+  ignored. Missing or blank metadata cannot match an active filter.
+- Unknown fields, empty lists/tuples and blank/non-string labels raise `ValueError`.
+  Unknown labels match nothing; no matches returns `[]`.
 
 Filters restrict candidates before ranking and deduplication. Vector retrieval
 uses exact search over the full corpus, or only eligible vectors when filtered.
 
-Curated snapshots use document-purpose tags for Doc Type (below) and document
-publishers (`arm`, `aws`, `google`, `ampere`) for Product. Product identifies the
-publisher, not the software discussed or its hosting provider.
+Product identifies the document publisher: `arm`, `aws`, `google` or `ampere`.
+See [platform values](../embedding-generation/README.md#platform-values) for OS,
+ISA and hardware tags. Choose Doc Type by purpose; omit it when unsure:
 
-| Platform scope | Tags |
+| Doc Type | Content |
 |---|---|
-| Execution environment | `linux`, `windows`, `macos`, `android`, `baremetal`, `rtos`, `chromeos`, `freebsd` |
-| Intrinsic family or ISA taught by the document | `neon`, `sve`, `sve2`, `sme`, `sme2`, `helium` (MVE) |
-| Architecture or hardware family | `cme`, `mali`, `cortex-m`, `agi-cpu` (Arm AGI CPU) |
-| Documented hosted runtime | `google-colab` |
+| `learning` | Tutorials, courses and worked exercises |
+| `guide` | Installation, configuration, migration, troubleshooting and tuning |
+| `reference` | Manuals, specifications, intrinsic definitions and Insights FAQs |
+| `article` | Overviews, white papers and benchmark analysis |
+| `compatibility` | Software/OS/version support catalogs |
 
-Hardware and ISA tags do not imply OS compatibility, every hardware variant or
-additional tags. For example, SVE2 does not imply SVE. Use labels present in the
-loaded corpus; old artifacts retain their legacy labels. Source-level tags apply
-to every chunk from that source.
+Example: Arm-published references or lessons about SVE or SVE2:
 
-For an SVE intrinsic definition, use
-`{"doc_type":"reference","product":"arm","platform":"sve"}`.
-Use `{"platform":["sve","sve2"]}` to include both families. The same OR rule
-applies to mixed values: `["linux","sve"]` matches Linux resources or SVE resources;
-it cannot express a Linux-and-SVE intersection. See the
-[ingestion schema](../embedding-generation/README.md#filter-tags-during-ingestion)
-for tag definitions and contributor examples.
+```json
+{"doc_type":["reference","learning"],"product":"arm","platform":["sve","sve2"]}
+```
 
-Choose Doc Type by the content needed:
+Result tags always return arrays; missing values return `[]`. Missing curated
+fields fall back to legacy metadata; explicit `[]` suppresses fallback. Old
+snapshots retain legacy labels. Tagged records accept legacy Doc Type aliases
+unless cleared; legacy Product ISA names are not aliases for publishers.
 
-| Filter value | Plain-language meaning | Examples in this KB |
-|---|---|---|
-| `learning` | Tutorials and courses | Learning Paths, course lessons and worked exercises |
-| `guide` | How-to guides | Installation, configuration, migration, troubleshooting and tuning instructions |
-| `reference` | Technical reference and FAQs | Intrinsic definitions, instruction/register behavior, technical manuals/specifications and Insights Q&A |
-| `article` | Articles and overviews | Explanations, white papers, workload briefs and benchmark analysis |
-| `compatibility` | Software compatibility | Ecosystem dashboard and supported software/OS/version catalogs |
-
-For example, an intrinsic's definition belongs in `reference`, while a lesson on
-using it belongs in `learning`. Use `{"doc_type":["reference","learning"]}` when
-either would help. Omit Doc Type when unsure: a filter excludes other categories.
-These definitions and examples are also included in the Doc Type field description
-that MCP clients receive, so agents do not need to infer the meaning from the tag.
-
-Stored `filter_metadata` supplies curated values without changing the scalar
-source identities used for ranking and grouping. A missing map/field falls back
-to legacy metadata; an explicit empty array suppresses that fallback. A record
-can match any of its tags. Responses always return fresh arrays for `doc_type`,
-`product` and `platform`, including values inherited from legacy scalar metadata.
-Missing values return `[]`.
-Legacy document-type names remain accepted query aliases for tagged records,
-unless their public type is cleared. Legacy Product ISA names are not aliases
-for the publisher tag. Document-context expansion still applies filters to seeds
-only and reports each expanded record's own tags.
+Edition is rejected as a filter, including `null`, and removed from results;
+dashboard edition remains internal. Page expansion filters only matched seeds
+and reports each expanded record's own tags.
 
 ## Name synonyms
 

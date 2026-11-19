@@ -146,136 +146,56 @@ use the published `about-marker` and `generated-summary-faq` anchors. Unknown Hu
 shortcodes fail explicitly so new content formats cannot silently lose text.
 
 Regenerate chunks and vector artifacts to publish changes to this parsing code.
-Acquisition and promotion verify that retained sources preserve their reviewed
-metadata overrides before replacing the CSV. Generation scripts and metadata
-validation come from the same checkout; pinned-image fingerprints protect the
-build environment. Publish the rebuilt KB artifacts, then promote their runtime
-pin. If a pinned build input is stale, review its rebuilt image and pin first.
+Publish rebuilt artifacts and update the runtime pin; refresh stale build-input
+pins first.
 
 ### Filter tags during ingestion
 
-The optional `Doc Type`, `Product` and `Platform` CSV columns provide public
-search tags. `Site Name` still selects the ingestion path; `Keywords` help text
-retrieval and are not filter tags. Add only tags verified by the source.
+Add verified tags using these optional CSV columns. `Site Name` and `Keywords`
+keep their existing roles.
 
-| CSV column | Search filter | Values |
-|---|---|---|
-| `Doc Type` | `doc_type` | `learning`, `guide`, `reference`, `article`, `compatibility` |
-| `Product` | `product` | Document publisher: currently `arm`, `aws`, `google`, `ampere` |
-| `Platform` | `platform` | Verified execution environment, ISA, architecture, hardware family or hosted runtime; see below |
-
-Choose Doc Type by the document's primary purpose:
-
-| Tag | Use for |
+| Column | Values |
 |---|---|
-| `learning` | Tutorials, courses, lessons and worked exercises |
-| `guide` | Installation, operation, migration, tuning and troubleshooting instructions |
-| `reference` | Intrinsic/instruction definitions, technical manuals, specifications and Insights FAQs |
-| `article` | Explanations, overviews, white papers and benchmark analysis |
-| `compatibility` | Supported software, operating-system and version catalogs |
+| `Doc Type` | `learning`, `guide`, `reference`, `article`, `compatibility` |
+| `Product` | Document publisher: `arm`, `aws`, `google`, `ampere` |
+| `Platform` | Execution environment, ISA or hardware; see below |
 
-Product identifies the **document publisher**, not the software discussed or the
-hosting service. An Arm-published Docker tutorial or ArmEducationX course uses
-`arm`; an AWS-published Graviton guide uses `aws`. Verify ownership before adding
-a publisher. All three fields have fixed vocabularies. Add a new publisher to
-`PRODUCTS` in `source_metadata.py` only after verifying ownership.
-
-| Cell value | Meaning |
-|---|---|
-| `linux` | One explicit tag |
-| `["linux","windows","macos"]` | Multiple tags in one cell |
-| blank / omitted column | Inherit source metadata when available |
-| `[]` | Explicitly clear this field, suppressing inherited tags |
-
-Case and surrounding whitespace are normalized; duplicate labels are removed.
-Unknown or inapplicable fields stay untagged. Do not enter placeholder labels
-such as `unknown`, `all` or `n/a`. Invalid values fail with the field and source URL.
-Use JSON arrays for multiple values, not comma- or semicolon-separated labels.
-Use the exact column names above; misspellings such as `platform` or `Platforms`
-fail validation instead of silently losing tags on save.
-
-In a spreadsheet, enter the JSON array in one cell and let CSV export quote it.
-When editing raw CSV, quote the cell and double its internal quotes:
+Blank cells inherit tags; `[]` clears them. Use exact headers and supported values,
+with JSON arrays for multiple tags. Example tag columns appended to a source row:
 
 ```csv
-Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL,Doc Type,Product,Platform
-Learning Paths,CC4.0,Example Arm Docker tutorial,https://example.com/arm-docker,docker; installation,,learning,arm,"[""linux"",""windows"",""macos""]"
-Graviton Getting Started Guide,CC4.0,Example AWS Graviton guide,https://example.com/aws-graviton,graviton; migration,,guide,aws,linux
+Doc Type,Product,Platform
+learning,arm,"[""linux"",""windows""]"
 ```
+
+See the [tag definitions](../arm_kb_search/README.md#filters) for category meanings.
+Allowed values are defined in `source_metadata.py`.
 
 #### Platform values
 
 | Scope | Accepted tags |
 |---|---|
-| Execution environment | `linux`, `windows`, `macos`, `android`, `baremetal`, `rtos`, `chromeos`, `freebsd` |
-| ISA family | `neon`, `sve`, `sve2`, `sme`, `sme2`, `helium` |
-| Architecture / hardware family | `cme`, `mali`, `cortex-m`, `agi-cpu` |
+| Execution environment | `linux`, `windows`, `macos`, `android`, `baremetal` (no OS), `rtos`, `chromeos`, `freebsd` |
+| ISA family | `neon`, `sve`, `sve2`, `sme`, `sme2`, `helium` (MVE) |
+| Architecture / hardware family | `cme`, `mali` (including NX), `cortex-m`, `agi-cpu` (Arm AGI CPU) |
 | Hosted runtime | `google-colab` |
 
-- Tag the environments or architectures the source substantively covers, including
-  verified host/target environments and explicitly required setup. Incidental
-  mentions, optional links and general software portability are insufficient.
-- `baremetal` means software running without an OS. Physical cloud servers running
-  Linux use `linux`. `Bare metal` and `Bare-metal` normalize to `baremetal`.
-- Intrinsic cards derive ISA tags from their catalog families: `MVE` maps to
-  `helium`, and combined groups receive each listed family. Unknown families remain
-  blank. SVE2 does not imply SVE; streaming SVE mode alone does not imply `sve`.
-- `cme` covers CME architecture, programming and performance monitoring. `mali`
-  covers Mali GPU guidance, including Neural Accelerator (NX) guidance. `cortex-m`
-  covers material explicitly targeting Cortex-M. These tags imply neither an OS,
-  support for every hardware variant, nor additional ISA tags.
-- `agi-cpu` covers material explicitly targeting Arm AGI CPU hardware. It does
-  not imply an OS or additional ISA tags.
-- `google-colab` requires a documented Colab execution environment. It implies no
-  OS, CPU architecture or GPU model and does not change the publisher tag.
-- Dashboard entries use their catalog platform (`linux` or `windows`), not every
-  OS supported by the package. Keep verified OS tags when adding hardware/ISA tags.
+Tag substantive coverage or required setup, not incidental mentions. Hardware and
+ISA tags do not imply an OS, every hardware variant or additional ISA support;
+SVE2 does not imply SVE. Cloud servers running Linux use `linux`, not `baremetal`.
+Dashboard records use their catalog OS; intrinsic records use their catalog family.
 
 #### Preservation and filtering
 
-CSV loading, saving and discovery preserve explicit overrides, including blank
-versus `[]`. Newly discovered sources have no override. Existing CSVs without tag
-columns keep their layout; files with a subset keep that subset. Conflicting
-explicit overrides for duplicate dashboard URLs fail validation.
+Blank cells inherit source defaults or Learn frontmatter. Explicit tags replace
+the field's inherited list; `[]` clears it. Child overrides take precedence.
 
-Blank cells inherit verified adapter defaults: Learning Paths use `learning` /
-`arm`, Install Guides use `guide` / `arm`, and dashboard records use
-`compatibility` / `arm` plus their catalog OS. Mixed-purpose adapters still need
-an explicit Doc Type. Learn Platform defaults come from the pinned repository's
-`operatingsystems`, exact Cortex-M/Mali `armips`, exact ISA values in
-`tools_software_languages`, and `Arm AGI CPU` in `platforms` (mapped to `agi-cpu`).
-Lessons inherit their path's taxonomy unless the lesson overrides that field.
-Body text and general keywords do not infer tags.
-Install guides without structured platform metadata need a reviewed CSV tag.
+Tags are preserved through CSV rewrites, chunks and vector metadata. Conflicting
+assignments at the same scope fail validation; builds report coverage gaps.
 
-An explicit Platform cell replaces the entire derived list; include the verified
-OS and ISA/hardware tags together. Leave redundant overrides blank so future
-frontmatter changes can flow through. `[]` suppresses every inherited tag for
-that field. Builds print `[METADATA GAP]` with source URLs, unmapped OS warnings,
-and source-chunk coverage; unknown or inapplicable values remain untagged.
-
-For overlapping Learn sources, an explicitly configured child page or smaller
-resource takes precedence field by field. Blank child fields inherit the parent;
-`[]` clears them. Canonical membership, including aliases, determines precedence
-independently of CSV row order. Same-scope conflicts fail before replacing outputs.
-
-The dispatcher applies tags to every parsed chunk, including transcripts, child
-pages and API topics. YAML and vector JSON preserve them in `filter_metadata`;
-scalar metadata retains source identity for intrinsic ranking, dashboard variants
-and document context. Explicit intrinsic overrides take precedence over defaults.
-
-Search uses OR within a field and AND across fields; missing requested tags are
-excluded. `["linux","sve"]` means Linux **or** SVE, not their intersection.
-Older artifacts with a missing curated field fall back to legacy metadata;
-`[]` suppresses fallback. All three result fields are arrays, including legacy
-values; unknown values return `[]`. Legacy
-Doc Type names remain query aliases when the public type is nonempty. Legacy
-Product ISA labels are not aliases for publisher tags. Existing published
-artifacts retain their old tags until the corpus is rebuilt and promoted. See the [search API](../arm_kb_search/README.md#filters) for client usage.
-
-Edition is removed from contributor tags and public filters/results. Remove the
-`Edition` column from older CSVs; ingestion rejects it with a migration message.
-Raw dashboard edition remains internal so catalog variants stay distinct.
+Remove the retired `Edition` CSV column; dashboard edition remains internal.
+See the [search API](../arm_kb_search/README.md#filters) for filtering and
+compatibility details.
 
 ## Discover developer.arm.com Sources
 
