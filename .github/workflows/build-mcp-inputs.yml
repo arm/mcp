@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - .github/scripts/build-input-fingerprint.py
       - pyproject.toml
       - mcp-local/.dockerignore
       - mcp-local/.python-version
@@ -100,6 +101,12 @@ jobs:
       - name: Acquire and verify locked inputs
         run: mcp-local/.venv/bin/python mcp-local/scripts/stage-build-inputs.py --arch ${{ matrix.arch }}
 
+      - name: Fingerprint bundle inputs
+        id: fingerprint
+        run: |
+          value="$(python3 .github/scripts/build-input-fingerprint.py mcp-inputs)"
+          echo "value=${value}" >> "$GITHUB_OUTPUT"
+
       - name: Build architecture input image locally
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
@@ -113,6 +120,7 @@ jobs:
           provenance: false
           tags: ${{ env.IMAGE }}:${{ env.PUBLICATION_TAG }}-${{ matrix.arch }}
           labels: |
+            com.arm.mcp.build-input-fingerprint=${{ steps.fingerprint.outputs.value }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.title=Arm MCP immutable build inputs
@@ -191,6 +199,7 @@ jobs:
           provenance: mode=max
           tags: ${{ env.IMAGE }}:${{ env.PUBLICATION_TAG }}-${{ matrix.arch }}
           labels: |
+            com.arm.mcp.build-input-fingerprint=${{ steps.fingerprint.outputs.value }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.title=Arm MCP immutable build inputs

@@ -16,7 +16,7 @@
 
 FROM toolchain AS refresh
 WORKDIR /refresh
-COPY intrinsic_catalog.py document_chunking.py ./
+COPY intrinsic_catalog.py document_chunking.py agi_product_brief.py ./
 COPY --from=intrinsic-chunks /embedding-data/intrinsic_chunks/ /previous/
 RUN --network=default python intrinsic_catalog.py \
     --existing /previous --output /snapshot/intrinsic_chunks \

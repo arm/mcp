@@ -17,6 +17,9 @@
 # The workflow supplies both named contexts as immutable image references.
 FROM toolchain AS generation
 
+# Keep the environment pinned while taking generation code from this checkout.
+COPY local_vectorstore_creation.py /embedding-data/
+
 ENV INTRINSIC_CHUNKS_DIR=/chunks/intrinsic_chunks \
     YAML_DATA_DIR=/chunks/yaml_data \
     USEARCH_INDEX_FILENAME=/output/usearch_index.bin \

@@ -18,6 +18,8 @@ from zipfile import BadZipFile, ZipFile
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
 
+from agi_product_brief import extract_agi_product_brief, is_agi_product_brief
+
 TOKEN_PATTERN = re.compile(r"\w+|[^\w\s]", re.UNICODE)
 WORD_PATTERN = re.compile(r"\S+")
 SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+")
@@ -218,6 +220,8 @@ class ParsedDocument:
     version: str = ""
     platform: str = ""
     edition: str = ""
+    # A separately expandable unit within a source page, such as an Insights FAQ.
+    context_url: str = ""
 
 
 def normalize_source_url(url: str) -> str:
@@ -245,55 +249,6 @@ def learn_learning_path_root_url(source_url: str) -> str | None:
         return None
     return urlunparse((parsed.scheme, parsed.netloc.lower(),
                        "/" + "/".join(segments[:3]) + "/", "", "", ""))
-
-
-def learn_learning_path_step_urls(
-    source_url: str, html: str | bytes, *, ordered_only: bool = False,
-) -> list[str]:
-    source_url = normalize_source_url(source_url)
-    if not is_learn_learning_path_url(source_url):
-        return []
-
-    source = urlparse(source_url)
-    source_path = source.path.rstrip("/") + "/"
-    soup = BeautifulSoup(html, "html.parser")
-    step_urls: list[str] = []
-    seen: set[str] = set()
-
-    links = soup.find_all("a", href=True)
-    if ordered_only:
-        # Only the published step-navigation weights establish step order. Generic
-        # hyperlinks still support discovery, but cannot certify a path manifest.
-        weighted = {}
-        for link in links:
-            classes = link.get("class", [])
-            if "inner-learning-path-navbar-element" not in classes:
-                continue
-            weights = [int(m[1]) for value in classes if (m := re.fullmatch(r"(\d+)-weight", value))]
-            if "content-individual-a-mobile" in classes or weights == [0]:
-                continue
-            if len(weights) != 1 or weights[0] in weighted:
-                return []
-            weighted[weights[0]] = link
-        links = [weighted[index] for index in sorted(weighted)]
-
-    for link in links:
-        candidate = normalize_source_url(urljoin(source_url, link.get("href", "")))
-        parsed = urlparse(candidate)
-        if (
-            parsed.scheme not in {"http", "https"}
-            or parsed.netloc.lower() != "learn.arm.com"
-        ):
-            continue
-        path = parsed.path.rstrip("/") + "/"
-        if path == source_path or not path.startswith(source_path):
-            continue
-        step_url = urlunparse((parsed.scheme, parsed.netloc, path, "", "", ""))
-        if step_url not in seen:
-            seen.add(step_url)
-            step_urls.append(step_url)
-
-    return step_urls
 
 
 def is_arm_developer_documentation_url(url: str) -> bool:
@@ -388,6 +343,21 @@ def clean_text(text: str) -> str:
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+
+FENCED_CODE = re.compile(
+    r"^ {0,3}(`{3,}|~{3,})[^\n]*\n.*?^ {0,3}\1[ \t]*(?=\n|$)", re.M | re.S
+)
+
+
+def clean_chunk_text(text: str) -> str:
+    """Normalize prose while preserving whitespace within fenced examples."""
+    parts, start = [], 0
+    for match in FENCED_CODE.finditer(text):
+        parts.extend((clean_text(text[start:match.start()]), match[0]))
+        start = match.end()
+    parts.append(clean_text(text[start:]))
+    return "\n\n".join(part for part in parts if part)
 
 
 def tokenize_link_text(text: str) -> list[str]:
@@ -617,7 +587,8 @@ def _should_skip_html_tag(tag) -> bool:
 
 
 def parse_html(
-    html: str, source_url: str, resolved_url: str, fallback_title: str
+    html: str, source_url: str, resolved_url: str, fallback_title: str,
+    *, use_heading_levels: bool = False,
 ) -> ParsedDocument:
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup.find_all(
@@ -647,6 +618,7 @@ def parse_html(
         title = clean_text(soup.title.get_text(" ", strip=True)) or title
 
     heading_stack: list[str] = []
+    heading_levels: list[int] = []
     heading_anchor_stack: list[Optional[str]] = []
     sections: list[Section] = []
     current_blocks: list[Block] = []
@@ -665,15 +637,27 @@ def parse_html(
     for tag in root.find_all(list(HTML_BLOCK_TAGS)):
         if _should_skip_html_tag(tag):
             continue
-        text = clean_text(tag.get_text("\n" if tag.name == "pre" else " ", strip=True))
+        if tag.name in {"pre", "code"}:
+            # Syntax highlighting may split a line across many spans. Concatenate
+            # their text without inserting separators or stripping indentation.
+            text = tag.get_text().strip("\n")
+        else:
+            text = clean_text(tag.get_text(" ", strip=True))
         if not text or is_boilerplate_line(text):
             continue
         if tag.name in HTML_HEADING_TAGS:
             flush_section()
             level = int(tag.name[1])
-            while len(heading_stack) >= level:
+            # Repository Markdown can begin at h3 or skip levels. Opt in to
+            # that hierarchy without changing other providers' HTML chunks.
+            while heading_stack and (
+                heading_levels[-1] >= level if use_heading_levels
+                else len(heading_stack) >= level
+            ):
+                heading_levels.pop()
                 heading_stack.pop()
                 heading_anchor_stack.pop()
+            heading_levels.append(level)
             heading_stack.append(text)
             heading_anchor_stack.append(clean_text(tag.get("id", "")) or None)
             if level == 1 and not first_h1_seen:
@@ -732,6 +716,17 @@ def parse_pdf(
     pdf_bytes: bytes, source_url: str, resolved_url: str, fallback_title: str
 ) -> ParsedDocument:
     reader = PdfReader(BytesIO(pdf_bytes))
+    if is_agi_product_brief(source_url) or is_agi_product_brief(resolved_url):
+        return ParsedDocument(
+            source_url=source_url,
+            resolved_url=resolved_url,
+            display_title=fallback_title,
+            content_type="pdf",
+            sections=[
+                Section(headings, [Block("paragraph", text)], f"page={number}")
+                for headings, text, number in extract_agi_product_brief(reader)
+            ],
+        )
     sections: list[Section] = []
     document_title = fallback_title
     for page_number, page in enumerate(reader.pages, start=1):
@@ -760,7 +755,7 @@ def parse_pdf(
                 continue
             blocks.append(Block("paragraph", paragraph))
         if blocks:
-            sections.append(Section(heading_path, blocks))
+            sections.append(Section(heading_path, blocks, f"page={page_number}"))
     if not sections:
         sections.append(Section([], [Block("paragraph", fallback_title)]))
     return ParsedDocument(
@@ -1089,7 +1084,7 @@ def parse_document_content(
     fallback_title: str,
 ) -> ParsedDocument:
     content_type = (content_type or "").lower()
-    if "pdf" in content_type or resolved_url.lower().endswith(".pdf"):
+    if "pdf" in content_type or urlparse(resolved_url).path.lower().endswith(".pdf"):
         return parse_pdf(response_content, source_url, resolved_url, fallback_title)
     # Raw GitHub-hosted PPTX files may be served as generic binary content; use
     # the resolved path before attempting to decode the file as UTF-8 text.
@@ -1160,15 +1155,26 @@ def merge_code_context(blocks: list[Block]) -> list[str]:
         else:
             merged.append(block.text)
         i += 1
-    return [clean_text(item) for item in merged if clean_text(item)]
+    return [clean_chunk_text(item) for item in merged if item.strip()]
 
 
 def split_text_recursively(text: str, max_tokens: int) -> list[str]:
-    text = clean_text(text)
+    text = clean_chunk_text(text)
     if not text:
         return []
     if estimate_tokens(text) <= max_tokens:
         return [text]
+    fences = list(FENCED_CODE.finditer(text))
+    if fences:
+        # Keep examples intact even when one exceeds the target chunk size.
+        # Splitting code by words destroys indentation and executable syntax.
+        parts, start = [], 0
+        for match in fences:
+            parts.extend(split_text_recursively(text[start:match.start()], max_tokens))
+            parts.append(match[0])
+            start = match.end()
+        parts.extend(split_text_recursively(text[start:], max_tokens))
+        return parts
     parts = [
         clean_text(part) for part in re.split(r"\n\s*\n", text) if clean_text(part)
     ]
@@ -1196,6 +1202,10 @@ def split_text_recursively(text: str, max_tokens: int) -> list[str]:
 
 
 def overlap_tail(text: str, overlap_tokens: int) -> str:
+    fences = list(FENCED_CODE.finditer(text))
+    if fences:
+        # Only overlap trailing prose; partial code would lose its fence/indent.
+        text = text[fences[-1].end():].strip()
     words = WORD_PATTERN.findall(text)
     if len(words) <= overlap_tokens:
         return text
@@ -1244,7 +1254,7 @@ def build_chunk_text(title: str, heading_path: list[str], body: str) -> str:
     heading_label = (
         " > ".join(normalized_heading_path) if normalized_heading_path else title
     )
-    return clean_text(
+    return clean_chunk_text(
         f"Document Title: {title}\nHeading Path: {heading_label}\n\n{body}"
     )
 
@@ -1321,7 +1331,9 @@ def chunk_parsed_document(
             )
     page_url = urlunparse(urlparse(parsed_document.source_url)._replace(fragment=""))
     parent_page_url = learn_learning_path_root_url(page_url)
-    document_url = parsed_document.source_url if doc_type == "Intrinsic" else page_url
+    document_url = parsed_document.context_url or (
+        parsed_document.source_url if doc_type == "Intrinsic" else page_url
+    )
     # Normalize the parent's stored identity while retaining original citation URLs.
     if parent_page_url and urlparse(page_url).path.rstrip("/") == urlparse(parent_page_url).path.rstrip("/"):
         document_url = parent_page_url

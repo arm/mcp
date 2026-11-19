@@ -23,6 +23,9 @@ ENV INTRINSIC_CHUNKS_DIR=/snapshot/intrinsic_chunks \
 
 WORKDIR /work
 
+# Use generation code from the same checkout as this build's source CSV.
+COPY agi_product_brief.py document_chunking.py ecosystem_dashboard.py generate-chunks.py \
+    learn_public.py learn_repository.py /embedding-data/
 COPY vector-db-sources.csv vector-db-sources.csv
 COPY --from=intrinsic-chunks \
     /embedding-data/intrinsic_chunks/ \
