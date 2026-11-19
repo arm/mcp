@@ -165,5 +165,11 @@ def test_workflow_only_publishes_manual_main_runs():
     assert build["with"]["no-cache"] == "true"
     assert build["with"]["push"] == "${{ env.PUBLISH_IMAGE == 'true' }}"
     assert build["with"]["outputs"] == "type=local,dest=${{ runner.temp }}/intrinsic-snapshot"
+    fingerprint = next(s for s in steps if "build-input-fingerprint.py toolchain" in s.get("run", ""))
+    buildx = next(s for s in steps if s.get("uses", "").startswith("docker/setup-buildx-action@"))
+    assert steps.index(buildx) < steps.index(fingerprint) < steps.index(build)
+    assert "if" not in fingerprint and fingerprint.get("continue-on-error", "false") == "false"
+    assert fingerprint["env"]["GENERATOR_IMAGE"] == "${{ steps.inputs.outputs.generator_image }}"
+    assert '--image "$GENERATOR_IMAGE"' in fingerprint["run"]
     attest = next(s for s in steps if s.get("uses", "").startswith("actions/attest@"))
     assert attest["with"]["subject-digest"] == "${{ steps.snapshot.outputs.digest }}"
