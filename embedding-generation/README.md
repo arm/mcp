@@ -64,34 +64,25 @@ corresponding release action; it opens a separate reviewed version PR.
 
 ## Intrinsic Catalog Snapshot
 
-Builds reuse the snapshot pinned by `intrinsic_chunks_image` in `pipeline-inputs.lock.json`.
-To refresh it, run **Refresh Intrinsic Snapshot** in GitHub Actions on `main`.
-Leave `dry_run` enabled to validate without publishing; disable it to publish a
-new private `ghcr.io/arm/mcp-intrinsic-chunks` image. The workflow downloads the
-current Arm catalog and operations, refreshes every record, and preserves
-existing filenames, IDs and URLs. The image contains only the prepared YAML
-records and a manifest with source checksums and record counts.
+1. Run **Refresh Intrinsic Snapshot** in GitHub Actions on `main`. Keep `dry_run`
+   enabled to validate, or disable it to publish a private snapshot image.
+2. Copy the full image reference (`ghcr.io/arm/mcp-intrinsic-chunks@sha256:...`)
+   from the run summary into `intrinsic_chunks_image` in `pipeline-inputs.lock.json`.
+   Review and merge that pin update in a separate PR.
+3. The Sunday embedding pipeline uses the new pin. Review and merge its generated
+   release PR to release the updated embeddings.
 
-Overloads sharing a catalog name are kept as separate records with stable IDs
-based on their signatures and a shared catalog URL. Existing IDs are retained,
-and a missing overload fails validation just like a missing intrinsic. New files
-use the `chunk_<uuid>.yaml` naming convention. Refreshed descriptions use catalog
-requirements; the old generic `-march` recommendations are not carried forward.
-Acquisition must use the updated `document_chunking.py` to preserve overload
-order. If `Dockerfile.acquire` copies generation scripts from the checkout,
-merging these changes is sufficient for the scripts. If it uses scripts baked
-into the generator image, merge the automatic generator-pin update first.
-Any separate dependency-image freshness checks must also pass.
+The workflow downloads Arm's latest catalog and operations, validates them, and
+packages the prepared YAML records with a manifest. It preserves existing
+filenames, IDs and URLs, and keeps overloads as separate records. Invalid data or
+missing existing records stop publication. Descriptions use catalog requirements
+instead of the old generic `-march` recommendations.
 
-The run summary reports the published digest. Update `intrinsic_chunks_image`
-to that immutable reference in a reviewed PR. The normal Sunday embedding
-pipeline consumes it after that PR merges; the normal release PR still requires
-review. This workflow does not build embeddings, change pins or release MCP.
-
-An empty/invalid catalog, missing existing records, unsupported families,
-missing operations or descriptions over 500 embedding tokens fail before
-publication. Existing snapshots remain available. Repeated runs with identical
-inputs produce identical YAML; publication uses a unique tag for each run.
+Before updating the snapshot pin, acquisition must use the updated
+`document_chunking.py` to preserve overload grouping. If scripts are baked into
+its generator image, merge the automatic generator-pin PR first. If scripts come
+from the checkout, merging the code is sufficient. Dependency-image freshness
+checks must also pass.
 
 ## Add Documents
 
