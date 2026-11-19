@@ -48,6 +48,7 @@ def test_discovered_sources_inherit_verified_tags_through_chunks(
             "New AWS Graviton lesson", "Learn on Arm.", url=root_route,
             operatingsystems=["Linux", "Windows"], armips=["Cortex-M", "Mali"],
             tools_software_languages=["SME2", "SVE", "SVE2", "Neon", "Python"],
+            platforms=["Arm AGI CPU", "AWS Graviton"],
         ),
         "content/learning-paths/cross-platform/new/lesson.md": markdown(
             "Lesson", "Build the example.", **({"url": lesson_route} if lesson_route else {})),
@@ -70,7 +71,7 @@ def test_discovered_sources_inherit_verified_tags_through_chunks(
         expected = {"doc_type": ["guide"], "product": ["arm"], "platform": []}
         if config["urls"][i] == root:
             expected = {"doc_type": ["learning"], "product": ["arm"], "platform": [
-                "linux", "windows", "cortex-m", "mali", "sme2", "sve", "sve2", "neon",
+                "linux", "windows", "cortex-m", "mali", "sme2", "sve", "sve2", "neon", "agi-cpu",
             ]}
             assert len({chunk.url for chunk in chunks}) == 2
         assert chunks and all(chunk.toDict()["filter_metadata"] == expected for chunk in chunks)
@@ -84,15 +85,15 @@ def test_learn_platform_metadata_uses_authored_scope_and_flags_unknown_os():
     repo = repository({
         "content/learning-paths/cross-platform/new/_index.md": markdown(
             "Root", "Learn.", operatingsystems=["Linux"], armips=["Cortex-M55"],
-            tools_software_languages=["SME2"],
+            tools_software_languages=["SME2"], platforms=["Arm AGI CPU"],
         ),
         "content/learning-paths/cross-platform/new/child.md": markdown(
             "Child", "Neon is only an incidental mention.", operatingsystems=["FutureOS"],
-            armips=[], tools_software_languages=[],
+            armips=[], tools_software_languages=[], platforms=[],
         ),
     })
     root = "https://learn.arm.com/learning-paths/cross-platform/new/"
-    assert repo.platform_tags(root) == ["linux", "cortex-m", "sme2"]
+    assert repo.platform_tags(root) == ["linux", "cortex-m", "sme2", "agi-cpu"]
     with pytest.warns(UserWarning, match="FutureOS"):
         assert repo.platform_tags(root + "child/") == []
 

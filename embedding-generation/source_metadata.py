@@ -30,6 +30,7 @@ PLATFORMS = frozenset(
         "cme",
         "mali",
         "cortex-m",
+        "agi-cpu",
         "google-colab",
     }
 )
@@ -62,6 +63,7 @@ LEARN_PLATFORM_TAGS = {
     "tools_software_languages": {name: name for name in (
         "neon", "sve", "sve2", "sme", "sme2", "helium",
     )},
+    "platforms": {"arm agi cpu": "agi-cpu"},
 }
 
 

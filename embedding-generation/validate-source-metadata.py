@@ -1,14 +1,12 @@
 # Copyright © 2026, Arm Limited and Contributors. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Fail closed when a pinned generator or generated CSV loses contributor tags."""
+"""Fail closed when a generated CSV loses contributor tags."""
 
 import argparse
 import csv
-import subprocess
 import sys
-import tempfile
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 
 from source_metadata import (
@@ -19,7 +17,7 @@ from source_metadata import (
 
 
 def read_sources(path):
-    by_url = defaultdict(Counter)
+    by_url = defaultdict(set)
     with Path(path).open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         columns = reader.fieldnames or []
@@ -35,7 +33,7 @@ def read_sources(path):
                     None if tags.get(field) is None else tuple(sorted(tags[field]))
                     for field in METADATA_COLUMNS.values()
                 )
-                by_url[url][values] += 1
+                by_url[url].add(values)
     return set(columns) & METADATA_COLUMNS.keys(), by_url
 
 
@@ -48,60 +46,29 @@ def assignment_sets(rows):
     )
 
 
-def validate(expected, actual, *, strict_roundtrip=False):
+def validate(expected, actual):
     expected_columns, expected_sources = read_sources(expected)
     actual_columns, actual_sources = read_sources(actual)
     missing = expected_columns - actual_columns
     if missing:
         raise ValueError(f"Generated CSV lost metadata columns: {', '.join(sorted(missing))}")
     for url, tags in expected_sources.items():
-        if strict_roundtrip:
-            matches = actual_sources.get(url) == tags
-        elif url not in actual_sources:
+        if url not in actual_sources:
             print(f"Removed source: {url}")
             continue
-        else:
-            matches = assignment_sets(actual_sources[url]) == assignment_sets(tags)
-        if not matches:
+        if assignment_sets(actual_sources[url]) != assignment_sets(tags):
             raise ValueError(f"Generated CSV lost a source or changed metadata for {url}")
-
-
-def check_generator(expected, generator):
-    with tempfile.TemporaryDirectory() as directory:
-        roundtrip = Path(directory) / "sources.csv"
-        roundtrip.write_bytes(Path(expected).read_bytes())
-        # Use the image's own imports, never the checkout's metadata implementation.
-        subprocess.run(
-            [sys.executable, "-I", "-c",
-             "import runpy, sys; from pathlib import Path; "
-             "sys.path.insert(0, str(Path(sys.argv[1]).resolve().parent)); "
-             "module = runpy.run_path(sys.argv[1]); "
-             "module['load_existing_sources'](sys.argv[2]); "
-             "module['save_sources_csv'](sys.argv[2])",
-             str(Path(generator).resolve()), str(roundtrip)],
-            check=True,
-        )
-        validate(expected, roundtrip, strict_roundtrip=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("expected", type=Path)
-    parser.add_argument("actual", type=Path, nargs="?")
-    parser.add_argument("--generator", type=Path)
+    parser.add_argument("actual", type=Path)
     args = parser.parse_args()
-    if bool(args.actual) == bool(args.generator):
-        parser.error("supply either a generated CSV or --generator")
     try:
-        if args.generator:
-            check_generator(args.expected, args.generator)
-        else:
-            validate(args.expected, args.actual)
-    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+        validate(args.expected, args.actual)
+    except (ValueError, OSError) as error:
         print(f"Source metadata validation failed: {error}", file=sys.stderr)
-        if args.generator:
-            print("Build and review a compatible generator image, then update "
-                  "pipeline-inputs.lock.json before running acquisition.", file=sys.stderr)
         return 1
     return 0
 

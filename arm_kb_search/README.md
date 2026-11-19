@@ -98,7 +98,7 @@ publisher, not the software discussed or its hosting provider.
 |---|---|
 | Execution environment | `linux`, `windows`, `macos`, `android`, `baremetal`, `rtos`, `chromeos`, `freebsd` |
 | Intrinsic family or ISA taught by the document | `neon`, `sve`, `sve2`, `sme`, `sme2`, `helium` (MVE) |
-| Architecture or hardware family | `cme`, `mali`, `cortex-m` |
+| Architecture or hardware family | `cme`, `mali`, `cortex-m`, `agi-cpu` (Arm AGI CPU) |
 | Documented hosted runtime | `google-colab` |
 
 Hardware and ISA tags do not imply OS compatibility, every hardware variant or

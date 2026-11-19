@@ -766,7 +766,8 @@ def test_invalid_filter_objects(value):
 ])
 @pytest.mark.parametrize("curated", [False, True])
 @pytest.mark.parametrize("platforms", [("linux", "windows"), ("cme", "sme"), ("mali", "linux"),
-                                     ("google-colab", "linux"), ("cortex-m", "windows")])
+                                     ("google-colab", "linux"), ("cortex-m", "windows"),
+                                     ("agi-cpu", "linux")])
 def test_filter_alternatives_combine_before_ranking_and_share_k(doc_types, curated, platforms):
     guide, learning, reference = doc_types
     first, second = platforms

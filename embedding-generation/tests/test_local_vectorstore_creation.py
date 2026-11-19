@@ -475,7 +475,7 @@ def test_prepared_chunks_roundtrip_without_reparsing(
         writer = csv.writer(stream)
         writer.writerow(["Site Name", "Display Name", "URL", "Doc Type", "Product", "Platform"])
         writer.writerow(["Install Guides", "Guide", "https://example.org/guide", "guide", "arm",
-                         '["linux","windows","sme2","cme","mali","google-colab","cortex-m"]'])
+                         '["linux","windows","sme2","cme","mali","google-colab","cortex-m","agi-cpu"]'])
     config, count = gc.readInCSV(csv_path)
     assert count == 1
     monkeypatch.setattr(gc, "fetch_with_logging", lambda url: SimpleNamespace(

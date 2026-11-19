@@ -23,14 +23,11 @@ ENV INTRINSIC_CHUNKS_DIR=/snapshot/intrinsic_chunks \
 
 WORKDIR /work
 
+# Use generation code from the same checkout as this build's source CSV.
+COPY agi_product_brief.py document_chunking.py ecosystem_dashboard.py generate-chunks.py \
+    learn_public.py learn_repository.py source_metadata.py validate-source-metadata.py /embedding-data/
 COPY vector-db-sources.csv vector-db-sources.csv
 COPY vector-db-sources.csv expected-sources.csv
-COPY validate-source-metadata.py source_metadata.py /work/validation/
-
-# Exercise the pinned image's CSV serializer before any network acquisition.
-RUN --network=none python /work/validation/validate-source-metadata.py \
-    /work/expected-sources.csv --generator /embedding-data/generate-chunks.py
-
 COPY --from=intrinsic-chunks \
     /embedding-data/intrinsic_chunks/ \
     /snapshot/intrinsic_chunks/
@@ -42,7 +39,7 @@ RUN --network=default \
     python /embedding-data/generate-chunks.py /work/vector-db-sources.csv
 
 # Never publish chunks whose generated source catalog lost reviewed overrides.
-RUN --network=none python /work/validation/validate-source-metadata.py \
+RUN --network=none python /embedding-data/validate-source-metadata.py \
     /work/expected-sources.csv /work/vector-db-sources.csv
 
 FROM scratch AS chunks

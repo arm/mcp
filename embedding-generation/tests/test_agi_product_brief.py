@@ -238,7 +238,7 @@ def test_main_validates_before_replacing_outputs_and_reuses_download(
     sources = tmp_path / "sources.csv"
     original = (
         "Site Name,License Type,Display Name,URL,Keywords,Doc Type,Product,Platform\n"
-        f"Arm Documentation,Arm Proprietary,Arm AGI CPU Product Brief,{URL},Arm AGI CPU,reference,arm,[]\n"
+        f"Arm Documentation,Arm Proprietary,Arm AGI CPU Product Brief,{URL},Arm AGI CPU,reference,arm,agi-cpu\n"
     )
     sources.write_text(original)
     output = tmp_path / "chunks"
@@ -277,7 +277,7 @@ def test_main_validates_before_replacing_outputs_and_reuses_download(
         saved = [yaml.safe_load(path.read_text()) for path in output.glob("*.yaml")]
         assert len(saved) == 11
         assert all(c.get("filter_metadata") == {
-            "doc_type": ["reference"], "product": ["arm"], "platform": []
+            "doc_type": ["reference"], "product": ["arm"], "platform": ["agi-cpu"]
         } for c in saved)
         specs = [c for c in saved if c["heading_path"][0] == "Specifications"]
         assert {c["heading"] for c in specs} == {f"SKU {sku}" for sku in SKUS}

@@ -22,24 +22,46 @@ The toolchain image:
 1. Installs the exact Python dependencies recorded in `uv.lock`.
 2. Acquires the sentence-transformer revision recorded in `embedding-model.lock.json`.
 3. Confirms that the saved model loads with networking disabled.
-4. Copies the locked environment, local model, and generation scripts into the
+4. Copies the locked environment, local model, and model lock into the
    final image without `uv`, `pip`, or `ensurepip` and its bundled pip wheel.
 
 When a file baked into the toolchain changes on `main`, including its
-Dockerfile, Python or model locks, acquisition code, or generation scripts,
+Dockerfile, Python or model locks, or model acquisition code,
 GitHub Actions rebuilds this image and opens or updates
 `automation/pin-embedding-generator`. That PR updates
 `pipeline-inputs.lock.json` to the new immutable digest. The workflow also
-supports manual branch runs, which publish an image without opening a PR.
+supports manual runs on `main` with `dry_run=false` to publish and propose a pin
+update. Branch runs build and scan only.
 
-`Dockerfile.acquire` uses this toolchain for network-enabled discovery and
+`Dockerfile.acquire` copies `generate-chunks.py` and its local modules from the
+workflow checkout and uses this toolchain for network-enabled discovery and
 content acquisition, then publishes only the acquired chunk snapshot from a
-scratch stage. `Dockerfile.vectorstore` uses the same toolchain and that
-immutable chunk snapshot to build `metadata.json` and `usearch_index.bin`
+scratch stage. `Dockerfile.vectorstore` copies
+`local_vectorstore_creation.py` from the same checkout and uses the same toolchain
+and that immutable chunk snapshot to build `metadata.json` and `usearch_index.bin`
 without network access. The scratch output also includes the exact local model
 used to generate the index, keeping the model, metadata, and index together as
 one immutable artifact. It is published privately as
 `ghcr.io/arm/mcp-embedding-vectorstore`.
+
+Generation-script changes take effect on the next embedding pipeline run without
+a toolchain rebuild or pin update. Changes to Python, dependencies, or the model
+still require rebuilding the toolchain and merging its pin update before running
+the pipeline. Generation code is identified by the workflow source commit; the
+environment is identified by the pinned toolchain digest.
+
+Before acquiring chunks, the pipeline checks that both the pinned toolchain and
+runtime build-input bundle match the checkout, avoiding expensive embedding runs
+with stale dependencies. The MCP release workflow checks the runtime bundle
+again before the final offline build. If a fingerprint is stale or missing,
+check for a pending pin-update PR with matching inputs. If none is available or
+its inputs are outdated, rebuild the corresponding image on `main` with
+`dry_run=false`. Review and merge the pin update, then start a new workflow run
+from updated `main`.
+
+For runtime OS-package or migrate-ease lock changes, start **Build MCP Input
+Bundle** manually. Changes to `mcp-local/build-inputs.lock.json` do not trigger
+bundle builds automatically because promotion PRs also update that file.
 
 ## Promote an Embedding Build into MCP
 
@@ -123,14 +145,12 @@ raw-heading sanitization and duplicate handling. Learning Path frontmatter secti
 use the published `about-marker` and `generated-summary-faq` anchors. Unknown Hugo
 shortcodes fail explicitly so new content formats cannot silently lose text.
 
-Changes to this parsing code require rebuilding the toolchain and merging its
-`automation/pin-embedding-generator` PR before rebuilding the corpus. The pinned
-toolchain, not the current checkout, supplies the acquisition Python modules.
-Acquisition first runs the pinned generator's CSV load/save roundtrip offline.
-It fails if tags or rows are lost. Acquisition and promotion also verify that
-retained sources preserve their overrides before replacing the CSV. Merge order:
-generator changes and guard, then the reviewed toolchain image pin, then rebuilt
-KB artifacts and their runtime pin. Never substitute an unverified image digest.
+Regenerate chunks and vector artifacts to publish changes to this parsing code.
+Acquisition and promotion verify that retained sources preserve their reviewed
+metadata overrides before replacing the CSV. Generation scripts and metadata
+validation come from the same checkout; pinned-image fingerprints protect the
+build environment. Publish the rebuilt KB artifacts, then promote their runtime
+pin. If a pinned build input is stale, review its rebuilt image and pin first.
 
 ### Filter tags during ingestion
 
@@ -189,7 +209,7 @@ Graviton Getting Started Guide,CC4.0,Example AWS Graviton guide,https://example.
 |---|---|
 | Execution environment | `linux`, `windows`, `macos`, `android`, `baremetal`, `rtos`, `chromeos`, `freebsd` |
 | ISA family | `neon`, `sve`, `sve2`, `sme`, `sme2`, `helium` |
-| Architecture / hardware family | `cme`, `mali`, `cortex-m` |
+| Architecture / hardware family | `cme`, `mali`, `cortex-m`, `agi-cpu` |
 | Hosted runtime | `google-colab` |
 
 - Tag the environments or architectures the source substantively covers, including
@@ -204,6 +224,8 @@ Graviton Getting Started Guide,CC4.0,Example AWS Graviton guide,https://example.
   covers Mali GPU guidance, including Neural Accelerator (NX) guidance. `cortex-m`
   covers material explicitly targeting Cortex-M. These tags imply neither an OS,
   support for every hardware variant, nor additional ISA tags.
+- `agi-cpu` covers material explicitly targeting Arm AGI CPU hardware. It does
+  not imply an OS or additional ISA tags.
 - `google-colab` requires a documented Colab execution environment. It implies no
   OS, CPU architecture or GPU model and does not change the publisher tag.
 - Dashboard entries use their catalog platform (`linux` or `windows`), not every
@@ -220,9 +242,10 @@ Blank cells inherit verified adapter defaults: Learning Paths use `learning` /
 `arm`, Install Guides use `guide` / `arm`, and dashboard records use
 `compatibility` / `arm` plus their catalog OS. Mixed-purpose adapters still need
 an explicit Doc Type. Learn Platform defaults come from the pinned repository's
-`operatingsystems`, exact Cortex-M/Mali `armips`, and exact ISA values in
-`tools_software_languages`. Lessons inherit their path's taxonomy unless the
-lesson overrides that field. Body text and general keywords do not infer tags.
+`operatingsystems`, exact Cortex-M/Mali `armips`, exact ISA values in
+`tools_software_languages`, and `Arm AGI CPU` in `platforms` (mapped to `agi-cpu`).
+Lessons inherit their path's taxonomy unless the lesson overrides that field.
+Body text and general keywords do not infer tags.
 Install guides without structured platform metadata need a reviewed CSV tag.
 
 An explicit Platform cell replaces the entire derived list; include the verified
@@ -248,8 +271,7 @@ Older artifacts with a missing curated field fall back to legacy metadata;
 values; unknown values return `[]`. Legacy
 Doc Type names remain query aliases when the public type is nonempty. Legacy
 Product ISA labels are not aliases for publisher tags. Existing published
-artifacts retain their old tags until the generator and corpus are rebuilt and
-promoted. See the [search API](../arm_kb_search/README.md#filters) for client usage.
+artifacts retain their old tags until the corpus is rebuilt and promoted. See the [search API](../arm_kb_search/README.md#filters) for client usage.
 
 Edition is removed from contributor tags and public filters/results. Remove the
 `Edition` column from older CSVs; ingestion rejects it with a migration message.
@@ -411,8 +433,7 @@ selected only for the brief's Arm-hosted URL. Other PDFs retain generic parsing.
 Acquisition and validation happen before rewriting the sources CSV or deleting
 existing chunks; the validated chunks are reused without a second download.
 All parsed PDF pages now cite `#page=N`, while `resolved_url` retains the fetched
-document URL. Rebuild the toolchain and regenerate chunks/vector artifacts to
-publish these changes.
+document URL. Regenerate chunks and vector artifacts to publish these changes.
 
 ## Ecosystem Dashboard ingestion
 
@@ -478,7 +499,8 @@ Public Platform tags come from the stored catalog family, independently of the
 embedding text. Adding support for a family label does not acquire that family's
 records; refreshing the intrinsic snapshot is a separate operation.
 
-Rebuild and pin the updated toolchain, then regenerate chunks before rebuilding
-the vector store. Intrinsic chunks require prepared metadata and `embedding_text`;
+Regenerate chunks with the updated acquisition scripts before rebuilding the
+vector store. Rebuild and pin the toolchain first if its dependencies or model
+changed. Intrinsic chunks require prepared metadata and `embedding_text`;
 missing preparation or descriptions over 500 tokens fail the build. Publish the
 model, metadata, and index together.

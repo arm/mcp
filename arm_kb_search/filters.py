@@ -45,6 +45,7 @@ class SearchFilters(BaseModel):
         "including neural-graphics guidance for Mali GPUs with a Neural Accelerator (NX). "
         "Use cortex-m for lessons or guidance explicitly targeting Cortex-M processors, "
         "including deployment, resource limits, and optimized kernels. "
+        "Use agi-cpu for material explicitly targeting Arm AGI CPU hardware. "
         "Use google-colab for a documented Google Colab execution environment; it does not "
         "imply an OS, CPU architecture, GPU model, or Google as the document publisher. "
         "Hardware, architecture, and ISA tags do not imply OS compatibility, support for every "

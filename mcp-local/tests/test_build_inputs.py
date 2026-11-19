@@ -166,44 +166,6 @@ def test_promotion_preserves_source_metadata(tmp_path, change):
         assert original.read_bytes() == original_bytes
 
 
-@pytest.mark.parametrize("change", ["none", "drop-columns", "drop-source", "drop-duplicate"])
-def test_generator_metadata_roundtrip_preflight(tmp_path, change):
-    # Model the serializer boundary without the generator's acquisition dependencies.
-    # The legacy contract reads all rows but writes only the six base columns.
-    generator = tmp_path / "generate-chunks.py"
-    generator.write_text(
-        "import csv\n"
-        "def load_existing_sources(path):\n"
-        "    global rows, columns\n"
-        "    with open(path) as f:\n"
-        "        reader = csv.DictReader(f)\n"
-        f"        columns = reader.fieldnames{'[:6]' if change == 'drop-columns' else ''}\n"
-        "        rows = list(reader)\n"
-        "def save_sources_csv(path):\n"
-        "    with open(path, 'w', newline='') as f:\n"
-        "        writer = csv.DictWriter(f, columns, extrasaction='ignore')\n"
-        "        writer.writeheader()\n"
-        f"        writer.writerows(rows{ {'drop-source': '[:1]', 'drop-duplicate': '[:-1]'}.get(change, '') })\n"
-    )
-    source = tmp_path / "sources.csv"
-    source.write_text(
-        "Site Name,License Type,Display Name,URL,Keywords,Transcript Source URL,Doc Type,Product,Platform\n"
-        "Guide,MIT,Example,https://example.com/,,,guide,[],linux\n"
-        "Guide,MIT,Inherited,https://example.com/inherit,,,,,\n"
-        "Guide,MIT,Example,https://example.com/,,,guide,[],linux\n"
-    )
-    before = source.read_bytes()
-    result = subprocess.run(
-        [sys.executable, str(REPOSITORY / "embedding-generation/validate-source-metadata.py"),
-         str(source), "--generator", str(generator)],
-        capture_output=True, text=True,
-    )
-    assert (result.returncode != 0) == (change != "none"), result.stderr
-    if change == "drop-columns":
-        assert "metadata columns" in result.stderr
-    assert source.read_bytes() == before
-
-
 def test_docker_base_images_match_manifest() -> None:
     docker_args = {
         "ubuntu": "UBUNTU_IMAGE",
@@ -1381,15 +1343,24 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
         ".python-version",
         "Dockerfile.toolchain",
         "acquire-model.py",
-        "document_chunking.py",
-        "ecosystem_dashboard.py",
         "embedding-model.lock.json",
-        "generate-chunks.py",
-        "local_vectorstore_creation.py",
         "pyproject.toml",
         "uv.lock",
     ):
         assert f"embedding-generation/{source}" in workflow_triggers
+    for source in (
+        "agi_product_brief.py",
+        "document_chunking.py",
+        "ecosystem_dashboard.py",
+        "generate-chunks.py",
+        "learn_public.py",
+        "learn_repository.py",
+        "local_vectorstore_creation.py",
+        "source_metadata.py",
+        "validate-source-metadata.py",
+    ):
+        assert f"embedding-generation/{source}" not in workflow_triggers
+        assert source not in TOOLCHAIN_DOCKERFILE
     assert "propose-toolchain-pin:" in TOOLCHAIN_WORKFLOW
     assert "update-embedding-toolchain-pin.py" in TOOLCHAIN_WORKFLOW
     assert "automation/pin-embedding-generator" in TOOLCHAIN_WORKFLOW
@@ -1402,6 +1373,53 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
     assert "subject-name: ${{ env.IMAGE }}" in TOOLCHAIN_WORKFLOW
     assert "subject-digest: ${{ steps.publish.outputs.digest }}" in TOOLCHAIN_WORKFLOW
     assert "push-to-registry: true" in TOOLCHAIN_WORKFLOW
+
+
+def test_generation_stages_use_checkout_scripts_with_pinned_toolchain() -> None:
+    generation = REPOSITORY / "embedding-generation"
+    acquisition = (generation / "Dockerfile.acquire").read_text()
+    vectorstore = (generation / "Dockerfile.vectorstore").read_text()
+    dockerignore = (generation / ".dockerignore").read_text()
+    stage_scripts = (
+        (
+            acquisition,
+            (
+                "agi_product_brief.py",
+                "document_chunking.py",
+                "ecosystem_dashboard.py",
+                "generate-chunks.py",
+                "learn_public.py",
+                "learn_repository.py",
+                "source_metadata.py",
+                "validate-source-metadata.py",
+            ),
+        ),
+        (vectorstore, ("local_vectorstore_creation.py",)),
+    )
+    for stage, scripts in stage_scripts:
+        assert "FROM toolchain AS " in stage
+        instructions = stage.replace("\\\n", " ").splitlines()
+        for script in scripts:
+            assert f"!{script}" in dockerignore
+            assert (generation / script).is_file()
+            assert any(
+                line.startswith("COPY ")
+                and script in line.split()[1:-1]
+                and line.split()[-1] == "/embedding-data/"
+                for line in instructions
+            )
+        assert stage.index("COPY ") < stage.index("RUN ")
+    assert "RUN --network=none" in vectorstore
+    assert "          network: none\n" in EMBEDDING_WORKFLOW
+    assert (
+        "toolchain=docker-image://${{ steps.inputs.outputs.generator_image }}"
+        in EMBEDDING_WORKFLOW
+    )
+    assert (
+        "toolchain=docker-image://${{ "
+        "needs.acquire-and-publish-chunks.outputs.generator-image }}"
+        in EMBEDDING_WORKFLOW
+    )
 
 
 def test_embedding_toolchain_uses_fixed_python_version() -> None:

@@ -59,6 +59,7 @@ def write_sources(tmp_path, cells, *, platform_column=True, site="Learning Paths
         (" Mali ", ["mali"]),
         (" Google-Colab ", ["google-colab"]),
         (" Cortex-M ", ["cortex-m"]),
+        ('["Linux", "AGI-CPU", "agi-cpu"]', ["linux", "agi-cpu"]),
         ('["Cortex-M", "Windows", "cortex-m"]', ["cortex-m", "windows"]),
         ('["google-colab", "Linux", "GOOGLE-COLAB"]', ["google-colab", "linux"]),
         ('["Android", "MALI", "mali"]', ["android", "mali"]),
