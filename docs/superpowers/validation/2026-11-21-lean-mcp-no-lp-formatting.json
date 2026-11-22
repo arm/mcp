@@ -1,0 +1,16 @@
+{
+  "smoke": {
+    "queries": 50,
+    "mean_before_chars": 11124.38,
+    "mean_after_chars": 6903.9,
+    "reduction_percent": 37.939013230400256,
+    "url_differences": 0
+  },
+  "benchmark": {
+    "queries": 440,
+    "mean_before_chars": 12619.4,
+    "mean_after_chars": 8572.277272727273,
+    "reduction_percent": 32.070643035902876,
+    "url_differences": 0
+  }
+}

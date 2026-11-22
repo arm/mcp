@@ -1,5 +1,7 @@
 # SDD ledger — plan: docs/superpowers/plans/2026-11-21-lean-mcp.md
 
+> Historical record: the user subsequently deferred the Learning Path feature. Current scope is search-result slimming and shared citation/legal instructions only; see `docs/superpowers/validation/2026-11-21-lean-mcp.md`.
+
 | Task | Contract check | Result |
 |---|---|---|
 | 1 | Server formatting, index, interface tests share metadata and helpers; kept together | consistent |

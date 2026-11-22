@@ -1,5 +1,7 @@
 # Task 1 implementation report
 
+> Historical record: the user subsequently deferred the Learning Path feature. Current scope is search-result slimming and shared citation/legal instructions only; see `docs/superpowers/validation/2026-11-21-lean-mcp.md`.
+
 Status: implemented Changes 1–3, verified locally, ready for independent review.
 Base: `0c249c8cea1f79de56ea0a9b9541b052176ebe05` (PR #294 on latest main).
 Branch: `codex/lean-mcp`. No push performed. Optional Change 4 excluded.

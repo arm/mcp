@@ -201,9 +201,7 @@ missing or conflicting context returns an error. The shared search library retai
 `parent_resource`; it is temporarily disabled in MCP pending further evaluation.
 See the [shared search documentation](arm_kb_search/README.md) for API and metadata details.
 
-For step-by-step work, search once and call `get_learning_path` with the best
-hit's `learning_path`. It returns the stored tutorial offline as full text,
-commands, or an outline, with a page selector for large paths. MCP search results
+MCP search results
 omit repeated legal/tracking text and raw distances; the legal and citation
 guidance appears once in server instructions. See the
 [server tool reference](mcp-local/README.md) for response fields and examples.
@@ -216,7 +214,7 @@ your computer:
 
 - `mcp-traffic.jsonl` records when tools are used, the inputs provided, and the
   reason for each tool call. It also records results from knowledge base
-  searches and Learning Path requests.
+  searches.
 - `error_logging.yaml` records details about errors encountered by the server.
   This information can help with troubleshooting.
 

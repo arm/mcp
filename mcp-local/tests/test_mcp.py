@@ -154,12 +154,11 @@ def test_mcp_stdio_transport_responds(platform):
         knowledge_search = next(
             tool for tool in tools if tool["name"] == "knowledge_base_search"
         )
-        assert "get_learning_path" in tool_names
-        assert "search once" in knowledge_search["description"]
-        assert "get_learning_path(learning_path)" in knowledge_search["description"]
+        assert "get_learning_path" not in tool_names
+        assert "get_learning_path" not in knowledge_search["description"]
         instructions = response["result"]["instructions"]
-        assert instructions.startswith("Arm knowledge base. For a how-to")
-        assert "ONE knowledge_base_search" in instructions[:512]
+        assert instructions.startswith("Arm knowledge base.")
+        assert "get_learning_path" not in instructions
         assert "Preserve the `utm_source` query parameter" in instructions
         assert "no license to any intellectual property rights is granted by Arm" in instructions
         assert len(instructions) <= 4096
