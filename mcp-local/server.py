@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Annotated, Any, Dict, List, Literal, Optional
+
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-from typing import Annotated, List, Dict, Any, Optional, Literal
 from pydantic import Field
-import arm_kb_search
-from arm_kb_search import SearchFilters
 from utils.config import (
     DEFAULT_ARCH,
     METADATA_PATH,
@@ -28,14 +27,27 @@ from utils.config import (
     USEARCH_INDEX_PATH,
 )
 from utils.docker_utils import check_docker_image_architectures
+from utils.error_handling import format_tool_error
+from utils.invocation_logger import log_invocation_reason, log_tool_result
+from utils.learning_paths import LearningPathIndex, lean_result
+from utils.llvm_mca_tool import llvm_mca_analyze, mca_help
 from utils.migrate_ease_utils import run_migrate_ease_scan
 from utils.skopeo_tool import skopeo_help, skopeo_inspect
-from utils.llvm_mca_tool import mca_help, llvm_mca_analyze
-from utils.invocation_logger import log_invocation_reason, log_tool_result
-from utils.error_handling import format_tool_error
 
-# Initialize the MCP server
-mcp = FastMCP("arm-mcp")
+import arm_kb_search
+from arm_kb_search import SearchFilters
+from arm_kb_search.response import ARM_CONTENT_DISCLAIMER, UTM_SOURCE_PRESERVATION_NOTE
+
+INSTRUCTIONS = (
+    "Arm knowledge base. For a how-to, set-up, deploy, tune or migrate task: run ONE "
+    "knowledge_base_search, then call get_learning_path on the `learning_path` of the best hit "
+    "and write the runbook from that single document; do not keep searching for the same topic. "
+    "Cite URLs exactly as returned (keep utm_source and #fragments).\n\n"
+    + UTM_SOURCE_PRESERVATION_NOTE + "\n\n" + ARM_CONTENT_DISCLAIMER
+)
+
+# Initialize the MCP server with session-wide citation and legal guidance.
+mcp = FastMCP("arm-mcp", instructions=INSTRUCTIONS)
 
 
 # Load USearch index and metadata at module load time
@@ -48,33 +60,25 @@ SEARCH_RESOURCES = arm_kb_search.load_search_resources(
     utm_source="arm-mcp",
 )
 
+LP_INDEX = LearningPathIndex(SEARCH_RESOURCES)
 
 # error formatter now lives in utils/error_handling.py
 
 
 @mcp.tool(
     description=(
-        'If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your '
-        'strategy. Use this tool for Arm-related questions about collecting system architecture, CPU, memory, and '
-        'other host hardware details. '
-        'Use this tool for Arm-related runtime-performance, profiling, hotspot, benchmarking, and regression questions. '
-        'Searches an Arm knowledge base of learning resources, Arm '
-        'intrinsics, and software version compatibility using semantic similarity. Given a natural language query, '
-        'returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful '
-        'for finding documentation, tutorials, or version compatibility for Arm migrations. Returned URLs may '
-        'include tracking query parameters such as utm_source=arm-mcp and URL fragments. When sharing or citing '
-        'returned URLs, preserve each URL exactly as returned, including query parameters and fragments; do not '
-        "remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can "
-        'briefly explain why it is calling this tool to provide additional context. '
-        'Filters doc_type, product and platform narrow results before ranking; each accepts a string '
-        'or non-empty list. Values within a field use OR; different fields use AND. '
-        'Missing or explicitly cleared tags do not match. Use labels present in returned metadata; '
-        'older snapshots may use legacy labels. '
-        'Result fields doc_type, product and platform always return arrays, including legacy tags; '
-        'missing tags return []. Relax filters if needed evidence is missing. Start with the default chunks scope. When '
-        'more surrounding context from the matched pages is needed, use scope="page" after the user requests or '
-        'approves expansion. Page scope returns all stored chunks from those pages in order and can produce large '
-        'responses.'
+        "Search Arm's knowledge base (Learning Paths, install guides, Arm docs, intrinsics, "
+        "software compatibility). Returns ranked sections: url, title, heading, snippet, "
+        "learning_path (root URL of the Learning Path the section belongs to, when any). "
+        "For step-by-step tasks, search once, then call get_learning_path(learning_path) "
+        "instead of repeated searches. "
+        "Filters doc_type, product and platform narrow results before ranking; each accepts a string "
+        "or non-empty list. Values within a field use OR; different fields use AND. "
+        "Missing or explicitly cleared tags do not match. Use labels present in returned metadata; "
+        "older snapshots may use legacy labels. Result fields doc_type, product and platform "
+        "always return arrays; missing tags return []. Relax filters if needed evidence is missing. "
+        "Start with the default chunks scope. Page scope returns all stored chunks from matched "
+        "pages in order and can produce large responses; use only when requested or approved."
     )
 )
 def knowledge_base_search(
@@ -115,11 +119,35 @@ def knowledge_base_search(
         results = arm_kb_search.search(
             query, SEARCH_RESOURCES, filters=filters, k=k, scope=scope
         )
+        results = [lean_result(item) for item in results]
         log_tool_result(entry_id, "knowledge_base_search", results)
         return results
     except Exception as e:
         error = format_tool_error(tool="knowledge_base_search", exc=e, args=call_args)
         log_tool_result(entry_id, "knowledge_base_search", error)
+        raise ToolError(str(e)) from e
+
+
+@mcp.tool(description=(
+    "Return one whole Arm Learning Path as ordered text: all step pages in order, navigation "
+    "and metadata chunks removed. Call it with the learning_path (or any page URL) from a "
+    "knowledge_base_search hit instead of searching repeatedly. mode=full (default) | commands "
+    "(only code blocks and shell lines) | outline (page list). page=<url> restricts to one page; "
+    "very large paths return the outline automatically."
+))
+def get_learning_path(
+    url: str, mode: str = "full", page: str | None = None,
+    invocation_reason: str | None = None,
+) -> dict:
+    call_args = {"url": url, "mode": mode, "page": page}
+    entry_id = log_invocation_reason(tool="get_learning_path", reason=invocation_reason, args=call_args)
+    try:
+        result = LP_INDEX.get(url, mode=mode, page=page)
+        log_tool_result(entry_id, "get_learning_path", result)
+        return result
+    except Exception as e:
+        error = format_tool_error(tool="get_learning_path", exc=e, args=call_args)
+        log_tool_result(entry_id, "get_learning_path", error)
         raise ToolError(str(e)) from e
 
 

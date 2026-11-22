@@ -67,7 +67,7 @@ def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monk
                  "doc_type": ["learning", "guide"], "product": ["arm"],
                  "platform": ["linux", "windows"],
                  "page_url": "https://example.org/guide/", "parent_page_url": "https://example.org/"}]
-    monkeypatch.setattr(arm_kb_search, "load_search_resources", lambda **kwargs: None)
+    monkeypatch.setattr(arm_kb_search, "load_search_resources", lambda **kwargs: arm_kb_search.SearchResources([], object(), None, None))
     def search(query, resources, *, filters, k, scope):
         assert filters is None or isinstance(filters, SearchFilters)
         calls.append((query, {"filters": filters, "k": k, "scope": scope}))
@@ -166,11 +166,13 @@ def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monk
 def test_search_failures_are_mcp_errors_and_logged_for_every_scope(tmp_path, monkeypatch):
     import asyncio
     import importlib.util
-    import arm_kb_search
+
     from fastmcp import Client
     from utils import error_handling
 
-    monkeypatch.setattr(arm_kb_search, "load_search_resources", lambda **kwargs: None)
+    import arm_kb_search
+
+    monkeypatch.setattr(arm_kb_search, "load_search_resources", lambda **kwargs: arm_kb_search.SearchResources([], object(), None, None))
 
     def fail_search(*args, **kwargs):
         raise RuntimeError("Search backend unavailable")
@@ -237,3 +239,69 @@ def test_scope_expansion_through_mcp_and_missing_metadata_error(tmp_path, monkey
     asyncio.run(exercise())
     logs = [json.loads(line) for line in (tmp_path / "mcp-traffic.jsonl").read_text().splitlines()]
     assert logs[-2]["args"]["scope"] == "page" and logs[-1]["result"]["status"] == "error"
+
+
+def test_lean_tools_instructions_results_and_paired_logs(tmp_path, monkeypatch):
+    import asyncio
+    import copy
+    import importlib.util
+
+    from fastmcp import Client
+
+    import arm_kb_search
+    from arm_kb_search.response import (
+        ARM_CONTENT_DISCLAIMER,
+        UTM_SOURCE_PRESERVATION_NOTE,
+    )
+
+    root = "https://learn.arm.com/learning-paths/cat/demo/"
+    source = [{"url": root + "step/?utm_source=arm-mcp#build",
+               "snippet": "Document Title: Demo\nHeading Path: Build\n\nEvidence",
+               "title": "Demo", "heading": ["Build"], "doc_type": ["Learning Paths"],
+               "product": ["Arm"], "platform": ["Linux"], "score": .8, "distance": .2,
+               "disclaimer": ARM_CONTENT_DISCLAIMER, "url_tracking_instruction": UTM_SOURCE_PRESERVATION_NOTE,
+               "page_url": root + "step/", "parent_page_url": root,
+               "context": {"scope": "page", "chunk_index": 0}, "extra": "retained"}]
+    before = copy.deepcopy(source)
+    metadata = [{"url": root, "title": "Demo", "heading_path": ["Intro"],
+                 "original_text": "Offline body", "doc_type": "Learning Paths"}]
+    resources = arm_kb_search.SearchResources(metadata, object(), None, None)
+    monkeypatch.setattr(arm_kb_search, "load_search_resources", lambda **kwargs: resources)
+    monkeypatch.setattr(arm_kb_search, "search", lambda *a, **kw: source)
+    monkeypatch.setattr(invocation_logger, "WORKSPACE_DIR", str(tmp_path))
+    spec = importlib.util.spec_from_file_location("lean_server", Path(__file__).parents[1] / "server.py")
+    server = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(server)
+    instructions = server.mcp.instructions
+    assert instructions.startswith("Arm knowledge base. For a how-to")
+    assert "ONE knowledge_base_search" in instructions[:512]
+    assert "get_learning_path" in instructions[:512]
+    assert ARM_CONTENT_DISCLAIMER in instructions and UTM_SOURCE_PRESERVATION_NOTE in instructions
+    assert len(instructions) <= 4096
+
+    async def exercise():
+        async with Client(server.mcp) as client:
+            tools = {t.name: t for t in await client.list_tools()}
+            assert "search once" in tools["knowledge_base_search"].description
+            assert "get_learning_path" in tools
+            assert set(tools["get_learning_path"].inputSchema["properties"]) == {"url", "mode", "page", "invocation_reason"}
+            for scope in ("chunks", "page"):
+                result = await client.call_tool("knowledge_base_search", {"query": "demo", "scope": scope})
+                item = result.structured_content["result"][0]
+                assert item == {"url": root + "step/?utm_source=arm-mcp#build", "snippet": "Evidence",
+                    "title": "Demo", "heading": ["Build"], "doc_type": ["Learning Paths"],
+                    "product": ["Arm"], "platform": ["Linux"], "score": .8,
+                    "page_url": root + "step/", "parent_page_url": root,
+                    "context": {"scope": "page", "chunk_index": 0}, "extra": "retained", "learning_path": root}
+            result = await client.call_tool("get_learning_path", {"url": root, "invocation_reason": "Write runbook"})
+            assert "Offline body" in result.structured_content["text"]
+            missing = await client.call_tool("get_learning_path", {"url": "https://example.org/"})
+            assert missing.structured_content["error"].startswith("no Learning Path found")
+    asyncio.run(exercise())
+    assert source == before
+    logs = [json.loads(line) for line in (tmp_path / "mcp-traffic.jsonl").read_text().splitlines()]
+    assert len(logs) == 8
+    for call, result in zip(logs[::2], logs[1::2]):
+        assert call["id"] == result["id"] and call["tool"] == result["tool"]
+    assert logs[4]["args"] == {"url": root, "mode": "full", "page": None}
+    assert logs[4]["invocation_reason"] == "Write runbook"
