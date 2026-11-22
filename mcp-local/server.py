@@ -63,27 +63,32 @@ SEARCH_RESOURCES = arm_kb_search.load_search_resources(
 
 @mcp.tool(
     description=(
-        'If a user asks to migrate a codebase to Arm, strongly consider using this tool as a part of your '
-        'strategy. Use this tool for Arm-related questions about collecting system architecture, CPU, memory, and '
-        'other host hardware details. '
-        'Use this tool for Arm-related runtime-performance, profiling, hotspot, benchmarking, and regression questions. '
-        'Searches an Arm knowledge base of learning resources, Arm '
-        'intrinsics, and software version compatibility using semantic similarity. Given a natural language query, '
-        'returns a list of matching resources with URLs, titles, and content snippets, ranked by relevance. Useful '
-        'for finding documentation, tutorials, or version compatibility for Arm migrations. Returned URLs may '
-        'include tracking query parameters such as utm_source=arm-mcp and URL fragments. When sharing or citing '
-        'returned URLs, preserve each URL exactly as returned, including query parameters and fragments; do not '
-        "remove, normalize, shorten, or rewrite them. Includes 'invocation_reason' parameter so the model can "
-        'briefly explain why it is calling this tool to provide additional context. '
-        'Filters doc_type, product and platform narrow results before ranking; each accepts a string '
-        'or non-empty list. Values within a field use OR; different fields use AND. '
-        'Missing or explicitly cleared tags do not match. Use labels present in returned metadata; '
-        'older snapshots may use legacy labels. '
-        'Result fields doc_type, product and platform always return arrays, including legacy tags; '
-        'missing tags return []. Relax filters if needed evidence is missing. Start with the default chunks scope. When '
-        'more surrounding context from the matched pages is needed, use scope="page" after the user requests or '
-        'approves expansion. Page scope returns all stored chunks from those pages in order and can produce large '
-        'responses.'
+        "Search Arm documentation, tutorials, intrinsics and compatibility. Use for Arm migration; system "
+        "architecture, CPU, memory and host hardware; and runtime-performance, profiling, hotspot, "
+        "benchmarking, and regression questions.\n"
+        "Query with the known software/intrinsic, target and question; avoid building the query around an "
+        "unverified answer.\n"
+        "Choose k=2 for a precise fact, command or API; k=5 for a procedure, comparison or uncertain "
+        "question. Use 8-10 when several distinct sources are needed or relevant results leave coverage "
+        "gaps. k limits ranked entries, not tokens or pages (maximum 20).\n"
+        "Filters are optional exclusions: use them for explicit metadata restrictions or to narrow noisy "
+        "results using observed tags. A mentioned vendor or OS alone does not require a filter. doc_type "
+        "selects content type; product means document publisher, not software or CPU; platform means "
+        "verified environment or ISA. For an explicit \"Linux or Windows only\" restriction, use "
+        "platform=[\"linux\",\"windows\"]. Omit uncertain fields. Lists are OR within a field; fields combine "
+        "with AND. platform=[\"linux\",\"sve\"] means either, not both: filter one, keep the other in the "
+        "query, and verify both in the evidence.\n"
+        "Older snapshots use legacy labels or lack tags. If filters hide relevant evidence, relax "
+        "inferred filters while keeping the target in the query; enforce explicit user restrictions when "
+        "selecting sources. Raising k cannot fix an empty filtered set. No match does not establish "
+        "incompatibility.\n"
+        "Search again only for a missing fact needed to answer; name that gap in invocation_reason. "
+        "Rephrase for relevance, increase k for coverage. Use scope=\"page\" for surrounding context only "
+        "when requested or approved, with k=1-2 initial hits: expansion returns all stored chunks of "
+        "matched pages and may be large. Stop when the answer is supported; state remaining uncertainty "
+        "when searches add no useful evidence.\n"
+        "When citing, preserve each URL exactly as returned, including query parameters and fragments; do "
+        "not remove, normalize, shorten, or rewrite them."
     )
 )
 def knowledge_base_search(

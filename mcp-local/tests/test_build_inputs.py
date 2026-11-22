@@ -1585,11 +1585,8 @@ def test_mcp_runtime_treats_packaged_model_as_local_only() -> None:
 
 
 def test_performix_is_not_bundled_or_exposed() -> None:
-    routing_hint = (
-        "Use this tool for Arm-related runtime-performance, profiling, hotspot, "
-        "benchmarking, and regression questions."
-    )
-    assert routing_hint in SERVER
+    for routing_hint in ("runtime-performance", "profiling", "hotspot", "benchmarking", "regression"):
+        assert routing_hint in SERVER
     assert "def apx_recipe_run" not in SERVER
     assert "utils.apx" not in SERVER
     assert "performix" not in json.dumps(SERVER_METADATA).lower()

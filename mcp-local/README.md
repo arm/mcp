@@ -9,6 +9,22 @@ or non-empty list; labels within a field use OR, and fields use AND. `scope="pag
 expands the initially matched pages using stored ordering metadata and should be
 used when the user requests or approves wider context.
 
+The tool description guides agents to choose `k=2` for a precise fact, command,
+or API; `k=5` for a procedure, comparison, or uncertain question; and `k=8–10`
+when distinct sources or missing coverage justify a broader search. The API
+still defaults to `k=5`. Approved page expansion starts from `k=1–2` hits.
+
+Use filters for explicit source, content-type, or environment restrictions,
+or to narrow noisy results using observed tags. For Linux or Windows only,
+use `platform=["linux", "windows"]`; for Arm-published guidance about Graviton,
+use `product="arm"`. A list cannot express Linux **and** SVE: filter one and
+verify the other in the retrieved evidence. Missing or legacy tags can hide
+relevant results, so relax inferred restrictions while preserving the user's
+requirements when choosing sources. Increasing `k` cannot repair an empty
+filtered set. Follow-up searches should name the missing fact in
+`invocation_reason` and stop when the answer is supported or further searches
+add no useful evidence. This guidance is self-contained; no skill is required.
+
 Each response entry retains its citation `url`, `title`, `heading`, `snippet`,
 array-valued `doc_type`, `product`, and `platform`, and `score`. Existing extra
 fields, including `context`, `page_url`, and `parent_page_url`, remain available.
