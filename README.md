@@ -201,9 +201,9 @@ missing or conflicting context returns an error. The shared search library retai
 `parent_resource`; it is temporarily disabled in MCP pending further evaluation.
 See the [shared search documentation](arm_kb_search/README.md) for API and metadata details.
 
-MCP search results
-omit repeated legal/tracking text and raw distances; the legal and citation
-guidance appears once in server instructions. See the
+MCP search results omit raw distances and repeated tracking text. A scoped Arm
+legal notice appears once per applicable response; routing and citation guidance
+remain in the tool description, with session instructions as additional context. See the
 [server tool reference](mcp-local/README.md) for response fields and examples.
 
 ## Logging

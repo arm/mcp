@@ -10,6 +10,8 @@
 
 from typing import Any
 
+from arm_kb_search.response import ARM_CONTENT_DISCLAIMER, is_arm_domain_url
+
 
 def strip_snippet_prefix(snippet: str) -> str:
     lines = snippet.split("\n")
@@ -27,3 +29,16 @@ def lean_result(item: dict[str, Any]) -> dict[str, Any]:
     if "snippet" in result:
         result["snippet"] = strip_snippet_prefix(result["snippet"])
     return result
+
+
+def lean_results(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep one scoped Arm notice in the response for clients that omit instructions."""
+    results = [lean_result(item) for item in items]
+    for item, result in zip(items, results):
+        if item.get("disclaimer") and is_arm_domain_url(item.get("url")):
+            result["disclaimer"] = (
+                "For all results in this response sourced from arm.com or its subdomains: "
+                + ARM_CONTENT_DISCLAIMER
+            )
+            break
+    return results

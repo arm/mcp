@@ -41,3 +41,29 @@ def test_prefix_removal_only_at_top_and_lean_copy_preserves_every_other_field():
 ])
 def test_prefix_stripping_boundaries(snippet, expected):
     assert lean.strip_snippet_prefix(snippet) == expected
+
+
+def test_response_notice_once_on_first_arm_result_without_mutation():
+    from arm_kb_search.response import ARM_CONTENT_DISCLAIMER
+
+    source = [
+        {"url": "https://github.com/arm/example", "snippet": "External"},
+        {"url": ROOT, "snippet": "Arm one", "disclaimer": ARM_CONTENT_DISCLAIMER},
+        {"url": ROOT + "step/", "snippet": "Arm two", "disclaimer": ARM_CONTENT_DISCLAIMER},
+    ]
+    before = copy.deepcopy(source)
+    result = lean.lean_results(source)
+    assert [r["url"] for r in result] == [r["url"] for r in source]
+    assert "disclaimer" not in result[0] and "disclaimer" not in result[2]
+    assert result[1]["disclaimer"] == (
+        "For all results in this response sourced from arm.com or its subdomains: "
+        + ARM_CONTENT_DISCLAIMER
+    )
+    assert source == before
+
+
+@pytest.mark.parametrize("source", [[], [{"url": ROOT, "snippet": "No notice requested"}],
+    [{"url": "https://github.com/arm/example", "snippet": "External"}],
+    [{"url": "https://arm.com.example.org/", "snippet": "External", "disclaimer": "not Arm"}]])
+def test_no_notice_for_empty_external_or_disclaimer_disabled_results(source):
+    assert all("disclaimer" not in r for r in lean.lean_results(source))

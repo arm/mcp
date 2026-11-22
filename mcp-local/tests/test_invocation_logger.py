@@ -274,6 +274,7 @@ def test_lean_search_instructions_results_and_paired_logs(tmp_path, monkeypatch)
     assert instructions.startswith("Arm knowledge base.")
     assert "get_learning_path" not in instructions
     assert "ONE knowledge_base_search" not in instructions
+    assert "For content sourced from arm.com or its subdomains:" in instructions
     assert ARM_CONTENT_DISCLAIMER in instructions and UTM_SOURCE_PRESERVATION_NOTE in instructions
     assert len(instructions) <= 4096
 
@@ -283,6 +284,9 @@ def test_lean_search_instructions_results_and_paired_logs(tmp_path, monkeypatch)
             assert "get_learning_path" not in tools
             assert "get_learning_path" not in tools["knowledge_base_search"].description
             assert "search once" not in tools["knowledge_base_search"].description
+            assert "system architecture, CPU, memory" in tools["knowledge_base_search"].description
+            assert "runtime-performance, profiling, hotspot, benchmarking, and regression" in tools["knowledge_base_search"].description
+            assert "preserve each URL exactly as returned" in tools["knowledge_base_search"].description
             for scope in ("chunks", "page"):
                 result = await client.call_tool("knowledge_base_search", {"query": "demo", "scope": scope})
                 item = result.structured_content["result"][0]
@@ -290,7 +294,8 @@ def test_lean_search_instructions_results_and_paired_logs(tmp_path, monkeypatch)
                     "title": "Demo", "heading": ["Build"], "doc_type": ["Learning Paths"],
                     "product": ["Arm"], "platform": ["Linux"], "score": .8,
                     "page_url": root + "step/", "parent_page_url": root,
-                    "context": {"scope": "page", "chunk_index": 0}, "extra": "retained"}
+                    "context": {"scope": "page", "chunk_index": 0}, "extra": "retained",
+                    "disclaimer": "For all results in this response sourced from arm.com or its subdomains: " + ARM_CONTENT_DISCLAIMER}
     asyncio.run(exercise())
     assert source == before
     logs = [json.loads(line) for line in (tmp_path / "mcp-traffic.jsonl").read_text().splitlines()]

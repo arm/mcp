@@ -156,6 +156,9 @@ def test_mcp_stdio_transport_responds(platform):
         )
         assert "get_learning_path" not in tool_names
         assert "get_learning_path" not in knowledge_search["description"]
+        assert "system architecture, CPU, memory" in knowledge_search["description"]
+        assert "runtime-performance, profiling, hotspot, benchmarking, and regression" in knowledge_search["description"]
+        assert "preserve each URL exactly as returned" in knowledge_search["description"]
         instructions = response["result"]["instructions"]
         assert instructions.startswith("Arm knowledge base.")
         assert "get_learning_path" not in instructions
@@ -188,11 +191,16 @@ def test_mcp_stdio_transport_responds(platform):
         actual_nginx_urls = {_base_url(url) for url in _result_urls(nginx_structured_content)}
         assert expected_nginx_urls & actual_nginx_urls, "Test Failed: MCP check_nginx tool failed: content mismatch., Expected one of: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_NGINX_RESPONSE,indent=2), json.dumps(check_nginx_response.get("result")["structuredContent"],indent=2))
         for item in nginx_structured_content["result"]:
-            assert not {"disclaimer", "url_tracking_instruction", "distance"} & item.keys()
+            assert not {"url_tracking_instruction", "distance"} & item.keys()
             assert not item["snippet"].startswith(("Document Title:", "Heading Path:"))
             assert all(isinstance(item[field], list) for field in ("doc_type", "product", "platform"))
             assert "edition" not in item
         print("\n***Test Passed: MCP check_nginx tool succeeded")
+
+        notices = [item["disclaimer"] for item in nginx_structured_content["result"] if "disclaimer" in item]
+        assert len(notices) == 1
+        assert notices[0].startswith("For all results in this response sourced from arm.com or its subdomains:")
+        assert "no license to any intellectual property rights is granted by Arm" in notices[0]
 
         #Check Migrate Ease Tool Test
         raw_socket.sendall(_encode_mcp_message(constants.CHECK_MIGRATE_EASE_TOOL_REQUEST))
