@@ -29,14 +29,17 @@ from utils.config import (
 from utils.docker_utils import check_docker_image_architectures
 from utils.error_handling import format_tool_error
 from utils.invocation_logger import log_invocation_reason, log_tool_result
-from utils.lean_results import lean_results
 from utils.llvm_mca_tool import llvm_mca_analyze, mca_help
 from utils.migrate_ease_utils import run_migrate_ease_scan
 from utils.skopeo_tool import skopeo_help, skopeo_inspect
 
 import arm_kb_search
 from arm_kb_search import SearchFilters
-from arm_kb_search.response import ARM_CONTENT_DISCLAIMER, UTM_SOURCE_PRESERVATION_NOTE
+from arm_kb_search.response import (
+    ARM_CONTENT_DISCLAIMER,
+    UTM_SOURCE_PRESERVATION_NOTE,
+    lean_results,
+)
 
 INSTRUCTIONS = (
     "Arm knowledge base. Cite URLs exactly as returned (keep utm_source and #fragments).\n\n"

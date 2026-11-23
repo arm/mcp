@@ -1,13 +1,10 @@
 """Search response presentation contracts; no model or network required."""
 
 import copy
-import sys
-from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from utils import lean_results as lean
+from arm_kb_search import response as lean
 
 ROOT = "https://learn.arm.com/learning-paths/servers-and-cloud-computing/demo/"
 
@@ -40,7 +37,7 @@ def test_prefix_removal_only_at_top_and_lean_copy_preserves_every_other_field():
     ("Body\nDocument Title: keep\nHeading Path: keep", "Body\nDocument Title: keep\nHeading Path: keep"),
 ])
 def test_prefix_stripping_boundaries(snippet, expected):
-    assert lean.strip_snippet_prefix(snippet) == expected
+    assert lean.lean_result({"snippet": snippet})["snippet"] == expected
 
 
 def test_response_notice_once_on_first_arm_result_without_mutation():
@@ -67,3 +64,50 @@ def test_response_notice_once_on_first_arm_result_without_mutation():
     [{"url": "https://arm.com.example.org/", "snippet": "External", "disclaimer": "not Arm"}]])
 def test_no_notice_for_empty_external_or_disclaimer_disabled_results(source):
     assert all("disclaimer" not in r for r in lean.lean_results(source))
+
+
+@pytest.mark.parametrize("heading", ["Large-System Extensions (LSE)", ["Large-System Extensions (LSE)"], ""])
+def test_full_heading_context_survives_prefix_removal(heading):
+    source = {
+        "url": "https://github.com/aws/aws-graviton-getting-started/blob/main/c-c++.md",
+        "title": "C/C++ on Graviton",
+        "heading": heading,
+        "snippet": (
+            "Document Title: C/C++ on Graviton\n"
+            "Heading Path: Enabling Arm Architecture Specific Features > Large-System Extensions (LSE)\n\n"
+            "Use objdump to inspect the compiled instructions."
+        ),
+    }
+    before = copy.deepcopy(source)
+    result = lean.lean_result(source)
+    assert result["heading_path"] == (
+        "Enabling Arm Architecture Specific Features > Large-System Extensions (LSE)"
+    )
+    assert result["heading"] == heading
+    assert result["title"] == "C/C++ on Graviton"
+    assert result["snippet"] == "Use objdump to inspect the compiled instructions."
+    assert source == before
+
+
+@pytest.mark.parametrize("heading", ["Intro", ["Intro"]])
+def test_flat_heading_is_not_duplicated_as_a_path(heading):
+    result = lean.lean_result({"heading": heading, "snippet": "Heading Path: Intro\n\nBody"})
+    assert "heading_path" not in result
+    assert result["heading"] == heading
+    assert result["snippet"] == "Body"
+
+
+def test_existing_structured_heading_path_is_preserved():
+    source = {"heading": "Leaf", "heading_path": ["Parent", "Leaf"],
+              "snippet": "Heading Path: Parent > Leaf\n\nBody"}
+    before = copy.deepcopy(source)
+    result = lean.lean_result(source)
+    assert result["heading_path"] == ["Parent", "Leaf"]
+    assert result["snippet"] == "Body"
+    assert source == before
+
+
+def test_body_heading_label_does_not_become_result_metadata():
+    result = lean.lean_result({"heading": "Intro", "snippet": "Body\nHeading Path: example text"})
+    assert "heading_path" not in result
+    assert result["snippet"] == "Body\nHeading Path: example text"
