@@ -179,6 +179,12 @@ clang -O3 main.c
             "Embedded content",
             "https://example.com/visualization/#layout",
         ),
+        (
+            "/apps/sme-visualisations/#/sme/layout",
+            'title="ZA *tile* [layout](https://example.com/extra)"',
+            "ZA *tile* [layout](https://example.com/extra)",
+            "https://learn.arm.com/apps/sme-visualisations/#/sme/layout",
+        ),
     ],
 )
 def test_fullscreen_iframe_preserves_title_link_and_surrounding_text(

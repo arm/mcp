@@ -411,8 +411,10 @@ class Repository:
                     raise ValueError(f"{page.path}: fullscreen-iframe requires src")
                 title = args.get("title") or "Embedded content"
                 # Index a link to the interactive content without fetching it.
+                # A raw HTML block keeps Markdown syntax in the title literal.
                 return (
-                    f'\n\n<a href="{html.escape(src)}">{html.escape(title)}</a>\n\n'
+                    f'\n\n<p><a href="{html.escape(src)}">'
+                    f'{html.escape(title)}</a></p>\n\n'
                 )
             raise ValueError(f"{page.path}: unsupported Hugo shortcode {name}")
 
