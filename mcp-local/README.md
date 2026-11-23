@@ -9,10 +9,10 @@ or non-empty list; labels within a field use OR, and fields use AND. `scope="pag
 expands the initially matched pages using stored ordering metadata and should be
 used when the user requests or approves wider context.
 
-The tool description guides agents to choose `k=2` for a precise fact, command,
-or API; `k=5` for a procedure, comparison, or uncertain question; and `k=8–10`
-when distinct sources or missing coverage justify a broader search. The API
-still defaults to `k=5`. Approved page expansion starts from `k=1–2` hits.
+The `k` parameter help recommends considering `k=2–4` for a targeted follow-up
+and increasing it only when needed evidence is missing. The default remains
+`k=5`. With approved `scope="page"` expansion, `k` selects the initial hits;
+the number of returned page chunks can exceed `k`.
 
 Use filters for explicit source, content-type, or environment restrictions,
 or to narrow noisy results using observed tags. For Linux or Windows only,
@@ -40,7 +40,17 @@ Arm notice. The list shape and result order stay unchanged.
 The tool description retains the hardware/performance/migration routing hints
 and exact-URL citation rule. Session instructions also carry scoped legal and
 citation guidance, but clients need not rely solely on initialization metadata.
-The shared `arm_kb_search` Python API retains its existing response contract.
+
+The shared `arm_kb_search` Python API also changes its public metadata contract:
+`doc_type`, `product`, and `platform` always return arrays, with `[]` for missing
+tags. `edition` is no longer accepted as a filter or returned in results. Python
+callers must handle tag arrays and remove uses of the public `edition` field.
+See the [shared API filter documentation](../arm_kb_search/README.md#filters)
+for metadata semantics and migration details.
+
+Lean formatting applies only to MCP responses. The shared Python API retains
+`distance` and, when configured, per-result URL tracking instructions and Arm
+disclaimers. Snippet prefix removal and disclaimer consolidation are MCP-only.
 
 Preserve citation URLs exactly as returned, including query parameters and
 fragments. Learning Paths remain searchable through the existing search tool;
