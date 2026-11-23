@@ -405,6 +405,15 @@ class Repository:
                 return f"\n\nCompiler Explorer options: {options}\n\n```c\n{source}\n```\n\n"
             if name == "youtube-nocookie":
                 return f"[Video](https://www.youtube.com/watch?v={parts[1]})"
+            if name == "fullscreen-iframe":
+                src = args.get("src", "").strip()
+                if not src:
+                    raise ValueError(f"{page.path}: fullscreen-iframe requires src")
+                title = args.get("title") or "Embedded content"
+                # Index a link to the interactive content without fetching it.
+                return (
+                    f'\n\n<a href="{html.escape(src)}">{html.escape(title)}</a>\n\n'
+                )
             raise ValueError(f"{page.path}: unsupported Hugo shortcode {name}")
 
         body = SHORTCODE.sub(shortcode, body)
