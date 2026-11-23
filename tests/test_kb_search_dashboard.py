@@ -209,7 +209,7 @@ def test_prefix_removal_only_at_top_and_lean_copy_preserves_every_other_field():
     before = deepcopy(source)
     result = lean_result(source)
     assert result == {"url": LEAN_RESULT_URL + "?utm_source=arm-mcp#intro", "snippet":
-                      "Body\nDocument Title: keep\nHeading Path: keep", "title": "Demo",
+                      "Body\nDocument Title: keep\nHeading Path: keep\n", "title": "Demo",
                       "heading": ["Intro"], "doc_type": ["Learning Paths"],
                       "product": ["Neoverse"], "platform": ["Linux"], "score": .9,
                       "context": {"scope": "page", "chunk_index": 0}, "page_url": LEAN_RESULT_URL + "?x=1",
@@ -313,6 +313,67 @@ def test_generated_header_does_not_consume_body_labels(body):
     })
     assert result["snippet"] == body
     assert result["heading_path"] == "Parent > Input fields"
+
+
+@pytest.mark.parametrize("scope", ["chunks", "page"])
+def test_lean_mixed_sources_preserve_evidence_and_citations(scope, monkeypatch):
+    cases = [
+        ("Documentation", "https://github.com/aws/guide/blob/main/c-c++.md#build",
+         "C/C++ on Graviton", "Build", "Performance > Build",
+         "    clang++ -O3 main.cpp\n\nDocument Title: keep this example\nHeading Path: optional input\n"),
+        ("Learning Paths", "https://learn.arm.com/learning-paths/demo/setup/#configure",
+         "Deploy NGINX", "Configure", "NGINX > Configure",
+         "```sh\nsudo nginx -t\n```\n"),
+        ("Ecosystem Dashboard", "https://developer.arm.com/ecosystem-dashboard/linux?package=nginx#support",
+         "NGINX (Open source)", "Support", "NGINX > Support",
+         "| OS | Status |\n| Linux | Supported |\n"),
+        ("Ecosystem Dashboard", "https://developer.arm.com/ecosystem-dashboard/windows?package=python",
+         "Python", "Compatibility", "Compatibility",
+         "Windows on Arm support: yes.  \nSee the package version requirements.\n"),
+        ("Intrinsic", "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=vaddq_u8",
+         "Arm Intrinsics - vaddq_u8", "vaddq_u8", None,
+         "uint8x16_t vaddq_u8(uint8x16_t a, uint8x16_t b);\n\nOperation:\n    result = a + b;\n"),
+        ("Install Guides", "https://learn.arm.com/install-guides/tool/#install",
+         "Install tool", "Install", "Install",
+         "Heading Path: configure this input\n    tool --install\n"),
+        ("Documentation", "https://developer.arm.com/documentation/example?lang=en#registers",
+         "Architecture manual", "Registers", "Chapter 2 > Registers",
+         "Register fields:\r\n    MODE[3:0]\r\n"),
+        ("Documentation", "https://example.org/manual.pdf?version=2#page=7",
+         "PDF manual", "Page 7", None,
+         "Document Title: a field in this document\nHeading Path: a user-supplied value\n\n  Keep this text.  \n"),
+    ]
+    rows = []
+    for index, (doc_type, url, title, heading, path, body) in enumerate(cases):
+        rows.append({
+            "chunk_uuid": str(index), "url": url, "title": title, "heading": heading,
+            "doc_type": doc_type, "product": "Arm", "platform": "",
+            "original_text": (f"Document Title: {title}\nHeading Path: {path}\n\n" if path else "") + body,
+            "document_context": {"format": 1, "url": url.split("#")[0],
+                                 "chunk_index": 0, "chunk_count": 1},
+        })
+    before = deepcopy(rows)
+    state = resources.SearchResources(rows, None, None, None, utm_source="arm-mcp")
+    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [
+        {"metadata": row, "distance": .1, "rerank_score": 1 - index / 10}
+        for index, row in enumerate(rows)
+    ])
+    hits = resources.search("source evidence", state, k=len(rows), scope=scope)
+    full = deepcopy(hits)
+    results = lean_results(hits)
+    assert [item["snippet"] for item in results] == [case[-1] for case in cases]
+    for original, lean in zip(hits, results):
+        assert {key: lean[key] for key in original if key not in {
+            "snippet", "disclaimer", "url_tracking_instruction", "distance",
+        }} == {key: value for key, value in original.items() if key not in {
+            "snippet", "disclaimer", "url_tracking_instruction", "distance",
+        }}
+        assert not {"distance", "url_tracking_instruction"} & lean.keys()
+    assert "disclaimer" not in results[0]
+    notices = [item["disclaimer"] for item in results if "disclaimer" in item]
+    assert notices == ["For all results in this response sourced from arm.com or its subdomains: "
+                       + ARM_CONTENT_DISCLAIMER]
+    assert rows == before and hits == full
 
 
 def pieces(parent_uuid, parent_chunk_uuid, texts):

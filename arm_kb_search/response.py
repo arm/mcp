@@ -98,7 +98,7 @@ def _split_snippet_prefix(snippet: str, title: Any, heading: Any) -> tuple[str, 
     if not heading_path or (isinstance(heading, str) and heading
             and heading_path != heading and not heading_path.endswith(" > " + heading)):
         return snippet, None
-    return "\n".join(lines[i + 3:]).strip(), heading_path
+    return "\n".join(lines[i + 3:]), heading_path
 
 
 def lean_result(item: dict[str, Any]) -> dict[str, Any]:

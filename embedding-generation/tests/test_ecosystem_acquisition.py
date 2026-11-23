@@ -8,6 +8,8 @@ from unittest.mock import Mock
 
 import pytest
 import requests
+from arm_kb_search import resources
+from arm_kb_search.response import lean_results
 
 from ecosystem_dashboard import (
     DASHBOARD_URL,
@@ -117,7 +119,7 @@ def test_explicit_revision_and_fetch_failure():
         acquire_catalog(session, "main")
 
 
-def test_catalog_retains_platform_and_same_url_editions(gc):
+def test_catalog_retains_platform_and_same_url_editions(gc, monkeypatch):
     package = (
         "---\nname: Example\ndescription: Useful software\nworks_on_arm: true\n---\n"
     )
@@ -154,6 +156,20 @@ def test_catalog_retains_platform_and_same_url_editions(gc):
     assert all(c.doc_type == "Ecosystem Dashboard" for c in chunks)
     assert all(c.platform == "linux" for c in chunks)
     assert all(c.toDict()["filter_metadata"] == overrides for c in chunks)
+
+    documents = discovered + gc.create_chunks_for_source(
+        f"{DASHBOARD_URL}/windows?package=example", "Example", "Ecosystem Dashboard", "")
+    rows = [chunk.toDict() for chunk in documents]
+    state = resources.SearchResources(rows, None, None, None, utm_source="arm-mcp")
+    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [
+        {"metadata": row} for row in rows
+    ])
+    hits = resources.search("Example support", state, k=len(rows))
+    lean = lean_results(hits)
+    assert [item["snippet"] for item in lean] == [chunk.content.partition("\n\n")[2] for chunk in documents]
+    assert [item["url"] for item in lean] == [item["url"] for item in hits]
+    assert {platform for item in lean for platform in item["platform"]} == {"linux", "windows"}
+    assert sum("disclaimer" in item for item in lean) == 1
 
 
 def test_catalog_warns_and_skips_individual_bad_records():

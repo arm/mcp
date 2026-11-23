@@ -33,6 +33,8 @@ fields, including `context`, `page_url`, and `parent_page_url`, remain available
 `Document Title:` / `Heading Path:` prefixes only when a complete generated
 header agrees with the result metadata. Unverified header-like body text is
 preserved, including in unreassembled embedding slices.
+After a verified header is removed, the remaining body is preserved exactly,
+including code indentation and trailing whitespace, for every source type.
 When the search library supplies Arm content disclaimers, one `disclaimer` is
 retained on the first applicable Arm-domain result. It explicitly covers all
 Arm-domain results in that response, preserves the original legal wording, and
