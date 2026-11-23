@@ -221,11 +221,11 @@ def test_prefix_removal_only_at_top_and_lean_copy_preserves_every_other_field():
 
 @pytest.mark.parametrize(("snippet", "expected"), [
     ("", ""),
-    ("\n  \nDocument Title: Demo\nHeading Path: Start\n", ""),
+    ("\n  \nDocument Title: Demo\nHeading Path: Start\n\n", ""),
     ("Body\nDocument Title: keep\nHeading Path: keep", "Body\nDocument Title: keep\nHeading Path: keep"),
 ])
 def test_prefix_stripping_boundaries(snippet, expected):
-    assert lean_result({"snippet": snippet})["snippet"] == expected
+    assert lean_result({"title": "Demo", "heading": "Start", "snippet": snippet})["snippet"] == expected
 
 
 def test_response_notice_once_on_first_arm_result_without_mutation():
@@ -277,15 +277,16 @@ def test_full_heading_context_survives_prefix_removal(heading):
 
 @pytest.mark.parametrize("heading", ["Intro", ["Intro"]])
 def test_flat_heading_is_not_duplicated_as_a_path(heading):
-    result = lean_result({"heading": heading, "snippet": "Heading Path: Intro\n\nBody"})
+    result = lean_result({"title": "Demo", "heading": heading,
+                          "snippet": "Document Title: Demo\nHeading Path: Intro\n\nBody"})
     assert "heading_path" not in result
     assert result["heading"] == heading
     assert result["snippet"] == "Body"
 
 
 def test_existing_structured_heading_path_is_preserved():
-    source = {"heading": "Leaf", "heading_path": ["Parent", "Leaf"],
-              "snippet": "Heading Path: Parent > Leaf\n\nBody"}
+    source = {"title": "Demo", "heading": "Leaf", "heading_path": ["Parent", "Leaf"],
+              "snippet": "Document Title: Demo\nHeading Path: Parent > Leaf\n\nBody"}
     before = deepcopy(source)
     result = lean_result(source)
     assert result["heading_path"] == ["Parent", "Leaf"]
@@ -330,6 +331,32 @@ def pieces(parent_uuid, parent_chunk_uuid, texts):
         })
         start += len(text)
     return rows
+
+
+@pytest.mark.parametrize("body", [
+    "Heading Path: optional user input\nKeep this field.",
+    "Document Title: required user input\nKeep this field.",
+    "Document Title: Install guide\nHeading Path: optional user input\n\nKeep this field.",
+    "Document Title: Other document\nHeading Path: Install\n\nKeep this field.",
+    "Document Title: Install guide\nHeading Path: Install\nKeep this field.",
+])
+def test_lean_incomplete_embedding_slice_preserves_unverified_header_labels(body, monkeypatch):
+    row = pieces("parent", "chunk", ["Earlier text. ", body])[1]
+    state = resources.SearchResources([row], None, None, None, include_disclaimers=False)
+    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [{"metadata": row}])
+    hit = resources.search("guide", state)[0]
+    assert hit["snippet"] == body
+    result = lean_result(hit)
+    assert result["snippet"] == body
+    assert "heading_path" not in result
+
+
+@pytest.mark.parametrize("title", [None, ""])
+def test_lean_preserves_header_like_body_without_title_metadata(title):
+    body = "Document Title: Example\nHeading Path: Intro\n\nKeep this text."
+    result = lean_result({"title": title, "heading": "Intro", "snippet": body})
+    assert result["snippet"] == body
+    assert "heading_path" not in result
 
 
 @pytest.mark.parametrize("selected_part", [0, 1, 2])

@@ -82,19 +82,23 @@ def add_utm_source_to_results(
     ]
 
 
-def _split_snippet_prefix(snippet: str) -> tuple[str, str | None]:
+def _split_snippet_prefix(snippet: str, title: Any, heading: Any) -> tuple[str, str | None]:
+    """Strip a complete generated header only when result metadata agrees."""
+    if not isinstance(title, str) or not title:
+        return snippet, None
     lines = snippet.split("\n")
     i = 0
-    heading_path = None
     while i < len(lines) and not lines[i].strip():
         i += 1
-    # Consume each generated field once; matching labels in the body are evidence.
-    for prefix in ("Document Title:", "Heading Path:"):
-        if i < len(lines) and lines[i].startswith(prefix):
-            if prefix == "Heading Path:":
-                heading_path = lines[i].removeprefix(prefix).strip()
-            i += 1
-    return "\n".join(lines[i:]).strip(), heading_path
+    header = lines[i:i + 3]
+    if (len(header) != 3 or header[0].rstrip("\r") != f"Document Title: {title}"
+            or not header[1].startswith("Heading Path:") or header[2].strip()):
+        return snippet, None
+    heading_path = header[1].removeprefix("Heading Path:").strip()
+    if not heading_path or (isinstance(heading, str) and heading
+            and heading_path != heading and not heading_path.endswith(" > " + heading)):
+        return snippet, None
+    return "\n".join(lines[i + 3:]).strip(), heading_path
 
 
 def lean_result(item: dict[str, Any]) -> dict[str, Any]:
@@ -102,10 +106,11 @@ def lean_result(item: dict[str, Any]) -> dict[str, Any]:
     result = {key: value for key, value in item.items()
               if key not in {"disclaimer", "url_tracking_instruction", "distance"}}
     if "snippet" in result:
-        result["snippet"], heading_path = _split_snippet_prefix(result["snippet"])
         heading = result.get("heading")
         if isinstance(heading, list) and all(isinstance(part, str) for part in heading):
             heading = " > ".join(heading)
+        result["snippet"], heading_path = _split_snippet_prefix(
+            result["snippet"], result.get("title"), heading)
         if heading_path and heading_path != heading:
             result.setdefault("heading_path", heading_path)
     return result
