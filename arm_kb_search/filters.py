@@ -25,15 +25,18 @@ class SearchFilters(BaseModel):
         "Content type: learning (tutorials and courses); guide (installation, configuration, migration, "
         "troubleshooting and tuning); reference (manuals, specifications, intrinsics and Insights FAQs); "
         "article (overviews, white papers and benchmark analysis); compatibility (software/OS/version "
-        "support catalogs). Omit when unsure."))
+        "support catalogs). Legacy corpora may use labels such as 'Learning Paths'; prefer observed "
+        "labels and omit when unsure."))
     product: FilterValue = Field(default=None, description=(
         "Document publisher: arm, aws, google or ampere. Identifies who published the document, "
-        "not the software or hardware discussed."))
+        "not the software or hardware discussed. An AWS workload does not by itself require product='aws'."))
     platform: FilterValue = Field(default=None, description=(
         "Verified execution environment: linux, windows, macos, android, baremetal (no OS), rtos, "
         "chromeos, freebsd, google-colab. Intrinsic family or ISA taught: neon, sve, sve2, sme, sme2, "
         "helium (MVE). Architecture or hardware: cme, mali (including NX), cortex-m, agi-cpu "
-        "(Arm AGI CPU). Tags do not imply other OS, ISA or hardware support."))
+        "(Arm AGI CPU). Tags do not imply other OS, ISA or hardware support. "
+        "Values in a list mean OR: ['linux', 'windows'] matches either. For Linux with SVE, "
+        "filter one tag, keep the other in the query, and verify both in the evidence."))
 
     @field_validator("doc_type", "product", "platform", mode="before")
     @classmethod
