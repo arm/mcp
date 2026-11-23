@@ -86,11 +86,14 @@ def _split_snippet_prefix(snippet: str) -> tuple[str, str | None]:
     lines = snippet.split("\n")
     i = 0
     heading_path = None
-    while i < len(lines) and (lines[i].startswith("Document Title:")
-                             or lines[i].startswith("Heading Path:") or not lines[i].strip()):
-        if lines[i].startswith("Heading Path:"):
-            heading_path = lines[i].removeprefix("Heading Path:").strip()
+    while i < len(lines) and not lines[i].strip():
         i += 1
+    # Consume each generated field once; matching labels in the body are evidence.
+    for prefix in ("Document Title:", "Heading Path:"):
+        if i < len(lines) and lines[i].startswith(prefix):
+            if prefix == "Heading Path:":
+                heading_path = lines[i].removeprefix(prefix).strip()
+            i += 1
     return "\n".join(lines[i:]).strip(), heading_path
 
 

@@ -299,6 +299,21 @@ def test_body_heading_label_does_not_become_result_metadata():
     assert result["snippet"] == "Body\nHeading Path: example text"
 
 
+@pytest.mark.parametrize("body", [
+    "Document Title: required user input\nKeep this field.",
+    "Heading Path: optional user input\nKeep this field.",
+    "Document Title: required user input\nHeading Path: optional user input\nKeep both fields.",
+])
+def test_generated_header_does_not_consume_body_labels(body):
+    result = lean_result({
+        "title": "Example",
+        "heading": "Input fields",
+        "snippet": "Document Title: Example\nHeading Path: Parent > Input fields\n\n" + body,
+    })
+    assert result["snippet"] == body
+    assert result["heading_path"] == "Parent > Input fields"
+
+
 def pieces(parent_uuid, parent_chunk_uuid, texts):
     rows = []
     start = 0
