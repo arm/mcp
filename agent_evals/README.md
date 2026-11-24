@@ -250,8 +250,9 @@ from the agent's reported usage; missing usage is unavailable, not zero.
 Application execution time is present only if the task's verifier measures it.
 For each Codex trial, the report also counts distinct attempts to call an MCP
 `knowledge_base_search` tool and lists installed skills whose `SKILL.md` files
-appear in successful read commands in the agent trace. A skill read does not
-prove the agent followed its instructions. A missing activity summary is shown
+appear as file inputs in successful, simple read commands in the agent trace.
+Compound shell commands are not inferred. A skill read does not prove the agent
+followed its instructions. A missing activity summary is shown
 as unavailable; an empty skill list appears as `none` in the report.
 With retries, these report fields describe the terminating attempt; earlier
 attempts retain their own activity in their saved results.

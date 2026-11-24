@@ -283,8 +283,9 @@ def _markdown(report: dict[str, Any]) -> str:
         "", "## Trial evidence", "",
         "Knowledge base (KB) calls count distinct knowledge-base search requests "
         "recorded in the agent trace. Skills read lists skill names identified from "
-        "successful file-read commands; a read does not prove the instructions were "
-        "followed. With retries, these fields describe the terminating attempt.", "",
+        "successful simple file-read commands. Compound commands are not inferred, "
+        "and a read does not prove the instructions were followed. With retries, "
+        "these fields describe the terminating attempt.", "",
         "| Trial | Input | Configuration | Agent result | Verifier result | End-to-end result | Agent timeouts | KB calls | Skills read | Artifacts |",
         "| --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |",
     ]

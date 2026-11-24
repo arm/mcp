@@ -91,9 +91,69 @@ _SKILL_PATH = re.compile(
     r"(?:^|/)\.agents/skills/(?:([^/{}\s'\"`]+)|\{([^{}]+)\})/SKILL\.md"
     r"(?=$|[^A-Za-z0-9_.-])"
 )
-_READ_COMMAND = re.compile(
-    r"\s*(?:\S*/)?(?:cat|sed|head|tail|less|more|grep|awk|nl)(?=\s|$)"
-)
+_READ_COMMANDS = {"cat", "sed", "head", "tail", "less", "more", "grep", "awk", "nl"}
+_CONTROL_OPERATORS = {"&&", "||", "|", ";", "&", "(", ")"}
+_VALUE_OPTIONS = {
+    "grep": {"-e", "--regexp", "-f", "--file", "-m", "--max-count",
+             "--include", "--exclude", "--exclude-dir"},
+    "sed": {"-e", "--expression", "-f", "--file"},
+    "awk": {"-F", "-f", "-v"},
+    "head": {"-n", "--lines", "-c", "--bytes"},
+    "tail": {"-n", "--lines", "-c", "--bytes"},
+    "nl": {"-w", "-s", "-i", "-v", "-l"},
+}
+
+
+def _read_file_operands(command: str) -> list[str]:
+    """Return unambiguous file inputs for one successful shell read command."""
+    if "\n" in command or "`" in command or "$(" in command:
+        return []
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>()")
+        lexer.whitespace_split = True
+        lexer.commenters = "#"
+        tokens = list(lexer)
+    except ValueError:
+        return []
+    if not tokens or any(token in _CONTROL_OPERATORS for token in tokens):
+        return []
+    reader = Path(tokens[0]).name
+    if reader not in _READ_COMMANDS:
+        return []
+
+    files: list[str] = []
+    positionals: list[str] = []
+    has_pattern_option = False
+    options = True
+    index = 1
+    while index < len(tokens):
+        token = tokens[index]
+        if token in ("<", ">", ">>"):
+            if index + 1 >= len(tokens):
+                return []
+            if token == "<":
+                files.append(tokens[index + 1])
+            index += 2
+            continue
+        if options and token == "--":
+            options = False
+        elif options and token.startswith("-") and token != "-":
+            if reader == "sed" and (token.startswith("-i") or token == "--in-place"):
+                return []
+            if token in _VALUE_OPTIONS.get(reader, set()):
+                if index + 1 >= len(tokens):
+                    return []
+                if reader in ("grep", "sed", "awk") and token in (
+                        "-e", "--regexp", "--expression", "-f", "--file"):
+                    has_pattern_option = True
+                index += 1
+        else:
+            positionals.append(token)
+        index += 1
+
+    if reader in ("grep", "sed", "awk") and not has_pattern_option:
+        positionals = positionals[1:]
+    return files + positionals
 
 
 def _activity_from_trace(path: Path, installed: list[str]) -> dict[str, Any] | None:
@@ -134,26 +194,10 @@ def _activity_from_trace(path: Path, installed: list[str]) -> dict[str, Any] | N
                 if (len(words) >= 3 and Path(words[0]).name in ("sh", "bash", "zsh") and
                         words[1] in ("-c", "-lc", "-ic")):
                     command = words[2]
-                for part in re.split(r"&&|\|\||[;|\n]", command):
-                    if not _READ_COMMAND.match(part):
-                        continue
-                    try:
-                        lexer = shlex.shlex(part, posix=True, punctuation_chars="<>")
-                        lexer.whitespace_split = True
-                        tokens = list(lexer)
-                    except ValueError:
-                        continue
-                    output_target = False
-                    for token in tokens[1:]:
-                        if output_target:
-                            output_target = False
-                            continue
-                        if token in (">", ">>"):
-                            output_target = True
-                            continue
-                        for match in _SKILL_PATH.finditer(token):
-                            names = (match.group(1),) if match.group(1) else match.group(2).split(",")
-                            skills_read.update(name for name in names if name in known_skills)
+                for file in _read_file_operands(command):
+                    for match in _SKILL_PATH.finditer(file):
+                        names = (match.group(1),) if match.group(1) else match.group(2).split(",")
+                        skills_read.update(name for name in names if name in known_skills)
     except (OSError, UnicodeError):
         return None
     if not saw_event:

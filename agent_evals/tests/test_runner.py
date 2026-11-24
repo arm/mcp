@@ -64,11 +64,27 @@ class RunnerTests(unittest.TestCase):
                     "id": "append-skill", "type": "command_execution", "exit_code": 0,
                     "command": "cat >> /tmp/profile/.agents/skills/third/SKILL.md",
                 }},
+                {"type": "item.completed", "item": {
+                    "id": "skipped-read", "type": "command_execution", "exit_code": 0,
+                    "command": "true || cat /tmp/profile/.agents/skills/third/SKILL.md",
+                }},
+                {"type": "item.completed", "item": {
+                    "id": "commented-read", "type": "command_execution", "exit_code": 0,
+                    "command": "cat unrelated.txt # /tmp/profile/.agents/skills/third/SKILL.md",
+                }},
+                {"type": "item.completed", "item": {
+                    "id": "search-pattern", "type": "command_execution", "exit_code": 0,
+                    "command": "grep -F '/tmp/profile/.agents/skills/third/SKILL.md' agent.log",
+                }},
+                {"type": "item.completed", "item": {
+                    "id": "quoted-pattern", "type": "command_execution", "exit_code": 0,
+                    "command": "grep -E 'name|description' /tmp/profile/.agents/skills/fourth/SKILL.md",
+                }},
             ]
             trace.write_text("".join(json.dumps(event) + "\n" for event in events),
                              encoding="utf-8")
-            self.assertEqual(_activity_from_trace(trace, ["first", "second", "third"]), {
-                "knowledge_base_calls": 2, "skills_read": ["first", "second"],
+            self.assertEqual(_activity_from_trace(trace, ["first", "second", "third", "fourth"]), {
+                "knowledge_base_calls": 2, "skills_read": ["first", "fourth", "second"],
             })
 
     def test_records_the_image_built_and_launched_for_an_mcp_server(self):
