@@ -1,0 +1,1 @@
+FROM ghcr.io/arm/mcp-build-inputs@sha256:8587f10da108cb7320c0b11536e2d995afc34abe5a04da10c14758b55a26abc9

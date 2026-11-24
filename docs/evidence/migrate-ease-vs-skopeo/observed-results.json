@@ -1,0 +1,123 @@
+{
+  "observed_at": "2026-11-17T20:19:14-07:00",
+  "environment": {
+    "host_architecture": "arm64",
+    "python": "3.12.15",
+    "docker_buildx": "v0.33.0-desktop.1",
+    "jq": "1.7.1-apple"
+  },
+  "tools": {
+    "migrate_ease": {
+      "docker_scanner_version": "1.0.0",
+      "git_commit": "e92c735f4bdfbe09e96aea7dd5b404f05d07f6fb",
+      "git_commit_date": "2026-03-25T13:46:27+08:00"
+    },
+    "skopeo": {
+      "version": "1.24.1",
+      "commit": "e9748eb1ea474af8c72e2d92a7f0fd5b7606b9bf",
+      "container": "quay.io/skopeo/stable@sha256:4b440098ada2bc2623308b0f60f5a5454084b98683e9e7dcecd77bba69797c56"
+    }
+  },
+  "migrate_ease_summary": {
+    "files": 13,
+    "lines": 18,
+    "total_findings": 12,
+    "scanner_errors": 1,
+    "image_issues": 9,
+    "configuration_info_issues": 1,
+    "plugin_issues": 1
+  },
+  "cases": [
+    {
+      "fixture": "Dockerfile.multiarch-latest",
+      "input": "FROM alpine:latest",
+      "migrate_ease": "no issue",
+      "skopeo": "multi-architecture index includes linux/arm64",
+      "assessment": "match"
+    },
+    {
+      "fixture": "Dockerfile.multiarch",
+      "input": "FROM alpine:3.20",
+      "migrate_ease": "IndexError in image-reference parser",
+      "skopeo": "OCI index includes linux/arm64/v8 and linux/amd64",
+      "assessment": "migrate-ease false indeterminate"
+    },
+    {
+      "fixture": "Dockerfile.amd64only",
+      "input": "FROM amd64/alpine:3.20",
+      "migrate_ease": "ImageIssue",
+      "skopeo": "index contains linux/amd64 only, apart from unknown/unknown attestation",
+      "assessment": "match"
+    },
+    {
+      "fixture": "Dockerfile.digest-index",
+      "input": "alpine multi-architecture index digest",
+      "migrate_ease": "ImageIssue after malformed Docker Hub API URL returned HTTP 400",
+      "skopeo": "OCI index includes linux/arm64/v8",
+      "assessment": "migrate-ease false positive"
+    },
+    {
+      "fixture": "Dockerfile.digest-child",
+      "input": "alpine amd64 child-manifest digest",
+      "migrate_ease": "ImageIssue after the same malformed digest URL; no media type or architecture evidence",
+      "skopeo": "single OCI manifest; config inspection reports linux/amd64",
+      "assessment": "same headline, but migrate-ease result is not evidentiary"
+    },
+    {
+      "fixture": "Dockerfile.nonhub",
+      "input": "FROM registry.k8s.io/pause:3.10",
+      "migrate_ease": "ImageIssue after token response KeyError: access_token",
+      "skopeo": "Docker manifest list includes linux/arm64",
+      "assessment": "migrate-ease false positive"
+    },
+    {
+      "fixture": "Dockerfile.private",
+      "input": "private GHCR digest",
+      "migrate_ease": "ImageIssue after malformed token scope returned HTTP 400",
+      "skopeo": "explicit unauthorized diagnostic without credentials",
+      "assessment": "migrate-ease incorrectly converts unverified to unsupported"
+    },
+    {
+      "fixture": "Dockerfile.platform",
+      "input": "FROM --platform=linux/amd64 alpine:3.20",
+      "migrate_ease": "ImageIssue after treating --platform=linux/amd64 as the image name",
+      "skopeo": "can inspect alpine:3.20, but does not parse Dockerfile syntax",
+      "assessment": "complementary tools; migrate-ease parser is wrong"
+    },
+    {
+      "fixture": "Dockerfile.variable",
+      "input": "ARG BASE=alpine:3.20; FROM ${BASE}",
+      "migrate_ease": "ImageIssue without resolving the default",
+      "skopeo": "requires the resolved reference",
+      "assessment": "ambiguous until Dockerfile resolution"
+    },
+    {
+      "fixture": "Dockerfile.scratch",
+      "input": "FROM scratch",
+      "migrate_ease": "ImageIssue after Docker Hub 404",
+      "skopeo": "not applicable; scratch is not a registry image",
+      "assessment": "migrate-ease false positive"
+    },
+    {
+      "fixture": "Dockerfile.stage",
+      "input": "FROM build after declaring build stage",
+      "migrate_ease": "ImageIssue after treating stage alias as Docker Hub image library/build",
+      "skopeo": "not applicable to stage aliases",
+      "assessment": "migrate-ease false positive"
+    },
+    {
+      "fixture": "Dockerfile.lowercase",
+      "input": "from amd64/alpine:3.20",
+      "migrate_ease": "no issue",
+      "skopeo": "amd64-only when given the extracted reference",
+      "assessment": "migrate-ease false negative"
+    },
+    {
+      "fixture": "Dockerfile.static",
+      "input": "ENV TARGETARCH=amd64; RUN pip install PyQBDI",
+      "migrate_ease": "ConfigurationInfoIssue plus PluginIssue",
+      "skopeo": "not applicable",
+      "assessment": "unique migrate-ease value"
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+FROM alpine:latest
+ENV TARGETARCH=amd64
+RUN pip install PyQBDI

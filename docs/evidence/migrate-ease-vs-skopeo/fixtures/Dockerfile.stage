@@ -1,0 +1,3 @@
+FROM alpine:latest AS build
+RUN echo ready
+FROM build
