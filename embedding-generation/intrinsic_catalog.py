@@ -93,8 +93,8 @@ def build_intrinsic_chunk(row: dict, operations: dict[str, str]) -> dict:
     if isinstance(requirement, dict):
         content += " ".join(_text(requirement[key]) for key in ("title", "intro", "features")
                             if isinstance(requirement.get(key), str)) + "\n"
-    if row.get("sme_modes"):
-        content += "Function attributes: " + ", ".join(row["sme_modes"]) + ".\n"
+    for interface in row.get("interfaces", []):
+        content += " ".join(_text(interface).split()) + "\n"
     if row.get("Operation"):
         operation = operations.get(row["Operation"])
         if not operation:

@@ -77,11 +77,19 @@ def test_refresh_updates_old_records_and_preserves_identity(tmp_path, source):
     (("Neon", "SVE"), "arm_neon_sve_bridge.h"), ((), "arm_acle.h"),
 ])
 def test_family_headers_and_required_features(families, header):
-    row = entry(families=families, sme_modes=["__arm_streaming"],
+    # Interface strings from Arm's svluti4_zt_u8_x4 catalog entry.
+    interfaces = [
+        "This intrinsic only has <a href='https://arm-software.github.io/acle/main/acle.html#introduction-to-streaming-and-non-streaming-mode'>streaming</a> interface",
+        'This intrinsic has "__arm_in("zt0")" <a href=\'https://arm-software.github.io/acle/main/acle.html#state-management\'>shared state</a> interface',
+    ] if "SME and SME2" in families else []
+    row = entry(families=families, interfaces=interfaces,
                 required_streaming_features={"features": "FEAT_SME"})
     chunk = build_intrinsic_chunk(row, {})
     assert f"Header declarations: `#include <{header}>`.\n" in chunk["content"]
-    assert "__arm_streaming" in chunk["content"] and "FEAT_SME" in chunk["content"]
+    assert "FEAT_SME" in chunk["content"]
+    assert ("This intrinsic only has streaming interface" in chunk["content"]) == bool(interfaces)
+    assert ('This intrinsic has "__arm_in("zt0")" shared state interface' in chunk["content"]) == bool(interfaces)
+    assert "<a " not in chunk["content"]
     assert "Signature: void example ();" in chunk["embedding_text"]
 
 
