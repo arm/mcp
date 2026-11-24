@@ -18,7 +18,8 @@ from unittest.mock import Mock, call, patch
 
 from agent_evals import Scenario, load_scenario
 from agent_evals.codex_adapter import (
-    _activity_from_trace, _docker_socket, _install_skills, _write_provider_config, run_codex,
+    _activity_from_trace, _docker_socket, _install_skills, _read_file_operands,
+    _write_provider_config, run_codex,
     run_codex_trial, tomllib,
 )
 from agent_evals.runner import (
@@ -28,6 +29,17 @@ from agent_evals.runner import (
 
 
 class RunnerTests(unittest.TestCase):
+    def test_skill_read_operands_handle_attached_options_and_redirections(self):
+        skill = "/tmp/profile/.agents/skills/example/SKILL.md"
+        self.assertEqual(_read_file_operands(f"grep -ename {skill}"), [skill])
+        self.assertEqual(_read_file_operands(f"grep --regexp=name {skill}"), [skill])
+        self.assertEqual(_read_file_operands(f"sed -e'1,3p' {skill}"), [skill])
+        self.assertEqual(_read_file_operands(f"awk -fscript.awk {skill}"), [skill])
+        self.assertEqual(_read_file_operands(f"grep -A 1 -F '{skill}' agent.log"),
+                         ["agent.log"])
+        self.assertEqual(_read_file_operands(f"cat <<< {skill}"), [])
+        self.assertEqual(_read_file_operands(f"cat &> {skill}"), [])
+
     def test_activity_counts_kb_calls_and_names_observed_skill_reads(self):
         with tempfile.TemporaryDirectory() as temporary:
             trace = Path(temporary) / "agent.jsonl"

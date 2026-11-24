@@ -92,9 +92,10 @@ _SKILL_PATH = re.compile(
     r"(?=$|[^A-Za-z0-9_.-])"
 )
 _READ_COMMANDS = {"cat", "sed", "head", "tail", "less", "more", "grep", "awk", "nl"}
-_CONTROL_OPERATORS = {"&&", "||", "|", ";", "&", "(", ")"}
+_SHELL_PUNCTUATION = set(";&|<>()")
 _VALUE_OPTIONS = {
     "grep": {"-e", "--regexp", "-f", "--file", "-m", "--max-count",
+             "-A", "-B", "-C", "--after-context", "--before-context", "--context",
              "--include", "--exclude", "--exclude-dir"},
     "sed": {"-e", "--expression", "-f", "--file"},
     "awk": {"-F", "-f", "-v"},
@@ -115,7 +116,9 @@ def _read_file_operands(command: str) -> list[str]:
         tokens = list(lexer)
     except ValueError:
         return []
-    if not tokens or any(token in _CONTROL_OPERATORS for token in tokens):
+    if not tokens or any(
+            token and set(token) <= _SHELL_PUNCTUATION and token not in ("<", ">", ">>")
+            for token in tokens):
         return []
     reader = Path(tokens[0]).name
     if reader not in _READ_COMMANDS:
@@ -140,6 +143,10 @@ def _read_file_operands(command: str) -> list[str]:
         elif options and token.startswith("-") and token != "-":
             if reader == "sed" and (token.startswith("-i") or token == "--in-place"):
                 return []
+            if reader in ("grep", "sed", "awk") and (
+                    (token.startswith(("-e", "-f")) and len(token) > 2) or
+                    token.startswith(("--regexp=", "--expression=", "--file="))):
+                has_pattern_option = True
             if token in _VALUE_OPTIONS.get(reader, set()):
                 if index + 1 >= len(tokens):
                     return []
