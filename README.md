@@ -29,8 +29,9 @@ own shell:
 Skills are served as standard MCP resources (`skill://<name>/SKILL.md`) with
 file manifests and as same-named MCP prompts. See
 [skill delivery and client compatibility](docs/skills.md) for loading them or
-installing them locally. The Docker image retains the CLI binaries; the skills
-show how to invoke them with `docker run --entrypoint` without starting the server.
+installing them locally. CLI binaries are intentionally not bundled in the
+server image; each skill checks or installs prerequisites in the user's
+environment before operating on the user's checkout.
 
 ## Pre-Built Image
 
@@ -176,7 +177,7 @@ args = [
 
 **Note**: The `/workspace` mount is optional and used for invocation/error logs.
 Knowledge-base search and skill delivery do not read project source. CLI scans
-use a separate shell invocation and workspace mount as shown in each skill.
+run directly in the client's user environment as shown in each skill.
 
 ### 3. Restart Your MCP Client
 

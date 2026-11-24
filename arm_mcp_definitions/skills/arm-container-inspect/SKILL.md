@@ -5,31 +5,38 @@ description: Inspect container tags and exact digests for Arm64 support using Sk
 
 # Inspect container architecture support
 
-Run commands through the agent's shell. This replaces the former `check_image`
-and `skopeo` MCP tools. Preserve the exact image tag or digest from the project.
+Run commands through the agent's shell. Preserve the exact image tag or digest from the project.
 
-Use an installed Skopeo, or the CLI bundled in the Arm MCP image. Set `ARM_MCP_IMAGE`
-to the version or digest configured for this project (or the newly built local
-image); the examples default to `armlimited/arm-mcp:latest`.
+This skill runs in the user's environment; Skopeo is not installed in the Arm
+MCP server image. Prefer an existing Skopeo installation. If Skopeo is absent,
+use Docker Buildx when available or ask before installing the `skopeo` package
+with the user's platform package manager. Do not modify the server container.
+
+Check the available CLI before inspecting an image:
 
 ```sh
 image='docker.io/library/nginx:latest'
-skopeo inspect --raw "docker://$image"
-# Docker fallback, without starting the MCP server or mounting a workspace:
-docker run --rm --entrypoint skopeo "${ARM_MCP_IMAGE:-armlimited/arm-mcp:latest}" \
-  inspect --raw "docker://$image"
+if command -v skopeo >/dev/null 2>&1; then
+  skopeo inspect --raw "docker://$image"
+elif docker buildx version >/dev/null 2>&1; then
+  docker buildx imagetools inspect --raw "$image"
+else
+  echo "Install Skopeo or Docker Buildx to inspect container images." >&2
+  exit 1
+fi
 ```
 
-If Docker Buildx is already available, `docker buildx imagetools inspect "$image"`
-is another way to inspect registry platforms without pulling image layers.
+The Docker Buildx fallback inspects registry platforms without pulling image
+layers.
 
 For an OCI index or Docker manifest list, inspect `manifests[].platform` and
 report OS, architecture, and variant. `linux/arm64` is the common server target;
 `arm` is 32-bit and does not establish Arm64 support. Ignore attestation entries
 with `unknown/unknown`. For a single manifest, query its configuration with
-`skopeo inspect "docker://$image"` and read `Os` and `Architecture`. Default
-non-raw inspection of a multi-platform tag selects one platform, so it cannot
-establish all supported architectures.
+`skopeo inspect "docker://$image"` and read `Os` and `Architecture`, or use
+`docker buildx imagetools inspect --format '{{json .Image}}' "$image"` and read
+`os` and `architecture`. Default non-raw inspection of a multi-platform tag
+selects one platform, so it cannot establish all supported architectures.
 
 Inspect pinned digests directly: an Arm-capable tag does not make a digest
 pointing at an amd64-only manifest portable. Record the reference, manifest type,
@@ -38,6 +45,6 @@ failures mean support is unverified, not absent. Use the user's existing registr
 authentication; a Docker subprocess does not automatically inherit host Skopeo
 credentials. Do not print secrets or put passwords in command arguments.
 
-For `oci:` or `dir:` transports, use the real local path with Skopeo and mount it
-read-only when using Docker. Remote image inspection needs registry networking;
-it does not require a Docker daemon socket inside the container.
+For `oci:` or `dir:` transports, use the real local path with Skopeo. Remote
+image inspection needs registry networking. Docker Buildx requires access to
+the user's Docker daemon; Skopeo does not.

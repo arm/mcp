@@ -24,7 +24,7 @@ from .skill_catalog import register_skills
 SERVER_INSTRUCTIONS = (
     'Use knowledge_base_search for Arm documentation and compatibility guidance. For CLI '
     'workflows, read skill://arm-container-inspect/SKILL.md, '
-    'skill://arm-migration-scan/SKILL.md, or skill://arm-assembly-analyze/SKILL.md using '
+    'skill://arm-migrate-ease-scan/SKILL.md, or skill://arm-assembly-analyze/SKILL.md using '
     'resources/read, or select the same-named MCP prompt. Run the commands through the '
     "client's shell in the target workspace. The server exposes no image inspection, "
     'migration scanning, or assembly analysis tools.'

@@ -60,25 +60,6 @@ RUN --network=none pip install \
     --requirement /tmp/requirements.lock && \
     rm -rf /tmp/wheels /tmp/requirements.lock
 
-# Install only migrate-ease. The old arm-linux-migration-tools installer also
-# installed unrelated profiling tools and then removed them again.
-COPY --from=mcp-inputs /mcp-build-inputs/migrate-ease.tar.gz /tmp/migrate-ease.tar.gz
-RUN --network=none mkdir -p /opt/arm-migration-tools/migrate-ease && \
-    tar -xzf /tmp/migrate-ease.tar.gz \
-      --strip-components=1 \
-      -C /opt/arm-migration-tools/migrate-ease && \
-    rm /tmp/migrate-ease.tar.gz && \
-    for scanner in cpp go java js python; do \
-      wrapper="/usr/local/bin/migrate-ease-${scanner}"; \
-      printf '%s\n' \
-        '#!/bin/sh' \
-        'cd /opt/arm-migration-tools/migrate-ease' \
-        'export PYTHONPATH="/opt/arm-migration-tools/migrate-ease${PYTHONPATH:+:$PYTHONPATH}"' \
-        "exec /app/.venv/bin/python -m ${scanner} \"\$@\"" \
-        > "${wrapper}"; \
-      chmod 0755 "${wrapper}"; \
-    done
-
 # Keep the model, metadata, and index from the same immutable vector-store
 # artifact. The model is architecture-independent even though generation ran
 # on arm64.
@@ -112,15 +93,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 COPY --from=mcp-inputs /mcp-build-inputs/debs/runtime/ /var/cache/apt/archives/
 RUN --network=none apt-get install -y --no-download --no-install-recommends \
       /var/cache/apt/archives/*.deb && \
-    ln -sf /usr/bin/llvm-mca-18 /usr/bin/llvm-mca && \
     rm -f /var/cache/apt/archives/*.deb && \
-    rm -rf /var/lib/apt/lists/* && \
-    skopeo --version && \
-    llvm-mca --version && \
-    git --version
+    rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /opt/arm-migration-tools/migrate-ease /opt/arm-migration-tools/migrate-ease
-COPY --from=builder /usr/local/bin/migrate-ease-* /usr/local/bin/
 COPY --from=builder /app /app
 
 WORKDIR /app

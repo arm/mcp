@@ -60,11 +60,11 @@ MCP_REQUESTS = [
     },
     {
         "jsonrpc": "2.0", "id": 5, "method": "resources/read",
-        "params": {"uri": "skill://arm-migration-scan/SKILL.md"},
+        "params": {"uri": "skill://arm-migrate-ease-scan/SKILL.md"},
     },
     {
         "jsonrpc": "2.0", "id": 6, "method": "prompts/get",
-        "params": {"name": "arm-migration-scan"},
+        "params": {"name": "arm-migrate-ease-scan"},
     },
 ]
 
@@ -326,7 +326,7 @@ def validate_mcp_responses(stdout: str, platform: str) -> list[str]:
     resources = responses.get(4, {}).get("result", {}).get("resources", [])
     expected = {
         f"skill://{name}/SKILL.md"
-        for name in ("arm-migration-scan", "arm-container-inspect", "arm-assembly-analyze")
+        for name in ("arm-migrate-ease-scan", "arm-container-inspect", "arm-assembly-analyze")
     }
     if not expected <= {resource["uri"] for resource in resources}:
         failures.append("bundled skill resources are missing")

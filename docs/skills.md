@@ -38,7 +38,7 @@ separate client capability. No extra skill-loading MCP tool is registered.
 | --- | --- |
 | Claude Code | Select a server prompt from slash-command completion, or attach its MCP resource. See [Claude MCP documentation](https://code.claude.com/docs/en/mcp). |
 | VS Code / GitHub Copilot | Use **MCP: Browse Resources** or **Add Context → MCP Resources**, or select the server prompt from slash-command completion. See [VS Code MCP capabilities](https://code.visualstudio.com/docs/agent-customization/mcp-servers#other-mcp-capabilities). |
-| Gemini CLI | Use the discovered skill prompt as a slash command, for example `/arm-migration-scan`; `/mcp` shows the server's resources and prompts. See [Gemini MCP documentation](https://geminicli.com/docs/tools/mcp-server/). |
+| Gemini CLI | Use the discovered skill prompt as a slash command, for example `/arm-migrate-ease-scan`; `/mcp` shows the server's resources and prompts. See [Gemini MCP documentation](https://geminicli.com/docs/tools/mcp-server/). |
 | Codex and other clients with MCP resource access | List the `arm-mcp` resources and read the relevant `skill://` URI. For native skill discovery, install the files locally as below. |
 | Clients exposing only MCP tools | Knowledge search works directly. Install or attach the skill files using the client's local instructions mechanism; the server cannot force resource/prompt support. |
 
@@ -57,18 +57,21 @@ supported by your client. For example, from a repository checkout:
 # Codex user skills; choose your client's directory if using a different host.
 mkdir -p "$HOME/.agents/skills"
 cp -R arm_mcp_definitions/skills/arm-container-inspect \
-  arm_mcp_definitions/skills/arm-migration-scan \
+  arm_mcp_definitions/skills/arm-migrate-ease-scan \
   arm_mcp_definitions/skills/arm-assembly-analyze "$HOME/.agents/skills/"
 ```
 
 For an image-only installation, extract the same files to a fresh staging
 directory, inspect them, and then copy the skill folders into the client's skill
-directory. Set the image to the version/digest used by the project:
+directory. Set the image to the version/digest used by the project. This uses
+Docker's copy operation and does not depend on extra utilities in the server
+image:
 
 ```sh
 skill_stage="$(mktemp -d)"
-docker run --rm --entrypoint tar "${ARM_MCP_IMAGE:-armlimited/arm-mcp:latest}" \
-  -C /app/arm_mcp_definitions/skills -cf - . | tar -xf - -C "$skill_stage"
+skill_container="$(docker create "${ARM_MCP_IMAGE:-armlimited/arm-mcp:latest}")"
+docker cp "$skill_container:/app/arm_mcp_definitions/skills/." "$skill_stage"
+docker rm "$skill_container"
 ```
 
 Restart or reload the client's skills after installation. The CLI skills are
@@ -79,16 +82,17 @@ self-contained; they do not depend on the repository being available later.
 Remove `check_image`, `skopeo`, `migrate_ease_scan`, and `mca` from explicit MCP
 tool allowlists and reload the server. Keep `knowledge_base_search`. Existing
 stdio Docker configurations still work. Their `/workspace` mount is optional
-and used for logs; the CLI invocations have independent source and report mounts.
+and used for logs; CLI workflows use the client's source and report paths.
 
-Skopeo, LLVM MCA, and migrate-ease remain in the image as CLI dependencies. The
-skills show both native commands and `docker run --entrypoint` alternatives.
-Choose the project's version/digest through `ARM_MCP_IMAGE`; a newly built image
-can be selected the same way. Scans retain output files for review and validation.
+Skopeo, LLVM MCA, migrate-ease, Git, and their support packages are not bundled
+in the server image. The skills run through the client's shell and contain the
+user-environment prerequisite and isolated-install guidance. Scans retain
+output files for review and validation.
 
 ## Validation
 
 The container integration suite checks the legacy stdio wire format, real
-knowledge retrieval, bundled skills, and CLI execution.
+knowledge retrieval, and bundled skill delivery. CLI workflows are tested in
+their user environment rather than through the server image.
 Client-specific UI behavior should be checked in the client versions used for
 a release; protocol tests do not automate those UIs.
