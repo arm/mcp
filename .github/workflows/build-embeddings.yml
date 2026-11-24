@@ -725,6 +725,7 @@ jobs:
           python-version: '3.13'
 
       - name: Download previous report
+        timeout-minutes: 5
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -747,6 +748,7 @@ jobs:
           fi
 
       - name: Audit links without changing sources
+        timeout-minutes: 50
         shell: bash
         run: |
           set -euo pipefail

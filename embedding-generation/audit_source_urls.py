@@ -11,11 +11,12 @@ import csv
 import sys
 import time
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from http.client import HTTPException
 from pathlib import Path
+from queue import Empty, Queue
 from tempfile import NamedTemporaryFile
+from threading import Event, Thread
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
@@ -31,26 +32,45 @@ FIELDS = [
     "action",
 ]
 MISSING = {404, 410}
+AUDIT_BUDGET_SECONDS = 45 * 60
 
 
-def check_url(url):
+def budget_exhausted(url):
+    return dict(
+        url=url,
+        status="uncertain",
+        http_status="",
+        final_url=url,
+        detail="Audit time budget exhausted; check incomplete",
+    )
+
+
+def check_url(url, deadline=float("inf")):
     code, final_url, detail = 0, url, ""
     # Four workers, each pausing before requests. Confirm missing responses once.
     for attempt in range(2):
-        time.sleep(1 if attempt == 0 else 2)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return budget_exhausted(url)
+        time.sleep(min(1 if attempt == 0 else 2, remaining))
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return budget_exhausted(url)
         try:
             if urlsplit(url).scheme not in {"http", "https"}:
                 raise ValueError("Expected an HTTP(S) URL")
             request = Request(
                 url, headers={"User-Agent": "arm-mcp-source-url-audit/1.0"}
             )
-            with urlopen(request, timeout=20) as response:
+            with urlopen(request, timeout=min(20, remaining)) as response:
                 code, final_url, detail = response.status, response.geturl(), ""
         except HTTPError as error:
             with error:
                 code, final_url, detail = error.code, error.geturl(), str(error)
         except (URLError, OSError, ValueError, HTTPException) as error:
             code, final_url, detail = 0, url, str(error)
+        if time.monotonic() >= deadline:
+            return budget_exhausted(url)
         if code not in MISSING:
             break
     status = "uncertain"
@@ -86,7 +106,54 @@ def missing_history(status, previous, now):
     return dict(first_missing_at=first.isoformat(), action=action)
 
 
-def run_audit(sources, output, previous=None, now=None):
+def collect_checks(urls, budget_seconds):
+    deadline = time.monotonic() + budget_seconds
+    pending, completed = Queue(), Queue()
+    stopped = Event()
+    results = {}
+    for url in urls:
+        pending.put(url)
+
+    def worker():
+        while not stopped.is_set() and time.monotonic() < deadline:
+            try:
+                url = pending.get_nowait()
+            except Empty:
+                return
+            try:
+                result = check_url(url, deadline=deadline)
+            except Exception as error:
+                completed.put((url, error))
+                return
+            completed.put((url, result))
+
+    # Daemon workers let report writing and process exit proceed even when DNS
+    # or a socket operation ignores its timeout. Workers never write the report.
+    for _ in range(min(4, len(urls))):
+        Thread(target=worker, daemon=True).start()
+    try:
+        while len(results) < len(urls):
+            try:
+                url, result = completed.get(timeout=max(0, deadline - time.monotonic()))
+            except Empty:
+                break
+            if isinstance(result, Exception):
+                raise result
+            results[url] = result
+            if len(results) % 100 == 0:
+                print(
+                    f"Checked {len(results)}/{len(urls)} URLs",
+                    file=sys.stderr,
+                    flush=True,
+                )
+    finally:
+        stopped.set()
+    return [results.get(url, budget_exhausted(url)) for url in urls]
+
+
+def run_audit(
+    sources, output, previous=None, now=None, budget_seconds=AUDIT_BUDGET_SECONDS
+):
     sources, output = Path(sources), Path(output)
     if output.resolve() == sources.resolve() or (
         output.exists() and output.samefile(sources)
@@ -115,19 +182,12 @@ def run_audit(sources, output, previous=None, now=None):
     now = now or datetime.now(timezone.utc)
     results = []
     print(f"Checking {len(urls)} unique URLs...", file=sys.stderr, flush=True)
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        for check in pool.map(check_url, urls):
-            check.update(
-                checked_at=now.isoformat(),
-                **missing_history(check["status"], history.get(check["url"], {}), now),
-            )
-            results.append(check)
-            if len(results) % 100 == 0:
-                print(
-                    f"Checked {len(results)}/{len(urls)} URLs",
-                    file=sys.stderr,
-                    flush=True,
-                )
+    for check in collect_checks(urls, budget_seconds):
+        check.update(
+            checked_at=now.isoformat(),
+            **missing_history(check["status"], history.get(check["url"], {}), now),
+        )
+        results.append(check)
     # Publish only a complete report; failures preserve the previous output.
     output.parent.mkdir(parents=True, exist_ok=True)
     with NamedTemporaryFile(
@@ -138,7 +198,7 @@ def run_audit(sources, output, previous=None, now=None):
         writer.writeheader()
         writer.writerows(results)
     temporary.replace(output)
-    print(f"Checked {len(results)} URLs. Report only; sources unchanged.\n")
+    print(f"Reported {len(results)} URLs. Report only; sources unchanged.\n")
     for action, count in sorted(Counter(row["action"] for row in results).items()):
         print(f"- {action}: {count}")
     return results

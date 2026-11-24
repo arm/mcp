@@ -161,8 +161,12 @@ HTTP success does not validate page content, JavaScript routes or anchors.
 
 History comes from the latest available report in the last ten completed runs
 of this workflow on the same branch, even if an unrelated embedding job failed. Reports
-last 30 days. An incomplete audit publishes no report; check the audit job's
-result. Any later source cleanup still needs the normal embedding rebuild.
+last 30 days. URL checks have a 45-minute budget within the 60-minute job.
+When the budget expires, completed results are kept and unfinished or unchecked
+URLs are reported as `investigate`, resetting their missing history. The report
+still includes every URL. Unexpected audit failures publish no new report;
+check the audit job's result. Any later source cleanup still needs the normal
+embedding rebuild.
 
 To test a pushed branch without building embeddings, dispatch the existing
 workflow with `audit_only=true` and `dry_run=true` (replace `YOUR_BRANCH`):
