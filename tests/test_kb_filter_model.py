@@ -23,12 +23,13 @@ from arm_kb_search import SearchFilters
 from arm_kb_search.filters import MetadataFilterIndex
 
 
-def test_filters_round_trip_through_endpoint_request_and_keep_matching():
+@pytest.mark.parametrize("curated", [False, True])
+def test_filters_round_trip_through_endpoint_request_and_keep_matching(curated):
     class Request(BaseModel):
         filters: SearchFilters
 
     payload = {"filters": {"platform": [" Linux ", "WINDOWS", "linux"],
-                           "product": " ARM ", "edition": None}}
+                           "product": " ARM ", "doc_type": None}}
     request = Request.model_validate_json(json.dumps(payload))
     filters = request.filters
     assert filters.platform == ("linux", "windows")
@@ -39,13 +40,18 @@ def test_filters_round_trip_through_endpoint_request_and_keep_matching():
         "filters": {"platform": ["linux", "windows"], "product": "arm"}}
     assert filters.model_dump(mode="json", exclude_none=True) == {
         "platform": ["linux", "windows"], "product": "arm"}
-    lookup = MetadataFilterIndex([
+    metadata = [
         {"platform": "linux", "product": "Arm"},
         {"platform": "windows", "product": "Arm"},
         {"platform": "macos", "product": "Arm"},
         {"platform": "linux", "product": "other"},
         {"product": "Arm"},
-    ])
+    ]
+    if curated:
+        for row in metadata:
+            row["filter_metadata"] = {
+                name: [row[name]] if name in row else [] for name in ("platform", "product")}
+    lookup = MetadataFilterIndex(metadata)
     assert lookup.eligible_ids(filters) == (0, 1)
     with pytest.raises(ValidationError, match="frozen"):
         filters.platform = "macos"
@@ -56,6 +62,7 @@ def test_filters_round_trip_through_endpoint_request_and_keep_matching():
     {"platform": 1}, {"platform": True}, {"platform": []},
     {"platform": ["linux", 1]}, {"platform": ["linux", " "]},
     {"platform": [["linux"]]}, {"unknown": "linux"},
+    {"edition": "commercial"}, {"edition": ["open-source"]}, {"edition": None},
 ])
 def test_json_filters_reject_invalid_values_and_unknown_fields(payload):
     with pytest.raises(ValidationError):

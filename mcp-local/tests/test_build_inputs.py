@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import csv
 import json
 import os
 from pathlib import Path
@@ -93,6 +94,76 @@ BENCHMARK_SCRIPT = next(
 BENCHMARK_IMAGE_ID = "sha256:" + "a" * 64
 BENCHMARK_GENERATOR = "ghcr.io/arm/mcp-embedding-generator@sha256:" + "b" * 64
 BENCHMARK_CANDIDATE = "ghcr.io/arm/mcp-embedding-vectorstore@sha256:" + "c" * 64
+
+
+@pytest.mark.parametrize("change", [
+    "none", "drop-columns", "change-tag", "clear-to-blank", "drop-source",
+    "collapse-duplicates", "merge-duplicates", "lose-duplicate-tag",
+])
+def test_promotion_preserves_source_metadata(tmp_path, change):
+    """A bad artifact must fail before replacing the reviewed source CSV."""
+    source_dir = tmp_path / "embedding-generation"
+    source_dir.mkdir()
+    columns = ["Site Name", "License Type", "Display Name", "URL", "Keywords",
+               "Transcript Source URL", "Doc Type", "Product", "Platform"]
+    row = ["Guide", "MIT", "Example", "https://example.com/", "", "", "guide", "[]", "linux"]
+    if change in {"merge-duplicates", "lose-duplicate-tag"}:
+        row[-2] = ""
+    original = source_dir / "vector-db-sources.csv"
+    with original.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(columns)
+        writer.writerow(row)
+        if change == "collapse-duplicates":
+            writer.writerow(row)
+        elif change in {"merge-duplicates", "lose-duplicate-tag"}:
+            writer.writerow(row[:6] + ["", "[]", ""])
+    original_bytes = original.read_bytes()
+    artifact = tmp_path / "artifact.csv"
+    if change == "drop-columns":
+        columns, row = columns[:6], row[:6]
+    elif change == "change-tag":
+        row[-1] = "windows"
+    elif change == "clear-to-blank":
+        row[-2] = ""
+    elif change == "merge-duplicates":
+        row[-2] = "[]"
+    with artifact.open("w", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(columns)
+        if change != "drop-source":
+            writer.writerow(row)
+        if change == "none":
+            writer.writerow(["Guide", "MIT", "Discovered", "https://example.com/new", "", "", "", "", ""])
+    for name in ("validate-source-metadata.py", "source_metadata.py"):
+        script = REPOSITORY / "embedding-generation" / name
+        if script.exists():
+            (source_dir / name).write_bytes(script.read_bytes())
+    docker = tmp_path / "docker"
+    docker.write_text(
+        '#!/bin/sh\ncase "$1" in\n'
+        '  create) echo fixture-container;;\n'
+        '  cp) cp "$GENERATED_CSV" "$3";;\n'
+        '  pull|rm) :;;\n  *) exit 9;;\nesac\n'
+    )
+    docker.chmod(0o755)
+    restore = next(step for step in BENCHMARK_WORKFLOW["jobs"]["propose-mcp-embedding-pin"]["steps"]
+                   if step["name"] == "Restore generated sources CSV from chunk artifact")
+    result = subprocess.run(
+        ["bash", "-c", restore["run"]], cwd=tmp_path,
+        env={**os.environ, "PATH": f"{tmp_path}:{os.environ['PATH']}",
+             "GENERATED_CSV": str(artifact), "RUNNER_TEMP": str(tmp_path),
+             "CHUNK_REFERENCE": "example/chunks@sha256:" + "a" * 64},
+        capture_output=True, text=True,
+    )
+    if change in {"none", "drop-source", "collapse-duplicates", "merge-duplicates"}:
+        assert result.returncode == 0, result.stderr
+        assert original.read_bytes() == artifact.read_bytes()
+        if change == "drop-source":
+            assert "Removed source: https://example.com/" in result.stdout
+    else:
+        assert result.returncode != 0, "Promotion accepted metadata loss"
+        assert original.read_bytes() == original_bytes
 
 
 def test_docker_base_images_match_manifest() -> None:
@@ -1285,6 +1356,8 @@ def test_toolchain_input_changes_rebuild_and_propose_pin() -> None:
         "learn_public.py",
         "learn_repository.py",
         "local_vectorstore_creation.py",
+        "source_metadata.py",
+        "validate-source-metadata.py",
     ):
         assert f"embedding-generation/{source}" not in workflow_triggers
         assert source not in TOOLCHAIN_DOCKERFILE
@@ -1317,6 +1390,8 @@ def test_generation_stages_use_checkout_scripts_with_pinned_toolchain() -> None:
                 "generate-chunks.py",
                 "learn_public.py",
                 "learn_repository.py",
+                "source_metadata.py",
+                "validate-source-metadata.py",
             ),
         ),
         (vectorstore, ("local_vectorstore_creation.py",)),

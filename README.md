@@ -172,13 +172,17 @@ After updating the configuration, restart your MCP client to load the Arm MCP se
 
 - `k`: an integer from 1 to 20 limiting initial matches, defaulting to 5 when omitted.
   Explicit `null` and values outside this range are rejected.
-- `filters`: `doc_type`, `product`, `platform`, or `edition`, each accepting a
+- `filters`: `doc_type`, `product`, or `platform`, each accepting a
   label or non-empty list. Values within a field use OR; fields use AND.
   Matching ignores case and surrounding whitespace. Use known metadata labels;
   records with missing tags cannot match a filter.
 
+Edition is no longer a request filter or result field. Remove `edition` from
+client filter objects; unsupported fields are rejected rather than ignored.
+Dashboard catalog variants remain distinct internally.
+
 ```json
-{"query": "How do SVE predicated loads work?", "filters": {"doc_type": "Intrinsic", "product": "SVE"}, "k": 3}
+{"query": "How do SVE predicated loads work?", "filters": {"doc_type": "reference", "product": "arm", "platform": "sve"}, "k": 3}
 ```
 
 Choose `scope` for the amount of context:
@@ -196,6 +200,11 @@ Expansion requires regenerated KB artifacts with complete ordering metadata;
 missing or conflicting context returns an error. The shared search library retains
 `parent_resource`; it is temporarily disabled in MCP pending further evaluation.
 See the [shared search documentation](arm_kb_search/README.md) for API and metadata details.
+
+MCP search results omit raw distances and repeated tracking text. A scoped Arm
+legal notice appears once per applicable response; routing and citation guidance
+remain in the tool description, with session instructions as additional context. See the
+[server tool reference](mcp-local/README.md) for response fields and examples.
 
 ## Logging
 

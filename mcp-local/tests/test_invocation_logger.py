@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 import sys
 from pathlib import Path
 
@@ -54,25 +55,36 @@ def test_logs_call_without_invocation_reason(tmp_path, monkeypatch):
 def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monkeypatch):
     import asyncio
     import importlib.util
+
     import pytest
     from fastmcp import Client
     from fastmcp.exceptions import ToolError
+
     import arm_kb_search
     from arm_kb_search import SearchFilters
+    from arm_kb_search.response import ARM_CONTENT_DISCLAIMER, UTM_SOURCE_PRESERVATION_NOTE
 
     calls = []
-    expected = [{"url": "https://example.org/guide/#section", "snippet": "Evidence",
+    expected = [{"url": "https://example.org/guide/?utm_source=arm-mcp#section",
+                 "snippet": "Document Title: Guide\nHeading Path: Install\n\n    command --flag\n",
+                 "title": "Guide", "heading": ["Install"], "extra": {"keep": True},
+                 "doc_type": ["learning", "guide"], "product": ["arm"],
+                 "platform": ["linux", "windows"],
                  "page_url": "https://example.org/guide/", "parent_page_url": "https://example.org/"}]
+    source = [{**expected[0], "distance": .2, "url_tracking_instruction": UTM_SOURCE_PRESERVATION_NOTE}]
+    snapshot = deepcopy(source)
     monkeypatch.setattr(arm_kb_search, "load_search_resources", lambda **kwargs: None)
     def search(query, resources, *, filters, k, scope):
         assert filters is None or isinstance(filters, SearchFilters)
         calls.append((query, {"filters": filters, "k": k, "scope": scope}))
-        return [] if filters is not None and filters.product == "missing" else expected
+        return [] if filters is not None and filters.product == "missing" else source
     monkeypatch.setattr(arm_kb_search, "search", search)
     monkeypatch.setattr(invocation_logger, "WORKSPACE_DIR", str(tmp_path))
     spec = importlib.util.spec_from_file_location("filter_options_server", Path(__file__).parents[1] / "server.py")
     server = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(server)
+    assert ARM_CONTENT_DISCLAIMER in server.mcp.instructions
+    assert UTM_SOURCE_PRESERVATION_NOTE in server.mcp.instructions
 
     async def exercise():
         async with Client(server.mcp) as client:
@@ -94,7 +106,8 @@ def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monk
                 for name, field in shared_schema["properties"].items()}
             assert filter_model_schema["additionalProperties"] is False
             filter_schema = filter_model_schema["properties"]
-            for field in ("doc_type", "product", "platform", "edition"):
+            assert set(filter_schema) == {"doc_type", "product", "platform"}
+            for field in ("doc_type", "product", "platform"):
                 options = filter_schema[field]["anyOf"]
                 assert {option["type"] for option in options} == {"string", "array", "null"}
                 array = next(option for option in options if option["type"] == "array")
@@ -113,16 +126,20 @@ def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monk
                 assert logged_call["args"] == {"query": "needle", "k": 5, "scope": "chunks",
                                                "filters": None if expected_filters is None else {}}
             result = await client.call_tool(tool.name, {"query": "needle", "k": 1,
-                "filters": {"doc_type": " Learning Paths ", "product": "ARM", "platform": "Linux", "edition": "Open-Source"}})
+                "filters": {"doc_type": " Learning Paths ", "product": "ARM", "platform": "Linux"}})
             assert result.structured_content["result"] == expected
             assert calls[-1] == ("needle", {"k": 1, "scope": "chunks", "filters": SearchFilters(
-                doc_type="learning paths", product="arm", platform="linux", edition="open-source")})
-            alternatives = {"doc_type": [" Learning Paths ", "Install Guides", "learning paths"],
-                            "platform": [" Linux ", "Windows"], "product": ["ARM"], "edition": ["OPEN-SOURCE"]}
-            await client.call_tool(tool.name, {"query": "needle", "filters": alternatives, "k": 2})
-            assert calls[-1] == ("needle", {"k": 2, "scope": "chunks", "filters": SearchFilters(
-                doc_type=("learning paths", "install guides"), platform=("linux", "windows"),
-                product=("arm",), edition=("open-source",))})
+                doc_type="learning paths", product="arm", platform="linux")})
+            for doc_types, normalized in (
+                ([" Learning Paths ", "Install Guides", "learning paths"], ("learning paths", "install guides")),
+                ([" Learning ", "Guide", "learning"], ("learning", "guide")),
+            ):
+                alternatives = {"doc_type": doc_types, "platform": [" Linux ", "Windows"],
+                                "product": ["ARM"]}
+                await client.call_tool(tool.name, {"query": "needle", "filters": alternatives, "k": 2})
+                assert calls[-1] == ("needle", {"k": 2, "scope": "chunks", "filters": SearchFilters(
+                    doc_type=normalized, platform=("linux", "windows"),
+                    product=("arm",))})
             await client.call_tool(tool.name, {"query": "needle", "filters": {"platform": ["linux", "windows"], "product": "Arm"}})
             assert calls[-1] == ("needle", {"k": 5, "scope": "chunks",
                                            "filters": SearchFilters(platform=("linux", "windows"), product="arm")})
@@ -133,11 +150,13 @@ def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monk
             empty = await client.call_tool(tool.name, {"query": "needle", "filters": {"product": "missing"}})
             assert empty.structured_content["result"] == []
             for scope in ("chunks", "page"):
-                await client.call_tool(tool.name, {"query": "needle", "scope": scope})
+                result = await client.call_tool(tool.name, {"query": "needle", "scope": scope})
+                assert result.structured_content["result"] == expected
                 assert calls[-1] == ("needle", {"k": 5, "filters": None, "scope": scope})
             before = len(calls)
             invalid = [{"k": v} for v in (None, 0, -1, 21, 100, True, 1.5, "3")]
             invalid += [{"scope": v} for v in (None, "parent_resource", "parent", "learning_path", "PAGE", [], True)]
+            invalid += [{"filters": {"edition": value}} for value in ("commercial", ["open-source"], None)]
             invalid += [{"filters": f} for f in ({"unknown": "x"}, {"product": " "}, {"product": 3}, [])]
             invalid += [{"filters": {"platform": v}} for v in ([], [None], ["linux", " "], ["linux", 3], [["linux"]])]
             for options in invalid:
@@ -145,12 +164,13 @@ def test_search_options_schema_validation_forwarding_and_defaults(tmp_path, monk
                     await client.call_tool(tool.name, {"query": "needle", **options})
             assert len(calls) == before
     asyncio.run(exercise())
+    assert source == snapshot
     logged = [json.loads(x) for x in (tmp_path / "mcp-traffic.jsonl").read_text().splitlines()]
     assert len(logged) == 2 * len(calls)
     assert logged[0]["id"] == logged[1]["id"] and logged[1]["result"] == expected
     assert logged[0]["args"] == {"query": "needle", "k": 5, "filters": None, "scope": "chunks"}
     assert next(entry["args"] for entry in logged if entry.get("args", {}).get("filters")) == {"query": "needle", "k": 1, "scope": "chunks", "filters": {
-        "doc_type": "learning paths", "product": "arm", "platform": "linux", "edition": "open-source"}}
+        "doc_type": "learning paths", "product": "arm", "platform": "linux"}}
 
 
 def test_search_failures_are_mcp_errors_and_logged_for_every_scope(tmp_path, monkeypatch):
@@ -193,11 +213,13 @@ def test_search_failures_are_mcp_errors_and_logged_for_every_scope(tmp_path, mon
 def test_scope_expansion_through_mcp_and_missing_metadata_error(tmp_path, monkeypatch):
     import asyncio
     import importlib.util
+
     import pytest
-    import arm_kb_search
     from fastmcp import Client
     from fastmcp.exceptions import ToolError
     from utils import error_handling
+
+    import arm_kb_search
 
     url = "https://example.org/guide"
     rows = [{"url": url + "#section", "original_text": f"section {i}", "chunk_uuid": str(i),

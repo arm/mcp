@@ -80,3 +80,20 @@ def add_utm_source_to_results(
         else item
         for item in results
     ]
+
+
+def lean_results(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep one scoped Arm notice in the response for clients that omit instructions."""
+    results = [
+        {key: value for key, value in item.items()
+         if key not in {"disclaimer", "url_tracking_instruction", "distance"}}
+        for item in items
+    ]
+    for item, result in zip(items, results):
+        if item.get("disclaimer") and is_arm_domain_url(item.get("url")):
+            result["disclaimer"] = (
+                "For all results in this response sourced from arm.com or its subdomains: "
+                + ARM_CONTENT_DISCLAIMER
+            )
+            break
+    return results

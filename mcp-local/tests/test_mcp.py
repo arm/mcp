@@ -164,6 +164,9 @@ def test_mcp_stdio_transport_responds(platform):
             "CPU, memory, and other host hardware details."
             in knowledge_search["description"]
         )
+        instructions = response["result"]["instructions"]
+        assert "Preserve the `utm_source` query parameter" in instructions
+        assert "For content sourced from arm.com or its subdomains:" in instructions
 
         print("\n***Test Passed: arm-mcp container initialized and ran successfully")
 
@@ -189,7 +192,16 @@ def test_mcp_stdio_transport_responds(platform):
         expected_nginx_urls = {_base_url(expected) for expected in constants.EXPECTED_CHECK_NGINX_RESPONSE}
         actual_nginx_urls = {_base_url(url) for url in _result_urls(nginx_structured_content)}
         assert expected_nginx_urls & actual_nginx_urls, "Test Failed: MCP check_nginx tool failed: content mismatch., Expected one of: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_NGINX_RESPONSE,indent=2), json.dumps(check_nginx_response.get("result")["structuredContent"],indent=2))
+        for item in nginx_structured_content["result"]:
+            assert not {"url_tracking_instruction", "distance"} & item.keys()
+            assert all(isinstance(item[field], list) for field in ("doc_type", "product", "platform"))
+            assert "edition" not in item
         print("\n***Test Passed: MCP check_nginx tool succeeded")
+
+        notices = [item["disclaimer"] for item in nginx_structured_content["result"] if "disclaimer" in item]
+        assert len(notices) == 1
+        assert notices[0].startswith("For all results in this response sourced from arm.com or its subdomains:")
+        assert "no license to any intellectual property rights is granted by Arm" in notices[0]
 
         #Check Migrate Ease Tool Test
         raw_socket.sendall(_encode_mcp_message(constants.CHECK_MIGRATE_EASE_TOOL_REQUEST))
