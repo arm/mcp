@@ -5,7 +5,7 @@ description: Estimate assembly throughput and CPU resource pressure with llvm-mc
 
 # Analyze assembly with LLVM MCA
 
-Run commands through the agent's shell. This replaces the former `mca` MCP tool.
+Run commands through the agent's shell.
 Use textual assembly, not an object file or executable. Generate assembly from
 source with the project's compiler and target flags (for example, Clang `-S`),
 or extract a suitable instruction region from disassembly. Preprocess `.S` files
@@ -18,9 +18,9 @@ then resolve the installed binary (for example `llvm-mca-18` or a package-manage
 LLVM `bin` directory). Do not modify the server container.
 
 ```sh
-command -v llvm-mca || command -v llvm-mca-18
-llvm-mca --mtriple=aarch64 --mcpu=help
-llvm-mca --mtriple=aarch64 --mcpu=neoverse-n1 \
+mca="$(command -v llvm-mca || command -v llvm-mca-18)" || exit 1
+"$mca" --mtriple=aarch64 --mcpu=help
+"$mca" --mtriple=aarch64 --mcpu=neoverse-n1 \
   --iterations=100 --bottleneck-analysis --resource-pressure loop.s
 ```
 
