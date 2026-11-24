@@ -1,4 +1,4 @@
 {
   "generator_image": "ghcr.io/arm/mcp-embedding-generator@sha256:64c809f347c89d9035a2f3911722d97cde9a5ed278f01b195452efcff2039ebd",
-  "intrinsic_chunks_image": "docker.io/armlimited/arm-mcp:mcp-embedding-base@sha256:0ac6fb52a54b321a8229b6a34bfc200fff1d827220d0cbf3873a93703928c1ce"
+  "intrinsic_chunks_image": "ghcr.io/arm/mcp-intrinsic-chunks@sha256:8a759f2daa3e34329c7b1e55d7ae632e4c6f30d4901aea57fd992438e93d10c2"
 }
