@@ -1,0 +1,126 @@
+name: Refresh Intrinsic Snapshot
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Validate the latest catalog without publishing an image
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-intrinsics-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/mcp-intrinsic-chunks
+  PUBLISH_IMAGE: ${{ github.repository == 'arm/mcp' && github.ref == 'refs/heads/main' && !inputs.dry_run }}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Load pinned inputs
+        id: inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in generator_image intrinsic_chunks_image; do
+            image="$(jq -er --arg key "$key" '.[$key]' embedding-generation/pipeline-inputs.lock.json)"
+            if [[ ! "$image" =~ ^[A-Za-z0-9./:_-]+@sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::$key must be pinned by digest."
+              exit 1
+            fi
+            echo "$key=$image" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Verify existing snapshot package is private
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/verify-ghcr-package-private.sh mcp-intrinsic-chunks --allow-missing
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Verify pinned toolchain matches checkout
+        env:
+          GENERATOR_IMAGE: ${{ steps.inputs.outputs.generator_image }}
+        run: python3 .github/scripts/build-input-fingerprint.py toolchain --image "$GENERATOR_IMAGE"
+
+      - name: Build, validate and optionally publish the snapshot
+        id: snapshot
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: embedding-generation
+          file: embedding-generation/Dockerfile.intrinsics
+          target: snapshot
+          platforms: linux/arm64
+          pull: true
+          no-cache: true
+          push: ${{ env.PUBLISH_IMAGE == 'true' }}
+          outputs: type=local,dest=${{ runner.temp }}/intrinsic-snapshot
+          provenance: false
+          build-contexts: |
+            toolchain=docker-image://${{ steps.inputs.outputs.generator_image }}
+            intrinsic-chunks=docker-image://${{ steps.inputs.outputs.intrinsic_chunks_image }}
+          tags: ${{ env.IMAGE }}:git-${{ github.sha }}-run-${{ github.run_id }}-${{ github.run_attempt }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.title=Arm MCP intrinsic catalog snapshot
+
+      - name: Report catalog validation and digest
+        env:
+          DIGEST: ${{ steps.snapshot.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo '### Intrinsic snapshot validation'
+            echo '```json'
+            cat "$RUNNER_TEMP/intrinsic-snapshot/embedding-data/intrinsic_chunks/catalog-manifest.json"
+            echo '```'
+            if [[ "$PUBLISH_IMAGE" == 'true' ]]; then
+              if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+                echo '::error::Snapshot build returned an invalid image digest.' >&2
+                exit 1
+              fi
+              echo "Update intrinsic_chunks_image in a reviewed PR to: \`$IMAGE@$DIGEST\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attest snapshot provenance
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.snapshot.outputs.digest }}
+          push-to-registry: true
+
+      - name: Verify published snapshot package is private
+        if: ${{ env.PUBLISH_IMAGE == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/verify-ghcr-package-private.sh mcp-intrinsic-chunks

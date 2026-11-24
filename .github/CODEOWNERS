@@ -13,6 +13,7 @@
 /mcp-local/uv.lock @arm/mcp-security-team
 /mcp-local/scripts/stage-build-inputs.py @arm/mcp-security-team
 /embedding-generation/Dockerfile.acquire @arm/mcp-security-team
+/embedding-generation/Dockerfile.intrinsics @arm/mcp-security-team
 /embedding-generation/Dockerfile.toolchain @arm/mcp-security-team
 /embedding-generation/Dockerfile.vectorstore @arm/mcp-security-team
 /embedding-generation/embedding-model.lock.json @arm/mcp-security-team

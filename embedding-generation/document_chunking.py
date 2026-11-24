@@ -178,8 +178,10 @@ def prepare_intrinsic_chunk(chunk: dict) -> dict:
     if not is_intrinsic_chunk(chunk):
         return chunk
     normalized = normalize_intrinsic_chunk(chunk)
+    context = normalized.get("document_context", {})
     normalized["document_context"] = {
-        "format": 1, "url": normalized["url"], "chunk_index": 0, "chunk_count": 1,
+        "format": 1, "url": normalized["url"],
+        "chunk_index": context.get("chunk_index", 0), "chunk_count": context.get("chunk_count", 1),
     }
     normalized.pop("embedding_texts", None)
     record = {**normalized, "original_text": normalized["content"]}
