@@ -28,9 +28,10 @@ URL = "https://example.com/guide"
         ([404, 200], "redirected"),
         ([404, 503], "uncertain"),
         ([404, 0], "uncertain"),
-        ([401], "uncertain"),
-        ([403], "uncertain"),
-        ([429], "uncertain"),
+        ([404, 403], "blocked"),
+        ([401], "blocked"),
+        ([403], "blocked"),
+        ([429], "blocked"),
         ([500], "uncertain"),
         ([0], "uncertain"),
         ([200], "redirected"),
@@ -70,13 +71,15 @@ def test_grace_period_and_stale_history(day, expected):
     )
 
 
-@pytest.mark.parametrize("status", ["reachable", "redirected", "uncertain"])
+@pytest.mark.parametrize("status", ["reachable", "redirected", "uncertain", "blocked"])
 def test_recovery_or_uncertainty_resets_history(status):
     previous = dict(
         status="missing", checked_at=NOW.isoformat(), first_missing_at=NOW.isoformat()
     )
     reset = audit.missing_history(status, previous, NOW + timedelta(days=7))
     assert reset["first_missing_at"] == ""
+    if status == "blocked":
+        assert reset["action"] == "retry"
     assert (
         audit.missing_history(
             "missing", dict(reset, status=status), NOW + timedelta(days=14)
@@ -275,3 +278,82 @@ audit.run_audit(sys.argv[1], sys.argv[2], budget_seconds=0.1)
     assert result.returncode == 0, result.stderr
     rows = list(csv.DictReader(report.open()))
     assert len(rows) == 1 and rows[0]["action"] == "investigate"
+
+
+def test_report_groups_blocked_redirects_and_preserves_other_findings(
+    tmp_path, monkeypatch, capsys
+):
+    source, previous, report = (
+        tmp_path / name for name in ("sources.csv", "previous.csv", "report.csv")
+    )
+    blocked_url = "https://developer.arm.com/guide"
+    community_url = "https://community.arm.com/article"
+    missing_url, error_url, working_url = (
+        URL + suffix for suffix in ("/missing", "/error", "/working")
+    )
+    outcomes = {
+        blocked_url: ("blocked", 403, blocked_url),
+        community_url: ("blocked", 403, "https://developer.arm.com/community/article"),
+        missing_url: ("missing", 404, missing_url),
+        error_url: ("uncertain", 500, error_url),
+        working_url: ("reachable", 200, working_url),
+    }
+    contents = "URL\n" + "\n".join(outcomes) + "\n"
+    source.write_text(contents)
+    old = (NOW - timedelta(days=7)).isoformat()
+    with previous.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=audit.FIELDS)
+        writer.writeheader()
+        writer.writerows(
+            dict(url=url, status="missing", checked_at=old, first_missing_at=old)
+            for url in outcomes
+        )
+
+    def check(url, deadline):
+        status, code, final_url = outcomes[url]
+        return dict(
+            url=url, status=status, http_status=code, final_url=final_url, detail=""
+        )
+
+    monkeypatch.setattr(audit, "check_url", check)
+    rows = audit.run_audit(source, report, previous=previous, now=NOW)
+    summary = capsys.readouterr().out
+    assert [row["action"] for row in rows] == [
+        "retry",
+        "retry",
+        "review_removal",
+        "investigate",
+        "keep",
+    ]
+    assert all(not row["first_missing_at"] for row in rows[:2])
+    assert summary.count("| developer.arm.com | 403 | 2 |") == 1
+    assert "| community.arm.com |" not in summary
+    assert community_url not in summary
+    assert "Access blocked (automatic retry) | 2" in summary
+    assert missing_url in summary and "review_removal" in summary
+    assert error_url in summary
+    assert len(list(csv.DictReader(report.open()))) == len(outcomes)
+    assert source.read_text() == contents
+
+
+def test_report_summary_limits_individual_followups(capsys):
+    rows = [
+        dict(
+            url=f"{URL}/{i}",
+            status="missing",
+            http_status=404,
+            final_url=f"{URL}/{i}",
+            detail="",
+            checked_at=NOW.isoformat(),
+            first_missing_at=NOW.isoformat(),
+            action="watch",
+        )
+        for i in range(30)
+    ]
+    audit.print_summary(rows)
+    summary = capsys.readouterr().out
+    assert f"<{URL}/0>" in summary
+    assert f"<{URL}/19>" in summary
+    assert f"<{URL}/20>" not in summary
+    assert "Showing 20 of 30" in summary
+    assert "source-url-audit.csv" in summary

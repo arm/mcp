@@ -8,6 +8,10 @@
 
 import argparse
 import csv
+import json
+import os
+import signal
+import subprocess
 import sys
 import time
 from collections import Counter
@@ -15,10 +19,10 @@ from datetime import datetime, timedelta, timezone
 from http.client import HTTPException
 from pathlib import Path
 from queue import Empty, Queue
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from threading import Event, Thread
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
 
 FIELDS = [
@@ -32,6 +36,7 @@ FIELDS = [
     "action",
 ]
 MISSING = {404, 410}
+BLOCKED = {401, 403, 429}
 AUDIT_BUDGET_SECONDS = 45 * 60
 
 
@@ -47,7 +52,7 @@ def budget_exhausted(url):
 
 def check_url(url, deadline=float("inf")):
     code, final_url, detail = 0, url, ""
-    # Four workers, each pausing before requests. Confirm missing responses once.
+    # Eight workers, each pausing before requests. Confirm missing responses once.
     for attempt in range(2):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -76,6 +81,8 @@ def check_url(url, deadline=float("inf")):
     status = "uncertain"
     if code in MISSING:
         status = "missing"
+    elif code in BLOCKED:
+        status = "blocked"
     elif 200 <= code < 300:
         status = "redirected" if final_url != url else "reachable"
     return dict(
@@ -91,7 +98,7 @@ def missing_history(status, previous, now):
     if status != "missing":
         return dict(
             first_missing_at="",
-            action="investigate" if status == "uncertain" else "keep",
+            action={"uncertain": "investigate", "blocked": "retry"}.get(status, "keep"),
         )
     first = now
     if previous.get("status") == "missing":
@@ -129,7 +136,7 @@ def collect_checks(urls, budget_seconds):
 
     # Daemon workers let report writing and process exit proceed even when DNS
     # or a socket operation ignores its timeout. Workers never write the report.
-    for _ in range(min(4, len(urls))):
+    for _ in range(min(8, len(urls))):
         Thread(target=worker, daemon=True).start()
     try:
         while len(results) < len(urls):
@@ -151,8 +158,130 @@ def collect_checks(urls, budget_seconds):
     return [results.get(url, budget_exhausted(url)) for url in urls]
 
 
+def verify_in_browser(checks, budget_seconds, channel="chromium"):
+    blocked = {row["url"]: row for row in checks if row["http_status"] == 403}
+    if not blocked or budget_seconds <= 0:
+        return
+    print(
+        f"Browser-verifying {len(blocked)} blocked URLs...", file=sys.stderr, flush=True
+    )
+    with TemporaryDirectory(prefix="source-url-browser-") as temporary:
+        source, output = (
+            Path(temporary) / name for name in ("urls.json", "verified.jsonl")
+        )
+        source.write_text(json.dumps(list(blocked)), encoding="utf-8")
+        command = [
+            sys.executable,
+            str(Path(__file__).with_name("audit_source_urls_browser.py")),
+            str(source),
+            str(output),
+            "--budget-seconds",
+            str(budget_seconds),
+            "--channel",
+            channel,
+        ]
+        # Keep completed browser results even if Chromium or its driver stalls.
+        with subprocess.Popen(
+            command, start_new_session=True, stdout=sys.stderr
+        ) as process:
+            try:
+                process.wait(timeout=budget_seconds)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait()
+                print(
+                    "Browser budget exhausted; keeping completed verifications.",
+                    file=sys.stderr,
+                )
+            if process.returncode:
+                print("Incomplete browser checks remain unverified.", file=sys.stderr)
+        if output.exists():
+            for line in output.read_text(encoding="utf-8").splitlines():
+                try:
+                    result = json.loads(line)
+                except json.JSONDecodeError:
+                    continue  # Killing the child may leave its last line partial.
+                row = blocked.get(result.get("url"))
+                if row is not None and 200 <= result.get("http_status", 0) < 300:
+                    row.update(
+                        status="redirected"
+                        if result["final_url"] != row["url"]
+                        else "reachable",
+                        http_status=result["http_status"],
+                        final_url=result["final_url"],
+                        detail="Browser verified after HTTP 403: " + result["title"],
+                    )
+
+
+def print_summary(results):
+    counts = Counter(row["action"] for row in results)
+    print("## Source URL audit\n")
+    print(f"Reported {len(results):,} URLs. Report only; sources unchanged.\n")
+    verified = sum(
+        row.get("detail", "").startswith("Browser verified") for row in results
+    )
+    if verified:
+        print(f"Browser fallback verified {verified:,} previously blocked URLs.\n")
+    print("| Result | URLs |\n| --- | ---: |")
+    for action, label in (
+        ("keep", "Working"),
+        ("retry", "Access blocked (automatic retry)"),
+        ("watch", "Missing (watch for seven days)"),
+        ("review_removal", "Persistent missing (manual removal review)"),
+        ("investigate", "Other errors (investigate)"),
+    ):
+        print(f"| {label} | {counts[action]:,} |")
+
+    def link(url):
+        return "<" + quote(url, safe=":/?#[]@!$&'()*+,;=%") + ">"
+
+    blocked = {}
+    for row in results:
+        if row["status"] == "blocked":
+            host = urlsplit(row["final_url"] or row["url"]).hostname or "unknown"
+            blocked.setdefault((host, str(row["http_status"])), []).append(row)
+    if blocked:
+        print("\n### Site access restrictions\n")
+        print(
+            "These URLs remain unverified and are automatically retried next run. "
+            "Review access once per site; no individual URL review is requested. "
+            "Access restrictions never qualify URLs for removal.\n"
+        )
+        print("| Site | HTTP | URLs | Example |\n| --- | --- | ---: | --- |")
+        for (host, code), rows in sorted(blocked.items()):
+            print(
+                f"| {host} | {code} | {len(rows):,} | [Open]({link(rows[0]['url'])}) |"
+            )
+
+    followups = [
+        row
+        for action in ("review_removal", "watch", "investigate")
+        for row in results
+        if row["action"] == action
+    ]
+    if followups:
+        print("\n### URL follow-up\n")
+        print("| Action | HTTP | URL |\n| --- | --- | --- |")
+        for row in followups[:20]:
+            print(
+                f"| {row['action']} | {row['http_status'] or 'No response'} | {link(row['url'])} |"
+            )
+        if len(followups) > 20:
+            print(f"\nShowing 20 of {len(followups):,} follow-ups.")
+    print("\nFull results and history: `source-url-audit.csv` in the report artifact.")
+
+
 def run_audit(
-    sources, output, previous=None, now=None, budget_seconds=AUDIT_BUDGET_SECONDS
+    sources,
+    output,
+    previous=None,
+    now=None,
+    budget_seconds=AUDIT_BUDGET_SECONDS,
+    browser_fallback=False,
+    browser_channel="chromium",
 ):
     sources, output = Path(sources), Path(output)
     if output.resolve() == sources.resolve() or (
@@ -182,7 +311,11 @@ def run_audit(
     now = now or datetime.now(timezone.utc)
     results = []
     print(f"Checking {len(urls)} unique URLs...", file=sys.stderr, flush=True)
-    for check in collect_checks(urls, budget_seconds):
+    deadline = time.monotonic() + budget_seconds
+    checks = collect_checks(urls, budget_seconds)
+    if browser_fallback:
+        verify_in_browser(checks, deadline - time.monotonic(), browser_channel)
+    for check in checks:
         check.update(
             checked_at=now.isoformat(),
             **missing_history(check["status"], history.get(check["url"], {}), now),
@@ -198,9 +331,7 @@ def run_audit(
         writer.writeheader()
         writer.writerows(results)
     temporary.replace(output)
-    print(f"Reported {len(results)} URLs. Report only; sources unchanged.\n")
-    for action, count in sorted(Counter(row["action"] for row in results).items()):
-        print(f"- {action}: {count}")
+    print_summary(results)
     return results
 
 
@@ -209,7 +340,19 @@ if __name__ == "__main__":
     parser.add_argument("sources", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--previous-report", type=Path)
+    parser.add_argument(
+        "--browser-fallback",
+        action="store_true",
+        help="Verify HTTP 403 responses with Playwright Chromium",
+    )
+    parser.add_argument("--browser-channel", default="chromium")
     args = parser.parse_args()
     if sys.version_info < (3, 13):
         parser.error("Use Python 3.13 or later for HTTP 308 redirect support")
-    run_audit(args.sources, args.output, args.previous_report)
+    run_audit(
+        args.sources,
+        args.output,
+        args.previous_report,
+        browser_fallback=args.browser_fallback,
+        browser_channel=args.browser_channel,
+    )

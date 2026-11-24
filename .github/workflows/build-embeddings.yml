@@ -724,6 +724,12 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Install browser verifier
+        timeout-minutes: 5
+        run: |
+          python -m pip install playwright==1.65.2
+          python -m playwright install --with-deps --no-shell chromium
+
       - name: Download previous report
         timeout-minutes: 5
         env:
@@ -758,7 +764,7 @@ jobs:
           fi
           python embedding-generation/audit_source_urls.py \
             embedding-generation/vector-db-sources.csv \
-            --output reports/source-url-audit.csv "${previous_args[@]}" \
+            --output reports/source-url-audit.csv --browser-fallback "${previous_args[@]}" \
             | tee -a "${GITHUB_STEP_SUMMARY}"
           git diff --exit-code -- embedding-generation/vector-db-sources.csv
 

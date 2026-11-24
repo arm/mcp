@@ -155,13 +155,37 @@ reports; it never edits sources, deletes rows, or gates embedding publication.
 
 Two GET responses of 404/410 mean `watch`. If missing observations persist for
 at least seven days, the report flags `review_removal` for manual review.
-Recovery or uncertainty resets the interval; missing/invalid history or gaps
-over 14 days restart it. Redirects are followed; other errors mean `investigate`.
-HTTP success does not validate page content, JavaScript routes or anchors.
+Recovery, blocked access or uncertainty resets the interval; missing/invalid
+history or gaps over 14 days restart it. Redirects are followed.
+
+The workflow first uses lightweight HTTP checks. For HTTP 403 responses, it
+then opens the original URL in an isolated Chromium browser, follows redirects,
+and waits for rendered content. A successful browser check changes the result
+to `reachable` or `redirected` with `action=keep`; `detail` records the browser
+verification. Login/error pages and known empty Arm documentation/dashboard
+shells cannot qualify as working. Browser checks share the same 45-minute audit
+budget and keep completed results if the browser stalls. They use no user login,
+private browser profile, or special access credentials.
+
+HTTP 401/429 and any 403 that the browser cannot verify mean `status=blocked`,
+`action=retry`: they are automatically checked again next run and never qualify
+for removal based on those responses. Other errors mean `investigate`.
+HTTP-only success does not validate page content, JavaScript routes or anchors;
+browser verification checks rendered availability, not the content's accuracy.
+
+The workflow summary groups blocked URLs by destination hostname and HTTP code,
+including community links that redirect to the same site. For example, if 1,492
+403 responses remain unverified after the browser fallback, they produce one
+site-access warning instead of 1,492 individual investigations. These URLs remain unverified; the summary
+shows their count and an example link. Review access once per site. Individual
+follow-ups show missing URLs and other errors, with removal reviews first and
+at most 20 links. The CSV retains every URL and its full history.
 
 History comes from the latest available report in the last ten completed runs
 of this workflow on the same branch, even if an unrelated embedding job failed. Reports
-last 30 days. URL checks have a 45-minute budget within the 60-minute job.
+last 30 days. Eight workers check URLs concurrently, each pausing one second
+before its first request and two seconds before confirming a missing response.
+URL checks have a 45-minute budget within the 60-minute job.
 When the budget expires, completed results are kept and unfinished or unchecked
 URLs are reported as `investigate`, resetting their missing history. The report
 still includes every URL. Unexpected audit failures publish no new report;
@@ -180,13 +204,21 @@ Only `source-url-audit` runs; the other jobs are skipped. A branch with no prior
 report starts a fresh observation window. Download the report from the run's
 artifacts. Normal scheduled runs still build embeddings and produce the report.
 
-For a local report with Python 3.13+, add `--previous-report previous.csv` to
-compare against an earlier report (the original baseline format is supported):
+For a local report with Python 3.13+, install the optional browser verifier and
+run with `--browser-fallback` to match the workflow. Add
+`--previous-report previous.csv` to compare against an earlier report (the
+original baseline format is supported):
 
 ```sh
+python3.13 -m pip install playwright==1.65.2
+python3.13 -m playwright install --no-shell chromium
 python3.13 embedding-generation/audit_source_urls.py \
-  embedding-generation/vector-db-sources.csv --output report.csv
+  embedding-generation/vector-db-sources.csv --output report.csv --browser-fallback
 ```
+
+Omit `--browser-fallback` for a standard-library-only HTTP audit. The fallback
+requires a POSIX host (Linux/macOS) so a stalled browser process tree can be
+stopped without delaying report publication.
 
 ## Discover developer.arm.com Sources
 
