@@ -15,13 +15,16 @@ A **scenario** is a JSON file with three parts:
 | --- | --- |
 | `task` | The shared request, optional repository or local directory inputs, and the command that verifies the agent's result. |
 | `configurations` | The agent and model to run, plus any configuration-specific prompt and MCP servers. |
-| `run` | Local execution settings, including repetitions and the agent timeout. |
+| `run` | Local execution settings, including repetitions, the agent timeout, and optional retries. |
 
 One **trial** is one task input run once under one configuration. The runner
 creates the full input × configuration × repetition set. For example, two
 codebases, two configurations, and three repetitions produce 12 trials. A
-request-only task has one implicit input. Each trial gets a fresh workspace. Trials run sequentially; configuration order alternates
-between repetitions so the same configuration does not always run first.
+request-only task has one implicit input. Each trial gets a fresh workspace.
+If an agent times out, the runner can retry the trial from a new workspace.
+Retries do not add to the planned trial count. Trials run sequentially;
+configuration order alternates between repetitions so the same configuration
+does not always run first.
 
 The runner handles the common lifecycle:
 
@@ -35,6 +38,7 @@ The runner handles the common lifecycle:
    elapsed time.
 4. Save the resulting workspace and a Git patch for Git inputs. If the agent
    completed or timed out, run the task's verifier against that workspace.
+   Retry only a timed-out agent, up to the configured attempt limit.
 5. Write one result per trial and a comparison report for the full run.
 
 The shared task request states the goal that every configuration receives.
@@ -97,6 +101,10 @@ Scenario loading checks that a relative Python verifier script exists.
 ### Configurations
 
 Every configuration has an `id` and an `agent` with `kind` and `model`.
+Optional `agent.reasoning_effort` sets the model's reasoning level. The Codex
+adapter passes it as `model_reasoning_effort`; when omitted, Codex uses its
+own default. Supported levels depend on the selected model. The MEGAHIT
+example sets both configurations to `medium` so they use the same level.
 Optional `prompt` points to a file relative to the scenario JSON; it can
 refer to a file above the scenario folder. Omitting `prompt` sends only the
 shared request. Omitting `mcp_servers` gives
@@ -136,9 +144,11 @@ CLI login.
 
 `run.execution_target` is currently `"local"`. `repetitions` controls how
 many times each input and configuration is tried, and
-`agent_timeout_seconds` limits each agent run. The optional `docker_access`
-setting lets the Codex agent use the local Docker daemon when the task or
-bundled skills require Docker commands.
+`agent_timeout_seconds` limits each agent attempt. Optional `max_attempts`
+sets the total number of attempts per trial; it defaults to 1. Only an agent
+timeout starts another attempt. The MEGAHIT scenario allows three attempts.
+The optional `docker_access` setting lets the Codex agent use the local Docker
+daemon when the task or bundled skills require Docker commands.
 
 ## Run a scenario locally
 
@@ -206,10 +216,12 @@ but its success checks and optional measures belong to its use case.
 
 The output directory contains `sources/`, `setup-logs/`, one directory under
 `trials/` per trial, `run.json`, `results.jsonl`, `sources.json`, `summary.json`,
-`report.json`, and `report.md`. A trial directory holds the assembled prompt,
-agent trace, final answer when available, stderr, verifier output when run,
-and a patch for Git inputs. That patch includes tracked changes and untracked
-files that Git does not ignore, so generated files may appear in it.
+`report.json`, and `report.md`. A trial directory holds the assembled prompt
+and one merged `result.json`. When retries are enabled, its `attempts/001`,
+`attempts/002`, and later directories hold separate workspaces, agent traces,
+stderr, verifier output, and Git patches. Without retries, these artifacts
+remain directly in the trial directory. A patch includes tracked changes and
+untracked files that Git does not ignore, so generated files may appear in it.
 
 For reproduction, `run.json` records the host OS, architecture, Python version,
 repetition count, and observed agent CLI versions (including `codex --version`).
@@ -220,17 +232,29 @@ server is built as a tagged Docker image and launched from that tag, it also
 records the image reference, image ID, OS, architecture, and available registry
 digests. An unavailable CLI version or non-Docker image is recorded as `null`.
 
-The report links to those artifacts. Its end-to-end success rate requires both a
-completed agent and a passing verifier. A timed-out agent remains an agent
-failure even if its saved code passes verification. The separate verifier pass
-rate includes all scored verifier runs, including timed-out agents, so code
-quality can be compared without discarding those workspaces. Verifier errors
-are excluded from that rate. Mean agent elapsed time and total tokens use
-completed-agent passing trials. Optional mean application execution time uses
-all verifier-passed trials, including timed-out agents. Each mean uses trials
-with an available measure and shows its sample count. Token use comes from
-the agent's reported usage; missing usage is unavailable, not zero.
+The report links to the merged result, each attempt's result, and the final
+attempt's artifacts. Earlier attempt artifacts remain in their attempt
+directories. The report shows one outcome per trial. Its end-to-end success
+rate requires a completed agent and a passing verifier on the terminating
+attempt. The comparison's "Not scored" count combines planned trials with no
+saved result and saved trials that could not be scored. The saved `report.json`
+keeps those counts separate. The report also counts every timed-out attempt,
+including timeouts followed by a successful retry. The verifier pass rate uses
+the terminating attempt, including a timed-out agent; verifier errors are
+excluded. Mean agent elapsed time and total tokens use end-to-end successful
+trials only. A retry contributes the completed attempt's measures without
+adding earlier timeout durations or tokens. Optional mean application
+execution time uses verifier-passed terminating attempts. Each mean uses
+trials with an available measure and shows its sample count. Token use comes
+from the agent's reported usage; missing usage is unavailable, not zero.
 Application execution time is present only if the task's verifier measures it.
+For each Codex trial, the report also counts distinct attempts to call an MCP
+`knowledge_base_search` tool and lists installed skills whose `SKILL.md` files
+appear in successful read commands in the agent trace. A skill read does not
+prove the agent followed its instructions. A missing activity summary is shown
+as unavailable; an empty skill list appears as `none` in the report.
+With retries, these report fields describe the terminating attempt; earlier
+attempts retain their own activity in their saved results.
 
 Regenerate a report from saved results, including an interrupted run, with:
 

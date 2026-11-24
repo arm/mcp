@@ -65,6 +65,12 @@ class ReportTests(unittest.TestCase):
                 trial("with-mcp", 2, "timeout", "passed", 40.0, 400, 0.5),
                 trial("with-mcp", 3, "completed", "error", 50.0, 500),
             ]
+            records[0]["agent"]["activity"] = {
+                "knowledge_base_calls": 0, "skills_read": [],
+            }
+            records[4]["agent"]["activity"] = {
+                "knowledge_base_calls": 3, "skills_read": ["arm-migration-scan"],
+            }
             (output / "results.jsonl").write_text(
                 "".join(json.dumps(record) + "\n" for record in records),
                 encoding="utf-8",
@@ -90,6 +96,7 @@ class ReportTests(unittest.TestCase):
                  "end_to_end_success_rate": 3 / 5},
             )
             self.assertEqual(report["scenario_id"], "sample")
+            self.assertEqual(report["timeouts"], 1)
             self.assertEqual(
                 (report["verifier_scored"], report["verifier_passing"],
                  report["verifier_pass_rate"]), (5, 4, 4 / 5)
@@ -103,6 +110,7 @@ class ReportTests(unittest.TestCase):
             self.assertEqual((standalone["planned"], standalone["recorded"],
                               standalone["scored"], standalone["unscored"],
                               standalone["passing"]), (4, 4, 3, 1, 2))
+            self.assertEqual(standalone["timeouts"], 0)
             self.assertAlmostEqual(standalone["end_to_end_success_rate"], 2 / 3)
             self.assertEqual(standalone["metrics"]["agent_elapsed_seconds"],
                              {"mean": 15.0, "samples": 2, "missing": 0})
@@ -116,6 +124,7 @@ class ReportTests(unittest.TestCase):
                               with_mcp["not_recorded"], with_mcp["scored"],
                               with_mcp["unscored"], with_mcp["passing"]),
                              (4, 3, 1, 2, 1, 1))
+            self.assertEqual(with_mcp["timeouts"], 1)
             self.assertEqual(with_mcp["end_to_end_success_rate"], 0.5)
             self.assertEqual(
                 (with_mcp["verifier_scored"], with_mcp["verifier_passing"],
@@ -135,19 +144,41 @@ class ReportTests(unittest.TestCase):
                              if item["trial_id"] == records[5]["trial_id"])
             self.assertEqual(
                 (timed_out["agent_status"], timed_out["verifier_status"],
-                 timed_out["classification"], timed_out["failure_category"]),
-                ("timeout", "passed", "failed", "agent_timeout"),
+                 timed_out["classification"], timed_out["failure_category"],
+                 timed_out["timeout_count"]),
+                ("timeout", "passed", "failed", "agent_timeout", 1),
             )
+            with_mcp_trial = next(item for item in report["trials"]
+                                  if item["trial_id"] == records[4]["trial_id"])
+            self.assertEqual(with_mcp_trial["knowledge_base_calls"], 3)
+            self.assertEqual(with_mcp_trial["skills_read"], ["arm-migration-scan"])
+            self.assertIsNone(timed_out["knowledge_base_calls"])
             self.assertEqual(json.loads((output / "report.json").read_text()), report)
             summary = json.loads((output / "summary.json").read_text(encoding="utf-8"))
             self.assertEqual((summary["failed"], summary["unscored"],
                               summary["not_recorded"], summary["verifier_passed"],
-                              summary["verifier_scored"]), (2, 2, 1, 4, 5))
+                              summary["verifier_scored"], summary["timeouts"]),
+                             (2, 2, 1, 4, 5, 1))
             markdown = (output / "report.md").read_text(encoding="utf-8")
-            self.assertIn("End-to-end success rate", markdown)
-            self.assertIn("Verifier pass rate", markdown)
-            self.assertIn("including timed-out agents.", markdown)
-            self.assertIn("| timeout | passed | failed (agent_timeout) |", markdown)
+            self.assertIn("| Scored trials | Not scored | End-to-end successes | "
+                          "End-to-end success rate |", markdown)
+            self.assertIn("| standalone | 4 | 3 | 1 | 2 | 66.7% | 0 |", markdown)
+            self.assertIn("| with-mcp | 4 | 2 | 2 | 1 | 50.0% | 1 |", markdown)
+            self.assertIn("Agent timeouts | Verifier scored | Verifier passes | "
+                          "Verifier pass rate", markdown)
+            self.assertIn("Timeouts count agent attempts", markdown)
+            self.assertIn("These counts are trials, based on the terminating attempt.", markdown)
+            self.assertIn("Why trials did not succeed", markdown)
+            self.assertIn("No saved result: 1", markdown)
+            self.assertIn("Agent timed out: 1", markdown)
+            self.assertNotIn("missing eligible-trial measurements", markdown)
+            self.assertIn("Knowledge base (KB) calls", markdown)
+            self.assertIn("| Timed out | Passed | Failed (Agent timed out) | 1 |", markdown)
+            self.assertIn("| Completed | Passed | Success | 0 |", markdown)
+            self.assertIn("| 3 | arm-migration-scan |", markdown)
+            self.assertIn("| 0 | none |", markdown)
+            self.assertNotIn("knowledge_base_search", markdown)
+            self.assertNotIn("Codex followed", markdown)
             for artifact in ("agent.jsonl", "changes.patch", "verifier.log",
                              "build-arm.log"):
                 self.assertIn(artifact, markdown)

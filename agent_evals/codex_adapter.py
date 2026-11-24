@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -83,6 +85,80 @@ def _usage_from_trace(path: Path) -> tuple[dict[str, int | None], bool]:
             elif event.get("type") == "turn.failed":
                 completed = False
     return usage, completed
+
+
+_SKILL_PATH = re.compile(
+    r"(?:^|/)\.agents/skills/(?:([^/{}\s'\"`]+)|\{([^{}]+)\})/SKILL\.md"
+    r"(?=$|[^A-Za-z0-9_.-])"
+)
+_READ_COMMAND = re.compile(
+    r"\s*(?:\S*/)?(?:cat|sed|head|tail|less|more|grep|awk|nl)(?=\s|$)"
+)
+
+
+def _activity_from_trace(path: Path, installed: list[str]) -> dict[str, Any] | None:
+    """Summarize observable KB calls and skill-file reads in a Codex trace."""
+    kb_calls: set[str] = set()
+    skills_read: set[str] = set()
+    known_skills = set(installed)
+    saw_event = False
+    try:
+        with path.open(encoding="utf-8") as stream:
+            for line in stream:
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(event, dict):
+                    continue
+                saw_event = True
+                item = event.get("item")
+                if not isinstance(item, dict):
+                    continue
+                if (event.get("type") in ("item.started", "item.completed") and
+                        item.get("type") == "mcp_tool_call" and
+                        item.get("tool") == "knowledge_base_search" and
+                        isinstance(item.get("id"), str)):
+                    kb_calls.add(item["id"])
+                if (event.get("type") != "item.completed" or
+                        item.get("type") != "command_execution" or
+                        item.get("exit_code") != 0):
+                    continue
+                command = item.get("command")
+                if not isinstance(command, str) or "SKILL.md" not in command:
+                    continue
+                try:
+                    words = shlex.split(command)
+                except ValueError:
+                    words = []
+                if (len(words) >= 3 and Path(words[0]).name in ("sh", "bash", "zsh") and
+                        words[1] in ("-c", "-lc", "-ic")):
+                    command = words[2]
+                for part in re.split(r"&&|\|\||[;|\n]", command):
+                    if not _READ_COMMAND.match(part):
+                        continue
+                    try:
+                        lexer = shlex.shlex(part, posix=True, punctuation_chars="<>")
+                        lexer.whitespace_split = True
+                        tokens = list(lexer)
+                    except ValueError:
+                        continue
+                    output_target = False
+                    for token in tokens[1:]:
+                        if output_target:
+                            output_target = False
+                            continue
+                        if token in (">", ">>"):
+                            output_target = True
+                            continue
+                        for match in _SKILL_PATH.finditer(token):
+                            names = (match.group(1),) if match.group(1) else match.group(2).split(",")
+                            skills_read.update(name for name in names if name in known_skills)
+    except (OSError, UnicodeError):
+        return None
+    if not saw_event:
+        return None
+    return {"knowledge_base_calls": len(kb_calls), "skills_read": sorted(skills_read)}
 
 
 def _docker_socket() -> Path:
@@ -182,6 +258,9 @@ def run_codex(
         "-C", str(workspace), "-m", configuration["agent"]["model"],
         "-o", str(final_answer),
     ]
+    if "reasoning_effort" in configuration["agent"]:
+        args.extend(["-c", f"model_reasoning_effort="
+                     f"{_toml_value(configuration['agent']['reasoning_effort'])}"])
     if docker_access:
         try:
             docker_socket = _docker_socket()
@@ -317,5 +396,6 @@ def run_codex_trial(
         configuration, servers, workspace, trial_dir, prompt, timeout_seconds,
         docker_access=docker_access, executable=executable,
     )
+    result["activity"] = _activity_from_trace(trial_dir / "agent.jsonl", installed)
     result["cli_version"] = cli_version
     return result, installed
