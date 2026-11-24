@@ -146,6 +146,44 @@ shortcodes fail explicitly so new content formats cannot silently lose text.
 
 Regenerate chunks and vector artifacts to publish changes to this parsing code.
 
+## Weekly source URL report
+
+The existing **Build Offline Embedding Pipeline** runs an independent URL audit
+on `main` every Sunday at 09:00 UTC and on manually selected branches. Download its `source-url-audit`
+artifact for one row per unique URL, including transcript URLs. This job only
+reports; it never edits sources, deletes rows, or gates embedding publication.
+
+Two GET responses of 404/410 mean `watch`. If missing observations persist for
+at least seven days, the report flags `review_removal` for manual review.
+Recovery or uncertainty resets the interval; missing/invalid history or gaps
+over 14 days restart it. Redirects are followed; other errors mean `investigate`.
+HTTP success does not validate page content, JavaScript routes or anchors.
+
+History comes from the latest available report in the last ten completed runs
+of this workflow on the same branch, even if an unrelated embedding job failed. Reports
+last 30 days. An incomplete audit publishes no report; check the audit job's
+result. Any later source cleanup still needs the normal embedding rebuild.
+
+To test a pushed branch without building embeddings, dispatch the existing
+workflow with `audit_only=true` and `dry_run=true` (replace `YOUR_BRANCH`):
+
+```sh
+gh workflow run build-embeddings.yml --repo arm/mcp --ref YOUR_BRANCH \
+  -f audit_only=true -f dry_run=true
+```
+
+Only `source-url-audit` runs; the other jobs are skipped. A branch with no prior
+report starts a fresh observation window. Download the report from the run's
+artifacts. Normal scheduled runs still build embeddings and produce the report.
+
+For a local report with Python 3.13+, add `--previous-report previous.csv` to
+compare against an earlier report (the original baseline format is supported):
+
+```sh
+python3.13 embedding-generation/audit_source_urls.py \
+  embedding-generation/vector-db-sources.csv --output report.csv
+```
+
 ## Discover developer.arm.com Sources
 
 `discover-developer-arm-com-sources.py` searches developer.arm.com and appends any new relevant pages (currently SME-related guides, programmer's guides, and blog posts) to `vector-db-sources.csv`. Existing rows are never modified, so it is safe to re-run occasionally to pick up new content.
