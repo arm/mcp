@@ -18,7 +18,8 @@ from unittest.mock import Mock, call, patch
 
 from agent_evals import Scenario, load_scenario
 from agent_evals.codex_adapter import (
-    _docker_socket, _install_skills, _write_provider_config, run_codex,
+    _activity_from_trace, _docker_socket, _install_skills, _read_file_operands,
+    _write_provider_config, run_codex,
     run_codex_trial, tomllib,
 )
 from agent_evals.runner import (
@@ -28,6 +29,76 @@ from agent_evals.runner import (
 
 
 class RunnerTests(unittest.TestCase):
+    def test_skill_read_operands_handle_attached_options_and_redirections(self):
+        skill = "/tmp/profile/.agents/skills/example/SKILL.md"
+        self.assertEqual(_read_file_operands(f"grep -ename {skill}"), [skill])
+        self.assertEqual(_read_file_operands(f"grep --regexp=name {skill}"), [skill])
+        self.assertEqual(_read_file_operands(f"sed -e'1,3p' {skill}"), [skill])
+        self.assertEqual(_read_file_operands(f"awk -fscript.awk {skill}"), [skill])
+        self.assertEqual(_read_file_operands(f"grep -A 1 -F '{skill}' agent.log"),
+                         ["agent.log"])
+        self.assertEqual(_read_file_operands(f"cat <<< {skill}"), [])
+        self.assertEqual(_read_file_operands(f"cat &> {skill}"), [])
+
+    def test_activity_counts_kb_calls_and_names_observed_skill_reads(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            trace = Path(temporary) / "agent.jsonl"
+            events = [
+                {"type": "item.started", "item": {"id": "kb-1", "type": "mcp_tool_call",
+                                                  "tool": "knowledge_base_search"}},
+                {"type": "item.completed", "item": {"id": "kb-1", "type": "mcp_tool_call",
+                                                    "tool": "knowledge_base_search"}},
+                {"type": "item.started", "item": {"id": "kb-2", "type": "mcp_tool_call",
+                                                  "tool": "knowledge_base_search"}},
+                {"type": "item.completed", "item": {"id": "other", "type": "mcp_tool_call",
+                                                    "tool": "another_tool"}},
+                {"type": "item.completed", "item": {
+                    "id": "read", "type": "command_execution", "exit_code": 0,
+                    "command": "/bin/zsh -lc 'cat /tmp/profile/.agents/skills/{first,second}/SKILL.md'",
+                }},
+                {"type": "item.completed", "item": {
+                    "id": "failed-read", "type": "command_execution", "exit_code": 1,
+                    "command": "cat /tmp/profile/.agents/skills/third/SKILL.md",
+                }},
+                {"type": "item.completed", "item": {
+                    "id": "mention", "type": "command_execution", "exit_code": 0,
+                    "command": "echo 'cat /tmp/profile/.agents/skills/third/SKILL.md'",
+                }},
+                {"type": "item.completed", "item": {
+                    "id": "unrelated-read", "type": "command_execution", "exit_code": 0,
+                    "command": "cat unrelated.txt && echo /tmp/profile/.agents/skills/third/SKILL.md",
+                }},
+                {"type": "item.completed", "item": {
+                    "id": "write-skill", "type": "command_execution", "exit_code": 0,
+                    "command": "cat > /tmp/profile/.agents/skills/third/SKILL.md",
+                }},
+                {"type": "item.completed", "item": {
+                    "id": "append-skill", "type": "command_execution", "exit_code": 0,
+                    "command": "cat >> /tmp/profile/.agents/skills/third/SKILL.md",
+                }},
+                {"type": "item.completed", "item": {
+                    "id": "skipped-read", "type": "command_execution", "exit_code": 0,
+                    "command": "true || cat /tmp/profile/.agents/skills/third/SKILL.md",
+                }},
+                {"type": "item.completed", "item": {
+                    "id": "commented-read", "type": "command_execution", "exit_code": 0,
+                    "command": "cat unrelated.txt # /tmp/profile/.agents/skills/third/SKILL.md",
+                }},
+                {"type": "item.completed", "item": {
+                    "id": "search-pattern", "type": "command_execution", "exit_code": 0,
+                    "command": "grep -F '/tmp/profile/.agents/skills/third/SKILL.md' agent.log",
+                }},
+                {"type": "item.completed", "item": {
+                    "id": "quoted-pattern", "type": "command_execution", "exit_code": 0,
+                    "command": "grep -E 'name|description' /tmp/profile/.agents/skills/fourth/SKILL.md",
+                }},
+            ]
+            trace.write_text("".join(json.dumps(event) + "\n" for event in events),
+                             encoding="utf-8")
+            self.assertEqual(_activity_from_trace(trace, ["first", "second", "third", "fourth"]), {
+                "knowledge_base_calls": 2, "skills_read": ["first", "fourth", "second"],
+            })
+
     def test_records_the_image_built_and_launched_for_an_mcp_server(self):
         server = {
             "build": ["docker", "buildx", "build", "--load", "-t", "arm-mcp:test", "."],
@@ -98,6 +169,111 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(result["status"], "timeout")
             self.assertEqual(result["agent"]["mcp_cleanup_error"], "Docker daemon unavailable")
             self.assertEqual(summary["passed"], 0)
+            self.assertEqual(summary["timeouts"], 1)
+
+    def test_timeout_retry_uses_fresh_workspace_and_completed_attempt_metrics(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            check = (
+                "import os, pathlib, sys\n"
+                "workspace = pathlib.Path(os.environ['AGENT_EVAL_WORKSPACE'])\n"
+                "sys.exit(0 if (workspace / 'working.txt').is_file() else 1)\n"
+            )
+            document = {
+                "schema_version": 1, "id": "retry-check",
+                "task": {"request": "Create working.txt.",
+                         "verifier": {"command": [sys.executable, "-c", check]}},
+                "run": {"execution_target": "local", "repetitions": 1,
+                        "agent_timeout_seconds": 30, "max_attempts": 3},
+                "configurations": [
+                    {"id": "standalone", "agent": {"kind": "test-agent", "model": "test"}}
+                ],
+            }
+            scenario_path = root / "scenario.json"
+            scenario_path.write_text(json.dumps(document), encoding="utf-8")
+            calls = []
+
+            def run_agent(configuration, servers, workspace, trial_dir, prompt,
+                          timeout_seconds, *, docker_access=False):
+                calls.append(workspace)
+                if len(calls) == 2:
+                    self.assertFalse((workspace / "timed-out-only.txt").exists())
+                (workspace / "working.txt").write_text("done\n", encoding="utf-8")
+                (trial_dir / "agent.jsonl").write_text("{}\n", encoding="utf-8")
+                if len(calls) == 1:
+                    (workspace / "timed-out-only.txt").write_text("old\n", encoding="utf-8")
+                    return ({"status": "timeout", "elapsed_seconds": 30.0,
+                             "usage": {"total_tokens": 999}, "trace": "agent.jsonl",
+                             "final_answer": None}, [])
+                return ({"status": "completed", "elapsed_seconds": 5.0,
+                         "usage": {"total_tokens": 12}, "trace": "agent.jsonl",
+                         "final_answer": None}, [])
+
+            output = root / "output"
+            summary = run_scenario(
+                load_scenario(scenario_path), output, adapters={"test-agent": run_agent}
+            )
+            trial_dir = output / "trials" / "task+standalone+001"
+            result = json.loads((trial_dir / "result.json").read_text(encoding="utf-8"))
+            report = json.loads((output / "report.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(calls), 2)
+            self.assertNotEqual(calls[0], calls[1])
+            self.assertEqual((summary["trials"], summary["passed"], summary["timeouts"]),
+                             (1, 1, 1))
+            self.assertEqual(len((output / "results.jsonl").read_text().splitlines()), 1)
+            self.assertEqual((result["timeout_count"], result["final_attempt"]), (1, 2))
+            self.assertEqual((result["agent"]["elapsed_seconds"],
+                              result["agent"]["usage"]["total_tokens"]), (5.0, 12))
+            first_attempt = json.loads(
+                (trial_dir / "attempts" / "001" / "result.json").read_text()
+            )
+            self.assertEqual(first_attempt["agent"]["status"], "timeout")
+            self.assertEqual(first_attempt["verifier"]["status"], "passed")
+            self.assertEqual(report["metrics"]["agent_elapsed_seconds"]["mean"], 5.0)
+            self.assertEqual(report["metrics"]["total_tokens"]["mean"], 12.0)
+            self.assertEqual(report["timeouts"], 1)
+            self.assertIn("attempts/002/agent.jsonl", report["trials"][0]["artifacts"]["trace"])
+
+    def test_retry_stops_after_three_timeouts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            document = {
+                "schema_version": 1, "id": "retry-limit",
+                "task": {"request": "Answer.",
+                         "verifier": {"command": [sys.executable, "-c", "pass"]}},
+                "run": {"execution_target": "local", "repetitions": 1,
+                        "agent_timeout_seconds": 30, "max_attempts": 3},
+                "configurations": [
+                    {"id": "standalone", "agent": {"kind": "test-agent", "model": "test"}}
+                ],
+            }
+            scenario_path = root / "scenario.json"
+            scenario_path.write_text(json.dumps(document), encoding="utf-8")
+            calls = []
+
+            def timed_out_agent(configuration, servers, workspace, trial_dir, prompt,
+                                timeout_seconds, *, docker_access=False):
+                calls.append(workspace)
+                return ({"status": "timeout", "elapsed_seconds": 30.0,
+                         "usage": None, "trace": None, "final_answer": None}, [])
+
+            output = root / "output"
+            summary = run_scenario(
+                load_scenario(scenario_path), output,
+                adapters={"test-agent": timed_out_agent},
+            )
+            result = json.loads((output / "trials" / "task+standalone+001" /
+                                 "result.json").read_text(encoding="utf-8"))
+            report = json.loads((output / "report.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(calls), 3)
+            self.assertEqual(len(set(calls)), 3)
+            self.assertEqual((summary["trials"], summary["failed"], summary["timeouts"]),
+                             (1, 1, 3))
+            self.assertEqual(len((output / "results.jsonl").read_text().splitlines()), 1)
+            self.assertEqual((result["status"], result["timeout_count"],
+                              result["final_attempt"]), ("timeout", 3, 3))
+            self.assertIsNone(report["metrics"]["agent_elapsed_seconds"]["mean"])
+            self.assertIsNone(report["metrics"]["total_tokens"]["mean"])
 
     def test_patch_respects_gitignore_and_captures_other_new_files(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -483,8 +659,10 @@ class RunnerTests(unittest.TestCase):
                 "run": {"execution_target": "local", "repetitions": 1,
                         "agent_timeout_seconds": 30},
                 "configurations": [
-                    {"id": "standalone", "agent": {"kind": "codex", "model": "test"}},
-                    {"id": "with-mcp", "agent": {"kind": "codex", "model": "test"},
+                    {"id": "standalone", "agent": {"kind": "codex", "model": "test",
+                                                    "reasoning_effort": "medium"}},
+                    {"id": "with-mcp", "agent": {"kind": "codex", "model": "test",
+                                                  "reasoning_effort": "medium"},
                      "prompt": "prompt.md", "mcp_servers": [{
                          "name": "test-server", "source": {"kind": "local", "path": str(server_source)},
                          "skills_root": "bundled/skills",
@@ -509,6 +687,7 @@ class RunnerTests(unittest.TestCase):
                 "answer = Path(args[args.index('-o') + 1])\n"
                 "prompt = sys.stdin.read()\n"
                 "assert '--ignore-user-config' not in args\n"
+                "assert 'model_reasoning_effort=\"medium\"' in args\n"
                 "with_mcp = 'Use the selected skill.' in prompt\n"
                 "skills = Path(os.environ['HOME']) / '.agents/skills'\n"
                 "for name in ('example-skill', 'second-skill'):\n"

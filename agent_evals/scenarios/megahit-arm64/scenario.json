@@ -23,7 +23,8 @@
   "run": {
     "execution_target": "local",
     "repetitions": 10,
-    "agent_timeout_seconds": 300,
+    "agent_timeout_seconds": 600,
+    "max_attempts": 3,
     "docker_access": true
   },
   "configurations": [
@@ -31,14 +32,16 @@
       "id": "codex-standalone",
       "agent": {
         "kind": "codex",
-        "model": "gpt-6.1-sol"
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "medium"
       }
     },
     {
       "id": "codex-arm-mcp",
       "agent": {
         "kind": "codex",
-        "model": "gpt-6.1-sol"
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "medium"
       },
       "prompt": "../../../agent-integrations/codex/arm-migration.md",
       "mcp_servers": [

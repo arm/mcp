@@ -127,6 +127,7 @@
         "execution_target": {"const": "local"},
         "repetitions": {"type": "integer", "minimum": 1},
         "agent_timeout_seconds": {"type": "integer", "minimum": 1},
+        "max_attempts": {"type": "integer", "minimum": 1},
         "docker_access": {"type": "boolean"}
       },
       "additionalProperties": false
@@ -136,7 +137,8 @@
       "required": ["kind", "model"],
       "properties": {
         "kind": {"$ref": "#/$defs/identifier"},
-        "model": {"$ref": "#/$defs/nonEmptyString"}
+        "model": {"$ref": "#/$defs/nonEmptyString"},
+        "reasoning_effort": {"$ref": "#/$defs/nonEmptyString"}
       },
       "additionalProperties": false
     },

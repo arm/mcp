@@ -103,6 +103,15 @@ def _metric(results: list[dict[str, Any]], name: str, *, applicable: bool = True
     return metric
 
 
+def _timeout_count(result: dict[str, Any]) -> int:
+    count = result.get("timeout_count")
+    if count is None:
+        return int((result.get("agent") or {}).get("status") == "timeout")
+    if type(count) is not int or count < 0:
+        raise ReportError(f"invalid timeout count for {result.get('trial_id')!r}")
+    return count
+
+
 def _counts(
     records: list[tuple[dict[str, Any], str, str | None]],
     planned: int,
@@ -124,6 +133,7 @@ def _counts(
         "scored": scored,
         "unscored": recorded - scored,
         "passing": len(passing),
+        "timeouts": sum(_timeout_count(result) for result, _, _ in records),
         "end_to_end_success_rate": len(passing) / scored if scored else None,
         "verifier_scored": len(verifier_scored),
         "verifier_passing": len(verifier_passing),
@@ -140,11 +150,15 @@ def _counts(
     }
 
 
-def _artifact(run_dir: Path, trial_id: str, name: Any) -> str | None:
+def _artifact(run_dir: Path, trial_id: str, name: Any, attempt: int | None = None) -> str | None:
     if (not isinstance(name, str) or Path(name).name != name or
-            Path(trial_id).name != trial_id or trial_id in (".", "..")):
+            Path(trial_id).name != trial_id or trial_id in (".", "..") or
+            (attempt is not None and (type(attempt) is not int or attempt < 1))):
         return None
-    relative = Path("trials") / trial_id / name
+    relative = Path("trials") / trial_id
+    if attempt is not None:
+        relative /= Path("attempts") / f"{attempt:03d}"
+    relative /= name
     path = (run_dir / relative).resolve()
     trial_dir = (run_dir / "trials" / trial_id).resolve()
     if (trial_dir.is_relative_to((run_dir / "trials").resolve()) and
@@ -156,8 +170,8 @@ def _artifact(run_dir: Path, trial_id: str, name: Any) -> str | None:
 def _trial_artifacts(run_dir: Path, result: dict[str, Any]) -> dict[str, str]:
     trial_id = result["trial_id"]
     agent = result.get("agent") or {}
+    final_attempt = result.get("final_attempt")
     candidates = {
-        "result": "result.json",
         "trace": agent.get("trace"),
         "final_answer": agent.get("final_answer"),
         "patch": result.get("patch"),
@@ -165,8 +179,18 @@ def _trial_artifacts(run_dir: Path, result: dict[str, Any]) -> dict[str, str]:
         "verifier_result": "verifier.json",
         "verifier_log": "verifier.log",
     }
-    return {label: path for label, name in candidates.items()
-            if (path := _artifact(run_dir, trial_id, name)) is not None}
+    artifacts = {"result": _artifact(run_dir, trial_id, "result.json")}
+    artifacts.update({label: path for label, name in candidates.items()
+                      if (path := _artifact(run_dir, trial_id, name, final_attempt)) is not None})
+    attempts = result.get("attempts", [])
+    if isinstance(attempts, list):
+        for attempt in attempts:
+            if not isinstance(attempt, dict):
+                continue
+            number = attempt.get("number")
+            if (path := _artifact(run_dir, trial_id, "result.json", number)) is not None:
+                artifacts[f"attempt_{number}_result"] = path
+    return {label: path for label, path in artifacts.items() if path is not None}
 
 
 def _cell(value: Any) -> str:
@@ -185,20 +209,40 @@ def _mean(metric: dict[str, Any], *, seconds: bool = False) -> str:
 
 
 def _markdown(report: dict[str, Any]) -> str:
+    reason_labels = {
+        "agent_timeout": "Agent timed out",
+        "agent_failed": "Agent failed",
+        "agent_interrupted": "Agent interrupted",
+        "agent_launch_error": "Agent could not start",
+        "unknown_agent_status": "Unknown agent result",
+        "verifier_failed": "Verifier failed",
+        "verifier_error": "Verifier error",
+        "missing_verifier": "Verifier did not run",
+    }
+    agent_labels = {
+        "completed": "Completed", "timeout": "Timed out", "failed": "Failed",
+        "interrupted": "Interrupted", "launch_error": "Could not start",
+    }
+    verifier_labels = {"passed": "Passed", "failed": "Failed", "error": "Error"}
+    outcome_labels = {"passing": "Success", "failed": "Failed", "unscored": "Not scored"}
     lines = [
         f"# Comparison report: {_cell(report['scenario_id'])}", "",
-        f"Recorded {report['recorded']} of {report['planned']} planned trials; "
-        f"{report['not_recorded']} not recorded.", "",
+        f"Of {report['planned']} planned trials, {report['scored']} were scored and "
+        f"{report['planned'] - report['scored']} were not scored. "
+        f"Agent timeout attempts: {report['timeouts']}.", "",
         "Run metadata: [run.json](run.json), [scenario.json](scenario.json), "
         "[sources.json](sources.json).", "",
-        "End-to-end success rate requires a completed agent and passing verifier; agent failures and "
-        "timeouts are scored failures. Verifier pass rate uses all scored verifier runs, "
-        "including timed-out agents. Verifier errors are excluded from that rate. "
-        "Mean agent time and tokens use completed-agent passing trials only. Mean "
-        "application time uses all verifier-passed trials with an available measurement, "
-        "including timed-out agents.", "",
+        "End-to-end success requires a completed agent and a verifier pass on the "
+        "terminating attempt. The success rate divides successes by scored trials. "
+        "Not scored includes trials without a saved result or without a score.", "",
+        "Timeouts count agent attempts, including retries that later succeeded. A final "
+        "timeout is a scored failure. Verifier pass rate uses scored verifier runs on "
+        "the terminating attempt, including after an agent timeout; verifier errors "
+        "are excluded.", "",
+        "Mean agent time and tokens use end-to-end successful trials. Mean application "
+        "time uses verifier-passed terminating attempts with an available measurement.", "",
         "## Comparison", "",
-        "| Configuration | Planned | Not recorded | Scored | Unscored | Passing | End-to-end success rate | Verifier scored | Verifier passing | Verifier pass rate |",
+        "| Configuration | Planned trials | Scored trials | Not scored | End-to-end successes | End-to-end success rate | Agent timeouts | Verifier scored | Verifier passes | Verifier pass rate |",
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for config in report["configurations"]:
@@ -207,8 +251,8 @@ def _markdown(report: dict[str, Any]) -> str:
         verifier_rate = ("unavailable" if config["verifier_pass_rate"] is None
                          else f"{config['verifier_pass_rate']:.1%}")
         lines.append(f"| {_cell(config['id'])} | {config['planned']} | "
-                     f"{config['not_recorded']} | {config['scored']} | "
-                     f"{config['unscored']} | {config['passing']} | {rate} | "
+                     f"{config['scored']} | {config['planned'] - config['scored']} | "
+                     f"{config['passing']} | {rate} | {config['timeouts']} | "
                      f"{config['verifier_scored']} | {config['verifier_passing']} | "
                      f"{verifier_rate} |")
     lines += [
@@ -223,29 +267,47 @@ def _markdown(report: dict[str, Any]) -> str:
         lines.append(f"| {_cell(config['id'])} | "
                      f"{_mean(metrics['agent_elapsed_seconds'], seconds=True)} | "
                      f"{_mean(metrics['total_tokens'])} | {app_text} |")
-    lines += ["", "## Nonpassing outcomes and missing measurements", ""]
+    reasons = []
     for config in report["configurations"]:
-        outcomes = ", ".join(f"{name}: {count}" for name, count in
-                             config["failure_categories"].items()) or "none"
-        missing = ", ".join(f"{name}: {metric['missing']}" for name, metric in
-                            config["metrics"].items() if metric["missing"]) or "none"
-        lines.append(f"- **{_cell(config['id'])}:** nonpassing outcomes: {outcomes}; "
-                     f"missing eligible-trial measurements: {missing}.")
+        counts = []
+        if config["not_recorded"]:
+            counts.append(f"No saved result: {config['not_recorded']}")
+        counts.extend(f"{reason_labels.get(name, name.replace('_', ' ').capitalize())}: {count}"
+                      for name, count in config["failure_categories"].items())
+        if counts:
+            reasons.append(f"- **{_cell(config['id'])}:** {', '.join(counts)}.")
+    if reasons:
+        lines += ["", "## Why trials did not succeed", "",
+                  "These counts are trials, based on the terminating attempt.", "", *reasons]
     lines += [
         "", "## Trial evidence", "",
-        "| Trial | Input | Configuration | Agent | Verifier | Outcome | Artifacts |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "Knowledge base (KB) calls count distinct knowledge-base search requests "
+        "recorded in the agent trace. Skills read lists skill names identified from "
+        "successful simple file-read commands. Compound commands are not inferred, "
+        "and a read does not prove the instructions were followed. With retries, "
+        "these fields describe the terminating attempt.", "",
+        "| Trial | Input | Configuration | Agent result | Verifier result | End-to-end result | Agent timeouts | KB calls | Skills read | Artifacts |",
+        "| --- | --- | --- | --- | --- | --- | ---: | ---: | --- | --- |",
     ]
     for trial in report["trials"]:
-        outcome = trial["classification"]
+        outcome = outcome_labels.get(trial["classification"], trial["classification"])
         if trial["failure_category"]:
-            outcome += f" ({trial['failure_category']})"
+            outcome += f" ({reason_labels.get(trial['failure_category'], trial['failure_category'])})"
+        agent_result = agent_labels.get(trial["agent_status"], trial["agent_status"] or "Unknown")
+        verifier_result = verifier_labels.get(trial["verifier_status"], "Not run")
         links = ", ".join(_link(label.replace("_", " "), path)
                           for label, path in trial["artifacts"].items()) or "none"
+        kb_calls = (str(trial["knowledge_base_calls"])
+                    if trial["knowledge_base_calls"] is not None else "unavailable")
+        if trial["skills_read"] is None:
+            skills_read = "unavailable"
+        else:
+            skills_read = ", ".join(_cell(name) for name in trial["skills_read"]) or "none"
         lines.append(f"| {_cell(trial['trial_id'])} | {_cell(trial['input_id'])} | "
-                     f"{_cell(trial['configuration_id'])} | {_cell(trial['agent_status'])} | "
-                     f"{_cell(trial['verifier_status'] or 'not run')} | "
-                     f"{_cell(outcome)} | {links} |")
+                     f"{_cell(trial['configuration_id'])} | {_cell(agent_result)} | "
+                     f"{_cell(verifier_result)} | "
+                     f"{_cell(outcome)} | {trial['timeout_count']} | "
+                     f"{kb_calls} | {skills_read} | {links} |")
     if report["setup_logs"]:
         lines += ["", "## Setup logs", ""]
         lines += [f"- {_link(Path(path).name, path)}" for path in report["setup_logs"]]
@@ -259,6 +321,7 @@ def run_summary(report: dict[str, Any], run_dir: Path) -> dict[str, Any]:
         "trials": report["recorded"],
         "passed": report["passing"],
         "failed": report["scored"] - report["passing"],
+        "timeouts": report["timeouts"],
         "verifier_passed": report["verifier_passing"],
         "verifier_scored": report["verifier_scored"],
         "unscored": report["unscored"],
@@ -325,6 +388,13 @@ def write_report(run_dir: Path) -> dict[str, Any]:
         "failure_category": category,
         "agent_status": (result.get("agent") or {}).get("status"),
         "verifier_status": (result.get("verifier") or {}).get("status"),
+        "timeout_count": _timeout_count(result),
+        "knowledge_base_calls": ((result.get("agent") or {}).get("activity") or {}).get(
+            "knowledge_base_calls"
+        ),
+        "skills_read": ((result.get("agent") or {}).get("activity") or {}).get(
+            "skills_read"
+        ),
         "artifacts": _trial_artifacts(run_dir, result),
     } for result, classification, category in records]
     logs = run_dir / "setup-logs"

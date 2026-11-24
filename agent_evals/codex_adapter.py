@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -83,6 +85,131 @@ def _usage_from_trace(path: Path) -> tuple[dict[str, int | None], bool]:
             elif event.get("type") == "turn.failed":
                 completed = False
     return usage, completed
+
+
+_SKILL_PATH = re.compile(
+    r"(?:^|/)\.agents/skills/(?:([^/{}\s'\"`]+)|\{([^{}]+)\})/SKILL\.md"
+    r"(?=$|[^A-Za-z0-9_.-])"
+)
+_READ_COMMANDS = {"cat", "sed", "head", "tail", "less", "more", "grep", "awk", "nl"}
+_SHELL_PUNCTUATION = set(";&|<>()")
+_VALUE_OPTIONS = {
+    "grep": {"-e", "--regexp", "-f", "--file", "-m", "--max-count",
+             "-A", "-B", "-C", "--after-context", "--before-context", "--context",
+             "--include", "--exclude", "--exclude-dir"},
+    "sed": {"-e", "--expression", "-f", "--file"},
+    "awk": {"-F", "-f", "-v"},
+    "head": {"-n", "--lines", "-c", "--bytes"},
+    "tail": {"-n", "--lines", "-c", "--bytes"},
+    "nl": {"-w", "-s", "-i", "-v", "-l"},
+}
+
+
+def _read_file_operands(command: str) -> list[str]:
+    """Return unambiguous file inputs for one successful shell read command."""
+    if "\n" in command or "`" in command or "$(" in command:
+        return []
+    try:
+        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>()")
+        lexer.whitespace_split = True
+        lexer.commenters = "#"
+        tokens = list(lexer)
+    except ValueError:
+        return []
+    if not tokens or any(
+            token and set(token) <= _SHELL_PUNCTUATION and token not in ("<", ">", ">>")
+            for token in tokens):
+        return []
+    reader = Path(tokens[0]).name
+    if reader not in _READ_COMMANDS:
+        return []
+
+    files: list[str] = []
+    positionals: list[str] = []
+    has_pattern_option = False
+    options = True
+    index = 1
+    while index < len(tokens):
+        token = tokens[index]
+        if token in ("<", ">", ">>"):
+            if index + 1 >= len(tokens):
+                return []
+            if token == "<":
+                files.append(tokens[index + 1])
+            index += 2
+            continue
+        if options and token == "--":
+            options = False
+        elif options and token.startswith("-") and token != "-":
+            if reader == "sed" and (token.startswith("-i") or token == "--in-place"):
+                return []
+            if reader in ("grep", "sed", "awk") and (
+                    (token.startswith(("-e", "-f")) and len(token) > 2) or
+                    token.startswith(("--regexp=", "--expression=", "--file="))):
+                has_pattern_option = True
+            if token in _VALUE_OPTIONS.get(reader, set()):
+                if index + 1 >= len(tokens):
+                    return []
+                if reader in ("grep", "sed", "awk") and token in (
+                        "-e", "--regexp", "--expression", "-f", "--file"):
+                    has_pattern_option = True
+                index += 1
+        else:
+            positionals.append(token)
+        index += 1
+
+    if reader in ("grep", "sed", "awk") and not has_pattern_option:
+        positionals = positionals[1:]
+    return files + positionals
+
+
+def _activity_from_trace(path: Path, installed: list[str]) -> dict[str, Any] | None:
+    """Summarize observable KB calls and skill-file reads in a Codex trace."""
+    kb_calls: set[str] = set()
+    skills_read: set[str] = set()
+    known_skills = set(installed)
+    saw_event = False
+    try:
+        with path.open(encoding="utf-8") as stream:
+            for line in stream:
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(event, dict):
+                    continue
+                saw_event = True
+                item = event.get("item")
+                if not isinstance(item, dict):
+                    continue
+                if (event.get("type") in ("item.started", "item.completed") and
+                        item.get("type") == "mcp_tool_call" and
+                        item.get("tool") == "knowledge_base_search" and
+                        isinstance(item.get("id"), str)):
+                    kb_calls.add(item["id"])
+                if (event.get("type") != "item.completed" or
+                        item.get("type") != "command_execution" or
+                        item.get("exit_code") != 0):
+                    continue
+                command = item.get("command")
+                if not isinstance(command, str) or "SKILL.md" not in command:
+                    continue
+                try:
+                    words = shlex.split(command)
+                except ValueError:
+                    words = []
+                if (len(words) >= 3 and Path(words[0]).name in ("sh", "bash", "zsh") and
+                        words[1] in ("-c", "-lc", "-ic")):
+                    command = words[2]
+                for file in _read_file_operands(command):
+                    for match in _SKILL_PATH.finditer(file):
+                        names = (match.group(1),) if match.group(1) else match.group(2).split(",")
+                        skills_read.update(name for name in names if name in known_skills)
+    except (OSError, UnicodeError):
+        return None
+    if not saw_event:
+        return None
+    return {"knowledge_base_calls": len(kb_calls), "skills_read": sorted(skills_read)}
 
 
 def _docker_socket() -> Path:
@@ -182,6 +309,9 @@ def run_codex(
         "-C", str(workspace), "-m", configuration["agent"]["model"],
         "-o", str(final_answer),
     ]
+    if "reasoning_effort" in configuration["agent"]:
+        args.extend(["-c", f"model_reasoning_effort="
+                     f"{_toml_value(configuration['agent']['reasoning_effort'])}"])
     if docker_access:
         try:
             docker_socket = _docker_socket()
@@ -317,5 +447,6 @@ def run_codex_trial(
         configuration, servers, workspace, trial_dir, prompt, timeout_seconds,
         docker_access=docker_access, executable=executable,
     )
+    result["activity"] = _activity_from_trace(trial_dir / "agent.jsonl", installed)
     result["cli_version"] = cli_version
     return result, installed

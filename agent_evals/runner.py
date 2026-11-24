@@ -239,6 +239,7 @@ def run_scenario(
     repetitions = scenario.repetitions if repetitions is None else repetitions
     if not 1 <= repetitions <= scenario.repetitions:
         raise RunnerError(f"repetitions must be between 1 and {scenario.repetitions}")
+    max_attempts = scenario.document["run"].get("max_attempts", 1)
     selected_adapters = _default_adapters() if adapters is None else adapters
     for config in scenario.configurations:
         if config["agent"]["kind"] not in selected_adapters:
@@ -344,56 +345,79 @@ def run_scenario(
             task_input = by_input[trial["input_id"]]
             config = by_config[trial["configuration_id"]]
             label = f"[{len(results) + 1}/{total_trials}] {trial['trial_id']}"
-            announce(f"{label}: preparing workspace")
             trial_dir = trials_dir / trial["trial_id"]
             trial_dir.mkdir()
-            workspace = trial_dir / "workspace"
             source_dir, source_info = inputs[task_input["id"]]
-            baseline = None
-            if source_dir is None:
-                workspace.mkdir()
-            elif task_input["kind"] == "git":
-                _git(["clone", "--shared", str(source_dir), str(workspace)],
-                     trial_dir, trial_dir / "workspace-clone.log")
-                baseline = source_info["commit"]
-                _git(["checkout", "--detach", baseline], workspace,
-                     trial_dir / "workspace-checkout.log")
-                _git(["remote", "set-url", "origin", source_info["repository"]],
-                     workspace, trial_dir / "workspace-remote.log")
-            else:
-                _copy_source(source_dir, workspace)
             prompt = _prompt(scenario, config, task_input)
             (trial_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
             adapter = selected_adapters[config["agent"]["kind"]]
-            announce(f"{label}: running {config['agent']['kind']} "
-                     f"(timeout {scenario.document['run']['agent_timeout_seconds']}s)")
-            agent, installed = adapter(
-                config, servers_by_config[config["id"]], workspace, trial_dir,
-                prompt, scenario.document["run"]["agent_timeout_seconds"],
-                docker_access=scenario.document["run"].get("docker_access", False),
-            )
-            version = agent.pop("cli_version", None)
-            if isinstance(version, str) and version:
-                versions = run_metadata["agent_versions"].setdefault(config["agent"]["kind"], [])
-                if version not in versions:
-                    versions.append(version)
-                    _write_json(output / "run.json", run_metadata)
-            elapsed = agent.get("elapsed_seconds")
-            duration = f" in {elapsed:.1f}s" if isinstance(elapsed, (int, float)) else ""
-            announce(f"{label}: agent {agent['status']}{duration}")
-            patch = _patch(workspace, baseline, trial_dir)
-            if agent["status"] in ("completed", "timeout"):
-                announce(f"{label}: verifying")
-                verifier = _verify(scenario, workspace, trial_dir, source_dir)
-                announce(f"{label}: verifier {verifier['status']}")
-            else:
-                verifier = None
-            result = {
-                **trial, "input": source_info, "agent": agent,
-                "skills": installed, "patch": patch, "verifier": verifier,
-                "status": verifier["status"] if agent["status"] == "completed" and verifier is not None
-                          else agent["status"],
-            }
+            attempts: list[dict[str, Any]] = []
+            timeout_count = 0
+            for attempt_number in range(1, max_attempts + 1):
+                attempt_dir = (trial_dir / "attempts" / f"{attempt_number:03d}"
+                               if max_attempts > 1 else trial_dir)
+                attempt_dir.mkdir(parents=True, exist_ok=True)
+                attempt_label = (f"{label} (attempt {attempt_number}/{max_attempts})"
+                                 if max_attempts > 1 else label)
+                announce(f"{attempt_label}: preparing workspace")
+                workspace = attempt_dir / "workspace"
+                baseline = None
+                if source_dir is None:
+                    workspace.mkdir()
+                elif task_input["kind"] == "git":
+                    _git(["clone", "--shared", str(source_dir), str(workspace)],
+                         attempt_dir, attempt_dir / "workspace-clone.log")
+                    baseline = source_info["commit"]
+                    _git(["checkout", "--detach", baseline], workspace,
+                         attempt_dir / "workspace-checkout.log")
+                    _git(["remote", "set-url", "origin", source_info["repository"]],
+                         workspace, attempt_dir / "workspace-remote.log")
+                else:
+                    _copy_source(source_dir, workspace)
+                announce(f"{attempt_label}: running {config['agent']['kind']} "
+                         f"(timeout {scenario.document['run']['agent_timeout_seconds']}s)")
+                agent, installed = adapter(
+                    config, servers_by_config[config["id"]], workspace, attempt_dir,
+                    prompt, scenario.document["run"]["agent_timeout_seconds"],
+                    docker_access=scenario.document["run"].get("docker_access", False),
+                )
+                version = agent.pop("cli_version", None)
+                if isinstance(version, str) and version:
+                    versions = run_metadata["agent_versions"].setdefault(config["agent"]["kind"], [])
+                    if version not in versions:
+                        versions.append(version)
+                        _write_json(output / "run.json", run_metadata)
+                elapsed = agent.get("elapsed_seconds")
+                duration = f" in {elapsed:.1f}s" if isinstance(elapsed, (int, float)) else ""
+                announce(f"{attempt_label}: agent {agent['status']}{duration}")
+                patch = _patch(workspace, baseline, attempt_dir)
+                if agent["status"] in ("completed", "timeout"):
+                    announce(f"{attempt_label}: verifying")
+                    verifier = _verify(scenario, workspace, attempt_dir, source_dir)
+                    announce(f"{attempt_label}: verifier {verifier['status']}")
+                else:
+                    verifier = None
+                attempt_result = {
+                    **trial, "input": source_info, "agent": agent,
+                    "skills": installed, "patch": patch, "verifier": verifier,
+                    "status": verifier["status"] if agent["status"] == "completed" and verifier is not None
+                              else agent["status"],
+                }
+                if max_attempts > 1:
+                    _write_json(attempt_dir / "result.json", attempt_result)
+                    attempts.append({
+                        "number": attempt_number,
+                        "agent_status": agent["status"],
+                        "verifier_status": verifier["status"] if verifier is not None else None,
+                    })
+                if agent["status"] == "timeout":
+                    timeout_count += 1
+                else:
+                    break
+            result = {**attempt_result, "timeout_count": timeout_count}
+            if max_attempts > 1:
+                result["attempts"] = attempts
+                result["final_attempt"] = attempt_number
             _write_json(trial_dir / "result.json", result)
             index.write(json.dumps(result) + "\n")
             index.flush()
