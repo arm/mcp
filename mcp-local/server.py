@@ -93,7 +93,7 @@ def knowledge_base_search(
     query: str,
     invocation_reason: Optional[str] = None,
     filters: Annotated[Optional[SearchFilters], Field(description=(
-        "Optional exclusions using labels observed in returned metadata; older corpora may use "
+        "Keep only results matching observed metadata labels; older corpora may use "
         "legacy labels or lack tags. Omit uncertain fields. Missing tags do not match: relax "
         "inferred filters if they hide evidence, while enforcing explicit user restrictions "
         "in the sources used. No matches do not establish incompatibility."
