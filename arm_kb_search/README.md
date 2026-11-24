@@ -22,7 +22,8 @@ results = search(
     "deploy containers",
     resources,
     k=5,
-    filters=SearchFilters(doc_type="Learning Paths", product="AWS Graviton"),
+    filters=SearchFilters(doc_type=["learning", "guide"], product="arm",
+                          platform=["linux", "windows"]),
 )
 ```
 
@@ -62,7 +63,7 @@ Runtime loading writes no files. Keep metadata and synonyms unchanged during loa
 ## Filters
 
 `filters` accepts a `SearchFilters` instance or a dictionary with optional
-`doc_type`, `product`, `platform`, and `edition` fields.
+`doc_type`, `product`, and `platform` fields.
 
 `SearchFilters` is the shared Pydantic model used by MCP and available to endpoint
 request models. Use `SearchFilters.model_json_schema()` to generate its schema and
@@ -72,17 +73,43 @@ It replaces the dataclass: use `model_dump()` and `model_copy()` instead of
 changed values. Instances remain frozen; alternatives are stored as tuples in
 Python and serialized as arrays in JSON.
 
-- Each field accepts a string or non-empty list of strings (also tuples in Python).
-  For example, `{"platform": ["linux", "windows"]}` matches either label.
-  Values within a field use OR; fields use AND. Matching ignores case, surrounding
-  whitespace, and duplicate choices.
-- Omitted filters, `None`, and `{}` leave search unrestricted. A field set to
-  `None` is ignored. Missing or blank metadata cannot match an active filter.
-- Unknown fields, empty lists or tuples, and blank or non-string labels raise
-  `ValueError`. Unknown labels match nothing; no matches returns an empty list.
+- Values are strings or non-empty lists (also tuples in Python). Choices use OR
+  within a field; fields use AND. Matching ignores case, surrounding whitespace
+  and duplicate choices. `k` limits the combined results.
+- Omitted filters, `None` and `{}` leave search unrestricted; `None` fields are
+  ignored. Missing or blank metadata cannot match an active filter.
+- Unknown fields, empty lists/tuples and blank/non-string labels raise `ValueError`.
+  Unknown labels match nothing; no matches returns `[]`.
 
 Filters restrict candidates before ranking and deduplication. Vector retrieval
 uses exact search over the full corpus, or only eligible vectors when filtered.
+
+Product identifies the document publisher: `arm`, `aws`, `google` or `ampere`.
+See [platform values](../embedding-generation/README.md#platform-values) for OS,
+ISA and hardware tags. Choose Doc Type by purpose; omit it when unsure:
+
+| Doc Type | Content |
+|---|---|
+| `learning` | Tutorials, courses and worked exercises |
+| `guide` | Installation, configuration, migration, troubleshooting and tuning |
+| `reference` | Manuals, specifications, intrinsic definitions and Insights FAQs |
+| `article` | Overviews, white papers and benchmark analysis |
+| `compatibility` | Software/OS/version support catalogs |
+
+Example: Arm-published references or lessons about SVE or SVE2:
+
+```json
+{"doc_type":["reference","learning"],"product":"arm","platform":["sve","sve2"]}
+```
+
+Result tags always return arrays; missing values return `[]`. Missing curated
+fields fall back to legacy metadata; explicit `[]` suppresses fallback. Old
+snapshots retain legacy labels. Tagged records accept legacy Doc Type aliases
+unless cleared; legacy Product ISA names are not aliases for publishers.
+
+Edition is rejected as a filter, including `null`, and removed from results;
+dashboard edition remains internal. Page expansion filters only matched seeds
+and reports each expanded record's own tags.
 
 ## Name synonyms
 

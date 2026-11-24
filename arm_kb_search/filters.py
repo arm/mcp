@@ -8,25 +8,34 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 FilterValue = str | Annotated[tuple[str, ...], Field(min_length=1)] | None
 
 
+def metadata_filter_value(item: Mapping[str, Any], name: str) -> list[str]:
+    """Return independent arrays for public tags and legacy scalar defaults."""
+    public = item.get("filter_metadata")
+    value = public[name] if isinstance(public, Mapping) and name in public else item.get(name, "")
+    choices = [value] if isinstance(value, str) else value if isinstance(value, list) else []
+    return [label for label in choices if isinstance(label, str) and label.strip()]
+
+
 class SearchFilters(BaseModel):
     """Exact labels: OR within a field, AND across fields; lists normalize to tuples."""
 
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
     doc_type: FilterValue = Field(default=None, description=(
-        "Exact document category, for example Learning Paths, Install Guides, Intrinsic, "
-        "or Ecosystem Dashboard. Use labels present in returned metadata."))
+        "Content type: learning (tutorials and courses); guide (installation, configuration, migration, "
+        "troubleshooting and tuning); reference (manuals, specifications, intrinsics and Insights FAQs); "
+        "article (overviews, white papers and benchmark analysis); compatibility (software/OS/version "
+        "support catalogs). Omit when unsure."))
     product: FilterValue = Field(default=None, description=(
-        "Exact corpus product label, for example Arm, AWS Graviton, Neon, SVE, or SVE2. "
-        "This is not generally the software name: Jenkins documentation may have product Arm."))
+        "Document publisher: arm, aws, google or ampere. Identifies who published the document, "
+        "not the software or hardware discussed."))
     platform: FilterValue = Field(default=None, description=(
-        "Exact platform label, for example linux or windows. Mainly populated for ecosystem "
-        "compatibility records; filtering on it excludes tutorials with missing platform metadata."))
-    edition: FilterValue = Field(default=None, description=(
-        "Exact edition label, for example commercial or open-source. Mainly populated for "
-        "ecosystem compatibility records; missing metadata cannot match."))
+        "Verified execution environment: linux, windows, macos, android, baremetal (no OS), rtos, "
+        "chromeos, freebsd, google-colab. Intrinsic family or ISA taught: neon, sve, sve2, sme, sme2, "
+        "helium (MVE). Architecture or hardware: cme, mali (including NX), cortex-m, agi-cpu "
+        "(Arm AGI CPU). Tags do not imply other OS, ISA or hardware support."))
 
-    @field_validator("doc_type", "product", "platform", "edition", mode="before")
+    @field_validator("doc_type", "product", "platform", mode="before")
     @classmethod
     def normalize_value(cls, value: Any) -> str | tuple[str, ...] | None:
         """Copy alternatives into an immutable, normalized, unique tuple."""
@@ -62,9 +71,15 @@ class MetadataFilterIndex:
         }
         for row_id, item in enumerate(metadata):
             for name, values in self._postings.items():
-                value = item.get(name)
-                if isinstance(value, str) and value.strip():
-                    values.setdefault(value.strip().casefold(), set()).add(row_id)
+                value = metadata_filter_value(item, name)
+                labels = {label.strip().casefold() for label in value}
+                # Preserve old document-type queries without exposing detailed
+                # labels as public tags. Empty/invalid public tags suppress aliases.
+                legacy = item.get(name)
+                if name == "doc_type" and labels and isinstance(legacy, str) and legacy.strip():
+                    labels.add(legacy.strip().casefold())
+                for label in labels:
+                    values.setdefault(label, set()).add(row_id)
 
     def eligible_ids(self, filters: SearchFilters) -> tuple[int, ...] | None:
         """None means unrestricted; an empty tuple means no eligible chunks."""

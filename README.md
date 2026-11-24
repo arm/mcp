@@ -172,13 +172,17 @@ After updating the configuration, restart your MCP client to load the Arm MCP se
 
 - `k`: an integer from 1 to 20 limiting initial matches, defaulting to 5 when omitted.
   Explicit `null` and values outside this range are rejected.
-- `filters`: `doc_type`, `product`, `platform`, or `edition`, each accepting a
+- `filters`: `doc_type`, `product`, or `platform`, each accepting a
   label or non-empty list. Values within a field use OR; fields use AND.
   Matching ignores case and surrounding whitespace. Use known metadata labels;
   records with missing tags cannot match a filter.
 
+Edition is no longer a request filter or result field. Remove `edition` from
+client filter objects; unsupported fields are rejected rather than ignored.
+Dashboard catalog variants remain distinct internally.
+
 ```json
-{"query": "How do SVE predicated loads work?", "filters": {"doc_type": "Intrinsic", "product": "SVE"}, "k": 3}
+{"query": "How do SVE predicated loads work?", "filters": {"doc_type": "reference", "product": "arm", "platform": "sve"}, "k": 3}
 ```
 
 Choose `scope` for the amount of context:

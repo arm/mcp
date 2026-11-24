@@ -39,7 +39,15 @@ from document_chunking import (
 )
 from ecosystem_dashboard import acquire_catalog
 from learn_public import is_public_learn_url
-from learn_repository import LearnSources, is_learn_url
+from learn_repository import LearnSources, is_learn_url, public_url
+from source_metadata import (
+    METADATA_COLUMNS,
+    format_metadata_override,
+    read_metadata_overrides,
+    source_metadata_defaults,
+    validate_metadata_columns,
+    validate_metadata_overrides,
+)
 
 
 # Create a session with retry logic for resilient HTTP requests
@@ -81,6 +89,7 @@ known_source_urls = set()
 # List of all source entries (including existing and new)
 # Each entry is a dict: {site_name, license_type, display_name, url, keywords}
 all_sources = []
+source_csv_metadata_columns = []
 
 # Increase the file size limit, which defaults to '131,072'
 csv.field_size_limit(
@@ -93,9 +102,10 @@ def load_existing_sources(csv_file):
     Load existing sources from vector-db-sources.csv into memory.
     Populates known_source_urls set and all_sources list.
     """
-    global known_source_urls, all_sources
+    global known_source_urls, all_sources, source_csv_metadata_columns
     known_source_urls = set()
     all_sources = []
+    source_csv_metadata_columns = []
 
     if not os.path.exists(csv_file):
         print(f"Sources file '{csv_file}' does not exist. Starting fresh.")
@@ -103,8 +113,13 @@ def load_existing_sources(csv_file):
 
     with open(csv_file, "r", newline="", encoding="utf-8") as file:
         reader = csv.DictReader(file)
+        validate_metadata_columns(reader.fieldnames or [], str(csv_file))
+        source_csv_metadata_columns = [
+            column for column in (reader.fieldnames or []) if column in METADATA_COLUMNS
+        ]
         for row in reader:
             url = row.get("URL", "").strip()
+            overrides = read_metadata_overrides(row, url)
             if url:
                 known_source_urls.add(url)
                 all_sources.append(
@@ -119,6 +134,8 @@ def load_existing_sources(csv_file):
                         ).strip(),
                     }
                 )
+                if overrides:
+                    all_sources[-1]["metadata_overrides"] = overrides
 
     print(f"Loaded {len(all_sources)} existing sources from '{csv_file}'")
 
@@ -168,6 +185,12 @@ def save_sources_csv(csv_file):
     """
     Write all sources (existing + new) to vector-db-sources.csv.
     """
+    metadata_columns = list(source_csv_metadata_columns)
+    for column, field in METADATA_COLUMNS.items():
+        if column not in metadata_columns and any(
+            field in source.get("metadata_overrides", {}) for source in all_sources
+        ):
+            metadata_columns.append(column)
     with open(csv_file, "w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
         writer.writerow(
@@ -178,7 +201,7 @@ def save_sources_csv(csv_file):
                 "URL",
                 "Keywords",
                 "Transcript Source URL",
-            ]
+            ] + metadata_columns
         )
         for source in all_sources:
             writer.writerow(
@@ -189,6 +212,11 @@ def save_sources_csv(csv_file):
                     source["url"],
                     source["keywords"],
                     source.get("transcript_source_url", ""),
+                ] + [
+                    format_metadata_override(
+                        source.get("metadata_overrides", {}).get(METADATA_COLUMNS[column])
+                    )
+                    for column in metadata_columns
                 ]
             )
 
@@ -215,6 +243,7 @@ class Chunk:
         page_url="",
         parent_page_url="",
         document_context=None,
+        filter_metadata=None,
     ):
         self.title = title
         self.url = url
@@ -229,6 +258,9 @@ class Chunk:
         self.content_type = content_type
         self.platform = platform
         self.edition = edition
+        self.filter_metadata = {
+            name: list(tags) for name, tags in (filter_metadata or {}).items()
+        }
         self.context_metadata = {
             key: value for key, value in {
                 "page_url": page_url, "parent_page_url": parent_page_url,
@@ -261,6 +293,7 @@ class Chunk:
             "content_type": self.content_type,
             "platform": self.platform,
             "edition": self.edition,
+            **({"filter_metadata": self.filter_metadata} if self.filter_metadata else {}),
             **self.context_metadata,
         }
 
@@ -294,12 +327,10 @@ def create_ecosystem_dashboard_chunk(source_url, keywords_value):
     chunks = []
     for package in packages:
         keywords = list(dict.fromkeys(package.keywords + curated))
-        chunks.extend(
-            chunk_from_payload(payload, keywords)
-            for payload in chunk_parsed_document(
-                package.document, "Ecosystem Dashboard", keywords
-            )
-        )
+        for payload in chunk_parsed_document(package.document, "Ecosystem Dashboard", keywords):
+            chunk = chunk_from_payload(payload, keywords)
+            chunk.filter_metadata["platform"] = [package.document.platform]
+            chunks.append(chunk)
     return chunks
 
 
@@ -316,8 +347,20 @@ def reconcile_ecosystem_sources(discover=True):
         return
     catalog = build_ecosystem_dashboard_entries()
     curated = {}
+    metadata_overrides = {}
     for row in existing:
-        curated.setdefault(row["url"], []).extend(parse_keywords(row["keywords"], ""))
+        url = row["url"]
+        curated.setdefault(url, []).extend(parse_keywords(row["keywords"], ""))
+        overrides = metadata_overrides.setdefault(url, {})
+        for column, field in METADATA_COLUMNS.items():
+            if field not in row.get("metadata_overrides", {}):
+                continue
+            override = row["metadata_overrides"][field]
+            previous = overrides.get(field)
+            if previous is not None and override is not None and set(previous) != set(override):
+                raise ValueError(f"{column} for {url}: conflicting source overrides")
+            if previous is None:
+                overrides[field] = override
     missing = curated.keys() - catalog.keys()
     for url in sorted(missing):
         print(f"[ECOSYSTEM OMITTED SOURCE] Missing or invalid in snapshot: {url}")
@@ -341,6 +384,8 @@ def reconcile_ecosystem_sources(discover=True):
                 "transcript_source_url": "",
             }
         )
+        if metadata_overrides.get(url):
+            replacements[-1]["metadata_overrides"] = metadata_overrides[url]
     position = next(
         (
             i
@@ -392,7 +437,9 @@ def create_learn_chunks(source_url, source_name, doc_type, keywords_value):
                 and context.get("parent_page_url") == manifest[0]
             ):
                 context["learning_path_pages"] = manifest
-            chunks.append(chunk_from_payload(payload, keywords))
+            chunk = chunk_from_payload(payload, keywords)
+            chunk.filter_metadata["platform"] = learn_sources.platform_tags(context["url"])
+            chunks.append(chunk)
     return chunks
 
 
@@ -409,6 +456,7 @@ def readInCSV(csv_file):
         "site_names": [],
         "license_types": [],
         "transcript_urls": [],
+        "metadata_overrides": [],
     }
 
     if not os.path.exists(csv_file):
@@ -416,6 +464,7 @@ def readInCSV(csv_file):
 
     with open(csv_file, "r", newline="", encoding="utf-8") as file:
         reader = csv.DictReader(file)
+        validate_metadata_columns(reader.fieldnames or [], str(csv_file))
         for row in reader:
             csv_dict["urls"].append(normalize_source_url(row.get("URL", "")))
             csv_dict["focus"].append(row.get("Keywords", ""))
@@ -424,6 +473,9 @@ def readInCSV(csv_file):
             csv_dict["license_types"].append(row.get("License Type", ""))
             csv_dict["transcript_urls"].append(
                 (row.get("Transcript Source URL", "") or "").strip()
+            )
+            csv_dict["metadata_overrides"].append(
+                read_metadata_overrides(row, csv_dict["urls"][-1])
             )
 
     return csv_dict, len(csv_dict["urls"])
@@ -537,6 +589,24 @@ def create_transcript_chunks(
 
 
 def create_chunks_for_source(
+    source_url, source_name, doc_type, keywords_value, transcript_url="",
+    metadata_overrides=None,
+):
+    """Apply validated source tags to every parsed chunk, keeping source identity."""
+    overrides = validate_metadata_overrides(metadata_overrides, source_url)
+    defaults = source_metadata_defaults(doc_type)
+    chunks = _create_source_chunks(
+        source_url, source_name, doc_type, keywords_value, transcript_url
+    )
+    for chunk in chunks:
+        chunk.filter_metadata = {
+            name: list(tags) for name, tags in
+            (defaults | chunk.filter_metadata | overrides).items()
+        }
+    return chunks
+
+
+def _create_source_chunks(
     source_url, source_name, doc_type, keywords_value, transcript_url=""
 ):
     source_url = normalize_source_url(source_url)
@@ -697,7 +767,6 @@ def chunkSaveAndTrack(url, chunk):
 
     # Record chunk
     recordChunk()
-    print(f"{file_name} === {chunk.title}")
 
 
 def prepare_intrinsic_chunks():
@@ -706,6 +775,46 @@ def prepare_intrinsic_chunks():
     for path in sorted(directory.glob("*.yaml")):
         chunk = prepare_intrinsic_chunk(yaml.safe_load(path.read_text()))
         path.write_text(yaml.safe_dump(chunk, sort_keys=False))
+
+
+def resolve_learn_metadata(assignments):
+    """Resolve explicit fields by canonical source scope, before replacing outputs."""
+    scopes = {}
+    for url, scope, overrides in assignments:
+        fields = scopes.setdefault(scope, {})
+        for name, tags in (overrides or {}).items():
+            if tags is None:  # Blank inherits; an explicit [] remains an assignment.
+                continue
+            if name in fields and set(fields[name][1]) != set(tags):
+                raise ValueError(
+                    f"Conflicting {name} tags for overlapping Learn source: "
+                    f"{fields[name][0]} and {url}"
+                )
+            fields[name] = (url, tags)
+
+    pages = {}
+    for scope, fields in scopes.items():
+        for page in scope:
+            for name, (url, tags) in fields.items():
+                pages.setdefault(page, {}).setdefault(name, []).append((scope, url, tags))
+    resolved = {}
+    for page, fields in pages.items():
+        resolved[page] = {}
+        for name, candidates in fields.items():
+            # A proper subset is a more specific configured resource. Use source
+            # membership, not URL prefixes: Hugo aliases can change URL ancestry.
+            owners = [candidate for candidate in candidates if not any(
+                other[0] < candidate[0] for other in candidates
+            )]
+            _, url, tags = owners[0]
+            for _, other_url, other_tags in owners[1:]:
+                if set(tags) != set(other_tags):
+                    raise ValueError(
+                        f"Conflicting {name} tags for overlapping Learn source: "
+                        f"{url} and {other_url}"
+                    )
+            resolved[page][name] = list(tags)
+    return resolved
 
 
 def main():
@@ -740,22 +849,32 @@ def main():
     # Validate Learn sources before modifying the CSV or deleting old chunks.
     # This also applies to SKIP_DISCOVERY and explicit transcript sources.
     validated_brief_chunks = {}
+    learn_metadata_assignments = []
     for source in all_sources:
         url = normalize_source_url(
             source.get("transcript_source_url")
         ) or normalize_source_url(source["url"])
         if is_learn_url(url):
-            learn_sources.documents(url)
+            documents = learn_sources.documents(url)
+            scope = {public_url(document.source_url) for document in documents}
+            if not is_public_learn_url(url):
+                # Include bodyless roots: they still own a broader source scope.
+                scope.update(page.url for page in learn_sources.repository_for_url(url).selected_pages(url))
+            learn_metadata_assignments.append((
+                source["url"], frozenset(scope), source.get("metadata_overrides"),
+            ))
         elif is_agi_product_brief(url):
             # This adapter rejects unfamiliar table layouts. Validate before
             # replacing outputs, and reuse the result from this exact download.
             chunks = create_chunks_for_source(
                 source["url"], source["display_name"], source["site_name"],
                 source["keywords"], source.get("transcript_source_url", ""),
+                metadata_overrides=source.get("metadata_overrides"),
             )
             if not chunks:
                 raise ValueError(f"Cannot acquire Arm AGI CPU product brief: {url}")
             validated_brief_chunks[(normalize_source_url(source["url"]), url)] = chunks
+    learn_metadata = resolve_learn_metadata(learn_metadata_assignments)
     save_sources_csv(sources_file)
 
     # 0) Initialize files
@@ -776,6 +895,20 @@ def main():
     csv_dict, csv_length = readInCSV(sources_file)
 
     learn_chunks = {}
+    coverage = dict.fromkeys(METADATA_COLUMNS.values(), 0)
+    metadata_gaps = {}
+    chunk_count = 0
+
+    def save_chunk(url, chunk):
+        nonlocal chunk_count
+        chunkSaveAndTrack(url, chunk)
+        chunk_count += 1
+        for field in coverage:
+            if chunk.filter_metadata.get(field):
+                coverage[field] += 1
+            else:
+                metadata_gaps.setdefault(url, set()).add(field)
+
     print(f"Starting to loop over CSV file {sources_file} ......")
     for i in range(csv_length):
         url = csv_dict["urls"][i]
@@ -783,15 +916,24 @@ def main():
         doc_type = csv_dict["site_names"][i]
         keywords_value = csv_dict["focus"][i]
         transcript_url = csv_dict["transcript_urls"][i]
-        effective_url = normalize_source_url(transcript_url) or normalize_source_url(url)
+        effective_url = normalize_source_url(transcript_url) or url
+        learn_source = is_learn_url(effective_url)
 
-        chunks = validated_brief_chunks.get((normalize_source_url(url), effective_url))
+        chunks = validated_brief_chunks.get((url, effective_url))
         if chunks is None:
             chunks = create_chunks_for_source(
-                url, source_name, doc_type, keywords_value, transcript_url
+                url, source_name, doc_type, keywords_value, transcript_url,
+                metadata_overrides=csv_dict["metadata_overrides"][i],
             )
+        print(f"[SOURCE CHUNKS] {url}: {len(chunks)}", flush=True)
         for chunk in chunks:
-            if is_learn_url(effective_url):
+            if learn_source:
+                # Transcript display links may be primary video URLs; the
+                # document context retains the canonical Learn page identity.
+                page = public_url(chunk.context_metadata["document_context"]["url"])
+                chunk.filter_metadata.update({
+                    name: list(tags) for name, tags in learn_metadata.get(page, {}).items()
+                })
                 # A parent guide and an explicitly listed child may overlap.
                 identity = (chunk.url, chunk.resolved_url, chunk.content)
                 if identity in learn_chunks:
@@ -803,16 +945,17 @@ def main():
                     continue
                 learn_chunks[identity] = (url, chunk)
             else:
-                chunkSaveAndTrack(url, chunk)
+                save_chunk(url, chunk)
 
     # Emit only after all overlapping rows have contributed their keywords.
     for url, chunk in learn_chunks.values():
-        chunkSaveAndTrack(url, chunk)
+        save_chunk(url, chunk)
 
-    # Save updated sources CSV with all discovered sources
-    save_sources_csv(sources_file)
     print("\n=== Source tracking complete ===")
     print(f"Total sources in {sources_file}: {len(all_sources)}")
+    for url, fields in sorted(metadata_gaps.items()):
+        print(f"[METADATA GAP] {url}: {', '.join(sorted(fields))}; verify tags or leave unknown/inapplicable fields untagged")
+    print(f"[METADATA COVERAGE] {chunk_count} source chunks (before vector splitting; excludes copied intrinsics): {coverage}")
 
 
 if __name__ == "__main__":
