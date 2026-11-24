@@ -158,6 +158,73 @@ clang -O3 main.c
     assert "https://learn.arm.com/install-guides/guide/" in text
 
 
+@pytest.mark.parametrize(
+    "src,title_attribute,title,expected_url",
+    [
+        (
+            "/apps/sme-visualisations/#/sme/layout",
+            'title="Interactive ZA tile layout visualization"',
+            "Interactive ZA tile layout visualization",
+            "https://learn.arm.com/apps/sme-visualisations/#/sme/layout",
+        ),
+        (
+            "../visualization/?a=1&b=2#layout",
+            "title='ZA [tiles] <view> & \"bounds\"'",
+            'ZA [tiles] <view> & "bounds"',
+            "https://learn.arm.com/install-guides/visualization/?a=1&b=2#layout",
+        ),
+        (
+            "https://example.com/visualization/#layout",
+            "",
+            "Embedded content",
+            "https://example.com/visualization/#layout",
+        ),
+        (
+            "/apps/sme-visualisations/#/sme/layout",
+            'title="ZA *tile* [layout](https://example.com/extra)"',
+            "ZA *tile* [layout](https://example.com/extra)",
+            "https://learn.arm.com/apps/sme-visualisations/#/sme/layout",
+        ),
+    ],
+)
+def test_fullscreen_iframe_preserves_title_link_and_surrounding_text(
+    src, title_attribute, title, expected_url
+):
+    body = f'''## Explore the layout
+Before the visualization.
+
+{{{{< fullscreen-iframe
+    src="{src}"
+    {title_attribute}
+    height="760px"
+    width="100%"
+    border="1px solid #999"
+    loading="lazy"
+>}}}}
+
+After the visualization.
+'''
+    repo = repository({"content/install-guides/demo.md": markdown("Demo", body)})
+    doc = repo.documents("https://learn.arm.com/install-guides/demo/")[0]
+    blocks = [block for section in doc.sections for block in section.blocks]
+    text = "\n".join(block.text for block in blocks)
+    assert "Before the visualization." in text and "After the visualization." in text
+    assert title in text and expected_url in text
+    assert [(link.text, link.url) for block in blocks for link in block.links] == [
+        (title, expected_url)
+    ]
+    assert "fullscreen-iframe" not in text and "760px" not in text
+
+
+@pytest.mark.parametrize("attributes", ["", 'src=""'])
+def test_fullscreen_iframe_requires_a_source(attributes):
+    repo = repository(
+        {"content/demo.md": markdown("Demo", "{{< fullscreen-iframe " + attributes + " >}}")}
+    )
+    with pytest.raises(ValueError, match="fullscreen-iframe requires src"):
+        repo.documents("https://learn.arm.com/demo/")
+
+
 def test_unknown_shortcode_and_missing_source_fail_closed():
     repo = repository({"content/demo.md": markdown("Demo", "{{< new-component >}}")})
     with pytest.raises(ValueError, match="unsupported Hugo shortcode"):
