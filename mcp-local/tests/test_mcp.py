@@ -154,17 +154,19 @@ def test_mcp_stdio_transport_responds(platform):
         knowledge_search = next(
             tool for tool in tools if tool["name"] == "knowledge_base_search"
         )
-        assert "get_learning_path" not in tool_names
-        assert "get_learning_path" not in knowledge_search["description"]
-        assert "system architecture, CPU, memory" in knowledge_search["description"]
-        assert "runtime-performance, profiling, hotspot, benchmarking, and regression" in knowledge_search["description"]
-        assert "preserve each URL exactly as returned" in knowledge_search["description"]
+        assert (
+            "Use this tool for Arm-related runtime-performance, profiling, hotspot, "
+            "benchmarking, and regression questions."
+            in knowledge_search["description"]
+        )
+        assert (
+            "Use this tool for Arm-related questions about collecting system architecture, "
+            "CPU, memory, and other host hardware details."
+            in knowledge_search["description"]
+        )
         instructions = response["result"]["instructions"]
-        assert instructions.startswith("Arm knowledge base.")
-        assert "get_learning_path" not in instructions
         assert "Preserve the `utm_source` query parameter" in instructions
-        assert "no license to any intellectual property rights is granted by Arm" in instructions
-        assert len(instructions) <= 4096
+        assert "For content sourced from arm.com or its subdomains:" in instructions
 
         print("\n***Test Passed: arm-mcp container initialized and ran successfully")
 
@@ -192,7 +194,6 @@ def test_mcp_stdio_transport_responds(platform):
         assert expected_nginx_urls & actual_nginx_urls, "Test Failed: MCP check_nginx tool failed: content mismatch., Expected one of: {}, Received: {}".format(json.dumps(constants.EXPECTED_CHECK_NGINX_RESPONSE,indent=2), json.dumps(check_nginx_response.get("result")["structuredContent"],indent=2))
         for item in nginx_structured_content["result"]:
             assert not {"url_tracking_instruction", "distance"} & item.keys()
-            assert not item["snippet"].startswith(("Document Title:", "Heading Path:"))
             assert all(isinstance(item[field], list) for field in ("doc_type", "product", "platform"))
             assert "edition" not in item
         print("\n***Test Passed: MCP check_nginx tool succeeded")

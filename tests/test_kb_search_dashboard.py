@@ -9,7 +9,6 @@ from arm_kb_search import resources
 from arm_kb_search.response import (
     ARM_CONTENT_DISCLAIMER,
     UTM_SOURCE_PRESERVATION_NOTE,
-    lean_result,
     lean_results,
 )
 from arm_kb_search.search import build_bm25_index, deduplicate_urls
@@ -141,7 +140,8 @@ def test_search_response_returns_usable_url_with_tracking_and_disclaimer(url_fie
     metadata = [
         {
             "chunk_uuid": "guide", "title": "Utility", "search_text": "utility",
-            "original_text": "Run utility --help.", "doc_type": "Install Guides",
+            "original_text": "Document Title: Utility\r\nHeading Path: Install\r\n\r\n    utility --help  \r\n",
+            "heading": "Install", "doc_type": "Install Guides",
             "resolved_url": "https://learn.arm.com/resolved?version=2#install",
             **url_fields,
         },
@@ -157,9 +157,17 @@ def test_search_response_returns_usable_url_with_tracking_and_disclaimer(url_fie
 
     assert len(hits) == 1
     assert hits[0]["url"] == f"https://learn.arm.com/{expected_page}?version=2&utm_source=test-client#install"
-    assert hits[0]["snippet"] == "Run utility --help."
+    assert hits[0]["snippet"] == metadata[0]["original_text"]
     assert hits[0]["disclaimer"] == ARM_CONTENT_DISCLAIMER
     assert hits[0]["url_tracking_instruction"] == UTM_SOURCE_PRESERVATION_NOTE
+
+    snapshot = deepcopy(hits)
+    expected = dict(hits[0], disclaimer=(
+        "For all results in this response sourced from arm.com or its subdomains: " + ARM_CONTENT_DISCLAIMER))
+    expected.pop("distance", None)
+    del expected["url_tracking_instruction"]
+    assert lean_results(hits) == [expected]
+    assert hits == snapshot
 
 
 def test_search_response_retains_dashboard_scope_and_defaults_for_old_metadata(
@@ -198,36 +206,6 @@ def test_search_response_retains_dashboard_scope_and_defaults_for_old_metadata(
     assert resources.search("query", state)[0]["platform"] == ["linux", "windows"]
 
 
-def test_prefix_removal_only_at_top_and_lean_copy_preserves_every_other_field():
-    source = {"url": LEAN_RESULT_URL + "?utm_source=arm-mcp#intro", "snippet":
-              "\nDocument Title: Demo\nHeading Path: Intro\n\nBody\nDocument Title: keep\nHeading Path: keep\n",
-              "title": "Demo", "heading": ["Intro"], "doc_type": ["Learning Paths"],
-              "product": ["Neoverse"], "platform": ["Linux"], "score": .9,
-              "context": {"scope": "page", "chunk_index": 0}, "page_url": LEAN_RESULT_URL + "?x=1",
-              "parent_page_url": LEAN_RESULT_URL, "future_field": [1], "distance": .1,
-              "disclaimer": "legal", "url_tracking_instruction": "tracking"}
-    before = deepcopy(source)
-    result = lean_result(source)
-    assert result == {"url": LEAN_RESULT_URL + "?utm_source=arm-mcp#intro", "snippet":
-                      "Body\nDocument Title: keep\nHeading Path: keep\n", "title": "Demo",
-                      "heading": ["Intro"], "doc_type": ["Learning Paths"],
-                      "product": ["Neoverse"], "platform": ["Linux"], "score": .9,
-                      "context": {"scope": "page", "chunk_index": 0}, "page_url": LEAN_RESULT_URL + "?x=1",
-                      "parent_page_url": LEAN_RESULT_URL, "future_field": [1]}
-    assert list(result) == [k for k in source if k not in {"distance", "disclaimer", "url_tracking_instruction"}]
-    assert source == before
-    assert "learning_path" not in lean_result({"url": "https://developer.arm.com/", "snippet": "Text"})
-
-
-@pytest.mark.parametrize(("snippet", "expected"), [
-    ("", ""),
-    ("\n  \nDocument Title: Demo\nHeading Path: Start\n\n", ""),
-    ("Body\nDocument Title: keep\nHeading Path: keep", "Body\nDocument Title: keep\nHeading Path: keep"),
-])
-def test_prefix_stripping_boundaries(snippet, expected):
-    assert lean_result({"title": "Demo", "heading": "Start", "snippet": snippet})["snippet"] == expected
-
-
 def test_response_notice_once_on_first_arm_result_without_mutation():
     source = [
         {"url": "https://github.com/arm/example", "snippet": "External"},
@@ -252,130 +230,6 @@ def test_no_notice_for_empty_external_or_disclaimer_disabled_results(source):
     assert all("disclaimer" not in r for r in lean_results(source))
 
 
-@pytest.mark.parametrize("heading", ["Large-System Extensions (LSE)", ["Large-System Extensions (LSE)"], ""])
-def test_full_heading_context_survives_prefix_removal(heading):
-    source = {
-        "url": "https://github.com/aws/aws-graviton-getting-started/blob/main/c-c++.md",
-        "title": "C/C++ on Graviton",
-        "heading": heading,
-        "snippet": (
-            "Document Title: C/C++ on Graviton\n"
-            "Heading Path: Enabling Arm Architecture Specific Features > Large-System Extensions (LSE)\n\n"
-            "Use objdump to inspect the compiled instructions."
-        ),
-    }
-    before = deepcopy(source)
-    result = lean_result(source)
-    assert result["heading_path"] == (
-        "Enabling Arm Architecture Specific Features > Large-System Extensions (LSE)"
-    )
-    assert result["heading"] == heading
-    assert result["title"] == "C/C++ on Graviton"
-    assert result["snippet"] == "Use objdump to inspect the compiled instructions."
-    assert source == before
-
-
-@pytest.mark.parametrize("heading", ["Intro", ["Intro"]])
-def test_flat_heading_is_not_duplicated_as_a_path(heading):
-    result = lean_result({"title": "Demo", "heading": heading,
-                          "snippet": "Document Title: Demo\nHeading Path: Intro\n\nBody"})
-    assert "heading_path" not in result
-    assert result["heading"] == heading
-    assert result["snippet"] == "Body"
-
-
-def test_existing_structured_heading_path_is_preserved():
-    source = {"title": "Demo", "heading": "Leaf", "heading_path": ["Parent", "Leaf"],
-              "snippet": "Document Title: Demo\nHeading Path: Parent > Leaf\n\nBody"}
-    before = deepcopy(source)
-    result = lean_result(source)
-    assert result["heading_path"] == ["Parent", "Leaf"]
-    assert result["snippet"] == "Body"
-    assert source == before
-
-
-def test_body_heading_label_does_not_become_result_metadata():
-    result = lean_result({"heading": "Intro", "snippet": "Body\nHeading Path: example text"})
-    assert "heading_path" not in result
-    assert result["snippet"] == "Body\nHeading Path: example text"
-
-
-@pytest.mark.parametrize("body", [
-    "Document Title: required user input\nKeep this field.",
-    "Heading Path: optional user input\nKeep this field.",
-    "Document Title: required user input\nHeading Path: optional user input\nKeep both fields.",
-])
-def test_generated_header_does_not_consume_body_labels(body):
-    result = lean_result({
-        "title": "Example",
-        "heading": "Input fields",
-        "snippet": "Document Title: Example\nHeading Path: Parent > Input fields\n\n" + body,
-    })
-    assert result["snippet"] == body
-    assert result["heading_path"] == "Parent > Input fields"
-
-
-@pytest.mark.parametrize("scope", ["chunks", "page"])
-def test_lean_mixed_sources_preserve_evidence_and_citations(scope, monkeypatch):
-    cases = [
-        ("Documentation", "https://github.com/aws/guide/blob/main/c-c++.md#build",
-         "C/C++ on Graviton", "Build", "Performance > Build",
-         "    clang++ -O3 main.cpp\n\nDocument Title: keep this example\nHeading Path: optional input\n"),
-        ("Learning Paths", "https://learn.arm.com/learning-paths/demo/setup/#configure",
-         "Deploy NGINX", "Configure", "NGINX > Configure",
-         "```sh\nsudo nginx -t\n```\n"),
-        ("Ecosystem Dashboard", "https://developer.arm.com/ecosystem-dashboard/linux?package=nginx#support",
-         "NGINX (Open source)", "Support", "NGINX > Support",
-         "| OS | Status |\n| Linux | Supported |\n"),
-        ("Ecosystem Dashboard", "https://developer.arm.com/ecosystem-dashboard/windows?package=python",
-         "Python", "Compatibility", "Compatibility",
-         "Windows on Arm support: yes.  \nSee the package version requirements.\n"),
-        ("Intrinsic", "https://developer.arm.com/architectures/instruction-sets/intrinsics/#q=vaddq_u8",
-         "Arm Intrinsics - vaddq_u8", "vaddq_u8", None,
-         "uint8x16_t vaddq_u8(uint8x16_t a, uint8x16_t b);\n\nOperation:\n    result = a + b;\n"),
-        ("Install Guides", "https://learn.arm.com/install-guides/tool/#install",
-         "Install tool", "Install", "Install",
-         "Heading Path: configure this input\n    tool --install\n"),
-        ("Documentation", "https://developer.arm.com/documentation/example?lang=en#registers",
-         "Architecture manual", "Registers", "Chapter 2 > Registers",
-         "Register fields:\r\n    MODE[3:0]\r\n"),
-        ("Documentation", "https://example.org/manual.pdf?version=2#page=7",
-         "PDF manual", "Page 7", None,
-         "Document Title: a field in this document\nHeading Path: a user-supplied value\n\n  Keep this text.  \n"),
-    ]
-    rows = []
-    for index, (doc_type, url, title, heading, path, body) in enumerate(cases):
-        rows.append({
-            "chunk_uuid": str(index), "url": url, "title": title, "heading": heading,
-            "doc_type": doc_type, "product": "Arm", "platform": "",
-            "original_text": (f"Document Title: {title}\nHeading Path: {path}\n\n" if path else "") + body,
-            "document_context": {"format": 1, "url": url.split("#")[0],
-                                 "chunk_index": 0, "chunk_count": 1},
-        })
-    before = deepcopy(rows)
-    state = resources.SearchResources(rows, None, None, None, utm_source="arm-mcp")
-    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [
-        {"metadata": row, "distance": .1, "rerank_score": 1 - index / 10}
-        for index, row in enumerate(rows)
-    ])
-    hits = resources.search("source evidence", state, k=len(rows), scope=scope)
-    full = deepcopy(hits)
-    results = lean_results(hits)
-    assert [item["snippet"] for item in results] == [case[-1] for case in cases]
-    for original, lean in zip(hits, results):
-        assert {key: lean[key] for key in original if key not in {
-            "snippet", "disclaimer", "url_tracking_instruction", "distance",
-        }} == {key: value for key, value in original.items() if key not in {
-            "snippet", "disclaimer", "url_tracking_instruction", "distance",
-        }}
-        assert not {"distance", "url_tracking_instruction"} & lean.keys()
-    assert "disclaimer" not in results[0]
-    notices = [item["disclaimer"] for item in results if "disclaimer" in item]
-    assert notices == ["For all results in this response sourced from arm.com or its subdomains: "
-                       + ARM_CONTENT_DISCLAIMER]
-    assert rows == before and hits == full
-
-
 def pieces(parent_uuid, parent_chunk_uuid, texts):
     rows = []
     start = 0
@@ -392,32 +246,6 @@ def pieces(parent_uuid, parent_chunk_uuid, texts):
         })
         start += len(text)
     return rows
-
-
-@pytest.mark.parametrize("body", [
-    "Heading Path: optional user input\nKeep this field.",
-    "Document Title: required user input\nKeep this field.",
-    "Document Title: Install guide\nHeading Path: optional user input\n\nKeep this field.",
-    "Document Title: Other document\nHeading Path: Install\n\nKeep this field.",
-    "Document Title: Install guide\nHeading Path: Install\nKeep this field.",
-])
-def test_lean_incomplete_embedding_slice_preserves_unverified_header_labels(body, monkeypatch):
-    row = pieces("parent", "chunk", ["Earlier text. ", body])[1]
-    state = resources.SearchResources([row], None, None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [{"metadata": row}])
-    hit = resources.search("guide", state)[0]
-    assert hit["snippet"] == body
-    result = lean_result(hit)
-    assert result["snippet"] == body
-    assert "heading_path" not in result
-
-
-@pytest.mark.parametrize("title", [None, ""])
-def test_lean_preserves_header_like_body_without_title_metadata(title):
-    body = "Document Title: Example\nHeading Path: Intro\n\nKeep this text."
-    result = lean_result({"title": title, "heading": "Intro", "snippet": body})
-    assert result["snippet"] == body
-    assert "heading_path" not in result
 
 
 @pytest.mark.parametrize("selected_part", [0, 1, 2])

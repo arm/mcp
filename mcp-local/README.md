@@ -29,12 +29,9 @@ Each response entry retains its citation `url`, `title`, `heading`, `snippet`,
 array-valued `doc_type`, `product`, and `platform`, and `score`. Existing extra
 fields, including `context`, `page_url`, and `parent_page_url`, remain available.
 `edition` is no longer a filter or response field. The MCP presentation omits
-`distance` and `url_tracking_instruction`, and removes duplicate
-`Document Title:` / `Heading Path:` prefixes only when a complete generated
-header agrees with the result metadata. Unverified header-like body text is
-preserved, including in unreassembled embedding slices.
-After a verified header is removed, the remaining body is preserved exactly,
-including code indentation and trailing whitespace, for every source type.
+`distance` and `url_tracking_instruction`. Snippets are returned unchanged,
+including any `Document Title:` / `Heading Path:` prefixes, code indentation,
+and trailing whitespace.
 When the search library supplies Arm content disclaimers, one `disclaimer` is
 retained on the first applicable Arm-domain result. It explicitly covers all
 Arm-domain results in that response, preserves the original legal wording, and
@@ -54,7 +51,7 @@ for metadata semantics and migration details.
 
 Lean formatting applies only to MCP responses. The shared Python API retains
 `distance` and, when configured, per-result URL tracking instructions and Arm
-disclaimers. Snippet prefix removal and disclaimer consolidation are MCP-only.
+disclaimers. Disclaimer consolidation is MCP-only.
 
 Preserve citation URLs exactly as returned, including query parameters and
 fragments. Learning Paths remain searchable through the existing search tool;

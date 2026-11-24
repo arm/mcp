@@ -28,7 +28,6 @@ import yaml
 from arm_kb_search import resources
 from arm_kb_search.analysis import Synonyms, analyze, name_keys
 from arm_kb_search.context import DocumentContextIndex
-from arm_kb_search.response import lean_results
 from transformers import AutoTokenizer
 
 import document_chunking as intrinsic_source
@@ -504,18 +503,6 @@ def test_prepared_chunks_roundtrip_without_reparsing(
     assert saved["product"] == isa
     assert saved["heading_path"] == [isa, "vaddq_u8"]
     assert "embedding_text" not in saved
-
-    state = resources.SearchResources([saved, saved_guide], None, None, None, include_disclaimers=False)
-    monkeypatch.setattr(resources, "hybrid_search", lambda *args, **kwargs: [
-        {"metadata": saved}, {"metadata": saved_guide},
-    ])
-    hits = resources.search("source evidence", state, k=2)
-    lean = lean_results(hits)
-    assert lean[0]["snippet"] == record["content"]
-    assert lean[1]["snippet"] == (
-        "Build an SME2 application on Linux or Windows, profile CME performance, and optimize Mali shaders."
-    )
-    assert [item["url"] for item in lean] == [item["url"] for item in hits]
 
 
 @pytest.mark.parametrize("text", [None, "", " \t\n", 3, {"compact": "x", "detailed": "y"}])
