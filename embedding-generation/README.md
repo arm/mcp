@@ -158,6 +158,96 @@ shortcodes fail explicitly so new content formats cannot silently lose text.
 
 Regenerate chunks and vector artifacts to publish changes to this parsing code.
 
+## Weekly source URL report
+
+The existing **Build Offline Embedding Pipeline** runs an independent URL audit
+on `main` every Sunday at 09:00 UTC and on manually selected branches. Download its `source-url-audit`
+artifact for one row per unique URL, including transcript URLs. This job only
+reports; it never edits sources, deletes rows, or gates embedding publication.
+
+Two GET responses of 404/410 mean `watch`. If missing observations persist for
+at least seven days, the report flags `review_removal` for manual review.
+Recovery, blocked access or uncertainty resets the interval; missing/invalid
+history or gaps over 14 days restart it. Redirects are followed.
+
+The workflow first checks Ecosystem Dashboard packages against one snapshot of
+the dashboard's [public source repository](https://github.com/ArmDeveloperEcosystem/ecosystem-dashboard-for-arm), pinned to its current commit. A matching
+record with a nonempty description or parsed body means `status=content_available`,
+`action=keep`. Its `final_url` links to the backend Markdown file and `http_status`
+is blank: the public dashboard page was not checked. Missing/empty records or a
+failed backend fetch mean `uncertain` / `investigate`, never missing or eligible
+for removal. Backend verification takes at most 90 seconds of the audit budget.
+This reuses the embedding pipeline's package parser without changing ingestion.
+
+For all other URLs, the workflow uses lightweight HTTP checks. For HTTP 403 responses, it
+then opens the original URL in an isolated Chromium browser, follows redirects,
+and waits for rendered content. A successful browser check changes the result
+to `reachable` or `redirected` with `action=keep`; `detail` records the browser
+verification. Login/error pages and known empty Arm documentation/dashboard
+shells cannot qualify as working, including after redirects. Browser 403/503
+challenges may resolve within the existing 25-second page limit; only a later
+2xx response with usable content qualifies. Browser checks share the same 45-minute audit
+budget and keep completed results if the browser stalls. They use no user login,
+private browser profile, or special access credentials.
+
+HTTP 401/429 and any 403 that the browser cannot verify mean `status=blocked`,
+`action=retry`: they are automatically checked again next run and never qualify
+for removal based on those responses. Other errors mean `investigate`.
+HTTP-only success does not validate page content, JavaScript routes or anchors;
+browser verification checks rendered availability, not the content's accuracy.
+
+The workflow summary groups blocked URLs by destination hostname and HTTP code,
+including community links that redirect to the same site. For example, if 1,492
+403 responses remain unverified after the browser fallback, they produce one
+site-access warning instead of 1,492 individual investigations. These URLs remain unverified; the summary
+shows their count and an example link. Review access once per site. Individual
+follow-ups show missing URLs and other errors, with removal reviews first and
+at most 20 links. The CSV retains every URL and its full history.
+
+History comes from the latest available report in the last ten completed runs
+of this workflow on the same branch, even if an unrelated embedding job failed. Reports
+last 30 days. Eight workers check URLs concurrently, each pausing one second
+before its first request and two seconds before confirming a missing response.
+URL checks have a 45-minute budget within the 60-minute job.
+When the budget expires, completed results are kept and unfinished or unchecked
+URLs are reported as `investigate`, resetting their missing history. The report
+still includes every URL. Unexpected audit failures publish no new report;
+check the audit job's result. Any later source cleanup still needs the normal
+embedding rebuild.
+
+To test a pushed branch without building embeddings, dispatch the existing
+workflow with `audit_only=true` and `dry_run=true` (replace `YOUR_BRANCH`):
+
+```sh
+gh workflow run build-embeddings.yml --repo arm/mcp --ref YOUR_BRANCH \
+  -f audit_only=true -f dry_run=true
+```
+
+Only `source-url-audit` runs; the other jobs are skipped. A branch with no prior
+report starts a fresh observation window. Download the report from the run's
+artifacts. Normal scheduled runs still build embeddings and produce the report.
+
+For a local report with Python 3.13+, install the optional backend and browser
+verifiers and run with `--backend-content --browser-fallback` to match the workflow. Add
+`--previous-report previous.csv` to compare against an earlier report (the
+original baseline format is supported):
+
+```sh
+python3.13 -m pip install --require-hashes --only-binary=:all: -r embedding-generation/requirements-source-url-audit.txt
+python3.13 -m playwright install --no-shell chromium
+python3.13 embedding-generation/audit_source_urls.py \
+  embedding-generation/vector-db-sources.csv --output report.csv --backend-content --browser-fallback
+```
+
+Omit both flags for a standard-library-only HTTP audit. The browser fallback
+requires a POSIX host (Linux/macOS) so a stalled browser process tree can be
+stopped without delaying report publication.
+
+`requirements-source-url-audit.txt` pins every audit dependency, including
+transitive dependencies, to exact versions and published wheel SHA-256 hashes.
+When updating a package, update its dependencies and hashes together and verify
+a clean install with the command above. The embedding build keeps its own `uv.lock`.
+
 ## Discover developer.arm.com Sources
 
 `discover-developer-arm-com-sources.py` searches developer.arm.com and appends any new relevant pages (currently SME-related guides, programmer's guides, and blog posts) to `vector-db-sources.csv`. Existing rows are never modified, so it is safe to re-run occasionally to pick up new content.

@@ -305,3 +305,26 @@ def test_misplaced_guidance_is_reported_instead_of_omitted(field):
             source_url="url",
             resolved_url="source",
         )
+
+
+@pytest.mark.parametrize(
+    "description,body,expected",
+    [
+        ("Useful database software", "", True),
+        ("", "Real installation instructions.", True),
+        ("", "", False),
+        ("null", "", False),
+    ],
+)
+def test_content_verification_requires_description_or_body(description, body, expected):
+    files = {
+        LINUX: (FIXTURES / "dot-net.md").read_text(),
+        WINDOWS: (FIXTURES / "dotnet-CLI.md").read_text(),
+        "content/linux/opensource_packages/example.md": f"---\nname: Example\ndescription: '{description}'\n---\n{body}",
+    }
+    if expected:
+        catalog = parse_catalog(archive(files), REVISION, require_content=True)
+    else:
+        with pytest.warns(UserWarning, match="description or body"):
+            catalog = parse_catalog(archive(files), REVISION, require_content=True)
+    assert (f"{DASHBOARD_URL}/linux?package=example" in catalog) is expected

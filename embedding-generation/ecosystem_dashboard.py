@@ -241,7 +241,9 @@ class DashboardPackage:
     keywords: list[str]
 
 
-def parse_catalog(archive: bytes, revision: str) -> dict[str, list[DashboardPackage]]:
+def parse_catalog(
+    archive: bytes, revision: str, *, require_content: bool = False
+) -> dict[str, list[DashboardPackage]]:
     """Skip invalid records with source-specific warnings; retain valid variants.
 
     Read archive members in memory, never extract paths to disk. resolved_url
@@ -276,6 +278,12 @@ def parse_catalog(archive: bytes, revision: str) -> dict[str, list[DashboardPack
                     source_url="",
                     resolved_url=resolved_url,
                 )
+                if require_content:
+                    description = (metadata.get("description") or "").strip()
+                    has_description = description.lower() not in {"", "null", "~"}
+                    has_body = any(section.blocks for section in document.sections[1:])
+                    if not has_description and not has_body:
+                        raise ValueError(f"{path}: expected a description or body")
                 slug = package_slug(metadata["name"].strip())
                 if not slug:
                     raise ValueError(f"{path}: package name produces an empty slug")

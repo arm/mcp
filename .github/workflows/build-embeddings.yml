@@ -10,6 +10,10 @@ on:
         required: true
         type: boolean
         default: true
+      audit_only:
+        description: Run only the source URL report (no embedding builds or publishing)
+        type: boolean
+        default: false
 
 permissions: read-all
 
@@ -18,7 +22,7 @@ env:
   CHUNK_PACKAGE_NAME: mcp-embedding-chunks
   VECTORSTORE_IMAGE: ghcr.io/${{ github.repository_owner }}/mcp-embedding-vectorstore
   VECTORSTORE_PACKAGE_NAME: mcp-embedding-vectorstore
-  PUBLISH_IMAGES: ${{ github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
+  PUBLISH_IMAGES: ${{ !inputs.audit_only && github.ref == 'refs/heads/main' && (github.event_name != 'workflow_dispatch' || !inputs.dry_run) }}
 
 concurrency:
   group: embedding-pipeline-${{ github.ref }}
@@ -26,6 +30,7 @@ concurrency:
 
 jobs:
   acquire-and-publish-chunks:
+    if: ${{ !inputs.audit_only }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 360 #setting it to maximum allowed time for a job to run, since the build and blackduck scan can take a long time
     permissions:
@@ -385,7 +390,7 @@ jobs:
     needs:
       - acquire-and-publish-chunks
       - generate-and-publish-vectorstore
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && !inputs.audit_only }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 45
     continue-on-error: true
@@ -702,3 +707,71 @@ jobs:
             --source-ref "${GITHUB_REF}" \
             --source-digest "${GITHUB_SHA}" \
             --bundle-from-oci
+
+  source-url-audit:
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Install audit verifiers
+        timeout-minutes: 5
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: -r embedding-generation/requirements-source-url-audit.txt
+          python -m playwright install --with-deps --no-shell chromium
+
+      - name: Download previous report
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_ids="$(gh run list --workflow build-embeddings.yml --branch "$GITHUB_REF_NAME" \
+            --status completed --limit 10 --json databaseId --jq '.[].databaseId')"
+          for run_id in ${run_ids}; do
+            [[ "${run_id}" == "${GITHUB_RUN_ID}" ]] && continue
+            artifact_id="$(gh api "repos/${GH_REPO}/actions/runs/${run_id}/artifacts" \
+              --jq '.artifacts[] | select(.name == "source-url-audit" and .expired == false) | .id')"
+            if [[ -n "${artifact_id}" ]]; then
+              gh run download "${run_id}" --name source-url-audit --dir previous
+              break
+            fi
+          done
+          if [[ ! -f previous/source-url-audit.csv ]]; then
+            echo 'No previous report available; this run starts a fresh observation window.'
+          fi
+
+      - name: Audit links without changing sources
+        timeout-minutes: 50
+        shell: bash
+        run: |
+          set -euo pipefail
+          previous_args=()
+          if [[ -f previous/source-url-audit.csv ]]; then
+            previous_args=(--previous-report previous/source-url-audit.csv)
+          fi
+          python embedding-generation/audit_source_urls.py \
+            embedding-generation/vector-db-sources.csv \
+            --output reports/source-url-audit.csv --backend-content --browser-fallback "${previous_args[@]}" \
+            | tee -a "${GITHUB_STEP_SUMMARY}"
+          git diff --exit-code -- embedding-generation/vector-db-sources.csv
+
+      - name: Upload report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: source-url-audit
+          path: reports/source-url-audit.csv
+          retention-days: 30
+          if-no-files-found: error
