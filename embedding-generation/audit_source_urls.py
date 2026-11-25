@@ -4,12 +4,13 @@
 # You may obtain a copy at http://www.apache.org/licenses/LICENSE-2.0
 # Distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND.
 
-"""Report HTTP availability and weekly missing history; never edit source data."""
+"""Report source availability and weekly missing history; never edit source data."""
 
 import argparse
 import csv
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -111,6 +112,77 @@ def missing_history(status, previous, now):
             pass  # Invalid, naive or missing timestamps cannot establish history.
     action = "review_removal" if now - first >= timedelta(days=7) else "watch"
     return dict(first_missing_at=first.isoformat(), action=action)
+
+
+def fetch_backend_catalog():
+    from ecosystem_dashboard import REPOSITORY, parse_catalog
+
+    headers = {"User-Agent": "arm-mcp-source-url-audit/1.0"}
+    url = f"https://api.github.com/repos/{REPOSITORY}/commits/main"
+    with urlopen(Request(url, headers=headers), timeout=30) as response:
+        revision = json.load(response)["sha"]
+    if not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise ValueError("Invalid dashboard revision")
+    url = f"https://codeload.github.com/{REPOSITORY}/tar.gz/{revision}"
+    with urlopen(Request(url, headers=headers), timeout=60) as response:
+        archive = response.read()
+    return parse_catalog(archive, revision, require_content=True)
+
+
+def verify_backend_content(urls, budget_seconds):
+    targets = []
+    for url in urls:
+        try:
+            parsed = urlsplit(url)
+        except ValueError:
+            continue  # Let the HTTP checker report malformed URLs as uncertain.
+        if (
+            parsed.scheme in {"http", "https"}
+            and parsed.hostname == "developer.arm.com"
+            and parsed.path
+            in {"/ecosystem-dashboard/linux", "/ecosystem-dashboard/windows"}
+        ):
+            targets.append(url)
+    if not targets:
+        return {}
+    started = time.monotonic()
+    completed = Queue()
+
+    def worker():
+        try:
+            completed.put(fetch_backend_catalog())
+        except Exception as error:
+            completed.put(error)
+
+    if budget_seconds > 0:
+        Thread(target=worker, daemon=True).start()
+    try:
+        catalog = completed.get(timeout=max(0, min(90, budget_seconds)))
+    except Empty:
+        catalog = TimeoutError("Backend check exceeded its time budget")
+    results = {}
+    for url in targets:
+        result = dict(url=url, status="uncertain", http_status="", final_url=url)
+        if isinstance(catalog, Exception):
+            result["detail"] = f"Backend content could not be verified: {catalog}"
+        elif packages := catalog.get(url):
+            result.update(
+                status="content_available",
+                final_url=packages[0].document.resolved_url,
+                detail="Backend description/body verified; public page not checked",
+            )
+        else:
+            result["detail"] = (
+                "No matching content record in the dashboard backend snapshot"
+            )
+        results[url] = result
+    verified = sum(row["status"] == "content_available" for row in results.values())
+    print(
+        f"Backend verified {verified}/{len(targets)} dashboard sources in {time.monotonic() - started:.1f}s",
+        file=sys.stderr,
+        flush=True,
+    )
+    return results
 
 
 def collect_checks(urls, budget_seconds):
@@ -218,6 +290,10 @@ def verify_in_browser(checks, budget_seconds, channel="chromium"):
 
 def print_summary(results):
     counts = Counter(row["action"] for row in results)
+    counts["content_available"] = sum(
+        row["status"] == "content_available" for row in results
+    )
+    counts["keep"] -= counts["content_available"]
     print("## Source URL audit\n")
     print(f"Reported {len(results):,} URLs. Report only; sources unchanged.\n")
     verified = sum(
@@ -227,7 +303,8 @@ def print_summary(results):
         print(f"Browser fallback verified {verified:,} previously blocked URLs.\n")
     print("| Result | URLs |\n| --- | ---: |")
     for action, label in (
-        ("keep", "Working"),
+        ("content_available", "Backend content available"),
+        ("keep", "Working pages"),
         ("retry", "Access blocked (automatic retry)"),
         ("watch", "Missing (watch for seven days)"),
         ("review_removal", "Persistent missing (manual removal review)"),
@@ -282,6 +359,7 @@ def run_audit(
     budget_seconds=AUDIT_BUDGET_SECONDS,
     browser_fallback=False,
     browser_channel="chromium",
+    backend_content=False,
 ):
     sources, output = Path(sources), Path(output)
     if output.resolve() == sources.resolve() or (
@@ -311,8 +389,13 @@ def run_audit(
     now = now or datetime.now(timezone.utc)
     results = []
     print(f"Checking {len(urls)} unique URLs...", file=sys.stderr, flush=True)
-    deadline = time.monotonic() + budget_seconds
-    checks = collect_checks(urls, budget_seconds)
+    started = time.monotonic()
+    deadline = started + budget_seconds
+    checked = verify_backend_content(urls, budget_seconds) if backend_content else {}
+    http_urls = [url for url in urls if url not in checked]
+    for check in collect_checks(http_urls, max(0, deadline - time.monotonic())):
+        checked[check["url"]] = check
+    checks = [checked[url] for url in urls]
     if browser_fallback:
         verify_in_browser(checks, deadline - time.monotonic(), browser_channel)
     for check in checks:
@@ -332,6 +415,7 @@ def run_audit(
         writer.writerows(results)
     temporary.replace(output)
     print_summary(results)
+    print(f"\nAudit duration: {time.monotonic() - started:.1f} seconds.")
     return results
 
 
@@ -346,6 +430,11 @@ if __name__ == "__main__":
         help="Verify HTTP 403 responses with Playwright Chromium",
     )
     parser.add_argument("--browser-channel", default="chromium")
+    parser.add_argument(
+        "--backend-content",
+        action="store_true",
+        help="Verify dashboard content from its published source repository",
+    )
     args = parser.parse_args()
     if sys.version_info < (3, 13):
         parser.error("Use Python 3.13 or later for HTTP 308 redirect support")
@@ -355,4 +444,5 @@ if __name__ == "__main__":
         args.previous_report,
         browser_fallback=args.browser_fallback,
         browser_channel=args.browser_channel,
+        backend_content=args.backend_content,
     )

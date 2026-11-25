@@ -158,7 +158,16 @@ at least seven days, the report flags `review_removal` for manual review.
 Recovery, blocked access or uncertainty resets the interval; missing/invalid
 history or gaps over 14 days restart it. Redirects are followed.
 
-The workflow first uses lightweight HTTP checks. For HTTP 403 responses, it
+The workflow first checks Ecosystem Dashboard packages against one snapshot of
+the dashboard's [public source repository](https://github.com/ArmDeveloperEcosystem/ecosystem-dashboard-for-arm), pinned to its current commit. A matching
+record with a nonempty description or parsed body means `status=content_available`,
+`action=keep`. Its `final_url` links to the backend Markdown file and `http_status`
+is blank: the public dashboard page was not checked. Missing/empty records or a
+failed backend fetch mean `uncertain` / `investigate`, never missing or eligible
+for removal. Backend verification takes at most 90 seconds of the audit budget.
+This reuses the embedding pipeline's package parser without changing ingestion.
+
+For all other URLs, the workflow uses lightweight HTTP checks. For HTTP 403 responses, it
 then opens the original URL in an isolated Chromium browser, follows redirects,
 and waits for rendered content. A successful browser check changes the result
 to `reachable` or `redirected` with `action=keep`; `detail` records the browser
@@ -204,19 +213,19 @@ Only `source-url-audit` runs; the other jobs are skipped. A branch with no prior
 report starts a fresh observation window. Download the report from the run's
 artifacts. Normal scheduled runs still build embeddings and produce the report.
 
-For a local report with Python 3.13+, install the optional browser verifier and
-run with `--browser-fallback` to match the workflow. Add
+For a local report with Python 3.13+, install the optional backend and browser
+verifiers and run with `--backend-content --browser-fallback` to match the workflow. Add
 `--previous-report previous.csv` to compare against an earlier report (the
 original baseline format is supported):
 
 ```sh
-python3.13 -m pip install playwright==1.65.2
+python3.13 -m pip install playwright==1.65.2 beautifulsoup4==4.15.0 pypdf==6.21.4 pyyaml==6.0.3
 python3.13 -m playwright install --no-shell chromium
 python3.13 embedding-generation/audit_source_urls.py \
-  embedding-generation/vector-db-sources.csv --output report.csv --browser-fallback
+  embedding-generation/vector-db-sources.csv --output report.csv --backend-content --browser-fallback
 ```
 
-Omit `--browser-fallback` for a standard-library-only HTTP audit. The fallback
+Omit both flags for a standard-library-only HTTP audit. The browser fallback
 requires a POSIX host (Linux/macOS) so a stalled browser process tree can be
 stopped without delaying report publication.
 
