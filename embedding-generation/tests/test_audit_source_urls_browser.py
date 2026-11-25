@@ -1,11 +1,15 @@
 """Browser fallback must verify rendered content before upgrading blocked URLs."""
 
+import asyncio
 import subprocess
 import sys
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
 import audit_source_urls as audit
+import audit_source_urls_browser as browser
 from audit_source_urls_browser import usable_page
 
 URL = "https://developer.arm.com/documentation/101897/latest/"
@@ -43,6 +47,94 @@ def test_dashboard_requires_a_selected_package():
     url = "https://developer.arm.com/ecosystem-dashboard/linux?package=anaconda"
     assert usable_page(url, url, "Anaconda - Ecosystem Dashboard for Arm", BODY)
     assert not usable_page(url, url, "Software Ecosystem Dashboard for Arm", BODY)
+
+
+@pytest.mark.parametrize(
+    "final_url,title,expected",
+    [
+        (URL, "Documentation – Arm Developer", False),
+        (
+            "https://developer.arm.com/ecosystem-dashboard/linux?package=anaconda",
+            "Software Ecosystem Dashboard for Arm",
+            False,
+        ),
+        (
+            "https://developer.arm.com/ecosystem-dashboard/linux?package=anaconda",
+            "Anaconda - Ecosystem Dashboard for Arm",
+            True,
+        ),
+    ],
+)
+def test_redirects_cannot_bypass_shell_validation(final_url, title, expected):
+    assert (
+        usable_page("https://community.arm.com/example", final_url, title, BODY)
+        is expected
+    )
+
+
+@pytest.mark.parametrize(
+    "initial_status,later_status,title,expected",
+    [
+        (403, 200, "Working guide", True),
+        (503, 200, "Working guide", True),
+        (403, None, "Working guide", False),
+        (503, None, "Working guide", False),
+        (403, 200, "Documentation – Arm Developer", False),
+        (404, 200, "Working guide", False),
+    ],
+)
+def test_browser_challenges_require_later_success_before_deadline(
+    monkeypatch, initial_status, later_status, title, expected
+):
+    clock = [0.0]
+    callbacks = {}
+    page = SimpleNamespace(
+        main_frame=object(),
+        url=URL,
+        on=lambda name, callback: callbacks.update({name: callback}),
+        title=AsyncMock(return_value=title),
+        locator=lambda selector: SimpleNamespace(
+            inner_text=AsyncMock(return_value=BODY), count=AsyncMock(return_value=0)
+        ),
+        close=AsyncMock(),
+    )
+
+    def navigate(status):
+        callbacks["response"](
+            SimpleNamespace(
+                request=SimpleNamespace(is_navigation_request=lambda: True),
+                frame=page.main_frame,
+                status=status,
+                url=URL,
+            )
+        )
+
+    async def goto(*args, **kwargs):
+        navigate(initial_status)
+
+    async def advance(seconds):
+        clock[0] += seconds
+        if later_status is not None:
+            navigate(later_status)
+
+    page.goto = goto
+    # Exercise response handling without requiring Chromium in the unit-test job.
+    monkeypatch.setitem(
+        sys.modules, "playwright.async_api", SimpleNamespace(Error=RuntimeError)
+    )
+    monkeypatch.setattr(browser, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(browser, "asyncio", SimpleNamespace(sleep=advance))
+    context = SimpleNamespace(new_page=AsyncMock(return_value=page))
+    result = asyncio.run(browser.verify_page(context, URL, deadline=1.0))
+    assert (result is not None) is expected
+    if expected:
+        assert result["http_status"] == 200
+        assert 0 < clock[0] < 1.0
+    elif initial_status in {403, 503}:
+        assert clock[0] == 1.0
+    else:
+        assert clock[0] == 0
+    page.close.assert_awaited_once()
 
 
 def test_partial_browser_results_survive_a_stalled_browser(monkeypatch):

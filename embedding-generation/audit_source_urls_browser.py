@@ -38,22 +38,24 @@ def usable_page(url, final_url, title, body):
         re.I,
     ):
         return False
-    source = urlsplit(url)
-    if source.hostname == "developer.arm.com" and source.path.startswith(
-        "/documentation/"
-    ):
-        if title.strip().lower() in {
-            "documentation",
-            "documentation – arm developer",
-            "documentation — arm developer",
-            "documentation - arm developer",
-        }:
-            return False
-    if source.hostname == "developer.arm.com" and source.path.startswith(
-        "/ecosystem-dashboard/"
-    ):
-        if "package" in parse_qs(source.query):
-            return title.endswith(" - Ecosystem Dashboard for Arm")
+    for source in (urlsplit(url), target):
+        if source.hostname == "developer.arm.com" and source.path.startswith(
+            "/documentation/"
+        ):
+            if title.strip().lower() in {
+                "documentation",
+                "documentation – arm developer",
+                "documentation — arm developer",
+                "documentation - arm developer",
+            }:
+                return False
+        if source.hostname == "developer.arm.com" and source.path.startswith(
+            "/ecosystem-dashboard/"
+        ):
+            if "package" in parse_qs(source.query) and not title.endswith(
+                " - Ecosystem Dashboard for Arm"
+            ):
+                return False
     return True
 
 
@@ -77,7 +79,8 @@ async def verify_page(context, url, deadline):
         await page.goto(url, wait_until="domcontentloaded", timeout=remaining)
         while time.monotonic() < expires:
             code = navigation.get("http_status", 0)
-            if code >= 400:
+            # JavaScript challenges can navigate from 403/503 to a usable page.
+            if code >= 400 and code not in {403, 503}:
                 return None
             try:
                 title = await page.title()

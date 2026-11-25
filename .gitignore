@@ -45,5 +45,6 @@ Thumbs.db
 # intrinsic chunks
 embedding-generation/intrinsic_chunks/*.yaml
 embedding-generation/*.txt
+!embedding-generation/requirements-source-url-audit.txt
 embedding-generation/metadata.json
 embedding-generation/usearch_index.bin

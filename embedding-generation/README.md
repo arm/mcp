@@ -172,7 +172,9 @@ then opens the original URL in an isolated Chromium browser, follows redirects,
 and waits for rendered content. A successful browser check changes the result
 to `reachable` or `redirected` with `action=keep`; `detail` records the browser
 verification. Login/error pages and known empty Arm documentation/dashboard
-shells cannot qualify as working. Browser checks share the same 45-minute audit
+shells cannot qualify as working, including after redirects. Browser 403/503
+challenges may resolve within the existing 25-second page limit; only a later
+2xx response with usable content qualifies. Browser checks share the same 45-minute audit
 budget and keep completed results if the browser stalls. They use no user login,
 private browser profile, or special access credentials.
 
@@ -219,7 +221,7 @@ verifiers and run with `--backend-content --browser-fallback` to match the workf
 original baseline format is supported):
 
 ```sh
-python3.13 -m pip install playwright==1.65.2 beautifulsoup4==4.15.0 pypdf==6.21.4 pyyaml==6.0.3
+python3.13 -m pip install --require-hashes --only-binary=:all: -r embedding-generation/requirements-source-url-audit.txt
 python3.13 -m playwright install --no-shell chromium
 python3.13 embedding-generation/audit_source_urls.py \
   embedding-generation/vector-db-sources.csv --output report.csv --backend-content --browser-fallback
@@ -228,6 +230,11 @@ python3.13 embedding-generation/audit_source_urls.py \
 Omit both flags for a standard-library-only HTTP audit. The browser fallback
 requires a POSIX host (Linux/macOS) so a stalled browser process tree can be
 stopped without delaying report publication.
+
+`requirements-source-url-audit.txt` pins every audit dependency, including
+transitive dependencies, to exact versions and published wheel SHA-256 hashes.
+When updating a package, update its dependencies and hashes together and verify
+a clean install with the command above. The embedding build keeps its own `uv.lock`.
 
 ## Discover developer.arm.com Sources
 
